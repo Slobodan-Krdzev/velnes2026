@@ -61,6 +61,27 @@ CREATE TYPE public.appointment_status AS ENUM (
 
 
 --
+-- Name: checkout_status; Type: TYPE; Schema: public; Owner: -
+--
+
+CREATE TYPE public.checkout_status AS ENUM (
+    'PAID',
+    'PARTIALLY_PAID',
+    'FAILED'
+);
+
+
+--
+-- Name: discount_code_type; Type: TYPE; Schema: public; Owner: -
+--
+
+CREATE TYPE public.discount_code_type AS ENUM (
+    'Percentage',
+    'Fixed amount'
+);
+
+
+--
 -- Name: employee_access; Type: TYPE; Schema: public; Owner: -
 --
 
@@ -79,6 +100,16 @@ CREATE TYPE public.employee_access AS ENUM (
 CREATE TYPE public.employee_status AS ENUM (
     'active',
     'invited'
+);
+
+
+--
+-- Name: invoice_status; Type: TYPE; Schema: public; Owner: -
+--
+
+CREATE TYPE public.invoice_status AS ENUM (
+    'Paid',
+    'Refunded'
 );
 
 
@@ -126,6 +157,17 @@ CREATE TYPE public.location_lifecycle AS ENUM (
 CREATE TYPE public.modifier_group_type AS ENUM (
     'single',
     'multi'
+);
+
+
+--
+-- Name: mtx_status; Type: TYPE; Schema: public; Owner: -
+--
+
+CREATE TYPE public.mtx_status AS ENUM (
+    'paid',
+    'failed',
+    'config_incomplete'
 );
 
 
@@ -310,6 +352,43 @@ ALTER TABLE ONLY public.businesses FORCE ROW LEVEL SECURITY;
 
 
 --
+-- Name: checkout_items; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.checkout_items (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    tenant_id uuid NOT NULL,
+    checkout_id uuid NOT NULL,
+    name text NOT NULL,
+    qty integer DEFAULT 1 NOT NULL,
+    amount integer NOT NULL,
+    item_class text NOT NULL,
+    seller_legal_entity_id uuid,
+    tax_profile_id text,
+    merchant_transaction_id uuid
+);
+
+ALTER TABLE ONLY public.checkout_items FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: checkouts; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.checkouts (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    tenant_id uuid NOT NULL,
+    invoice_id uuid NOT NULL,
+    ts timestamp with time zone DEFAULT now() NOT NULL,
+    customer_id uuid,
+    total integer NOT NULL,
+    status public.checkout_status DEFAULT 'FAILED'::public.checkout_status NOT NULL
+);
+
+ALTER TABLE ONLY public.checkouts FORCE ROW LEVEL SECURITY;
+
+
+--
 -- Name: customers; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -332,6 +411,25 @@ CREATE TABLE public.customers (
 );
 
 ALTER TABLE ONLY public.customers FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: discount_codes; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.discount_codes (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    tenant_id uuid NOT NULL,
+    code text NOT NULL,
+    type public.discount_code_type NOT NULL,
+    value integer NOT NULL,
+    used integer DEFAULT 0 NOT NULL,
+    usage_limit integer,
+    starts date NOT NULL,
+    ends date NOT NULL
+);
+
+ALTER TABLE ONLY public.discount_codes FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -414,6 +512,24 @@ ALTER TABLE ONLY public.employees FORCE ROW LEVEL SECURITY;
 
 
 --
+-- Name: gift_cards; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.gift_cards (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    tenant_id uuid NOT NULL,
+    code text NOT NULL,
+    value integer NOT NULL,
+    remaining integer NOT NULL,
+    customer_id uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT gift_cards_remaining_check CHECK ((remaining >= 0))
+);
+
+ALTER TABLE ONLY public.gift_cards FORCE ROW LEVEL SECURITY;
+
+
+--
 -- Name: holds; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -464,6 +580,73 @@ CREATE TABLE public.holidays (
 );
 
 ALTER TABLE ONLY public.holidays FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: invoice_counters; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.invoice_counters (
+    tenant_id uuid NOT NULL,
+    location_id uuid NOT NULL,
+    next integer DEFAULT 1 NOT NULL
+);
+
+ALTER TABLE ONLY public.invoice_counters FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: invoice_lines; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.invoice_lines (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    tenant_id uuid NOT NULL,
+    invoice_id uuid NOT NULL,
+    description text NOT NULL,
+    qty integer DEFAULT 1 NOT NULL,
+    unit_price integer NOT NULL,
+    line_discount integer DEFAULT 0 NOT NULL,
+    item_class text DEFAULT 'other'::text NOT NULL,
+    service_id uuid,
+    product_id uuid,
+    appointment_id uuid,
+    vat integer DEFAULT 18 NOT NULL,
+    sort integer DEFAULT 0 NOT NULL
+);
+
+ALTER TABLE ONLY public.invoice_lines FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: invoices; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.invoices (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    tenant_id uuid NOT NULL,
+    location_id uuid NOT NULL,
+    number text NOT NULL,
+    date date DEFAULT now() NOT NULL,
+    customer_id uuid,
+    customer_name text DEFAULT 'Walk-in'::text NOT NULL,
+    employee_id uuid,
+    employee_name text DEFAULT ''::text NOT NULL,
+    method text NOT NULL,
+    status public.invoice_status DEFAULT 'Paid'::public.invoice_status NOT NULL,
+    total integer NOT NULL,
+    tip integer DEFAULT 0 NOT NULL,
+    service_charge integer DEFAULT 0 NOT NULL,
+    cart_discount integer DEFAULT 0 NOT NULL,
+    points_redeemed integer DEFAULT 0 NOT NULL,
+    gift_amount integer DEFAULT 0 NOT NULL,
+    promo_code text,
+    promo_amount integer DEFAULT 0 NOT NULL,
+    idempotency_key text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+ALTER TABLE ONLY public.invoices FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -600,6 +783,64 @@ CREATE TABLE public.locations (
 );
 
 ALTER TABLE ONLY public.locations FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: loyalty_config; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.loyalty_config (
+    tenant_id uuid NOT NULL,
+    active boolean DEFAULT true NOT NULL,
+    earn_per integer DEFAULT 60 NOT NULL,
+    points integer DEFAULT 1 NOT NULL,
+    step integer DEFAULT 100 NOT NULL,
+    worth integer DEFAULT 300 NOT NULL,
+    expiry_months integer DEFAULT 24 NOT NULL,
+    welcome integer DEFAULT 25 NOT NULL,
+    birthday integer DEFAULT 50 NOT NULL
+);
+
+ALTER TABLE ONLY public.loyalty_config FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: loyalty_ledger; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.loyalty_ledger (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    tenant_id uuid NOT NULL,
+    customer_id uuid NOT NULL,
+    at date DEFAULT now() NOT NULL,
+    reason text NOT NULL,
+    points integer NOT NULL,
+    ref text DEFAULT '—'::text NOT NULL
+);
+
+ALTER TABLE ONLY public.loyalty_ledger FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: merchant_transactions; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.merchant_transactions (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    tenant_id uuid NOT NULL,
+    checkout_id uuid NOT NULL,
+    payment_account_id uuid,
+    legal_entity_id uuid,
+    amount integer NOT NULL,
+    method text NOT NULL,
+    status public.mtx_status NOT NULL,
+    provider_ref text,
+    legal_doc_ref text,
+    idempotency_key text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+ALTER TABLE ONLY public.merchant_transactions FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -778,6 +1019,20 @@ ALTER TABLE ONLY public.service_modifier_options FORCE ROW LEVEL SECURITY;
 
 
 --
+-- Name: service_recipes; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.service_recipes (
+    tenant_id uuid NOT NULL,
+    service_id uuid NOT NULL,
+    product_id uuid NOT NULL,
+    qty_amount numeric(10,2) NOT NULL
+);
+
+ALTER TABLE ONLY public.service_recipes FORCE ROW LEVEL SECURITY;
+
+
+--
 -- Name: service_variants; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -840,6 +1095,21 @@ ALTER TABLE ONLY public.stock_movements FORCE ROW LEVEL SECURITY;
 
 
 --
+-- Name: tax_rules; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.tax_rules (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    tenant_id uuid,
+    legal_entity_id uuid,
+    item_class text NOT NULL,
+    tax_profile_id text
+);
+
+ALTER TABLE ONLY public.tax_rules FORCE ROW LEVEL SECURITY;
+
+
+--
 -- Name: user_credentials; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -886,11 +1156,43 @@ ALTER TABLE ONLY public.businesses
 
 
 --
+-- Name: checkout_items checkout_items_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.checkout_items
+    ADD CONSTRAINT checkout_items_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: checkouts checkouts_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.checkouts
+    ADD CONSTRAINT checkouts_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: customers customers_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.customers
     ADD CONSTRAINT customers_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: discount_codes discount_codes_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.discount_codes
+    ADD CONSTRAINT discount_codes_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: discount_codes discount_codes_tenant_id_code_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.discount_codes
+    ADD CONSTRAINT discount_codes_tenant_id_code_key UNIQUE (tenant_id, code);
 
 
 --
@@ -934,6 +1236,22 @@ ALTER TABLE ONLY public.employees
 
 
 --
+-- Name: gift_cards gift_cards_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.gift_cards
+    ADD CONSTRAINT gift_cards_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: gift_cards gift_cards_tenant_id_code_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.gift_cards
+    ADD CONSTRAINT gift_cards_tenant_id_code_key UNIQUE (tenant_id, code);
+
+
+--
 -- Name: holds holds_key_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -963,6 +1281,38 @@ ALTER TABLE ONLY public.holiday_calendar_years
 
 ALTER TABLE ONLY public.holidays
     ADD CONSTRAINT holidays_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: invoice_counters invoice_counters_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.invoice_counters
+    ADD CONSTRAINT invoice_counters_pkey PRIMARY KEY (location_id);
+
+
+--
+-- Name: invoice_lines invoice_lines_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.invoice_lines
+    ADD CONSTRAINT invoice_lines_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: invoices invoices_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.invoices
+    ADD CONSTRAINT invoices_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: invoices invoices_tenant_id_number_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.invoices
+    ADD CONSTRAINT invoices_tenant_id_number_key UNIQUE (tenant_id, number);
 
 
 --
@@ -1019,6 +1369,38 @@ ALTER TABLE ONLY public.location_lifecycle_log
 
 ALTER TABLE ONLY public.locations
     ADD CONSTRAINT locations_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: loyalty_config loyalty_config_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.loyalty_config
+    ADD CONSTRAINT loyalty_config_pkey PRIMARY KEY (tenant_id);
+
+
+--
+-- Name: loyalty_ledger loyalty_ledger_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.loyalty_ledger
+    ADD CONSTRAINT loyalty_ledger_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: merchant_transactions merchant_transactions_idempotency_key_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.merchant_transactions
+    ADD CONSTRAINT merchant_transactions_idempotency_key_key UNIQUE (idempotency_key);
+
+
+--
+-- Name: merchant_transactions merchant_transactions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.merchant_transactions
+    ADD CONSTRAINT merchant_transactions_pkey PRIMARY KEY (id);
 
 
 --
@@ -1134,6 +1516,14 @@ ALTER TABLE ONLY public.service_modifier_options
 
 
 --
+-- Name: service_recipes service_recipes_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.service_recipes
+    ADD CONSTRAINT service_recipes_pkey PRIMARY KEY (service_id, product_id);
+
+
+--
 -- Name: service_variants service_variants_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1155,6 +1545,14 @@ ALTER TABLE ONLY public.services
 
 ALTER TABLE ONLY public.stock_movements
     ADD CONSTRAINT stock_movements_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: tax_rules tax_rules_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.tax_rules
+    ADD CONSTRAINT tax_rules_pkey PRIMARY KEY (id);
 
 
 --
@@ -1198,6 +1596,20 @@ CREATE UNIQUE INDEX appointments_idempotency ON public.appointments USING btree 
 --
 
 CREATE INDEX audit_log_tenant ON public.audit_log USING btree (tenant_id, ts DESC);
+
+
+--
+-- Name: checkout_items_tenant; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX checkout_items_tenant ON public.checkout_items USING btree (tenant_id, checkout_id);
+
+
+--
+-- Name: checkouts_tenant; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX checkouts_tenant ON public.checkouts USING btree (tenant_id, ts DESC);
 
 
 --
@@ -1264,6 +1676,27 @@ CREATE INDEX holidays_country ON public.holidays USING btree (country_code, year
 
 
 --
+-- Name: invoice_lines_tenant; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX invoice_lines_tenant ON public.invoice_lines USING btree (tenant_id, invoice_id);
+
+
+--
+-- Name: invoices_idempotency; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX invoices_idempotency ON public.invoices USING btree (tenant_id, idempotency_key) WHERE (idempotency_key IS NOT NULL);
+
+
+--
+-- Name: invoices_tenant; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX invoices_tenant ON public.invoices USING btree (tenant_id, location_id, date DESC);
+
+
+--
 -- Name: legal_entities_tenant; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -1310,6 +1743,20 @@ CREATE INDEX location_catalog_variants_tenant ON public.location_catalog_variant
 --
 
 CREATE INDEX locations_tenant ON public.locations USING btree (tenant_id, lifecycle);
+
+
+--
+-- Name: loyalty_ledger_tenant; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX loyalty_ledger_tenant ON public.loyalty_ledger USING btree (tenant_id, customer_id, at);
+
+
+--
+-- Name: merchant_transactions_tenant; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX merchant_transactions_tenant ON public.merchant_transactions USING btree (tenant_id, checkout_id);
 
 
 --
@@ -1366,6 +1813,13 @@ CREATE INDEX service_modifier_groups_tenant ON public.service_modifier_groups US
 --
 
 CREATE INDEX service_modifier_options_tenant ON public.service_modifier_options USING btree (tenant_id, group_id, sort);
+
+
+--
+-- Name: service_recipes_tenant; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX service_recipes_tenant ON public.service_recipes USING btree (tenant_id, product_id);
 
 
 --
@@ -1478,11 +1932,75 @@ ALTER TABLE ONLY public.businesses
 
 
 --
+-- Name: checkout_items checkout_items_checkout_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.checkout_items
+    ADD CONSTRAINT checkout_items_checkout_id_fkey FOREIGN KEY (checkout_id) REFERENCES public.checkouts(id) ON DELETE CASCADE;
+
+
+--
+-- Name: checkout_items checkout_items_merchant_transaction_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.checkout_items
+    ADD CONSTRAINT checkout_items_merchant_transaction_id_fkey FOREIGN KEY (merchant_transaction_id) REFERENCES public.merchant_transactions(id);
+
+
+--
+-- Name: checkout_items checkout_items_seller_legal_entity_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.checkout_items
+    ADD CONSTRAINT checkout_items_seller_legal_entity_id_fkey FOREIGN KEY (seller_legal_entity_id) REFERENCES public.legal_entities(id);
+
+
+--
+-- Name: checkout_items checkout_items_tenant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.checkout_items
+    ADD CONSTRAINT checkout_items_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.businesses(id);
+
+
+--
+-- Name: checkouts checkouts_customer_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.checkouts
+    ADD CONSTRAINT checkouts_customer_id_fkey FOREIGN KEY (customer_id) REFERENCES public.customers(id);
+
+
+--
+-- Name: checkouts checkouts_invoice_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.checkouts
+    ADD CONSTRAINT checkouts_invoice_id_fkey FOREIGN KEY (invoice_id) REFERENCES public.invoices(id);
+
+
+--
+-- Name: checkouts checkouts_tenant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.checkouts
+    ADD CONSTRAINT checkouts_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.businesses(id);
+
+
+--
 -- Name: customers customers_tenant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.customers
     ADD CONSTRAINT customers_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.businesses(id);
+
+
+--
+-- Name: discount_codes discount_codes_tenant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.discount_codes
+    ADD CONSTRAINT discount_codes_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.businesses(id);
 
 
 --
@@ -1590,6 +2108,22 @@ ALTER TABLE ONLY public.employees
 
 
 --
+-- Name: gift_cards gift_cards_customer_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.gift_cards
+    ADD CONSTRAINT gift_cards_customer_id_fkey FOREIGN KEY (customer_id) REFERENCES public.customers(id);
+
+
+--
+-- Name: gift_cards gift_cards_tenant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.gift_cards
+    ADD CONSTRAINT gift_cards_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.businesses(id);
+
+
+--
 -- Name: holds holds_employee_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1627,6 +2161,94 @@ ALTER TABLE ONLY public.holds
 
 ALTER TABLE ONLY public.holidays
     ADD CONSTRAINT holidays_country_code_year_fkey FOREIGN KEY (country_code, year) REFERENCES public.holiday_calendar_years(country_code, year);
+
+
+--
+-- Name: invoice_counters invoice_counters_location_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.invoice_counters
+    ADD CONSTRAINT invoice_counters_location_id_fkey FOREIGN KEY (location_id) REFERENCES public.locations(id);
+
+
+--
+-- Name: invoice_counters invoice_counters_tenant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.invoice_counters
+    ADD CONSTRAINT invoice_counters_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.businesses(id);
+
+
+--
+-- Name: invoice_lines invoice_lines_appointment_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.invoice_lines
+    ADD CONSTRAINT invoice_lines_appointment_id_fkey FOREIGN KEY (appointment_id) REFERENCES public.appointments(id);
+
+
+--
+-- Name: invoice_lines invoice_lines_invoice_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.invoice_lines
+    ADD CONSTRAINT invoice_lines_invoice_id_fkey FOREIGN KEY (invoice_id) REFERENCES public.invoices(id) ON DELETE CASCADE;
+
+
+--
+-- Name: invoice_lines invoice_lines_product_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.invoice_lines
+    ADD CONSTRAINT invoice_lines_product_id_fkey FOREIGN KEY (product_id) REFERENCES public.products(id);
+
+
+--
+-- Name: invoice_lines invoice_lines_service_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.invoice_lines
+    ADD CONSTRAINT invoice_lines_service_id_fkey FOREIGN KEY (service_id) REFERENCES public.services(id);
+
+
+--
+-- Name: invoice_lines invoice_lines_tenant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.invoice_lines
+    ADD CONSTRAINT invoice_lines_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.businesses(id);
+
+
+--
+-- Name: invoices invoices_customer_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.invoices
+    ADD CONSTRAINT invoices_customer_id_fkey FOREIGN KEY (customer_id) REFERENCES public.customers(id);
+
+
+--
+-- Name: invoices invoices_employee_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.invoices
+    ADD CONSTRAINT invoices_employee_id_fkey FOREIGN KEY (employee_id) REFERENCES public.employees(id);
+
+
+--
+-- Name: invoices invoices_location_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.invoices
+    ADD CONSTRAINT invoices_location_id_fkey FOREIGN KEY (location_id) REFERENCES public.locations(id);
+
+
+--
+-- Name: invoices invoices_tenant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.invoices
+    ADD CONSTRAINT invoices_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.businesses(id);
 
 
 --
@@ -1763,6 +2385,62 @@ ALTER TABLE ONLY public.location_lifecycle_log
 
 ALTER TABLE ONLY public.locations
     ADD CONSTRAINT locations_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.businesses(id);
+
+
+--
+-- Name: loyalty_config loyalty_config_tenant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.loyalty_config
+    ADD CONSTRAINT loyalty_config_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.businesses(id);
+
+
+--
+-- Name: loyalty_ledger loyalty_ledger_customer_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.loyalty_ledger
+    ADD CONSTRAINT loyalty_ledger_customer_id_fkey FOREIGN KEY (customer_id) REFERENCES public.customers(id);
+
+
+--
+-- Name: loyalty_ledger loyalty_ledger_tenant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.loyalty_ledger
+    ADD CONSTRAINT loyalty_ledger_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.businesses(id);
+
+
+--
+-- Name: merchant_transactions merchant_transactions_checkout_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.merchant_transactions
+    ADD CONSTRAINT merchant_transactions_checkout_id_fkey FOREIGN KEY (checkout_id) REFERENCES public.checkouts(id) ON DELETE CASCADE;
+
+
+--
+-- Name: merchant_transactions merchant_transactions_legal_entity_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.merchant_transactions
+    ADD CONSTRAINT merchant_transactions_legal_entity_id_fkey FOREIGN KEY (legal_entity_id) REFERENCES public.legal_entities(id);
+
+
+--
+-- Name: merchant_transactions merchant_transactions_payment_account_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.merchant_transactions
+    ADD CONSTRAINT merchant_transactions_payment_account_id_fkey FOREIGN KEY (payment_account_id) REFERENCES public.payment_accounts(id);
+
+
+--
+-- Name: merchant_transactions merchant_transactions_tenant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.merchant_transactions
+    ADD CONSTRAINT merchant_transactions_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.businesses(id);
 
 
 --
@@ -1918,6 +2596,30 @@ ALTER TABLE ONLY public.service_modifier_options
 
 
 --
+-- Name: service_recipes service_recipes_product_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.service_recipes
+    ADD CONSTRAINT service_recipes_product_id_fkey FOREIGN KEY (product_id) REFERENCES public.products(id) ON DELETE CASCADE;
+
+
+--
+-- Name: service_recipes service_recipes_service_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.service_recipes
+    ADD CONSTRAINT service_recipes_service_id_fkey FOREIGN KEY (service_id) REFERENCES public.services(id) ON DELETE CASCADE;
+
+
+--
+-- Name: service_recipes service_recipes_tenant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.service_recipes
+    ADD CONSTRAINT service_recipes_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.businesses(id);
+
+
+--
 -- Name: service_variants service_variants_service_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1982,6 +2684,22 @@ ALTER TABLE ONLY public.stock_movements
 
 
 --
+-- Name: tax_rules tax_rules_legal_entity_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.tax_rules
+    ADD CONSTRAINT tax_rules_legal_entity_id_fkey FOREIGN KEY (legal_entity_id) REFERENCES public.legal_entities(id);
+
+
+--
+-- Name: tax_rules tax_rules_tenant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.tax_rules
+    ADD CONSTRAINT tax_rules_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.businesses(id);
+
+
+--
 -- Name: user_credentials user_credentials_employee_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2036,10 +2754,28 @@ CREATE POLICY auth_login_lookup ON public.user_credentials FOR SELECT USING ((cu
 ALTER TABLE public.businesses ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: checkout_items; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.checkout_items ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: checkouts; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.checkouts ENABLE ROW LEVEL SECURITY;
+
+--
 -- Name: customers; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
 ALTER TABLE public.customers ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: discount_codes; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.discount_codes ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: emp_timings; Type: ROW SECURITY; Schema: public; Owner: -
@@ -2066,6 +2802,12 @@ ALTER TABLE public.employee_skills ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.employees ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: gift_cards; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.gift_cards ENABLE ROW LEVEL SECURITY;
+
+--
 -- Name: holds; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -2082,6 +2824,24 @@ ALTER TABLE public.holiday_calendar_years ENABLE ROW LEVEL SECURITY;
 --
 
 ALTER TABLE public.holidays ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: invoice_counters; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.invoice_counters ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: invoice_lines; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.invoice_lines ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: invoices; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.invoices ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: legal_entities; Type: ROW SECURITY; Schema: public; Owner: -
@@ -2124,6 +2884,24 @@ ALTER TABLE public.location_lifecycle_log ENABLE ROW LEVEL SECURITY;
 --
 
 ALTER TABLE public.locations ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: loyalty_config; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.loyalty_config ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: loyalty_ledger; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.loyalty_ledger ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: merchant_transactions; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.merchant_transactions ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: payment_accounts; Type: ROW SECURITY; Schema: public; Owner: -
@@ -2194,6 +2972,12 @@ ALTER TABLE public.service_modifier_groups ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.service_modifier_options ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: service_recipes; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.service_recipes ENABLE ROW LEVEL SECURITY;
+
+--
 -- Name: service_variants; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -2212,10 +2996,23 @@ ALTER TABLE public.services ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.stock_movements ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: tax_rules; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.tax_rules ENABLE ROW LEVEL SECURITY;
+
+--
 -- Name: audit_log tenant_append; Type: POLICY; Schema: public; Owner: -
 --
 
 CREATE POLICY tenant_append ON public.audit_log FOR INSERT WITH CHECK ((tenant_id = app.current_tenant()));
+
+
+--
+-- Name: loyalty_ledger tenant_append; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY tenant_append ON public.loyalty_ledger FOR INSERT WITH CHECK ((tenant_id = app.current_tenant()));
 
 
 --
@@ -2247,10 +3044,31 @@ CREATE POLICY tenant_isolation ON public.businesses USING ((id = app.current_ten
 
 
 --
+-- Name: checkout_items tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY tenant_isolation ON public.checkout_items USING ((tenant_id = app.current_tenant())) WITH CHECK ((tenant_id = app.current_tenant()));
+
+
+--
+-- Name: checkouts tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY tenant_isolation ON public.checkouts USING ((tenant_id = app.current_tenant())) WITH CHECK ((tenant_id = app.current_tenant()));
+
+
+--
 -- Name: customers tenant_isolation; Type: POLICY; Schema: public; Owner: -
 --
 
 CREATE POLICY tenant_isolation ON public.customers USING ((tenant_id = app.current_tenant())) WITH CHECK ((tenant_id = app.current_tenant()));
+
+
+--
+-- Name: discount_codes tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY tenant_isolation ON public.discount_codes USING ((tenant_id = app.current_tenant())) WITH CHECK ((tenant_id = app.current_tenant()));
 
 
 --
@@ -2282,10 +3100,38 @@ CREATE POLICY tenant_isolation ON public.employees USING ((tenant_id = app.curre
 
 
 --
+-- Name: gift_cards tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY tenant_isolation ON public.gift_cards USING ((tenant_id = app.current_tenant())) WITH CHECK ((tenant_id = app.current_tenant()));
+
+
+--
 -- Name: holds tenant_isolation; Type: POLICY; Schema: public; Owner: -
 --
 
 CREATE POLICY tenant_isolation ON public.holds USING ((tenant_id = app.current_tenant())) WITH CHECK ((tenant_id = app.current_tenant()));
+
+
+--
+-- Name: invoice_counters tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY tenant_isolation ON public.invoice_counters USING ((tenant_id = app.current_tenant())) WITH CHECK ((tenant_id = app.current_tenant()));
+
+
+--
+-- Name: invoice_lines tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY tenant_isolation ON public.invoice_lines USING ((tenant_id = app.current_tenant())) WITH CHECK ((tenant_id = app.current_tenant()));
+
+
+--
+-- Name: invoices tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY tenant_isolation ON public.invoices USING ((tenant_id = app.current_tenant())) WITH CHECK ((tenant_id = app.current_tenant()));
 
 
 --
@@ -2335,6 +3181,20 @@ CREATE POLICY tenant_isolation ON public.location_lifecycle_log USING ((tenant_i
 --
 
 CREATE POLICY tenant_isolation ON public.locations USING ((tenant_id = app.current_tenant())) WITH CHECK ((tenant_id = app.current_tenant()));
+
+
+--
+-- Name: loyalty_config tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY tenant_isolation ON public.loyalty_config USING ((tenant_id = app.current_tenant())) WITH CHECK ((tenant_id = app.current_tenant()));
+
+
+--
+-- Name: merchant_transactions tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY tenant_isolation ON public.merchant_transactions USING ((tenant_id = app.current_tenant())) WITH CHECK ((tenant_id = app.current_tenant()));
 
 
 --
@@ -2394,6 +3254,13 @@ CREATE POLICY tenant_isolation ON public.service_modifier_options USING ((tenant
 
 
 --
+-- Name: service_recipes tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY tenant_isolation ON public.service_recipes USING ((tenant_id = app.current_tenant())) WITH CHECK ((tenant_id = app.current_tenant()));
+
+
+--
 -- Name: service_variants tenant_isolation; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -2408,6 +3275,13 @@ CREATE POLICY tenant_isolation ON public.services USING ((tenant_id = app.curren
 
 
 --
+-- Name: tax_rules tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY tenant_isolation ON public.tax_rules USING (((tenant_id = app.current_tenant()) OR (tenant_id IS NULL))) WITH CHECK ((tenant_id = app.current_tenant()));
+
+
+--
 -- Name: user_credentials tenant_isolation; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -2419,6 +3293,13 @@ CREATE POLICY tenant_isolation ON public.user_credentials USING ((tenant_id = ap
 --
 
 CREATE POLICY tenant_read ON public.audit_log FOR SELECT USING ((tenant_id = app.current_tenant()));
+
+
+--
+-- Name: loyalty_ledger tenant_read; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY tenant_read ON public.loyalty_ledger FOR SELECT USING ((tenant_id = app.current_tenant()));
 
 
 --
@@ -2460,4 +3341,5 @@ INSERT INTO public.schema_migrations (version) VALUES
     ('20260824150005'),
     ('20260824180006'),
     ('20260824180007'),
-    ('20260824180008');
+    ('20260824180008'),
+    ('20260824210009');

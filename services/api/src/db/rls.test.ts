@@ -66,6 +66,14 @@ describe('row-level security', () => {
       'emp_timings',
       'schedule_exceptions',
       'holds',
+      'invoices',
+      'invoice_lines',
+      'checkouts',
+      'merchant_transactions',
+      'gift_cards',
+      'discount_codes',
+      'loyalty_ledger',
+      'service_recipes',
     ]) {
       const r = await api.query(`SELECT count(*)::int AS n FROM ${table}`);
       expect(r.rows[0].n, table).toBe(0);

@@ -173,11 +173,11 @@ describe('catalog doors (contract tests vs prototype)', () => {
     expect(res.statusCode).toBe(200);
     const cat = LocationCatalogResponseSchema.parse(res.json());
     expect(cat.services).toHaveLength(8);
-    expect(cat.products).toHaveLength(10);
+    expect(cat.products).toHaveLength(12);
     const s8 = cat.services.find((s) => s.name === 'Sports massage');
     expect(s8?.variants).toHaveLength(3);
     const ownUse = cat.products.filter((p) => p.own);
-    expect(ownUse).toHaveLength(3);
+    expect(ownUse).toHaveLength(5);
     expect(ownUse.every((p) => p.config.pos === false)).toBe(true);
     // Stock must equal the ledger sum, whatever other suites moved.
     const bands = cat.products.find((p) => p.sku === 'VEL-BND-SET');

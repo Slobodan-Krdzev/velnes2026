@@ -302,6 +302,29 @@ export async function priceFor(
   };
 }
 
+/** prodAt — the per-location resolution of one product. */
+export async function prodAt(trx: Trx, productId: string, locationId: string) {
+  const p = await trx
+    .selectFrom('products')
+    .select(['id', 'price', 'active', 'own'])
+    .where('id', '=', productId)
+    .executeTakeFirst();
+  if (!p) throw new CatalogError('NOT_FOUND', 'Unknown product');
+  const c = await trx
+    .selectFrom('locationCatalogProducts')
+    .selectAll()
+    .where('productId', '=', productId)
+    .where('locationId', '=', locationId)
+    .executeTakeFirst();
+  return {
+    active: c?.active ?? p.active,
+    price: c?.price ?? p.price,
+    pos: c?.pos ?? (p.own ? false : p.active),
+    stock: c?.stock ?? 0,
+    lowStock: c?.lowStock ?? 2,
+  };
+}
+
 /** The whole resolved catalog of one location, for catalog screens. */
 export async function locationCatalog(
   trx: Trx,

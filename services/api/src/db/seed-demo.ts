@@ -63,6 +63,11 @@ export const demo = {
   et1: '90000000-0000-4000-8000-000000000001',
   et2: '90000000-0000-4000-8000-000000000002',
   et3: '90000000-0000-4000-8000-000000000003',
+  p8: '70000000-0000-4000-8000-000000000008',
+  p9: '70000000-0000-4000-8000-000000000009',
+  gift1: 'a0000000-0000-4000-8000-000000000001',
+  gift2: 'a0000000-0000-4000-8000-000000000002',
+  gift3: 'a0000000-0000-4000-8000-000000000003',
 } as const;
 
 const vid = (svc: number, n: number) =>
@@ -161,6 +166,9 @@ export async function seedDemo(adminUrl: string) {
     await q('BEGIN');
     await q(`TRUNCATE audit_log, refresh_tokens, user_credentials, payment_accounts,
       legal_entity_locations, legal_entities, employee_locations,
+      tax_rules, service_recipes, loyalty_ledger, loyalty_config,
+      discount_codes, gift_cards, checkout_items, merchant_transactions,
+      checkouts, invoice_lines, invoices, invoice_counters,
       emp_timings, holds, appointment_history, appointments, customers,
       schedule_exceptions, holidays, holiday_calendar_years,
       stock_movements, location_catalog_products, products, product_categories,
@@ -412,6 +420,8 @@ export async function seedDemo(adminUrl: string) {
       [demo.o1, 'Massage oil, neutral 1 l', 'Own use', 'VEL-OIL-1L', 6, 0, true, true, 900, 1000, 'ml', null],
       [demo.o2, 'Arnica massage oil 500 ml', 'Own use', 'VEL-ARN-500', 3, 0, true, true, 1150, 500, 'ml', null],
       [demo.o3, 'Ultrasound gel 5 l', 'Own use', 'VEL-GEL-5L', 2, 0, true, true, 640, 5000, 'ml', null],
+      [demo.p8, 'Couch roll 50 cm', 'Own use', 'VEL-CCH-50', 14, 0, true, true, 510, 50, 'm', null],
+      [demo.p9, 'Nitrile gloves M — 100 pcs', 'Own use', 'VEL-GLV-M', 6, 0, true, true, 790, 100, 'pcs', null],
     ];
     for (const [id, name, cat, sku, , price, active, own, cost, size, unit, seller] of prodRows)
       await q(
@@ -545,6 +555,81 @@ export async function seedDemo(adminUrl: string) {
          VALUES ($1,$2,$3,$4,NULL,NULL,$5,$6,$7,$8,$9,$9,$10,$11,$12,$13,$14,'observed')`,
         [id, demo.business, emp, sid, n, med, pace, daysAgo(96), iso(today), rec, status, appr, apprBy, apprAt],
       );
+
+    // ── Till world: gift cards, promo codes, loyalty, recipes ─────
+    await q(
+      `INSERT INTO gift_cards (id, tenant_id, code, value, remaining, customer_id) VALUES
+       ($1,$4,'VEL-8841-2290',100,22,$5),
+       ($2,$4,'VEL-3317-9042',50,50,NULL),
+       ($3,$4,'VEL-6620-1185',75,0,$6)`,
+      [demo.gift1, demo.gift2, demo.gift3, demo.business, demo.c4, demo.c1],
+    );
+    await q(
+      `INSERT INTO discount_codes (tenant_id, code, type, value, used, usage_limit, starts, ends) VALUES
+       ($1,'SUMMER26','Percentage',15,48,200,'2026-07-01','2026-08-31'),
+       ($1,'WELCOME10','Fixed amount',10,132,500,'2026-01-01','2026-12-31'),
+       ($1,'AUTUMN20','Percentage',20,0,150,'2026-09-15','2026-10-15'),
+       ($1,'SPRING26','Percentage',10,187,200,'2026-03-01','2026-05-31')`,
+      [demo.business],
+    );
+    await q(
+      `INSERT INTO loyalty_config (tenant_id, active, earn_per, points, step, worth, expiry_months, welcome, birthday)
+       VALUES ($1,true,60,1,100,300,24,25,50)`,
+      [demo.business],
+    );
+    // Opening balances reconcile the seeded customer point totals:
+    // the ledger explains every number, from day one.
+    for (const [id, , , , , , , , points] of custRows)
+      if (points > 0)
+        await q(
+          `INSERT INTO loyalty_ledger (tenant_id, customer_id, at, reason, points, ref)
+           VALUES ($1,$2,now(),'Opening balance',$3,'—')`,
+          [demo.business, id, points],
+        );
+    // Recipes — what one treatment takes from the own-use shelf.
+    const recipeRows: [string, string, number][] = [
+      [demo.s1, demo.o1, 12],
+      [demo.s1, demo.p9, 2],
+      [demo.s1, demo.p8, 1.4],
+      [demo.s2, demo.o1, 18],
+      [demo.s2, demo.o3, 60],
+      [demo.s2, demo.p9, 2],
+      [demo.s2, demo.p8, 1.4],
+      [demo.s4, demo.p8, 1.4],
+      [demo.s6, demo.p8, 1.4],
+      [demo.s8, demo.o2, 25],
+      [demo.s8, demo.p8, 1.4],
+    ];
+    for (const [sid, pid, qty] of recipeRows)
+      await q(
+        `INSERT INTO service_recipes (tenant_id, service_id, product_id, qty_amount) VALUES ($1,$2,$3,$4)`,
+        [demo.business, sid, pid, qty],
+      );
+    // Historical invoices (prototype i1–i4, booked at Centar).
+    const invRows: [string, string, string, string, string, string, [string, number, number][]][] = [
+      ['CEN-2026-0412', '2026-08-04', 'Katerina Stojanovska', 'Maria Petrovska', 'Card', 'Paid', [['Rehab training', 1, 1700], ['Cuticle oil pen', 1, 510]]],
+      ['CEN-2026-0411', '2026-08-04', 'Marija Angelovska', 'Maria Petrovska', 'Gift card', 'Paid', [['Manual therapy, spine', 1, 4700]]],
+      ['CEN-2026-0410', '2026-08-03', 'Stefan Georgiev', 'Elena Ristova', 'Cash', 'Paid', [['Sports injury assessment', 1, 2700], ['Hydrating mask', 2, 1750]]],
+      ['CEN-2026-0409', '2026-08-03', 'Ivana Nikolikj', 'Ana Dimitrova', 'Card', 'Refunded', [['Medical taping', 1, 900]]],
+    ];
+    for (const [number, date, cust, emp, method, status, lns] of invRows) {
+      const total = lns.reduce((s, [, qy, u]) => s + qy * u, 0);
+      const inv = await q(
+        `INSERT INTO invoices (tenant_id, location_id, number, date, customer_name, employee_name, method, status, total)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id`,
+        [demo.business, demo.locCentar, number, date, cust, emp, method, status, total],
+      );
+      for (const [i, [d, qy, u]] of lns.entries())
+        await q(
+          `INSERT INTO invoice_lines (tenant_id, invoice_id, description, qty, unit_price, item_class, sort)
+           VALUES ($1,$2,$3,$4,$5,'other',$6)`,
+          [demo.business, inv.rows[0].id, d, qy, u, i],
+        );
+    }
+    await q(
+      `INSERT INTO invoice_counters (tenant_id, location_id, next) VALUES ($1,$2,413)`,
+      [demo.business, demo.locCentar],
+    );
 
     const hash = await argon2.hash(DEMO_PASSWORD);
     for (const [id] of emps)

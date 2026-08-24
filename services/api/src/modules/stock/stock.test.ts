@@ -92,7 +92,7 @@ describe('stock door', () => {
     expect(await stockOf(demo.locCentar, demo.p3)).toBe(beforeC - 10);
     expect(await stockOf(demo.locAerodrom, demo.p3)).toBe(10);
     const pair = await admin.query(
-      `SELECT kind, qty FROM stock_movements WHERE product_id=$1 AND ref IS NOT NULL ORDER BY qty`,
+      `SELECT kind, qty FROM stock_movements WHERE product_id=$1 AND kind::text LIKE 'transfer%' ORDER BY qty`,
       [demo.p3],
     );
     expect(pair.rows).toEqual([

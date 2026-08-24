@@ -9,6 +9,10 @@ export type AppointmentKind = "absence" | "appointment" | "blocked" | "chore" | 
 
 export type AppointmentStatus = "booked" | "cancelled" | "confirmed" | "no_show";
 
+export type CheckoutStatus = "FAILED" | "PAID" | "PARTIALLY_PAID";
+
+export type DiscountCodeType = "Fixed amount" | "Percentage";
+
 export type EmployeeAccess = "desk" | "manager" | "owner" | "staff";
 
 export type EmployeeStatus = "active" | "invited";
@@ -16,6 +20,8 @@ export type EmployeeStatus = "active" | "invited";
 export type Generated<T> = T extends ColumnType<infer S, infer I, infer U>
   ? ColumnType<S, I | undefined, U>
   : ColumnType<T, T | undefined, T>;
+
+export type InvoiceStatus = "Paid" | "Refunded";
 
 export type Json = JsonValue;
 
@@ -36,6 +42,8 @@ export type LegalEntityStatus = "pending" | "verified";
 export type LocationLifecycle = "ACTIVE" | "APPROVED" | "CHANGES_REQUIRED" | "CLOSED" | "DRAFT" | "RESUBMITTED" | "SUBMITTED" | "SUSPENDED" | "UNDER_REVIEW";
 
 export type ModifierGroupType = "multi" | "single";
+
+export type MtxStatus = "config_incomplete" | "failed" | "paid";
 
 export type Numeric = ColumnType<string, number | string, number | string>;
 
@@ -124,6 +132,29 @@ export interface Businesses {
   vat: string | null;
 }
 
+export interface CheckoutItems {
+  amount: number;
+  checkoutId: string;
+  id: Generated<string>;
+  itemClass: string;
+  merchantTransactionId: string | null;
+  name: string;
+  qty: Generated<number>;
+  sellerLegalEntityId: string | null;
+  taxProfileId: string | null;
+  tenantId: string;
+}
+
+export interface Checkouts {
+  customerId: string | null;
+  id: Generated<string>;
+  invoiceId: string;
+  status: Generated<CheckoutStatus>;
+  tenantId: string;
+  total: number;
+  ts: Generated<Timestamp>;
+}
+
 export interface Customers {
   blacklisted: Generated<boolean>;
   createdAt: Generated<Timestamp>;
@@ -140,6 +171,18 @@ export interface Customers {
   spend: Generated<number>;
   tenantId: string;
   visits: Generated<number>;
+}
+
+export interface DiscountCodes {
+  code: string;
+  ends: Timestamp;
+  id: Generated<string>;
+  starts: Timestamp;
+  tenantId: string;
+  type: DiscountCodeType;
+  usageLimit: number | null;
+  used: Generated<number>;
+  value: number;
 }
 
 export interface EmployeeLocations {
@@ -193,6 +236,16 @@ export interface EmpTimings {
   windowTo: Timestamp | null;
 }
 
+export interface GiftCards {
+  code: string;
+  createdAt: Generated<Timestamp>;
+  customerId: string | null;
+  id: Generated<string>;
+  remaining: number;
+  tenantId: string;
+  value: number;
+}
+
 export interface Holds {
   createdAt: Generated<Timestamp>;
   date: Timestamp;
@@ -223,6 +276,52 @@ export interface Holidays {
   name: string;
   type: string;
   year: number;
+}
+
+export interface InvoiceCounters {
+  locationId: string;
+  next: Generated<number>;
+  tenantId: string;
+}
+
+export interface InvoiceLines {
+  appointmentId: string | null;
+  description: string;
+  id: Generated<string>;
+  invoiceId: string;
+  itemClass: Generated<string>;
+  lineDiscount: Generated<number>;
+  productId: string | null;
+  qty: Generated<number>;
+  serviceId: string | null;
+  sort: Generated<number>;
+  tenantId: string;
+  unitPrice: number;
+  vat: Generated<number>;
+}
+
+export interface Invoices {
+  cartDiscount: Generated<number>;
+  createdAt: Generated<Timestamp>;
+  customerId: string | null;
+  customerName: Generated<string>;
+  date: Generated<Timestamp>;
+  employeeId: string | null;
+  employeeName: Generated<string>;
+  giftAmount: Generated<number>;
+  id: Generated<string>;
+  idempotencyKey: string | null;
+  locationId: string;
+  method: string;
+  number: string;
+  pointsRedeemed: Generated<number>;
+  promoAmount: Generated<number>;
+  promoCode: string | null;
+  serviceCharge: Generated<number>;
+  status: Generated<InvoiceStatus>;
+  tenantId: string;
+  tip: Generated<number>;
+  total: number;
 }
 
 export interface LegalEntities {
@@ -308,6 +407,43 @@ export interface Locations {
   rooms: Generated<number>;
   tenantId: string;
   tz: Generated<string>;
+}
+
+export interface LoyaltyConfig {
+  active: Generated<boolean>;
+  birthday: Generated<number>;
+  earnPer: Generated<number>;
+  expiryMonths: Generated<number>;
+  points: Generated<number>;
+  step: Generated<number>;
+  tenantId: string;
+  welcome: Generated<number>;
+  worth: Generated<number>;
+}
+
+export interface LoyaltyLedger {
+  at: Generated<Timestamp>;
+  customerId: string;
+  id: Generated<string>;
+  points: number;
+  reason: string;
+  ref: Generated<string>;
+  tenantId: string;
+}
+
+export interface MerchantTransactions {
+  amount: number;
+  checkoutId: string;
+  createdAt: Generated<Timestamp>;
+  id: Generated<string>;
+  idempotencyKey: string;
+  legalDocRef: string | null;
+  legalEntityId: string | null;
+  method: string;
+  paymentAccountId: string | null;
+  providerRef: string | null;
+  status: MtxStatus;
+  tenantId: string;
 }
 
 export interface PaymentAccounts {
@@ -417,6 +553,13 @@ export interface ServiceModifierOptions {
   tenantId: string;
 }
 
+export interface ServiceRecipes {
+  productId: string;
+  qtyAmount: Numeric;
+  serviceId: string;
+  tenantId: string;
+}
+
 export interface Services {
   categoryId: string | null;
   createdAt: Generated<Timestamp>;
@@ -458,6 +601,14 @@ export interface StockMovements {
   tenantId: string;
 }
 
+export interface TaxRules {
+  id: Generated<string>;
+  itemClass: string;
+  legalEntityId: string | null;
+  taxProfileId: string | null;
+  tenantId: string | null;
+}
+
 export interface UserCredentials {
   employeeId: string;
   passwordHash: string;
@@ -470,14 +621,21 @@ export interface DB {
   appointments: Appointments;
   auditLog: AuditLog;
   businesses: Businesses;
+  checkoutItems: CheckoutItems;
+  checkouts: Checkouts;
   customers: Customers;
+  discountCodes: DiscountCodes;
   employeeLocations: EmployeeLocations;
   employees: Employees;
   employeeSkills: EmployeeSkills;
   empTimings: EmpTimings;
+  giftCards: GiftCards;
   holds: Holds;
   holidayCalendarYears: HolidayCalendarYears;
   holidays: Holidays;
+  invoiceCounters: InvoiceCounters;
+  invoiceLines: InvoiceLines;
+  invoices: Invoices;
   legalEntities: LegalEntities;
   legalEntityLocations: LegalEntityLocations;
   locationCatalogProducts: LocationCatalogProducts;
@@ -485,6 +643,9 @@ export interface DB {
   locationCatalogVariants: LocationCatalogVariants;
   locationLifecycleLog: LocationLifecycleLog;
   locations: Locations;
+  loyaltyConfig: LoyaltyConfig;
+  loyaltyLedger: LoyaltyLedger;
+  merchantTransactions: MerchantTransactions;
   paymentAccounts: PaymentAccounts;
   productCategories: ProductCategories;
   products: Products;
@@ -495,8 +656,10 @@ export interface DB {
   serviceCategories: ServiceCategories;
   serviceModifierGroups: ServiceModifierGroups;
   serviceModifierOptions: ServiceModifierOptions;
+  serviceRecipes: ServiceRecipes;
   services: Services;
   serviceVariants: ServiceVariants;
   stockMovements: StockMovements;
+  taxRules: TaxRules;
   userCredentials: UserCredentials;
 }
