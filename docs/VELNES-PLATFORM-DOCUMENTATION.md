@@ -50,9 +50,11 @@ All five speak to **one API**. No app touches the database directly.
   No Keycloak. Roles/permissions modeled after the prototype's role
   kits (owner / manager / front desk / staff + custom roles), scoped
   by location.
-- **Deploy:** Linux VPS, Docker Compose + **Caddy** (TLS, routing).
-  Sized for hundreds of salons on one 8–16 GB VPS; scale by splitting
-  the widget/API before anything else.
+- **Deploy:** Linux VPS, fully native — no Docker (Alex's decision,
+  24 Aug 2026): native PostgreSQL 16 + native **Caddy** (TLS, routing)
+  + the API as a single bundled Node file under systemd
+  (`deploy/DEPLOY.md`). Sized for hundreds of salons on one 8–16 GB
+  VPS; scale by splitting the widget/API before anything else.
 - **Testing:** Vitest for unit/contract tests, Playwright for the
   critical end-to-end journeys. Suites green before merge — the
   prototype's discipline carries over.
@@ -296,7 +298,7 @@ velnes/
   reference/
     prototype/        # index.html + tests/ + DOCS/ (read-only spec)
   docs/               # this documentation
-  docker-compose.yml
+  deploy/             # systemd unit + native VPS deploy guide
   Caddyfile
 ```
 

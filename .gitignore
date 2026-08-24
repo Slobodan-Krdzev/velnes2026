@@ -18,6 +18,3 @@ test-results/
 .idea/
 .vscode/*
 !.vscode/extensions.json
-
-# caddy local state
-caddy_data/

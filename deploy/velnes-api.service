@@ -1,0 +1,25 @@
+# systemd unit for the Velnes API (no containers).
+# Install: copy to /etc/systemd/system/velnes-api.service, then
+#   systemctl daemon-reload && systemctl enable --now velnes-api
+[Unit]
+Description=Velnes API (Fastify)
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+User=velnes
+WorkingDirectory=/srv/velnes/api
+EnvironmentFile=/srv/velnes/api/.env
+ExecStart=/usr/bin/node dist/index.js
+Restart=always
+RestartSec=3
+# Hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/srv/velnes/api
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

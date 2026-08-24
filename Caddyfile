@@ -1,39 +1,40 @@
-# Velnes VPS routing. Domains are placeholders until DNS is decided;
-# same shape serves production. Caddy terminates TLS automatically.
+# Velnes VPS routing (native Caddy, no containers). Domains are
+# placeholders until DNS is decided; same shape serves production.
+# Caddy terminates TLS automatically.
 
 # The API (all five apps speak to it; the widget's public surface
 # lives under the same /api/v1 prefix with its own limits).
 api.velnes.mk {
-	reverse_proxy api:3001
+	reverse_proxy localhost:3001
 }
 
 # Built SPA bundles served as static files (populated by CI/deploy).
 app.velnes.mk {
-	root * /srv/workspace
+	root * /srv/velnes/workspace
 	try_files {path} /index.html
 	file_server
 }
 
 employee.velnes.mk {
-	root * /srv/employee
+	root * /srv/velnes/employee
 	try_files {path} /index.html
 	file_server
 }
 
 book.velnes.mk {
-	root * /srv/booking
+	root * /srv/velnes/booking
 	try_files {path} /index.html
 	file_server
 }
 
 supplier.velnes.mk {
-	root * /srv/supplier
+	root * /srv/velnes/supplier
 	try_files {path} /index.html
 	file_server
 }
 
 hq.velnes.mk {
-	root * /srv/hq
+	root * /srv/velnes/hq
 	try_files {path} /index.html
 	file_server
 }

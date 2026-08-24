@@ -24,7 +24,9 @@ modify anything under `reference/`.
 ## Commands
 - `pnpm dev` — everything in watch mode (api :3001, apps :5173–:5177)
 - `pnpm typecheck` / `pnpm lint` / `pnpm test` / `pnpm build`
-- Local DB only: `docker compose -f docker-compose.dev.yml up -d`
+- Local DB: native Homebrew Postgres 16 (`brew services start
+  postgresql@16`), db/user/password `velnes`. NO Docker anywhere —
+  Alex's decision 2026-08-24; VPS deploys natively per `deploy/DEPLOY.md`.
 - Migrations: dbmate (SQL in `db/migrations/`), types via kysely-codegen
 
 ## Layout
