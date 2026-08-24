@@ -505,7 +505,8 @@ CREATE TABLE public.employees (
     twofa_enabled boolean DEFAULT false NOT NULL,
     color text,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
-    hours jsonb
+    hours jsonb,
+    lang text DEFAULT 'en'::text NOT NULL
 );
 
 ALTER TABLE ONLY public.employees FORCE ROW LEVEL SECURITY;
@@ -3342,4 +3343,5 @@ INSERT INTO public.schema_migrations (version) VALUES
     ('20260824180006'),
     ('20260824180007'),
     ('20260824180008'),
-    ('20260824210009');
+    ('20260824210009'),
+    ('20260825090010');

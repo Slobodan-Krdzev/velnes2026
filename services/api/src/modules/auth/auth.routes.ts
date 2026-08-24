@@ -1,5 +1,6 @@
 import {
   LoginRequestSchema,
+  MePatchSchema,
   LoginResponseSchema,
   LogoutRequestSchema,
   MeResponseSchema,
@@ -9,7 +10,7 @@ import {
 import type { FastifyInstance } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
-import { AuthError, claimsFor, login, logout, me, rotateRefreshToken } from './auth.service.js';
+import { AuthError, claimsFor, login, logout, me, rotateRefreshToken, setLang } from './auth.service.js';
 import { env } from '../../env.js';
 
 const ErrorSchema = z.object({ error: z.string() });
@@ -78,5 +79,13 @@ export function authRoutes(app: FastifyInstance) {
     preHandler: [app.authenticate],
     schema: { response: { 200: MeResponseSchema } },
     handler: async (req) => me(req.claims),
+  });
+
+  r.route({
+    method: 'PATCH',
+    url: '/auth/me',
+    preHandler: [app.authenticate],
+    schema: { body: MePatchSchema, response: { 200: MeResponseSchema } },
+    handler: async (req) => setLang(req.claims, req.body.lang),
   });
 }

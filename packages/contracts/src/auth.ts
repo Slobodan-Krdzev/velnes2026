@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { EmployeeAccessSchema } from './permissions.js';
+import { EmployeeAccessSchema, PermMapSchema } from './permissions.js';
 
 export const LoginRequestSchema = z.object({
   email: z.email(),
@@ -39,11 +39,18 @@ export const LogoutRequestSchema = z.object({
 });
 export type LogoutRequest = z.infer<typeof LogoutRequestSchema>;
 
+export const LangSchema = z.enum(['en', 'mk', 'sq']);
+export type Lang = z.infer<typeof LangSchema>;
+
 export const MeResponseSchema = SessionEmployeeSchema.extend({
   email: z.email(),
   tenantId: z.uuid(),
+  lang: LangSchema,
+  perms: PermMapSchema,
 });
 export type MeResponse = z.infer<typeof MeResponseSchema>;
+
+export const MePatchSchema = z.object({ lang: LangSchema });
 
 /** Claims carried in the access JWT. */
 export const AccessClaimsSchema = z.object({

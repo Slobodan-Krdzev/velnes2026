@@ -1,11 +1,12 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
-import type { AccessClaims, SessionEmployee } from '@velnes/contracts';
+import type { AccessClaims, MeResponse, SessionEmployee } from '@velnes/contracts';
 import argon2 from 'argon2';
 import { sql } from 'kysely';
 import { db, withTenant } from '../../db/index.js';
 import type { EmployeeAccess, EmployeeStatus } from '../../db/types.js';
 import { env } from '../../env.js';
 import { logAudit } from '../audit/audit.service.js';
+import { permsFor } from './authz.service.js';
 
 export class AuthError extends Error {
   constructor(public code: 'INVALID_CREDENTIALS' | 'NOT_ACTIVE' | 'INVALID_TOKEN') {
@@ -75,11 +76,11 @@ async function revokeFamily(familyId: string) {
 async function sessionEmployee(
   tenantId: string,
   employeeId: string,
-): Promise<SessionEmployee & { email: string; tenantId: string }> {
+): Promise<MeResponse> {
   return withTenant(tenantId, async (trx) => {
     const e = await trx
       .selectFrom('employees')
-      .select(['id', 'name', 'email', 'access', 'roleId'])
+      .select(['id', 'name', 'email', 'access', 'roleId', 'lang'])
       .where('id', '=', employeeId)
       .executeTakeFirstOrThrow();
     const locs = await trx
@@ -87,14 +88,23 @@ async function sessionEmployee(
       .select('locationId')
       .where('employeeId', '=', employeeId)
       .execute();
+    const perms = await permsFor(trx, {
+      sub: e.id,
+      ten: tenantId,
+      acc: e.access,
+      rol: e.roleId,
+      locs: [],
+    });
     return {
       id: e.id,
       name: e.name,
       email: e.email,
       access: e.access,
       roleId: e.roleId,
+      lang: e.lang as 'en' | 'mk' | 'sq',
       tenantId,
       locationIds: locs.map((l) => l.locationId),
+      perms,
     };
   });
 }
@@ -164,5 +174,14 @@ export async function logout(token: string) {
 }
 
 export async function me(claims: AccessClaims) {
+  return sessionEmployee(claims.ten, claims.sub);
+}
+
+export async function setLang(claims: AccessClaims, lang: 'en' | 'mk' | 'sq') {
+  // Commit the write before re-reading: sessionEmployee opens its own
+  // transaction and would not see an uncommitted update.
+  await withTenant(claims.ten, (trx) =>
+    trx.updateTable('employees').set({ lang }).where('id', '=', claims.sub).execute(),
+  );
   return sessionEmployee(claims.ten, claims.sub);
 }

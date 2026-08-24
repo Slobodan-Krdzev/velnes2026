@@ -1,14 +1,96 @@
-/* Velnes design tokens.
- * Placeholder set — the real values get extracted from the prototype
- * (reference/prototype/index.html) when the Workspace UI phase starts. */
+/* Velnes design tokens — extracted from the prototype
+ * (reference/prototype/index.html :root), verbatim. */
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+
 :root {
-  --v-bg: #f7f7f8;
-  --v-surface: #ffffff;
-  --v-text: #17181c;
-  --v-muted: #6b7280;
-  --v-accent: #0e7a5f;
-  --v-danger: #b3261e;
-  --v-radius: 10px;
-  --v-font:
-    ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --surface: #ffffff;
+  --surface-muted: #f7f7f7;
+  --surface-sunken: #e5e5e5;
+  --ink: #000000;
+  --ink-muted: #727272;
+  --ink-inverse: #ffffff;
+  --line: #e5e5e5;
+  --line-strong: #e0e0e0;
+  --line-input: #ced1d9;
+  --line-input-strong: #b0b0b0;
+  --calendar-today: #eff6ff;
+  --event-warm: #ffddbd;
+  /* Calendar pastels per treatment category: low saturation, with a
+     deeper tint of the same family for the stripe and the icon. */
+  --ev-manual: #f2e5cf;
+  --ev-manual-ink: #9a7434;
+  --ev-rehab: #f3dfe6;
+  --ev-rehab-ink: #a2637b;
+  --ev-assess: #dcebe1;
+  --ev-assess-ink: #4f8264;
+  --ev-recovery: #e2e3f2;
+  --ev-recovery-ink: #6b70a3;
+  --ev-other: #e9e6dc;
+  --ev-other-ink: #7c7663;
+  --event-neutral: rgba(0, 0, 0, 0.06);
+  --event-sky: #d8ecfb;
+  --success: #1e7d45;
+  --warning: #c26a02;
+  --danger: #c62828;
+  --info: #1a73e8;
+  --r-event: 4px;
+  --r-card: 6px;
+  --r-control: 8px;
+  --r-tile: 12px;
+  --r-pill: 20px;
+  --sidebar: 74px;
+  --header: 70px;
+  --slot: 36px;
+  /* Accent: olive. Deep is the only one that keeps white readable. */
+  --accent: #9aa07e;
+  --accent-strong: #7c8460;
+  --accent-deep: #6f7357;
+  --accent-tint: #f2f4ec;
+  --accent-line: #dfe3d2;
+  --accent-glow: #ccd4b5;
+  --accent-ink: #4b4f3a;
+  --accent-soft: #c5c4b5;
+  --font:
+    'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+html {
+  -webkit-font-smoothing: antialiased;
+}
+body {
+  font-family: var(--font);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 20px;
+}
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+a {
+  color: inherit;
+  text-decoration: none;
+}
+:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
 }

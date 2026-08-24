@@ -1,0 +1,119 @@
+.shell {
+  display: grid;
+  grid-template-columns: 200px 1fr;
+  min-height: 100vh;
+  background: var(--surface-muted);
+}
+.shell-side {
+  background: var(--ink);
+  color: var(--ink-inverse);
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 16px 10px;
+}
+.shell-logo {
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--r-tile);
+  background: rgba(255, 255, 255, 0.95);
+  color: var(--ink);
+  font-weight: 800;
+  font-size: 20px;
+  margin: 0 auto;
+}
+.shell-nav {
+  display: grid;
+  gap: 2px;
+}
+.shell-navitem {
+  padding: 10px 12px;
+  border-radius: var(--r-control);
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.75);
+}
+.shell-navitem:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+.shell-navitem.on {
+  background: var(--accent-deep);
+  color: var(--ink-inverse);
+}
+.shell-header {
+  height: var(--header);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 24px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+}
+.shell-title {
+  font-weight: 800;
+  font-size: 16px;
+}
+.shell-tools {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.shell-lang {
+  width: auto;
+  height: 34px;
+}
+.shell-user {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+}
+.shell-avatar {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--accent-tint);
+  color: var(--accent-ink);
+  font-size: 12px;
+  font-weight: 800;
+}
+.shell-content {
+  padding: 24px;
+}
+
+.login-page {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  background: var(--surface-muted);
+}
+.login-card {
+  width: min(400px, 92vw);
+  padding: 32px;
+  display: grid;
+  gap: 24px;
+}
+.login-brand {
+  display: grid;
+  gap: 6px;
+  justify-items: center;
+  text-align: center;
+}
+.login-mark {
+  width: 52px;
+  height: 52px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--r-tile);
+  background: var(--ink);
+  color: var(--ink-inverse);
+  font-size: 24px;
+  font-weight: 800;
+}
+.login-form {
+  display: grid;
+  gap: 16px;
+}

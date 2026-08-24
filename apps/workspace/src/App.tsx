@@ -1,29 +1,58 @@
-import { API_PREFIX, HealthResponseSchema, type HealthResponse } from '@velnes/contracts';
-import { AppShell } from '@velnes/ui';
-import { useEffect, useState } from 'react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { createI18n } from '@velnes/i18n';
+import { useMemo, type ReactNode } from 'react';
+import { I18nextProvider, useTranslation } from 'react-i18next';
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { Login } from './pages/Login.js';
+import { SessionProvider, useSession } from './session.js';
+import { Shell } from './shell/Shell.js';
+
+const queryClient = new QueryClient({
+  defaultOptions: { queries: { retry: 1, staleTime: 15_000 } },
+});
+
+function Protected({ children }: { children: ReactNode }) {
+  const { me, booting } = useSession();
+  const { t } = useTranslation();
+  if (booting) return <div className="shell-content muted">{t('shell.loading')}</div>;
+  if (!me) return <Navigate to="/login" replace />;
+  return children;
+}
+
+function Placeholder({ title }: { title: string }) {
+  const { t } = useTranslation();
+  return <h1 style={{ fontSize: 20 }}>{t(title)}</h1>;
+}
 
 export function App() {
-  const [health, setHealth] = useState<HealthResponse | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    fetch(`${API_PREFIX}/health`)
-      .then((res) => res.json())
-      .then((data: unknown) => setHealth(HealthResponseSchema.parse(data)))
-      .catch((err: unknown) => setError(err instanceof Error ? err.message : 'failed'));
-  }, []);
-
+  const i18n = useMemo(() => createI18n('en'), []);
   return (
-    <AppShell title="Velnes Workspace">
-      {health ? (
-        <p>
-          API {health.status} · v{health.version} · {health.time}
-        </p>
-      ) : error ? (
-        <p>API unreachable: {error}</p>
-      ) : (
-        <p>Checking API…</p>
-      )}
-    </AppShell>
+    <I18nextProvider i18n={i18n}>
+      <QueryClientProvider client={queryClient}>
+        <BrowserRouter>
+          <SessionProvider>
+            <Routes>
+              <Route path="/login" element={<Login />} />
+              <Route
+                element={
+                  <Protected>
+                    <Shell />
+                  </Protected>
+                }
+              >
+                <Route path="/" element={<Placeholder title="nav.flightdeck" />} />
+                <Route path="/calendar" element={<Placeholder title="nav.calendar" />} />
+                <Route path="/till" element={<Placeholder title="nav.till" />} />
+                <Route path="/catalog" element={<Placeholder title="nav.catalog" />} />
+                <Route path="/customers" element={<Placeholder title="nav.customers" />} />
+                <Route path="/reports" element={<Placeholder title="nav.reports" />} />
+                <Route path="/settings" element={<Placeholder title="nav.settings" />} />
+                <Route path="*" element={<Navigate to="/" replace />} />
+              </Route>
+            </Routes>
+          </SessionProvider>
+        </BrowserRouter>
+      </QueryClientProvider>
+    </I18nextProvider>
   );
 }

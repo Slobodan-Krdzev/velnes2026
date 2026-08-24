@@ -199,6 +199,7 @@ export interface Employees {
   email: string;
   hours: Json | null;
   id: Generated<string>;
+  lang: Generated<string>;
   name: string;
   phone: string | null;
   roleId: string | null;

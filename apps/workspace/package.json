@@ -10,14 +10,22 @@
     "build": "vite build"
   },
   "devDependencies": {
+    "@testing-library/jest-dom": "^7.0.1",
+    "@testing-library/user-event": "^14.6.6",
     "@velnes/config": "workspace:^",
     "@vitejs/plugin-react": "^6.1.0",
     "vite": "^8.2.2"
   },
   "dependencies": {
+    "@tanstack/react-query": "^5.102.1",
     "@velnes/contracts": "workspace:^",
+    "@velnes/i18n": "workspace:^",
     "@velnes/ui": "workspace:^",
+    "i18next": "^25.10.10",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "react-i18next": "^17.0.12",
+    "react-router-dom": "^7.18.2",
+    "zod": "^4.4.3"
   }
 }
