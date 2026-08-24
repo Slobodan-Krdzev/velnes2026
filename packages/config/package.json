@@ -1,0 +1,16 @@
+{
+  "name": "@velnes/config",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./eslint": "./eslint.mjs",
+    "./tsconfig.base.json": "./tsconfig.base.json",
+    "./tsconfig.node.json": "./tsconfig.node.json",
+    "./tsconfig.react.json": "./tsconfig.react.json"
+  },
+  "dependencies": {
+    "@eslint/js": "^10.0.1",
+    "typescript-eslint": "^8.67.0"
+  }
+}

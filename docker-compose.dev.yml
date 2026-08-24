@@ -1,0 +1,22 @@
+# Local development: only Postgres in a container.
+# API and apps run on the host via `pnpm dev` (Vite proxies /api to :3001).
+#   docker compose -f docker-compose.dev.yml up -d
+services:
+  db:
+    image: postgres:16-alpine
+    ports:
+      - '5432:5432'
+    environment:
+      POSTGRES_DB: velnes
+      POSTGRES_USER: velnes
+      POSTGRES_PASSWORD: velnes
+    volumes:
+      - dbdata_dev:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U velnes -d velnes']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  dbdata_dev:

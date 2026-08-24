@@ -1,0 +1,4 @@
+{
+  "extends": "@velnes/config/tsconfig.react.json",
+  "include": ["src"]
+}

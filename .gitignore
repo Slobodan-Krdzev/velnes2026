@@ -1,0 +1,23 @@
+# deps & builds
+node_modules/
+dist/
+*.tsbuildinfo
+
+# env & secrets
+.env
+.env.*
+!.env.example
+
+# test & tooling output
+coverage/
+playwright-report/
+test-results/
+
+# editor/os noise
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# caddy local state
+caddy_data/

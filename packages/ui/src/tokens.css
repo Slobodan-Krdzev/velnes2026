@@ -1,0 +1,14 @@
+/* Velnes design tokens.
+ * Placeholder set — the real values get extracted from the prototype
+ * (reference/prototype/index.html) when the Workspace UI phase starts. */
+:root {
+  --v-bg: #f7f7f8;
+  --v-surface: #ffffff;
+  --v-text: #17181c;
+  --v-muted: #6b7280;
+  --v-accent: #0e7a5f;
+  --v-danger: #b3261e;
+  --v-radius: 10px;
+  --v-font:
+    ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+}

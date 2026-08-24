@@ -1,0 +1,4 @@
+{
+  "extends": "@velnes/config/tsconfig.node.json",
+  "include": ["src"]
+}
