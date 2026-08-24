@@ -2,9 +2,9 @@ import { API_PREFIX, HealthResponseSchema } from '@velnes/contracts';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { buildServer } from '../../server.js';
 
-describe('GET /api/v1/health', () => {
-  const app = buildServer();
+const app = await buildServer();
 
+describe('GET /api/v1/health', () => {
   beforeAll(async () => {
     await app.ready();
   });

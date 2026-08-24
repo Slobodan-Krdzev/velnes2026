@@ -7,19 +7,24 @@
     "dev": "tsx watch src/index.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "build": "esbuild src/index.ts --bundle --platform=node --format=esm --external:pg-native --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\" --outfile=dist/index.js"
+    "build": "esbuild src/index.ts --bundle --platform=node --format=esm --external:pg-native --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\" --outfile=dist/index.js",
+    "seed": "tsx src/db/seed-cli.ts"
   },
   "devDependencies": {
     "@types/pg": "^8.23.1",
     "@velnes/config": "workspace:^",
     "esbuild": "^0.28.2",
+    "kysely-codegen": "^0.20.0",
     "tsx": "^4.23.12"
   },
   "dependencies": {
     "@fastify/cors": "^11.3.0",
+    "@fastify/jwt": "^10.2.2",
     "@fastify/rate-limit": "^11.2.0",
     "@velnes/contracts": "workspace:^",
+    "argon2": "^0.45.1",
     "fastify": "^5.12.1",
+    "fastify-plugin": "^6.0.0",
     "fastify-type-provider-zod": "^7.0.0",
     "kysely": "^0.29.5",
     "pg": "^8.23.0",

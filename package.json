@@ -20,6 +20,7 @@
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",
     "@velnes/config": "workspace:^",
+    "dbmate": "^2.35.0",
     "eslint": "^10.9.0",
     "jsdom": "^30.0.1",
     "prettier": "^3.9.6",

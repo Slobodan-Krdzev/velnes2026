@@ -7,9 +7,13 @@ import {
   validatorCompiler,
   type ZodTypeProvider,
 } from 'fastify-type-provider-zod';
+import { authRoutes } from './modules/auth/auth.routes.js';
+import { auditRoutes } from './modules/audit/audit.routes.js';
 import { healthRoutes } from './modules/health/health.routes.js';
+import { locationsRoutes } from './modules/locations/locations.routes.js';
+import { authPlugin } from './plugins/auth.js';
 
-export function buildServer() {
+export async function buildServer() {
   const app = Fastify({
     logger: process.env.NODE_ENV !== 'test',
   }).withTypeProvider<ZodTypeProvider>();
@@ -19,10 +23,19 @@ export function buildServer() {
 
   // Permissive for now; the public widget surface gets its own strict
   // limits and per-domain CORS when it is built (Phase 7).
-  app.register(cors, { origin: true });
-  app.register(rateLimit, { max: 1000, timeWindow: '1 minute' });
+  await app.register(cors, { origin: true });
+  await app.register(rateLimit, { max: 1000, timeWindow: '1 minute' });
+  await app.register(authPlugin);
 
-  app.register(healthRoutes, { prefix: API_PREFIX });
+  await app.register(
+    async (api) => {
+      healthRoutes(api);
+      authRoutes(api);
+      locationsRoutes(api);
+      auditRoutes(api);
+    },
+    { prefix: API_PREFIX },
+  );
 
   return app;
 }
