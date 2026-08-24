@@ -149,8 +149,39 @@ export const AppointmentListResponseSchema = z.object({
   appointments: z.array(AppointmentSchema),
 });
 
-/** The refusal from the one booking gate — a human sentence. */
+/** Structured refusal codes from the one booking gate — clients
+ *  render these localized; `message` stays the English fallback. */
+export const RefusalCodeSchema = z.enum([
+  'LOC_UNKNOWN',
+  'LOC_CLOSED_DAY',
+  'LOC_CLOSED_EXCEPTION',
+  'LOC_OPEN_HOURS',
+  'NOBODY_DOES_SERVICE',
+  'NOBODY_FREE',
+  'EMP_PICK',
+  'EMP_NOT_AT_LOCATION',
+  'EMP_NOT_BOOKABLE',
+  'EMP_INVITED',
+  'PAST_CLOSING',
+  'BEFORE_OPENING',
+  'EMP_DAY_OFF',
+  'EMP_NO_ROOM_WRAP',
+  'EMP_HOURS',
+  'EMP_NO_SKILL',
+  'CUSTOMER_BLACKLISTED',
+  'EMP_BUSY',
+  'SLOT_HELD',
+  'ROOMS_FULL',
+  'MISSING_REQUIRED',
+]);
+export type RefusalCode = z.infer<typeof RefusalCodeSchema>;
+
+/** The refusal from the one booking gate — a human sentence plus the
+ *  structured code + params that let every client localize it. */
 export const BookingRefusalSchema = z.object({
   error: z.literal('REFUSED'),
   message: z.string(),
+  code: RefusalCodeSchema.optional(),
+  params: z.record(z.string(), z.union([z.string(), z.number()])).optional(),
 });
+export type BookingRefusal = z.infer<typeof BookingRefusalSchema>;

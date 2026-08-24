@@ -32,7 +32,12 @@ const IdParams = z.object({ id: z.uuid() });
 
 function sendBookingError(reply: FastifyReply, e: unknown) {
   if (e instanceof BookingRefused)
-    return reply.code(409).send({ error: 'REFUSED' as const, message: e.message });
+    return reply.code(409).send({
+      error: 'REFUSED' as const,
+      message: e.message,
+      code: e.code,
+      params: e.params,
+    });
   if (e instanceof BookingError)
     return reply.code(404).send({ error: e.code, message: e.message });
   throw e;

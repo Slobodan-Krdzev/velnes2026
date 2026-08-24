@@ -15,6 +15,7 @@ import { healthRoutes } from './modules/health/health.routes.js';
 import { locationsRoutes } from './modules/locations/locations.routes.js';
 import { schedulingRoutes } from './modules/scheduling/scheduling.routes.js';
 import { stockRoutes } from './modules/stock/stock.routes.js';
+import { teamRoutes } from './modules/team/team.routes.js';
 import { tillRoutes } from './modules/till/till.routes.js';
 import { timingRoutes } from './modules/timing/timing.routes.js';
 import { authPlugin } from './plugins/auth.js';
@@ -45,6 +46,7 @@ export async function buildServer() {
       bookingRoutes(api);
       timingRoutes(api);
       tillRoutes(api);
+      teamRoutes(api);
     },
     { prefix: API_PREFIX },
   );

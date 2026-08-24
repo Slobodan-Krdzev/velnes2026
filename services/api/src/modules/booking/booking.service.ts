@@ -1,4 +1,4 @@
-import type { AccessClaims, Appointment, BookRequest } from '@velnes/contracts';
+import type { AccessClaims, Appointment, BookRequest, RefusalCode } from '@velnes/contracts';
 import type { Trx } from '../../db/index.js';
 import { logAudit } from '../audit/audit.service.js';
 import { priceFor, svcAt, svcChoice, svcLine } from '../catalog/catalog.service.js';
@@ -23,7 +23,28 @@ export const DAY_START = 480; // 08:00
 export const DAY_END = 1140; // 19:00
 export const HOLD_SECONDS = 600;
 
-export class BookingRefused extends Error {}
+export interface Refusal {
+  code: RefusalCode;
+  params: Record<string, string | number>;
+  message: string;
+}
+const refuse = (
+  code: RefusalCode,
+  params: Record<string, string | number>,
+  message: string,
+): Refusal => ({ code, params, message });
+
+export class BookingRefused extends Error {
+  code: RefusalCode | undefined;
+  params: Record<string, string | number> | undefined;
+  constructor(refusal: Refusal | string) {
+    super(typeof refusal === 'string' ? refusal : refusal.message);
+    if (typeof refusal !== 'string') {
+      this.code = refusal.code;
+      this.params = refusal.params;
+    }
+  }
+}
 export class BookingError extends Error {
   constructor(
     public code: 'NOT_FOUND' | 'GONE',
@@ -124,34 +145,47 @@ async function timingFor(trx: Trx, req: CheckReq, sch: DayScheduleT) {
  * same answer (a human sentence, or null for "free"). The widget can
  * never be more lenient than the front desk.
  */
-export async function bookingCheck(trx: Trx, req: CheckReq): Promise<string | null> {
+export async function bookingCheck(trx: Trx, req: CheckReq): Promise<Refusal | null> {
   const loc = await trx
     .selectFrom('locations')
     .select(['id', 'name', 'rooms'])
     .where('id', '=', req.locationId)
     .executeTakeFirst();
-  if (!loc) return 'That location does not exist';
+  if (!loc) return refuse('LOC_UNKNOWN', {}, 'That location does not exist');
   const sch = await scheduleFor(trx, req.locationId, req.date);
   const wrap = await timingFor(trx, req, sch);
   const startM0 = mins(req.start) - wrap.prep;
   const endM0 = mins(req.start) + req.dur + wrap.reset;
   if (!sch.open) {
     if (sch.source === 'exception')
-      return `${loc.name} is closed on ${req.date} — ${sch.reason ?? 'a scheduled closure'}`;
-    return `${loc.name} is closed on ${DAY_FULL[wdIdx(req.date)]}s`;
+      return refuse(
+        'LOC_CLOSED_EXCEPTION',
+        { loc: loc.name, date: req.date, reason: sch.reason ?? '' },
+        `${loc.name} is closed on ${req.date} — ${sch.reason ?? 'a scheduled closure'}`,
+      );
+    return refuse(
+      'LOC_CLOSED_DAY',
+      { loc: loc.name, day: DAY_FULL[wdIdx(req.date)]! },
+      `${loc.name} is closed on ${DAY_FULL[wdIdx(req.date)]}s`,
+    );
   }
   if (!withinSchedule(sch, startM0, endM0)) {
-    if (sch.source === 'exception')
-      return `${loc.name} is only open ${schedLabel(sch)} on ${req.date}`;
-    return `${loc.name} is open ${schedLabel(sch)} on ${DAY_FULL[wdIdx(req.date)]}s`;
+    return refuse(
+      'LOC_OPEN_HOURS',
+      { loc: loc.name, hours: schedLabel(sch), day: DAY_FULL[wdIdx(req.date)]!, date: req.date },
+      sch.source === 'exception'
+        ? `${loc.name} is only open ${schedLabel(sch)} on ${req.date}`
+        : `${loc.name} is open ${schedLabel(sch)} on ${DAY_FULL[wdIdx(req.date)]}s`,
+    );
   }
 
   if (req.emp === 'any') {
     const pool = req.sid ? await empsFor(trx, req.locationId, req.sid) : [];
-    if (!pool.length) return `Nobody at ${loc.name} does this service`;
+    if (!pool.length)
+      return refuse('NOBODY_DOES_SERVICE', { loc: loc.name }, `Nobody at ${loc.name} does this service`);
     for (const e of pool)
       if (!(await bookingCheck(trx, { ...req, emp: e.id }))) return null;
-    return `Nobody is free at ${req.start} on ${req.date}`;
+    return refuse('NOBODY_FREE', { time: req.start, date: req.date }, `Nobody is free at ${req.start} on ${req.date}`);
   }
 
   const emp = await trx
@@ -159,7 +193,7 @@ export async function bookingCheck(trx: Trx, req: CheckReq): Promise<string | nu
     .selectAll()
     .where('id', '=', req.emp)
     .executeTakeFirst();
-  if (!emp) return 'Pick an employee first';
+  if (!emp) return refuse('EMP_PICK', {}, 'Pick an employee first');
   const who = emp.name.split(' ')[0]!;
   const atLoc = await trx
     .selectFrom('employeeLocations')
@@ -167,33 +201,52 @@ export async function bookingCheck(trx: Trx, req: CheckReq): Promise<string | nu
     .where('employeeId', '=', emp.id)
     .where('locationId', '=', req.locationId)
     .executeTakeFirst();
-  if (!atLoc) return `${who} does not work at ${loc.name}`;
+  if (!atLoc)
+    return refuse('EMP_NOT_AT_LOCATION', { name: who, loc: loc.name }, `${who} does not work at ${loc.name}`);
   if (!emp.bookable)
-    return `${who} is not bookable — switch that on under Settings › Team & access`;
-  if (emp.status !== 'active') return `${who} has not accepted their invite yet`;
+    return refuse(
+      'EMP_NOT_BOOKABLE',
+      { name: who },
+      `${who} is not bookable — switch that on under Settings › Team & access`,
+    );
+  if (emp.status !== 'active')
+    return refuse('EMP_INVITED', { name: who }, `${who} has not accepted their invite yet`);
 
   const startM = mins(req.start) - wrap.prep;
   const endM = mins(req.start) + req.dur + wrap.reset;
-  if (endM > DAY_END) return `That runs past closing time (${hhmm(DAY_END)})`;
-  if (startM < DAY_START) return `Setting up for that would start before ${hhmm(DAY_START)}`;
+  if (endM > DAY_END)
+    return refuse('PAST_CLOSING', { time: hhmm(DAY_END) }, `That runs past closing time (${hhmm(DAY_END)})`);
+  if (startM < DAY_START)
+    return refuse('BEFORE_OPENING', { time: hhmm(DAY_START) }, `Setting up for that would start before ${hhmm(DAY_START)}`);
   const hoursObj =
     emp.hours && typeof emp.hours === 'object' && !Array.isArray(emp.hours)
       ? (emp.hours as Record<string, unknown>)
       : null;
   const win = whList(hoursObj?.[String(wdIdx(req.date))]);
-  if (!win.length) return `${who} does not work on ${DAY_FULL[wdIdx(req.date)]}s`;
+  if (!win.length)
+    return refuse('EMP_DAY_OFF', { name: who, day: DAY_FULL[wdIdx(req.date)]! }, `${who} does not work on ${DAY_FULL[wdIdx(req.date)]}s`);
   if (sch.source === 'exception' && !withinSchedule(sch, startM, endM))
-    return `${loc.name} is only open ${schedLabel(sch)} on ${req.date}`;
+    return refuse(
+      'LOC_OPEN_HOURS',
+      { loc: loc.name, hours: schedLabel(sch), date: req.date, day: DAY_FULL[wdIdx(req.date)]! },
+      `${loc.name} is only open ${schedLabel(sch)} on ${req.date}`,
+    );
   // Within ONE working period — never across the split-shift break.
   if (!whFits(win, startM, endM)) {
     const raw = mins(req.start);
     const rawEnd = raw + req.dur;
     if (whFits(win, raw, rawEnd))
-      return (
+      return refuse(
+        'EMP_NO_ROOM_WRAP',
+        { name: who, hours: whLabel(win) },
         `${who} works ${whLabel(win)} — that leaves no room for the ` +
-        `${wrap.prep && wrap.reset ? 'set-up and clean-up' : wrap.prep ? 'set-up' : 'clean-up'} around it`
+          `${wrap.prep && wrap.reset ? 'set-up and clean-up' : wrap.prep ? 'set-up' : 'clean-up'} around it`,
       );
-    return `${who} works ${whLabel(win)} on ${DAY_FULL[wdIdx(req.date)]}s`;
+    return refuse(
+      'EMP_HOURS',
+      { name: who, hours: whLabel(win), day: DAY_FULL[wdIdx(req.date)]! },
+      `${who} works ${whLabel(win)} on ${DAY_FULL[wdIdx(req.date)]}s`,
+    );
   }
   if (req.sid) {
     const hasSkills = await trx
@@ -202,7 +255,7 @@ export async function bookingCheck(trx: Trx, req: CheckReq): Promise<string | nu
       .where('employeeId', '=', emp.id)
       .execute();
     if (hasSkills.length && !hasSkills.some((s) => s.serviceId === req.sid))
-      return `${who} does not do this service`;
+      return refuse('EMP_NO_SKILL', { name: who }, `${who} does not do this service`);
   }
   if (req.custId) {
     const c = await trx
@@ -210,7 +263,8 @@ export async function bookingCheck(trx: Trx, req: CheckReq): Promise<string | nu
       .select(['name', 'blacklisted', 'noShows'])
       .where('id', '=', req.custId)
       .executeTakeFirst();
-    if (c?.blacklisted) return `${c.name} is blacklisted after ${c.noShows} no-shows`;
+    if (c?.blacklisted)
+      return refuse('CUSTOMER_BLACKLISTED', { name: c.name, noShows: c.noShows }, `${c.name} is blacklisted after ${c.noShows} no-shows`);
   }
   // Two blocks that touch, clash: prep/reset are inside the blocks.
   const others = await trx
@@ -227,9 +281,13 @@ export async function bookingCheck(trx: Trx, req: CheckReq): Promise<string | nu
       startM < a.startMin + a.durationMin + a.resetMin,
   );
   if (clash)
-    return `${who} is already booked ${hhmm(clash.startMin)}–${hhmm(clash.startMin + clash.durationMin)}`;
+    return refuse(
+      'EMP_BUSY',
+      { name: who, from: hhmm(clash.startMin), to: hhmm(clash.startMin + clash.durationMin) },
+      `${who} is already booked ${hhmm(clash.startMin)}–${hhmm(clash.startMin + clash.durationMin)}`,
+    );
   if (await heldAt(trx, req.locationId, req.date, mins(req.start), emp.id, req.key))
-    return 'Somebody is paying for that time right now';
+    return refuse('SLOT_HELD', {}, 'Somebody is paying for that time right now');
   // The room is taken exactly as long as the employee.
   const rooms = loc.rooms || 2;
   const roomRows = await trx
@@ -246,7 +304,8 @@ export async function bookingCheck(trx: Trx, req: CheckReq): Promise<string | nu
       a.startMin - a.prepMin < endM &&
       startM < a.startMin + a.durationMin + a.resetMin,
   ).length;
-  if (busyRooms >= rooms) return `All ${rooms} rooms at ${loc.name} are taken then`;
+  if (busyRooms >= rooms)
+    return refuse('ROOMS_FULL', { rooms, loc: loc.name }, `All ${rooms} rooms at ${loc.name} are taken then`);
   return null;
 }
 
@@ -443,7 +502,8 @@ export async function confirmBooking(
       key: req.key,
     });
     const slot = slots.find((s) => s.t === req.time);
-    if (!slot?.emp) throw new BookingRefused(`Nobody is free at ${req.time} on ${req.date}`);
+    if (!slot?.emp)
+      throw new BookingRefused(refuse('NOBODY_FREE', { time: req.time, date: req.date }, `Nobody is free at ${req.time} on ${req.date}`));
     empId = slot.emp;
   } else empId = req.employeeId;
 
@@ -496,7 +556,13 @@ export async function confirmBooking(
     employeeId: empId,
   });
   if (line.missingRequired.length)
-    throw new BookingRefused(`Choose ${line.missingRequired.join(', ')} first`);
+    throw new BookingRefused(
+      refuse(
+        'MISSING_REQUIRED',
+        { groups: line.missingRequired.join(', ') },
+        `Choose ${line.missingRequired.join(', ')} first`,
+      ),
+    );
 
   const refusal = await bookingCheck(trx, {
     locationId: req.locationId,

@@ -24,6 +24,8 @@ export class ApiError extends Error {
     public status: number,
     public code: string,
     message: string,
+    public refusalCode?: string,
+    public refusalParams?: Record<string, string | number>,
   ) {
     super(message);
   }
@@ -73,8 +75,16 @@ export async function api<S extends z.ZodType>(
     const body = (await res.json().catch(() => ({}))) as {
       error?: string;
       message?: string;
+      code?: string;
+      params?: Record<string, string | number>;
     };
-    throw new ApiError(res.status, body.error ?? 'ERROR', body.message ?? body.error ?? 'Request failed');
+    throw new ApiError(
+      res.status,
+      body.error ?? 'ERROR',
+      body.message ?? body.error ?? 'Request failed',
+      body.code,
+      body.params,
+    );
   }
   return schema.parse(await res.json()) as z.infer<S>;
 }
