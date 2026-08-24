@@ -1,15 +1,19 @@
 import type { Appointment } from '@velnes/contracts';
-import { Badge, Button } from '@velnes/ui';
+import { empColorOf, I, Icon } from '@velnes/ui';
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useAppointments, useDaySchedule, useEmployees, useLocations } from '../../api/queries.js';
+import { useAppointments, useEmployees, useLocations } from '../../api/queries.js';
 import { useSession } from '../../session.js';
+import { useScope } from '../../shell/Shell.js';
 import { AppointmentDrawer } from './AppointmentDrawer.js';
-import './calendar.css';
 
+/* The prototype's calendar constants, verbatim. */
 export const DAY_START = 480;
 export const DAY_END = 1140;
-const SPAN = DAY_END - DAY_START;
+const SLOT = 15;
+const DAY_MINUTES = DAY_END - DAY_START;
+const dayPct = (m: number) => ((m - DAY_START) / DAY_MINUTES) * 100;
+const WEEK_DAYS = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
 
 export const localIso = (d: Date) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -26,197 +30,348 @@ const mins = (t: string) => {
   const [h, m] = t.split(':').map(Number);
   return (h ?? 0) * 60 + (m ?? 0);
 };
+const hhmm = (m: number) =>
+  `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+const dayNum = (iso: string) => Number(iso.slice(8));
 
-const CAT_TONE: Record<string, string> = {
+const EV_TONE: Record<string, string> = {
+  Assessment: 'assess',
   'Manual therapy': 'manual',
   Rehab: 'rehab',
-  Assessment: 'assess',
   Recovery: 'recovery',
 };
+const evTone = (a: Appointment, category: string | null) => {
+  if (a.kind === 'note') return 'note';
+  if (a.kind === 'absence' || a.kind === 'blocked') return 'off';
+  if (a.kind === 'chore') return 'chore';
+  return EV_TONE[category ?? ''] ?? 'other';
+};
 
-function EventBlock({
+const slots: number[] = [];
+for (let m = DAY_START; m < DAY_END; m += SLOT) slots.push(m);
+
+function Event({
   a,
-  onClick,
+  color,
+  category,
+  onOpen,
 }: {
   a: Appointment;
-  onClick: (a: Appointment) => void;
+  color: [string, string, string, string];
+  category: string | null;
+  onOpen: (a: Appointment) => void;
 }) {
-  const start = mins(a.start);
-  const tone = CAT_TONE[a.serviceName ?? ''] ?? 'other';
-  const top = ((start - a.prepMin - DAY_START) / SPAN) * 100;
-  const height = ((a.prepMin + a.durationMin + a.resetMin) / SPAN) * 100;
-  const prepPct = (a.prepMin / (a.prepMin + a.durationMin + a.resetMin)) * 100;
-  const resetPct = (a.resetMin / (a.prepMin + a.durationMin + a.resetMin)) * 100;
+  const top = dayPct(mins(a.start));
+  const h = ((mins(a.end) - mins(a.start)) / DAY_MINUTES) * 100;
+  const paint = a.kind === 'appointment' ? color : null;
+  const wrapNeeded = a.kind === 'appointment' && (a.prepMin > 0 || a.resetMin > 0);
+  const van = mins(a.start) - a.prepMin;
+  const tot = mins(a.end) + a.resetMin;
   return (
-    <button
-      className={`cal-event tone-${tone}${a.status === 'cancelled' ? ' cancelled' : ''}`}
-      style={{ top: `${top}%`, height: `${height}%` }}
-      onClick={() => onClick(a)}
-      title={`${a.title} · ${a.serviceName ?? ''}`}
-    >
-      {a.prepMin > 0 && <span className="cal-wrap" style={{ height: `${prepPct}%`, top: 0 }} />}
-      <span className="cal-event-body">
-        <strong>{a.start}</strong> {a.title}
-        <span className="cal-event-svc">{a.serviceName ?? a.title}</span>
-      </span>
-      {a.resetMin > 0 && (
-        <span className="cal-wrap" style={{ height: `${resetPct}%`, bottom: 0 }} />
-      )}
-    </button>
+    <>
+      {wrapNeeded ? (
+        <div
+          className="ev-wrap"
+          style={{
+            top: `${dayPct(van)}%`,
+            height: `${((tot - van) / DAY_MINUTES) * 100}%`,
+            ...(paint ? ({ ['--ev-wrap-bg' as string]: paint[2] } as React.CSSProperties) : {}),
+          }}
+          title={`${a.prepMin} min set-up, ${a.resetMin} min clean-up`}
+        />
+      ) : null}
+      <button
+        className={`event ${a.kind} ev-${evTone(a, category)}${paint ? ' ev-emp' : ''}`}
+        style={
+          {
+            top: `${top}%`,
+            height: `${h}%`,
+            ...(paint ? { ['--ev-bg']: paint[2], ['--ev-ink']: paint[3] } : {}),
+          } as React.CSSProperties
+        }
+        onClick={() => onOpen(a)}
+        title={`${a.title} · ${a.serviceName ?? ''}`}
+      >
+        <span className="ev-main">
+          <span className="ev-head">
+            <span className="ev-ic">
+              <Icon d={I.calendar} size={16} w={2} />
+            </span>
+            <span className="ev-t">{a.serviceName ?? a.title}</span>
+          </span>
+          {h >= 54 ? (
+            <span className="ev-line">
+              <Icon d={I.clock} size={13} w={2} />
+              <span className="tnum">
+                {a.start} – {a.end}
+              </span>
+            </span>
+          ) : null}
+          {h >= 72 && a.kind === 'appointment' ? (
+            <span className="ev-line">
+              <Icon d={I.user} size={13} w={2} />
+              <span className="ev-clip">{a.title}</span>
+            </span>
+          ) : null}
+        </span>
+      </button>
+    </>
   );
 }
 
 export function CalendarPage() {
   const { t } = useTranslation();
   const { me } = useSession();
+  const { scope } = useScope();
   const locations = useLocations();
   const employees = useEmployees();
-  const [locationId, setLocationId] = useState<string | null>(null);
   const [view, setView] = useState<'day' | 'week'>('day');
   const [date, setDate] = useState(localIso(new Date()));
-  const [weekEmp, setWeekEmp] = useState<string | null>(null);
-  const [drawer, setDrawer] = useState<{ open: boolean; appointment?: Appointment }>({
-    open: false,
-  });
+  const [filters, setFilters] = useState(false);
+  const [calEmp, setCalEmp] = useState('all');
+  const [drawer, setDrawer] = useState<{
+    open: boolean;
+    appointment?: Appointment;
+    slot?: { date: string; time: string; empId?: string };
+  }>({ open: false });
 
   const myLocs = useMemo(() => {
     const all = locations.data?.locations ?? [];
     return me?.locationIds.length ? all.filter((l) => me.locationIds.includes(l.id)) : all;
   }, [locations.data, me]);
-  const loc = locationId ?? myLocs[0]?.id ?? null;
+  const scopeLocs = scope === 'all' ? myLocs.map((l) => l.id) : [scope];
+  const bookLoc = scope === 'all' ? (myLocs[0]?.id ?? null) : scope;
 
-  const cols = useMemo(() => {
-    const emps = (employees.data?.employees ?? []).filter(
-      (e) => e.bookable && e.status === 'active' && loc && e.locationIds.includes(loc),
-    );
-    return emps;
-  }, [employees.data, loc]);
-  const weekEmployee = weekEmp ?? cols[0]?.id ?? null;
+  const staff = useMemo(
+    () =>
+      (employees.data?.employees ?? []).filter(
+        (e) =>
+          e.bookable &&
+          e.status === 'active' &&
+          e.locationIds.some((id) => scopeLocs.includes(id)) &&
+          (calEmp === 'all' || e.id === calEmp),
+      ),
+    [employees.data, scopeLocs, calEmp],
+  );
 
-  const from = view === 'day' ? date : mondayOf(date);
-  const to = view === 'day' ? date : addDays(mondayOf(date), 6);
-  const appts = useAppointments(loc, from, to);
-  const schedule = useDaySchedule(loc, date);
+  const weekStart = mondayOf(date);
+  const from = view === 'day' ? date : weekStart;
+  const to = view === 'day' ? date : addDays(weekStart, 6);
+  // One query per scoped location, merged.
+  const appts = useAppointments(scopeLocs[0] ?? null, from, to);
+  const appts2 = useAppointments(scopeLocs[1] ?? null, from, to);
+  const list = useMemo(
+    () =>
+      [...(appts.data?.appointments ?? []), ...(appts2.data?.appointments ?? [])].filter(
+        (a) => a.status !== 'cancelled' && (calEmp === 'all' || a.employeeId === calEmp),
+      ),
+    [appts.data, appts2.data, calEmp],
+  );
 
-  const hours = Array.from({ length: (DAY_END - DAY_START) / 60 }, (_, i) => DAY_START + i * 60);
-  const days = view === 'week' ? Array.from({ length: 7 }, (_, i) => addDays(mondayOf(date), i)) : [date];
+  const today = localIso(new Date());
+  const days7 = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
+  const open = (a: Appointment) => setDrawer({ open: true, appointment: a });
+  const colorOf = (empId: string | null) =>
+    empColorOf(employees.data?.employees.find((e) => e.id === empId)?.color);
 
-  const eventsFor = (day: string, empId: string) =>
-    (appts.data?.appointments ?? []).filter(
-      (a) => a.date === day && a.employeeId === empId && a.status !== 'cancelled',
-    );
+  const gutter = (
+    <div className="cal-gutter">
+      {slots.map((m) => (
+        <div key={m} className={`cal-time${m % 60 === 0 ? ' hour' : ''}`}>
+          <span>{hhmm(m)}</span>
+        </div>
+      ))}
+    </div>
+  );
+
+  const cells = (iso: string, empId?: string) =>
+    slots.map((m) => (
+      <button
+        key={m}
+        className="cal-cell"
+        aria-label={`${t('cal.newAppointment')} ${iso} ${hhmm(m)}`}
+        onClick={() =>
+          setDrawer({ open: true, slot: { date: iso, time: hhmm(m), ...(empId ? { empId } : {}) } })
+        }
+      />
+    ));
+
+  const eventsIn = (iso: string, empId: string) =>
+    list
+      .filter((a) => a.date === iso && a.employeeId === empId)
+      .map((a) => (
+        <Event
+          key={a.id}
+          a={a}
+          color={colorOf(a.employeeId)}
+          category={a.serviceCategory ?? a.serviceName}
+          onOpen={open}
+        />
+      ));
 
   return (
-    <div className="cal">
-      <div className="cal-toolbar">
-        <select
-          className="input cal-loc"
-          value={loc ?? ''}
-          onChange={(e) => setLocationId(e.target.value)}
-          aria-label="Location"
-        >
-          {myLocs.map((l) => (
-            <option key={l.id} value={l.id}>
-              {l.name}
-            </option>
-          ))}
-        </select>
-        <div className="cal-nav">
-          <Button variant="secondary" size="sm" onClick={() => setDate(addDays(date, view === 'day' ? -1 : -7))}>
-            ‹
-          </Button>
-          <Button variant="secondary" size="sm" onClick={() => setDate(localIso(new Date()))}>
+    <>
+      <div className="toolbar toolbar-cal">
+        <div className="filters">
+          <button className="btn btn-secondary" onClick={() => setDate(localIso(new Date()))}>
             {t('common.today')}
-          </Button>
-          <Button variant="secondary" size="sm" onClick={() => setDate(addDays(date, view === 'day' ? 1 : 7))}>
-            ›
-          </Button>
-          <span className="cal-date tnum">{view === 'day' ? date : `${from} – ${to}`}</span>
-          {schedule.data && !schedule.data.open && view === 'day' ? (
-            <Badge tone="danger">{t('cal.closed')}</Badge>
-          ) : null}
-          {schedule.data?.source === 'exception' && schedule.data.open ? (
-            <Badge tone="warning">{t('cal.exception')}</Badge>
-          ) : null}
-        </div>
-        <div className="cal-views">
-          <Button
-            variant={view === 'day' ? 'primary' : 'secondary'}
-            size="sm"
-            onClick={() => setView('day')}
-          >
-            {t('cal.day')}
-          </Button>
-          <Button
-            variant={view === 'week' ? 'primary' : 'secondary'}
-            size="sm"
-            onClick={() => setView('week')}
-          >
-            {t('cal.week')}
-          </Button>
-          {view === 'week' ? (
-            <select
-              className="input cal-loc"
-              value={weekEmployee ?? ''}
-              onChange={(e) => setWeekEmp(e.target.value)}
+          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <button
+              className="btn btn-subtle btn-icon"
+              aria-label={t('cal.prev')}
+              onClick={() => setDate(addDays(date, view === 'week' ? -7 : -1))}
             >
-              {cols.map((e) => (
-                <option key={e.id} value={e.id}>
-                  {e.name}
-                </option>
-              ))}
-            </select>
-          ) : null}
-          <Button onClick={() => setDrawer({ open: true })}>{t('cal.newAppointment')}</Button>
+              <Icon d={I.left} size={20} w={2.5} />
+            </button>
+            <button className="input tnum calpick-btn" aria-label={t('cal.pickDate')}>
+              {view === 'week' ? `${dayNum(weekStart)} – ${dayNum(addDays(weekStart, 6))}` : date}
+            </button>
+            <button
+              className="btn btn-subtle btn-icon"
+              aria-label={t('cal.next')}
+              onClick={() => setDate(addDays(date, view === 'week' ? 7 : 1))}
+            >
+              <Icon d={I.right} size={20} w={2.5} />
+            </button>
+          </div>
+          <div className="pop">
+            <button
+              className={`btn btn-secondary btn-pill${filters ? ' open' : ''}`}
+              aria-haspopup="menu"
+              aria-expanded={filters}
+              onClick={() => setFilters((v) => !v)}
+            >
+              {t('cal.filters')}
+              <span className={`caret${filters ? ' up' : ''}`}>
+                <Icon d={I.down} size={18} w={2.2} />
+              </span>
+            </button>
+            {filters ? (
+              <div className="menu menu-left menu-wide" role="menu">
+                <div className="filterrow">
+                  <span className="fi">
+                    <Icon d={I.calendar} size={20} />
+                  </span>
+                  <span className="fl">{t('cal.view')}</span>
+                  <select
+                    className="select fsel"
+                    aria-label={t('cal.view')}
+                    value={view}
+                    onChange={(e) => setView(e.target.value as 'day' | 'week')}
+                  >
+                    <option value="week">{t('cal.week')}</option>
+                    <option value="day">{t('cal.day')}</option>
+                  </select>
+                </div>
+                <div className="filterrow">
+                  <span className="fi">
+                    <Icon d={I.users} size={20} />
+                  </span>
+                  <span className="fl">{t('cal.employeesFilter')}</span>
+                  <select
+                    className="select fsel"
+                    aria-label={t('cal.employeesFilter')}
+                    value={calEmp}
+                    onChange={(e) => setCalEmp(e.target.value)}
+                  >
+                    <option value="all">{t('cal.allEmployees')}</option>
+                    {(employees.data?.employees ?? [])
+                      .filter((e) => e.locationIds.some((id) => scopeLocs.includes(id)))
+                      .map((e) => (
+                        <option key={e.id} value={e.id}>
+                          {e.name}
+                        </option>
+                      ))}
+                  </select>
+                </div>
+              </div>
+            ) : null}
+          </div>
         </div>
+        <button className="btn btn-primary" onClick={() => setDrawer({ open: true })}>
+          {t('cal.add')} <Icon d={I.plus} size={20} w={2.5} />
+        </button>
       </div>
 
-      {cols.length === 0 ? (
-        <p className="muted">{t('cal.noEmployees')}</p>
-      ) : (
-        <div className="cal-grid card">
-          <div className="cal-gutter">
-            {hours.map((h) => (
-              <span key={h} className="cal-hour tnum">
-                {String(h / 60).padStart(2, '0')}:00
-              </span>
+      {staff.length === 0 ? (
+        <p style={{ padding: 20 }} className="muted">
+          {t('cal.noEmployees')}
+        </p>
+      ) : view === 'week' ? (
+        <div className="cal">
+          <div className="cal-row">
+            <div className="cal-gutter">
+              <div className="cal-gutter-head">W</div>
+            </div>
+            {days7.map((iso, i) => (
+              <div key={iso} className="cal-col" style={{ borderLeft: '1px solid var(--line)' }}>
+                <div className={`cal-head${iso === today ? ' today' : ''}`}>
+                  <span className="dow">{WEEK_DAYS[i]}</span>
+                  <span className="dnum">{dayNum(iso)}</span>
+                </div>
+              </div>
             ))}
           </div>
-          {view === 'day'
-            ? cols.map((e) => (
-                <div key={e.id} className="cal-col">
-                  <div className="cal-colhead">{e.name}</div>
-                  <div className="cal-colbody">
-                    {eventsFor(date, e.id).map((a) => (
-                      <EventBlock key={a.id} a={a} onClick={(x) => setDrawer({ open: true, appointment: x })} />
-                    ))}
-                  </div>
-                </div>
-              ))
-            : days.map((d) => (
-                <div key={d} className="cal-col">
-                  <div className="cal-colhead tnum">{d.slice(5)}</div>
-                  <div className="cal-colbody">
-                    {weekEmployee
-                      ? eventsFor(d, weekEmployee).map((a) => (
-                          <EventBlock key={a.id} a={a} onClick={(x) => setDrawer({ open: true, appointment: x })} />
-                        ))
-                      : null}
-                  </div>
+          <div className="cal-body">
+            <div className="cal-row">
+              {gutter}
+              {days7.map((iso) => (
+                <div key={iso} className={`cal-col${iso === today ? ' today' : ''}`}>
+                  {cells(iso)}
+                  {staff[0] ? eventsIn(iso, calEmp === 'all' ? (staff[0]?.id ?? '') : calEmp) : null}
                 </div>
               ))}
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="cal">
+          <div className="cal-row">
+            <div className="cal-gutter">
+              <div className="cal-gutter-head tnum">{dayNum(date)}</div>
+            </div>
+            {staff.map((e) => {
+              const c = empColorOf(e.color);
+              return (
+                <div key={e.id} className="cal-col">
+                  <div
+                    className="cal-head cal-head-emp"
+                    style={{ background: c[2], boxShadow: `inset 0 -3px 0 ${c[3]}` }}
+                  >
+                    <span className="dow" style={{ color: c[3] }}>
+                      {e.name}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <div className="cal-body">
+            <div className="cal-row">
+              {gutter}
+              {staff.map((e) => (
+                <div key={e.id} className={`cal-col${date === today ? ' today' : ''}`}>
+                  {cells(date, e.id)}
+                  {eventsIn(date, e.id)}
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       )}
 
-      {drawer.open && loc ? (
+      {drawer.open && bookLoc ? (
         <AppointmentDrawer
-          locationId={loc}
-          date={date}
+          locationId={scope === 'all' ? bookLoc : scope}
+          date={drawer.slot?.date ?? date}
+          time={drawer.slot?.time ?? null}
+          employeeId={drawer.slot?.empId ?? null}
           appointment={drawer.appointment ?? null}
-          employees={cols}
+          employees={staff}
           onClose={() => setDrawer({ open: false })}
         />
       ) : null}
-    </div>
+    </>
   );
 }

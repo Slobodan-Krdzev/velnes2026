@@ -1,0 +1,2390 @@
+/* ─────────────────────────────────────────────────────────────
+   Tokens — lifted from the Figma file "Velnes Business"
+   (Revel UI Components). No Figma variables exist in the file,
+   so these hex values are the token layer.
+   ───────────────────────────────────────────────────────────── */
+:root{
+  --surface:#ffffff;
+  --surface-muted:#f7f7f7;
+  --surface-sunken:#e5e5e5;
+  --ink:#000000;
+  --ink-muted:#727272;
+  --ink-inverse:#ffffff;
+  --line:#e5e5e5;
+  --line-strong:#e0e0e0;
+  --line-input:#ced1d9;
+  --line-input-strong:#b0b0b0;
+  --calendar-today:#eff6ff;
+  --event-warm:#ffddbd;
+  /* Agendapastels per behandelsoort: laag verzadigd, met een diepere tint
+     van dezelfde familie voor de streep en het icoon. Onderscheidend van
+     een meter afstand, rustig van dichtbij. */
+  --ev-manual:#f2e5cf;     --ev-manual-ink:#9a7434;
+  --ev-rehab:#f3dfe6;    --ev-rehab-ink:#a2637b;
+  --ev-assess:#dcebe1;     --ev-assess-ink:#4f8264;
+  --ev-recovery:#e2e3f2;  --ev-recovery-ink:#6b70a3;
+  --ev-other:#e9e6dc;    --ev-other-ink:#7c7663;
+  --event-neutral:rgba(0,0,0,.06);
+  --event-sky:#d8ecfb;
+  --success:#1e7d45;
+  --warning:#c26a02;
+  --danger:#c62828;
+  --info:#1a73e8;
+  --r-event:4px; --r-card:6px; --r-control:8px; --r-tile:12px; --r-pill:20px;
+  --sidebar:74px; --header:70px; --slot:36px;
+  /* Steunkleur: olijfgroen. Deep is de enige die wit uit de knop leesbaar houdt. */
+  --accent:#9aa07e; --accent-strong:#7c8460; --accent-deep:#6f7357;
+  --accent-tint:#f2f4ec; --accent-line:#dfe3d2;
+  --accent-glow:#ccd4b5; --accent-ink:#4b4f3a;
+  /* De uitstaande opslagknop in de CMS is geen grijs vlak maar een
+     gedempte olijf: hij hoort zichtbaar bij de accentkleur, hij is
+     alleen nog niet aan de beurt. */
+  --accent-soft:#c5c4b5;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{-webkit-font-smoothing:antialiased}
+body{
+  font-family:'Plus Jakarta Sans',ui-sans-serif,system-ui,sans-serif;
+  background:var(--surface); color:var(--ink); font-size:14px; line-height:20px;
+}
+.tnum{font-variant-numeric:tabular-nums}
+button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
+input,select,textarea{font:inherit;color:inherit}
+a{color:inherit;text-decoration:none}
+:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+/* ── Schuiven ─────────────────────────────────────────────────
+   De inheemse schuifbalk is overal weg. Zodra je hem opmaakt met
+   ::-webkit-scrollbar valt hij terug op de ouderwetse variant die breedte
+   inneemt: een dikke grijze staaf met een witte strook ernaast, dwars door
+   de rand van de agenda heen. In plaats daarvan zweeft er één duimpje over
+   het vlak dat op dat moment geschoven wordt — zie .sb-thumb hieronder. */
+*{scrollbar-width:none;-ms-overflow-style:none}
+::-webkit-scrollbar{width:0;height:0;background:transparent}
+
+/* Het zwevende duimpje. Eén stuks voor de hele pagina: het verhuist naar
+   het vlak dat geschoven wordt en trekt vanzelf weg als je stopt. Het
+   vangt geen muis, dus je kunt er dwars doorheen klikken. */
+.sb-thumb{position:fixed;top:0;left:0;width:6px;border-radius:99px;
+  background:rgba(47,44,38,.34);pointer-events:none;z-index:9999;
+  opacity:0;transition:opacity .4s ease}
+.sb-thumb.on{opacity:1}
+@media (prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;transition-duration:.01ms!important}}
+
+/* ── Shell ─────────────────────────────────────────────────── */
+.sidebar{
+  position:fixed;inset:0 auto 0 0;width:var(--sidebar);background:var(--ink-muted);
+  display:flex;flex-direction:column;justify-content:space-between;padding:5px;z-index:30;
+}
+.sidebar-group{display:flex;flex-direction:column;gap:5px}
+.tile{
+  width:64px;height:64px;display:grid;place-items:center;border-radius:var(--r-tile);
+  color:rgba(255,255,255,.85);transition:background .12s,color .12s;
+}
+@media(hover:hover){.tile:hover{background:rgba(0,0,0,.2);color:#fff}}
+.tile.active{background:rgba(0,0,0,.4);color:#fff}
+.applogo{width:64px;height:64px;display:grid;place-items:center;border-radius:8.889px;background:rgba(255,255,255,.95);color:var(--ink)}
+.shell{padding-left:var(--sidebar)}
+.topbar{
+  position:sticky;top:0;z-index:20;height:var(--header);display:flex;align-items:center;
+  justify-content:space-between;padding:0 26px;background:var(--surface-muted);border-bottom:1px solid var(--line);
+}
+.topbar h1{font-size:24px;line-height:30px;font-weight:700}
+.topbar-left{display:flex;align-items:center;gap:8px;min-width:0}
+.topbar h1{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.topbar-right{display:flex;align-items:center;gap:25px}
+.topbar-mid{display:flex;align-items:center;gap:8px;flex:1;margin:0 24px;overflow-x:auto;scrollbar-width:none}
+.topbar-mid::-webkit-scrollbar{display:none}
+.ttab{height:38px;padding:0 16px;border-radius:var(--r-pill);border:1px solid var(--line-input-strong);
+  font-size:15px;font-weight:600;color:var(--ink-muted);white-space:nowrap;flex:none}
+@media(hover:hover){.ttab:hover{border-color:var(--ink);color:var(--ink)}}
+.ttab.on{background:var(--ink);border-color:var(--ink);color:#fff}
+.catchip{height:40px;padding:0 16px;border-radius:var(--r-pill);border:1px solid var(--line-input-strong);
+  font-size:15px;font-weight:600;color:var(--ink-muted);white-space:nowrap;flex:none}
+@media(hover:hover){.catchip:hover{border-color:var(--ink);color:var(--ink)}}
+.catchip.on{background:var(--ink);border-color:var(--ink);color:#fff}
+.drag-h{cursor:grab;color:var(--ink-muted);padding:4px;border-radius:6px;line-height:0}
+@media(hover:hover){.drag-h:hover{background:var(--surface-muted);color:var(--ink)}}
+tr.dragging{opacity:.4}
+tr.dropinto td{box-shadow:inset 0 2px 0 0 var(--ink)}
+.bulkbar{display:flex;align-items:center;gap:12px;flex:1}
+.bulkbar .n{font-weight:700}
+.iconbtn{padding:4px;border-radius:6px;position:relative;display:grid;place-items:center}
+@media(hover:hover){.iconbtn:hover{background:rgba(0,0,0,.05)}}
+.dot{position:absolute;top:3px;right:3px;width:8px;height:8px;border-radius:99px;background:var(--danger)}
+.avatar{
+  width:42px;height:42px;border-radius:99px;background:var(--surface-sunken);
+  display:grid;place-items:center;font-size:12px;font-weight:700;color:var(--ink-muted);flex:none;
+}
+main{padding:24px 26px 64px}
+/* Sticky action bar: primary actions stay reachable however long the page is */
+.toolbar{
+  position:sticky;top:var(--header);z-index:15;background:var(--surface);
+  margin:-24px -26px 22px;padding:16px 26px;border-bottom:1px solid var(--line);
+  display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:16px;
+}
+.toolbar-actions{display:flex;align-items:center;gap:12px;margin-left:auto}
+.toolbar-context{display:flex;flex-direction:column;line-height:18px}
+.toolbar-context .k{font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.03em;color:var(--ink-muted)}
+.toolbar-context .v{font-size:20px;font-weight:700;font-variant-numeric:tabular-nums}
+.filters{display:flex;flex-wrap:wrap;align-items:center;gap:20px}
+/* Keuzelijsten die zich naar hun inhoud voegen in plaats van naar 202px.
+   Ze mogen krimpen tot er nog net een label in past, zodat een balk
+   liever smaller wordt dan dat hij op twee regels valt. */
+.select-fit{width:auto;min-width:104px;max-width:200px;flex:0 1 auto}
+/* De agendabalk telt zes bedieningen plus de knop. Met de standaardgaten
+   van 20px viel "All resources" al rond 1280px naar een tweede regel; op
+   10px past het geheel in ongeveer 980px. Vanaf 1100px dwingen we daarom
+   één regel af. Daaronder mag hij afbreken: doorduwen zou de keuzelijsten
+   zo smal maken dat het label wordt afgeknipt, en een select kapt zonder
+   beletselteken af. Liever netjes twee regels dan half leesbaar. */
+@media(min-width:1100px){
+  .toolbar-cal .filters{gap:10px;flex-wrap:nowrap;min-width:0}
+  .toolbar-cal .filters>*{flex:0 0 auto}
+  .toolbar-cal .filters .select-fit{flex:0 1 auto;min-width:104px}
+  .toolbar-cal .toolbar-actions,.toolbar-cal>.btn{flex:none}
+}
+.sticky-col{position:sticky;top:calc(var(--header) + 107px);align-self:start}
+
+/* ── Controls ──────────────────────────────────────────────── */
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:6px;height:50px;padding:0 16px;
+  border-radius:var(--r-control);font-size:16px;line-height:20px;white-space:nowrap;transition:background .12s,border-color .12s;
+}
+.btn-primary{background:var(--ink);color:var(--ink-inverse);font-weight:700}
+/* Eén woord en een plusje hebben geen knop van zestien breed nodig. De
+   ruimte die dat vrijspeelt is in een volle balk het meest waard. */
+.btn-add{padding:0 12px;gap:2px}
+@media(hover:hover){.btn-primary:hover{background:rgba(0,0,0,.85)}}
+.btn-secondary{border:1px solid var(--ink);font-weight:600}
+@media(hover:hover){.btn-secondary:hover{background:rgba(0,0,0,.05)}}
+.btn-subtle{border:1px solid var(--line-input-strong);color:var(--ink-muted);font-weight:600}
+@media(hover:hover){.btn-subtle:hover{border-color:var(--ink);color:var(--ink)}}
+.btn-ghost{color:var(--ink-muted);font-weight:600}
+/* Een knop die alleen uit zijn icoon bestaat: geen rand, geen woord, wel
+   dezelfde aanraakmaat als de knoppen ernaast. Het aantal actieve filters
+   hangt als klein cijfer rechtsboven, want dát kun je niet raden. */
+.btn-iconbtn{position:relative;width:50px;padding:0;color:var(--ink-muted)}
+@media(hover:hover){.btn-iconbtn:hover{background:rgba(0,0,0,.05);color:var(--ink)}}
+.btn-iconbtn.on,.btn-iconbtn.open{color:var(--ink)}
+.btn-iconbtn .fbadge{position:absolute;top:6px;right:4px}
+@media(hover:hover){.btn-ghost:hover{background:rgba(0,0,0,.05);color:var(--ink)}}
+.btn-icon{width:44px;padding:0}
+.btn-sm{height:36px;padding:0 12px;font-size:14px}
+.btn-sq{width:36px;height:36px;padding:0;border-radius:var(--r-control)}
+.btn[disabled]{opacity:.4;pointer-events:none}
+.btn-w{width:202px;max-width:100%}
+
+.input,.select{
+  height:50px;width:100%;border:1px solid var(--line-input);border-radius:var(--r-control);
+  background:var(--surface);padding:0 14px;font-size:16px;font-weight:500;
+}
+.input::placeholder{color:var(--ink-muted)}
+@media(hover:hover){.input:hover,.select:hover{border-color:var(--line-input-strong)}}
+.input:focus,.select:focus{border-color:var(--ink);outline:none}
+.select{
+  border-color:var(--line-input-strong);color:var(--ink-muted);appearance:none;padding-right:38px;cursor:pointer;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='%23727272' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right 10px center;
+}
+.select-w{width:202px;max-width:100%}
+.search{position:relative;width:320px;max-width:100%}
+.search svg{position:absolute;left:14px;top:50%;transform:translateY(-50%);color:var(--ink-muted);pointer-events:none}
+.search .input{padding-left:44px}
+.field{display:flex;flex-direction:column;gap:6px}
+.field>span{font-size:14px;font-weight:600}
+.field .hint{font-size:12px;font-weight:500;color:var(--ink-muted)}
+.req{color:var(--danger)}
+textarea.input{height:110px;padding:12px 14px;resize:vertical}
+
+/* ── Surfaces ──────────────────────────────────────────────── */
+.card{border:1px solid var(--line);border-radius:var(--r-card);background:var(--surface);overflow:hidden}
+.card-header{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--line)}
+.card-header h2{font-size:20px;line-height:26px;font-weight:700}
+.stat{border:1px solid var(--line);border-radius:var(--r-card);padding:20px;display:flex;flex-direction:column;gap:4px}
+.stat-label{font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.03em;color:var(--ink-muted)}
+.stat-value{font-size:24px;line-height:30px;font-weight:700;font-variant-numeric:tabular-nums}
+.stat-hint{font-size:12px;font-weight:500;color:var(--ink-muted);display:flex;gap:8px;align-items:center}
+.up{color:var(--success)} .down{color:var(--danger)}
+.grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+/* Drie kolommen stond als inline stijl in de panelen; als klasse is het
+   op een smal scherm wél terug te zetten naar één kolom. */
+.grid2.cols3{grid-template-columns:repeat(3,1fr)}
+.span2{grid-column:span 2}
+.badge{display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:var(--r-pill);font-size:12px;font-weight:700;background:var(--surface-muted);color:var(--ink-muted)}
+.badge.success{background:rgba(30,125,69,.12);color:var(--success)}
+.badge.danger{background:rgba(198,40,40,.12);color:var(--danger)}
+.badge.warning{background:rgba(194,106,2,.15);color:var(--warning)}
+.badge.info{background:rgba(26,115,232,.12);color:var(--info)}
+.badge.warm{background:var(--event-warm);color:var(--ink)}
+.badge[hidden]{display:none}
+/* Het label naast een rolnaam stond te krap tegen zijn tekst. */
+.badge.tag-wide{padding:4px 14px}
+/* Een teller die per rij een andere breedte heeft laat de knoppen erachter
+   verspringen. Eén maat, getal gecentreerd: 1 user en 25 users staan dan
+   even breed. */
+.badge-count{justify-content:center;width:84px;flex:none}
+@media(hover:hover){.badge-count:hover{background:var(--surface-sunken);color:var(--ink)}}
+.badge-count.on{background:var(--ink);color:var(--ink-inverse)}
+
+table{width:100%;border-collapse:collapse;text-align:left}
+thead{background:var(--surface-muted)}
+th{padding:12px 16px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;color:var(--ink-muted);border-bottom:1px solid var(--line)}
+td{padding:14px 16px;font-weight:500;border-bottom:1px solid var(--line)}
+tbody tr:last-child td{border-bottom:0}
+@media(hover:hover){tbody tr:hover{background:rgba(247,247,247,.7)}}
+tr.clickable{cursor:pointer}
+.right{text-align:right}
+.bold{font-weight:700}
+.muted{color:var(--ink-muted)}
+.empty{padding:64px 24px;text-align:center;display:flex;flex-direction:column;align-items:center;gap:8px}
+.empty h3{font-size:20px;font-weight:700}
+.empty p{color:var(--ink-muted);font-weight:500;max-width:380px}
+
+.tabs{display:flex;gap:24px;border-bottom:1px solid var(--line)}
+.tab{padding:8px 0 12px;margin-bottom:-1px;border-bottom:2px solid transparent;font-size:16px;font-weight:600;color:var(--ink-muted);white-space:nowrap}
+@media(hover:hover){.tab:hover{color:var(--ink)}}
+.tab.active{border-bottom-color:var(--ink);color:var(--ink);font-weight:700}
+
+/* ── Calendar ──────────────────────────────────────────────── */
+.cal{border:1px solid var(--line);border-radius:var(--r-card);overflow:hidden}
+.cal-row{display:flex}
+.cal-gutter{width:58px;flex:none;border-right:1px solid var(--line)}
+.cal-col{flex:1;border-left:1px solid var(--line);position:relative}
+.cal-head{height:40px;display:flex;align-items:center;justify-content:center;gap:6px;border-bottom:1px solid var(--line);background:rgba(0,0,0,.06)}
+.cal-head.today{background:var(--calendar-today)}
+.cal-head .dow{font-size:12px;font-weight:700;color:var(--ink-muted)}
+.cal-head .dnum{font-size:12px;font-weight:700;color:var(--ink-muted);width:28px;height:28px;display:grid;place-items:center;border-radius:var(--r-pill);font-variant-numeric:tabular-nums}
+.cal-head.today .dnum{background:var(--ink-muted);color:#fff}
+.cal-allday{height:var(--slot);display:flex;align-items:center;justify-content:center;border-bottom:1px solid var(--line);border-left:1px solid var(--line);background:rgba(0,0,0,.03);font-size:14px;font-weight:500;color:var(--ink-muted)}
+.cal-allday.today{background:var(--calendar-today)}
+/* ── De agenda vult wat er is ──────────────────────────────────
+   De hoogte stond op calc(100vh - 320px). Dat getal was een gok naar de
+   balk, de strook en de marges samen, en het klopte alleen bij één
+   schermhoogte: eronder liep de agenda door tot buiten beeld, erboven
+   bleef er een baan wit staan onder het laatste tijdvak.
+
+   Nu draagt niemand een hoogte. De agenda is het laatste vak in een
+   kolom die de kijkhoogte vult, en pakt wat de balk, de kaart en de
+   strook overlaten. Eén keten van flex, geen enkel vast getal. */
+.cal-body{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain}
+/* De hoogteketen geldt vanaf 901px. Daaronder loopt de agenda met de
+   pagina mee — daar is de kop anders van het rooster los te trekken —
+   en gelden de gewone regels ongewijzigd. Bewust geen blok dat het
+   verderop weer uitzet: zo'n terugdraaiing wint op soortelijkheid ook
+   van de marges die de smalle schermen zelf zetten. */
+@media(min-width:901px){
+  body.cal-mode #view{height:calc(100vh - var(--header));display:flex;flex-direction:column;
+    overflow:hidden;padding:20px 26px 24px}
+  /* De balk plakte aan de bovenkant met top:var(--header). Dat hoorde bij
+     een pagina die zelf schuift. Nu schuift het rooster en de pagina niet
+     meer, en dan duwt sticky de balk juist de hoogte van de kopregel naar
+     beneden: een baan wit erboven, en de balk zelf legde met zijn eigen
+     achtergrond de strook en de kolomkoppen eronder toe.
+
+     Dus statisch, net als op de kassa — dat scherm schuift ook niet. De
+     negatieve marges kunnen mee weg: die trokken de balk naar de
+     schermrand van een pagina die er niet meer is. */
+  body.cal-mode .toolbar{position:static;margin:0 0 16px;padding:0 0 16px}
+  body.cal-mode #view>.toolbar{flex:none}
+  body.cal-mode .cal{flex:1;min-height:0;display:flex;flex-direction:column}
+  body.cal-mode .cal>.cal-row{flex:none}
+  /* Het rooster vult de lade minstens helemaal. Past de hele dag erin,
+     dan rekken de rijen mee; past hij niet, dan houden ze hun
+     minimumhoogte en schuift de lade — er komt geen tijdvak bij om wit
+     op te vullen, en er gaat er geen af. */
+  body.cal-mode .cal-body>.cal-row{min-height:100%}
+  body.cal-mode .cal-body .cal-gutter,
+  body.cal-mode .cal-body .cal-col{display:flex;flex-direction:column}
+  body.cal-mode .cal-time,body.cal-mode .cal-cell{flex:1 1 0;min-height:var(--slot)}
+}
+.cal-time{height:var(--slot);display:grid;place-items:center;border-bottom:1px solid var(--line);background:var(--surface)}
+.cal-time span{font-size:12px;font-weight:600;color:var(--ink-muted);font-variant-numeric:tabular-nums}
+.cal-time.hour span{color:var(--ink)}
+/* De huidige tijd: een rode lijn dwars door de dag van vandaag, met een
+   bolletje aan de kop en de klok in de tijdkolom. Hij ligt boven de cellen
+   maar onder niets aanklikbaars — pointer-events uit, zodat je er dwars
+   doorheen een slot kunt aantikken. */
+.cal-gutter{position:relative}
+.cal-now-label{position:absolute;right:4px;z-index:13;transform:translateY(-50%);
+  padding:1px 5px;border-radius:4px;background:var(--danger);color:#fff;
+  font-size:11px;font-weight:800;line-height:15px;font-variant-numeric:tabular-nums}
+.cal-now{position:absolute;left:0;right:0;height:0;z-index:12;pointer-events:none;
+  border-top:2px solid var(--danger)}
+.cal-now::before{content:"";position:absolute;left:-4px;top:-5px;
+  width:8px;height:8px;border-radius:50%;background:var(--danger)}
+.cal-cell{height:var(--slot);border-bottom:1px solid var(--line);width:100%;display:block}
+.cal-col.today{background:var(--calendar-today)}
+.cal-col.closed{background:var(--surface-muted)}
+@media(hover:hover){.cal-col:not(.closed) .cal-cell:hover{background:rgba(0,0,0,.04)}}
+.cal-gutter-head{height:40px;display:grid;place-items:center;border-bottom:1px solid var(--line);background:rgba(0,0,0,.06);font-size:12px;font-weight:600;color:var(--ink-muted)}
+.cal-gutter-allday{height:var(--slot);display:grid;place-items:center;border-bottom:1px solid var(--line);background:rgba(0,0,0,.03);font-size:12px;font-weight:600;color:var(--ink-muted)}
+.event{
+  position:absolute;left:0;right:0;z-index:10;border-radius:var(--r-event);padding:7px 9px;
+  display:flex;flex-direction:column;justify-content:space-between;gap:4px;
+  overflow:hidden;cursor:pointer;text-align:left;
+  background:var(--ev-other);border-left:4px solid var(--ev-other-ink);
+}
+/* De behandeling bovenaan, met zijn eigen icoon ervoor. Dat is waar het oog
+   het eerst landt en waarop een medewerker de dag leest. */
+.event{min-height:28px}
+.event .ev-main{display:flex;flex-direction:column;gap:2px;min-height:0;overflow:hidden}
+.event .ev-head{display:flex;align-items:flex-start;gap:5px}
+.event .ev-ic{flex:none;display:grid;place-items:center;height:17px}
+.event .ev-t{font-size:13px;font-weight:800;line-height:17px;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.event .ev-line{display:flex;align-items:center;gap:5px;
+  font-size:12px;font-weight:600;line-height:15px;color:var(--ink-muted)}
+.event .ev-line svg{flex:none;opacity:.75}
+.event .ev-clip{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.event .ev-foot{flex:none;display:flex;align-items:center;gap:6px;
+  font-size:11px;font-weight:600;line-height:14px;color:var(--ink-muted)}
+.event .ev-loc{flex:none;margin-left:auto;padding:0 5px;border-radius:999px;
+  background:rgba(255,255,255,.55);font-weight:700}
+/* Hoort dit blok bij een langer bezoek, dan zegt die regel dat. */
+.event .ev-chain{font-weight:700}
+
+/* ── Kleur per behandelsoort: bepaalt het icoon ── */
+.event.ev-manual{background:var(--ev-manual);border-left-color:var(--ev-manual-ink)}
+.event.ev-manual .ev-ic{color:var(--ev-manual-ink)}
+.event.ev-rehab{background:var(--ev-rehab);border-left-color:var(--ev-rehab-ink)}
+.event.ev-rehab .ev-ic{color:var(--ev-rehab-ink)}
+.event.ev-assess{background:var(--ev-assess);border-left-color:var(--ev-assess-ink)}
+.event.ev-assess .ev-ic{color:var(--ev-assess-ink)}
+.event.ev-recovery{background:var(--ev-recovery);border-left-color:var(--ev-recovery-ink)}
+.event.ev-recovery .ev-ic{color:var(--ev-recovery-ink)}
+.event.ev-other .ev-ic{color:var(--ev-other-ink)}
+
+/* Wat geen behandeling is, dingt niet mee om de aandacht: grijs, geen
+   pastel. Geblokkeerde tijd leest als een gat in de dag en niet als iets
+   wat je kunt aanklikken om af te rekenen. */
+.event.ev-off,.event.ev-chore{background:var(--event-neutral);
+  border-left-color:var(--line-strong);color:var(--ink-muted)}
+.event.ev-off .ev-ic,.event.ev-chore .ev-ic{color:var(--ink-muted)}
+.event.ev-off .ev-t,.event.ev-chore .ev-t{font-weight:700}
+.event.blocked{opacity:.9}
+.event.ev-note{background:var(--event-sky);border-left-color:var(--info)}
+.event.ev-note .ev-ic{color:var(--info)}
+
+/* ── Feestdagen: het getal en de uitleg staan naast elkaar, zodat je
+   in één blik ziet hoeveel er open staat én dat er niets is gebeurd. */
+.holiday-state{display:flex;align-items:center;gap:16px;padding:14px 16px;
+  border:1px solid var(--line);border-radius:var(--r-control);background:var(--surface-muted)}
+.holiday-num{display:grid;place-items:center;width:46px;height:46px;flex:none;border-radius:var(--r-control);
+  background:var(--surface);border:1px solid var(--line);font-size:20px;font-weight:800}
+.tabs-lg .tab{font-size:16px;padding-bottom:12px}
+.tabs-lg .tab .fbadge{margin-left:6px}
+/* Een tijdvak in het uitzonderingsformulier. */
+.periodrow{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.periodrow .input[type=time]{width:128px}
+
+/* ── Datumkiezer boven de agenda ── */
+/* De knop is dezelfde pil als het invoerveld dat er stond; alleen nu
+   merk je dat je erop kunt drukken. */
+.calpick-btn{width:min(184px,38vw);display:grid;place-items:center;cursor:pointer}
+@media(hover:hover){.calpick-btn:hover{border-color:var(--ink)}}
+.calpick-btn.open{border-color:var(--ink)}
+.menu-cal{min-width:300px;padding:10px}
+.calpick-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:2px 2px 10px}
+.calpick-title{font-weight:700;font-size:15px}
+.calpick-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px}
+.calpick-dow{display:grid;place-items:center;height:26px;font-size:11px;font-weight:700;
+  text-transform:uppercase;color:var(--ink-muted)}
+.calpick-day{position:relative;height:38px;border-radius:var(--r-control);font-size:14px;font-weight:600;
+  display:grid;place-items:center;cursor:pointer}
+@media(hover:hover){.calpick-day:hover{background:var(--surface-muted)}}
+/* Dagen buiten deze maand blijven staan zodat het rooster heel blijft,
+   maar ze dringen zich niet op. */
+.calpick-day.out{color:var(--ink-muted);opacity:.45}
+.calpick-day.closed{color:var(--ink-muted)}
+.calpick-day.today{box-shadow:inset 0 0 0 1px var(--ink)}
+/* De keuze wint van vandaag: die regel staat na .today, en met dezelfde
+   soortelijkheid telt de volgorde. */
+.calpick-day.on{background:var(--accent-deep);color:#fff}
+.calpick-dot{position:absolute;bottom:6px;width:4px;height:4px;border-radius:99px;background:var(--accent-deep)}
+.calpick-day.on .calpick-dot{background:rgba(255,255,255,.85)}
+.calpick-foot{display:flex;align-items:center;justify-content:space-between;gap:8px;
+  padding:10px 2px 2px;margin-top:6px;border-top:1px solid var(--line);font-size:12px;font-weight:500}
+
+/* ── Wie is wie: de strook boven de agenda ── */
+/* Staat er een filter op één persoon, dan zakken de anderen weg — de
+   strook blijft zo kloppen bij wat je in het rooster ziet. */
+/* De dagweergave zet de naam al boven de kolom; die kop draagt de kleur,
+   zodat de kolom en de blokken erin bij elkaar horen. */
+.cal-head.cal-head-emp .dow{font-weight:800}
+
+/* ── Kleur per medewerker ──
+   Achteraan én met de soort van het blok erbij: hierboven staan regels van
+   dezelfde soortelijkheid, en dan wint de laatste. Zo blijft dit de winnaar,
+   waar hij ook komt te staan. De behandelsoort bepaalt nog het icoon, de
+   medewerker het vlak. Beide waarden komen als inline variabele mee, want
+   ze zijn in Instellingen te wijzigen. */
+.event.appointment.ev-emp{background:var(--ev-bg);border-left-color:var(--ev-ink)}
+.event.appointment.ev-emp .ev-ic{color:var(--ev-ink)}
+
+/* ── Modal ─────────────────────────────────────────────────── */
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:50;display:grid;place-items:center;
+  padding:16px;overflow-y:auto;overscroll-behavior:contain}
+.overlay[hidden]{display:none}
+.modal{
+  background:var(--surface);border:1px solid var(--line);border-radius:var(--r-control);
+  width:100%;max-height:90vh;display:flex;flex-direction:column;overflow:hidden;position:relative;
+  box-shadow:0 8px 28px -6px rgba(0,0,0,.16);animation:up .16s cubic-bezier(.16,1,.3,1);
+}
+@keyframes up{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.modal-head{padding:20px 56px 20px 24px;border-bottom:1px solid var(--line)}
+.modal-head h2{font-size:20px;line-height:26px;font-weight:700}
+.modal-head p{color:var(--ink-muted);font-weight:500;margin-top:4px}
+.modal-body{padding:20px 24px;overflow-y:auto;overscroll-behavior:contain;flex:1;
+  display:flex;flex-direction:column;gap:20px}
+.modal-foot{padding:16px 24px;border-top:1px solid var(--line);display:flex;align-items:center;justify-content:flex-end;gap:12px}
+.modal-close{position:absolute;top:16px;right:16px;padding:4px;border-radius:6px;color:var(--ink-muted)}
+@media(hover:hover){.modal-close:hover{background:var(--surface-muted);color:var(--ink)}}
+
+/* ── Misc ──────────────────────────────────────────────────── */
+.picker{display:flex;flex-direction:column;gap:4px;align-items:flex-start;border:1px solid var(--line);border-radius:var(--r-control);padding:16px;text-align:left;width:100%}
+@media(hover:hover){.picker:hover{border-color:var(--ink)}}
+.picker[disabled]{opacity:.45;pointer-events:none}
+.picker .n{font-weight:700}
+.picker .m{font-size:12px;font-weight:500;color:var(--ink-muted)}
+.picker .p{font-size:16px;font-weight:700;margin-top:4px;font-variant-numeric:tabular-nums}
+/* De naamkolom mocht niet krimpen, dus duwde een lange naam de knoppen
+   rechts het kaartje uit — de drie puntjes verdwenen achter de rand.
+   Met min-width:0 wijkt de naam en blijft de rij binnen de bon. */
+.basket-line{display:flex;align-items:center;gap:10px;padding:14px 14px 14px 16px;
+  border-bottom:1px solid var(--line);min-width:0}
+.basket-line .bl-name{flex:1;min-width:0}
+.basket-line .bl-name .bold{overflow-wrap:break-word}
+.basket-line .bl-sum{flex:none;min-width:64px;text-align:right}
+.basket-line .qty{flex:none}
+.basket-line .bl-more{flex:none}
+.qty{display:flex;align-items:center;gap:2px}
+.qty span{width:24px;text-align:center;font-weight:700;font-variant-numeric:tabular-nums}
+.sumrow{display:flex;align-items:center;justify-content:space-between}
+.bars{display:flex;align-items:flex-end;gap:16px;height:260px;padding:32px 20px 20px}
+.bar-wrap{flex:1;display:flex;flex-direction:column;align-items:center;gap:8px}
+.bar{width:100%;background:var(--event-warm);border-radius:4px 4px 0 0}
+.settings-layout{display:grid;grid-template-columns:240px minmax(0,1fr);gap:24px;align-items:start;
+  --snav-top:calc(var(--header) + 107px)}
+/* Zonder deze regel weigert de rechterkolom te krimpen: een rastercel is
+   van zichzelf min-width:auto en gaat dus mee met de breedste tabel die
+   erin staat. De tabel hóórt te schuiven, niet de pagina. */
+.settings-pane{min-width:0}
+.settings-pane .card{max-width:100%}
+.snav{display:flex;flex-direction:column;gap:4px}
+.snav,.settings-pane{position:sticky;top:var(--snav-top);
+  max-height:calc(100vh - var(--snav-top) - 24px);overflow-y:auto;overscroll-behavior:contain}
+/* Een schuifvlak knipt tegen zijn eigen rand: zonder die marge plakt de
+   actieve knop tegen de onderkant van de lijst. */
+.snav{padding-bottom:4px}
+.snav button{padding:12px 16px;border-radius:var(--r-control);font-weight:600;color:var(--ink-muted);text-align:left}
+@media(hover:hover){.snav button:hover{background:var(--surface-muted);color:var(--ink)}}
+.snav button.active{background:var(--ink);color:var(--ink-inverse)}
+.toggle{width:44px;height:24px;border-radius:99px;background:var(--surface-sunken);padding:2px;flex:none;transition:background .15s;
+  display:inline-flex;align-items:center;border:1px solid rgba(0,0,0,.06)}
+.toggle .knob{display:block;width:20px;height:20px;border-radius:99px;background:#fff;transition:transform .15s;
+  box-shadow:0 1px 3px rgba(0,0,0,.28)}
+.toggle.on{background:var(--ink)}
+.toggle.on .knob{transform:translateX(20px)}
+.togglerow{display:flex;align-items:flex-start;justify-content:space-between;gap:24px;border:1px solid var(--line);border-radius:var(--r-control);padding:14px 16px}
+.togglerow .l{font-weight:600}
+.togglerow .h{font-size:12px;font-weight:500;color:var(--ink-muted)}
+.checkrow{display:flex;align-items:center;gap:12px}
+/* Een regel met een miniatuur: het plaatje staat naast alles wat erbij
+   hoort, niet alleen naast de eerste regel ervan. Alles wat onder de naam
+   hoort staat daarom in een eigen kolom ernaast, en die kolom mag
+   afbreken zodra de ruimte op is. */
+.cellmain{display:flex;align-items:center;gap:12px;min-width:0}
+.cellbody{display:flex;flex-direction:column;gap:4px;min-width:0;flex:1}
+.cellhead{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0}
+/* Kleurkeuze voor een medewerker: vakjes in het echte formaat waarin je
+   ze terugziet, met een vinkje op de gekozen. */
+.swatches{display:flex;flex-wrap:wrap;gap:8px}
+.swatch{width:34px;height:34px;border-radius:var(--r-control);border:2px solid transparent;
+  display:grid;place-items:center;cursor:pointer}
+@media(hover:hover){.swatch:hover{border-color:currentColor}}
+.swatch.on{box-shadow:0 0 0 1px var(--surface) inset}
+/* De kleur van iemand in een tabelrij: hetzelfde vlak, kleiner. Het is
+   een knop, dus het mag ook zo voelen. */
+.empdot{width:20px;height:20px;border-radius:6px;flex:none;display:inline-block;vertical-align:-4px;cursor:pointer}
+@media(hover:hover){.empdot:hover{box-shadow:0 0 0 2px var(--ink) inset}}
+.empdot-pop{display:inline-block;vertical-align:-4px;line-height:0}
+.menu-dot{min-width:0;width:max-content;padding:8px;left:0;right:auto}
+.menu-dot .swatches{flex-wrap:nowrap;padding:2px}
+.menu-foot{padding:8px 4px 2px;margin-top:6px;border-top:1px solid var(--line);
+  font-size:12px;font-weight:600;color:var(--ink-muted)}
+/* Rangschikking: dezelfde vorm als een togglerow, maar met een vinkje.
+   Je zet hier maatstaven naast elkaar aan, dat is geen aan-of-uitkeuze. */
+.rankrow{display:flex;align-items:flex-start;gap:14px;width:100%;text-align:left;
+  border:1px solid var(--line);border-radius:var(--r-control);padding:14px 16px}
+.rankrow .check{margin-top:1px}
+.rankrow .l{font-weight:600}
+.rankrow .h{font-size:12px;font-weight:500;color:var(--ink-muted);margin-top:2px}
+.rankrow.on{border-color:var(--accent-deep);background:var(--accent-tint)}
+/* Twee naast elkaar: gelijke hoogte, zodat het raster niet rafelt als de
+   ene uitleg over twee regels loopt en de andere over één. */
+.grid2>.rankrow{height:100%}
+@media(hover:hover){.rankrow:hover{border-color:var(--accent-deep)}}
+.check{width:20px;height:20px;border:1px solid var(--line-input-strong);border-radius:4px;display:grid;place-items:center;flex:none;color:transparent}
+.check.on{background:var(--ink);border-color:var(--ink);color:#fff}
+.profile-grid{display:grid;grid-template-columns:320px 1fr;gap:24px}
+.checkout-grid{display:grid;grid-template-columns:1fr 400px;gap:24px}
+.contact{display:flex;align-items:center;gap:10px;border:1px solid var(--line);border-radius:var(--r-control);padding:10px 14px;font-weight:500}
+@media(hover:hover){.contact:hover{border-color:var(--ink)}}
+.backlink{display:inline-flex;align-items:center;gap:8px;font-weight:600;color:var(--ink-muted);margin-bottom:20px}
+@media(hover:hover){.backlink:hover{color:var(--ink)}}
+.section-label{padding:10px 16px;background:var(--surface-muted);border-bottom:1px solid var(--line);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;color:var(--ink-muted)}
+.hoursrow{display:flex;align-items:center;gap:16px;padding:14px 20px;border-bottom:1px solid var(--line)}
+.hoursrow .day{width:clamp(80px,22vw,112px);font-weight:600}
+/* Een gebroken dienst stapelt zijn vakken onder elkaar. Alleen dan gaat
+   de rij bovenlijnen — een gewone dag blijft staan zoals hij stond. */
+/* Klaarzetten en opruimen: dezelfde kleur als het blok, maar gestreept
+   en doorzichtig, zodat het bij de afspraak hoort en er toch niet voor
+   doorgaat. Staat achter de knop, dus vangt geen kliks. */
+.ev-wrap{position:absolute;left:2px;right:2px;border-radius:var(--r-control);
+  background:repeating-linear-gradient(135deg,var(--ev-wrap-bg,rgba(120,120,110,.20)) 0 5px,
+    transparent 5px 10px);
+  border:1px dashed var(--line);pointer-events:none;z-index:0}
+.cal-col .event{z-index:1}
+.hoursrow.split{align-items:flex-start}
+.hoursrow.split .day,.hoursrow.split .toggle,.hoursrow.split .wh-add{margin-top:9px}
+.dayperiods{display:flex;flex-direction:column;gap:8px;min-width:0}
+/* Uiterst rechts op de rij, wat er links ook staat. Op een smal scherm
+   wikkelt de rij en komt hij op zijn eigen regel — nog steeds rechts. */
+.hoursrow>.wh-add{margin-left:auto;flex:none}
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;padding:14px 20px;border-radius:var(--r-control);font-weight:600;z-index:80;animation:up .16s}
+.toast[hidden]{display:none}
+
+/* ── Side panel (Guestit pattern: fixed field on the right) ─── */
+/* De lade nam een vaste 480px. Op een breed scherm is dat een steeds
+   smaller wordende strook: bij 2240px staat er nog maar 21% formulier
+   naast 79% lijst, terwijl de bewerkkaart in de CMS daar 33% pakt.
+   Vandaar een aandeel in plaats van een maat, met 480px als bodem zodat
+   een laptop niets inlevert en 94vw als plafond voor de telefoon. */
+.panel{
+  position:fixed;top:0;right:0;bottom:0;width:var(--panel-w);max-width:100vw;z-index:40;
+  background:var(--surface);border-left:1px solid var(--line);
+  display:flex;flex-direction:column;transform:translateX(102%);
+  transition:transform .18s cubic-bezier(.16,1,.3,1);
+  box-shadow:-8px 0 28px -12px rgba(0,0,0,.18);
+}
+.panel.open{transform:none}
+/* Zolang de lade openstaat ligt de pagina eronder in de schaduw: de agenda
+   blijft leesbaar als context, maar de aandacht hoort bij het formulier.
+   Hij ligt onder de lade en boven al het andere, ook boven de zijbalk en de
+   bovenbalk — anders lijken die er nog bij te horen. */
+/* Hij blijft altijd staan en vervaagt alleen: met display:none ertussen
+   valt er niets te vervagen, en zonder muisdoorlaat vangt hij klikken die
+   voor de pagina bedoeld zijn. */
+.scrim{position:fixed;top:0;right:0;bottom:0;left:0;z-index:38;
+  background:rgba(24,22,19,.44);opacity:0;pointer-events:none;
+  transition:opacity .18s cubic-bezier(.16,1,.3,1)}
+.scrim.on{opacity:1;pointer-events:auto}
+.shell{transition:padding .18s cubic-bezier(.16,1,.3,1)}
+body.panel-open .shell{padding-right:var(--panel-w)}
+/* ── De lade in secties ────────────────────────────────────────
+   Drie zones, precies zoals de kop van een bewerkscherm hoort te
+   werken (GX-03): de opslagstand is een mededeling en nooit een knop,
+   de knoppen staan rechtsboven, en de identiteit eronder is het anker
+   waar het oog op landt. */
+.panel-topbar{display:flex;align-items:center;justify-content:space-between;gap:12px;
+  padding:14px 20px 12px}
+.panel-ident{display:flex;align-items:center;gap:14px;padding:0 20px 16px}
+.panel-ident .panel-idtext{flex:1;min-width:0}
+.panel-ident h2{font-size:22px;line-height:28px;font-weight:700}
+.panel-ident .sub{color:var(--ink-muted);font-weight:500;margin-top:2px;font-size:13px}
+.panel-thumb{width:64px;height:64px;flex:none;border-radius:var(--r-control);
+  border:1px solid var(--line);background:var(--surface-muted);overflow:hidden;
+  display:grid;place-items:center;color:var(--ink-muted);font-size:12px;font-weight:600;cursor:pointer}
+.panel-thumb img{width:100%;height:100%;object-fit:cover}
+/* Opslaan en sluiten zitten in de CMS aan elkaar vast: één blok, links
+   de knop met het woord, rechts het gevulde kruis. Dat leest als één
+   afronding — vastleggen of weglopen — in plaats van twee losse
+   knoppen die toevallig naast elkaar staan. Sluiten blijft de laatste
+   in de groep, zoals het contract eist. */
+.panel-endgroup{display:inline-flex;align-items:stretch;flex:none;
+  border-radius:var(--r-control);overflow:hidden}
+.panel-endgroup .btn{border-radius:0;border:0;height:44px}
+.panel-endgroup .btn-primary:disabled{background:var(--accent-soft);color:#fff;opacity:1}
+.panel-x{width:48px;flex:none;display:grid;place-items:center;
+  background:var(--accent-deep);color:#fff;border-radius:0}
+@media(hover:hover){.panel-x:hover{background:var(--ink)}}
+/* Het potlood naast de naam is geen sier: het zet je in het naamveld,
+   ook als die sectie dichtgeklapt staat. */
+.panel-rename{line-height:0;color:var(--ink-muted);flex:none}
+@media(hover:hover){.panel-rename:hover{color:var(--ink)}}
+.panel-ident h2{display:flex;align-items:center;gap:10px}
+.panel-live{display:flex;align-items:center;gap:8px;flex:none;font-weight:600;font-size:13px}
+.panel-live .lbl{color:var(--ok,var(--accent-deep))}
+/* De schakelbalk tussen de twee werkwijzen. Dezelfde gegevens, twee
+   manieren van kijken — hij verandert nooit wélke velden er zijn. */
+.ed-switchbar{display:flex;align-items:center;justify-content:space-between;gap:12px;
+  padding:14px 20px 6px}
+.ed-seg{display:inline-flex;background:var(--surface-muted);border:1px solid var(--line);
+  border-radius:999px;padding:3px}
+.ed-seg button{height:34px;padding:0 16px;border-radius:999px;font-weight:600;font-size:14px;
+  color:var(--ink-muted);white-space:nowrap}
+.ed-seg button.on{background:var(--accent-deep);color:#fff}
+.ed-expand{display:inline-flex;align-items:center;gap:6px;font-weight:600;font-size:14px;
+  color:var(--ink-muted);white-space:nowrap}
+/* Een dichtgeklapte sectie zegt zelf hoe hij ervoor staat, zodat je hem
+   nooit hoeft open te klappen om te weten of er iets mis is (GX-02). */
+.ed-sec{border:1px solid var(--line);border-radius:var(--r-card,14px);background:var(--surface);
+  margin-bottom:12px;overflow:hidden}
+.ed-sec.open{border-color:var(--line-strong,var(--line))}
+.ed-sechead{display:flex;align-items:flex-start;gap:12px;width:100%;padding:16px 18px;text-align:left}
+.ed-sechead .ed-secmain{flex:1;min-width:0}
+.ed-sectitle{display:flex;align-items:center;flex-wrap:wrap;gap:8px;font-weight:700;font-size:16px}
+.ed-secdesc{display:block;color:var(--ink-muted);font-weight:500;font-size:13px;margin-top:4px}
+.ed-secchev{flex:none;line-height:0;color:var(--ink-muted);transition:transform .15s;margin-top:2px}
+.ed-sec.open .ed-secchev{transform:rotate(90deg)}
+.ed-secbody{padding:0 18px 18px;display:flex;flex-direction:column;gap:16px}
+/* ── Het overzicht ─────────────────────────────────────────────
+   Alles hier leunt op wat er al is: .stat voor de pols, .card voor de
+   vakken, .note voor de duiding, de olijftokens voor de nadruk. Geen
+   eigen kleurenwereld, geen gloed, geen donker stuurscherm. */
+/* Twee verdiepingen, gescheiden door de vouw. Het eerste beeld vult de
+   kijkhoogte met wat vandaag geld of aandacht oplevert; wat je moet
+   weten maar niet moet dóén woont eronder en komt met de gewone
+   paginascroll in beeld. De pagina scrollt dus wél — maar het eerste
+   beeld is compleet zonder. */
+.fd{display:flex;flex-direction:column;gap:28px}
+.fd-fold{display:flex;flex-direction:column;gap:16px}
+.fd-main{display:grid;gap:16px;grid-template-columns:minmax(0,1.7fr) minmax(0,1fr)}
+.fd-left,.fd-side{display:flex;flex-direction:column;gap:12px;min-width:0}
+.fd-more{display:flex;flex-direction:column;gap:14px;padding-top:22px;border-top:1px solid var(--line)}
+.fd-more-k{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;
+  color:var(--ink-muted)}
+.fd-more-grid{display:grid;gap:14px;grid-template-columns:repeat(2,minmax(0,1fr))}
+.fd-greet h2{font-size:24px;line-height:30px;font-weight:700}
+.fd-greet p{margin-top:2px}
+.fd-pulse .stat-value{font-size:28px;line-height:34px}
+.fd-hero{border:1px solid var(--accent-deep);border-radius:var(--r-card);
+  background:var(--accent-tint);padding:26px 28px}
+.fd-hero-quiet{border-color:var(--line);background:var(--surface-muted)}
+.fd-kicker{display:block;font-size:11px;font-weight:700;letter-spacing:.05em;
+  text-transform:uppercase;color:var(--accent-deep);margin-bottom:8px}
+.fd-hero h2{font-size:22px;line-height:28px;font-weight:700}
+.fd-hero p{margin-top:8px;max-width:640px;font-weight:500;color:var(--ink-soft,var(--ink))}
+.fd-hero-meta{display:flex;flex-wrap:wrap;gap:8px 22px;margin-top:14px;
+  font-size:13px;font-weight:600;color:var(--ink-muted)}
+.fd-hero-meta span{display:inline-flex;align-items:center;gap:7px}
+.fd-hero-actions{display:flex;gap:10px;margin-top:16px}
+.fd-why{margin-top:14px;max-width:640px}
+.fd-opps{display:flex;flex-direction:column;gap:10px}
+.fd-opp{display:flex;align-items:center;gap:14px;border:1px solid var(--line);
+  border-radius:var(--r-card);background:var(--surface);padding:14px 18px}
+.fd-opp-ic{width:40px;height:40px;flex:none;display:grid;place-items:center;
+  border-radius:var(--r-control);background:var(--accent-tint);color:var(--accent-deep)}
+.fd-opp-body{flex:1;min-width:0}
+.fd-opp-body .t{display:block;font-weight:700}
+.fd-opp-body .x{display:block;font-size:13px;font-weight:500;color:var(--ink-muted);margin-top:2px}
+.fd-opp-side{display:flex;align-items:center;gap:14px;flex:none}
+.fd-opp-side .v{font-weight:800;font-variant-numeric:tabular-nums;color:var(--accent-deep);white-space:nowrap}
+.fd-card{display:flex;flex-direction:column;gap:12px;padding:18px 20px}
+.fd-card h3{font-size:15px;font-weight:700}
+.fd-card>.btn{align-self:flex-start;margin-top:auto}
+.fd-row{display:flex;justify-content:space-between;gap:12px;font-size:14px}
+.fd-row .k{font-weight:500;color:var(--ink-muted)}
+.fd-row .v{font-weight:700}
+.fd-emp{display:flex;align-items:center;gap:12px}
+.fd-emp-body{flex:1;min-width:0}
+.fd-emp-body .n{display:block;font-weight:600;font-size:14px}
+.fd-emp-body .x{display:block;font-size:12px;font-weight:500;color:var(--ink-muted);margin-top:1px}
+.fd-emp-body .x.danger{color:var(--danger,#a33);font-weight:600}
+.fd-emp>.v{font-weight:700;white-space:nowrap}
+.fd-face,.fd-init{border-radius:50%;flex:none;overflow:hidden;display:grid;place-items:center}
+.fd-face img{width:100%;height:100%;object-fit:cover;display:block}
+.fd-init{background:var(--accent-tint);color:var(--accent-deep);font-weight:700;width:100%;height:100%}
+.fd-shot{flex:none;border-radius:var(--r-control);overflow:hidden;border:1px solid var(--line);
+  background:var(--surface-muted);display:grid;place-items:center}
+.fd-shot img{width:100%;height:100%;object-fit:cover;display:block}
+.fd-bar{display:block;height:7px;border-radius:999px;background:var(--surface-muted);
+  margin-top:6px;overflow:hidden}
+.fd-bar i{display:block;height:100%;border-radius:999px;background:var(--accent-strong)}
+.fd-kumo{display:flex;align-items:center;gap:14px;border:1px solid var(--line);
+  border-radius:var(--r-card);background:var(--surface-muted);padding:16px 20px}
+.fd-kumo-ic{width:40px;height:40px;flex:none;display:grid;place-items:center;
+  border-radius:50%;background:var(--gold-tint,#f4ecd8);color:var(--gold,#a8861d)}
+.fd-kumo .t{display:block;font-weight:700}
+.fd-kumo .x{display:block;font-size:13px;font-weight:500;color:var(--ink-muted);margin-top:2px;max-width:760px}
+/* ── De vouw ───────────────────────────────────────────────────
+   Vanaf 1200px vult het eerste beeld de kijkhoogte: de vouw krijgt een
+   minimumhoogte en verdeelt hem over zijn delen. Geen overflow:hidden
+   meer — de plakkende kop in een scrollende kaart schoof over de rijen
+   heen en dat was precies wat er op de schermafdruk misging. De pagina
+   scrollt gewoon; de rangorde bepaalt wat er boven de vouw woont. */
+@media(min-width:1200px){
+  .fd-fold{min-height:calc(100vh - var(--header) - 44px)}
+  .fd-main{flex:1;min-height:0}
+  .fd-left{min-height:0}
+  .fd-pulse,.fd-hero{flex:none}
+  /* De kansen nemen wat er onder de heldkaart overblijft: hoger bij
+     meer ruimte, nooit talrijker. */
+  .fd-opps{flex:1;min-height:0}
+  .fd-opp{flex:1 1 0;min-height:64px}
+  /* Rechts vult de voorraadkaart de kolom, op zijn natuurlijke hoogte
+     gestut door dezelfde flex — zonder eigen scroll en zonder plakkende
+     kop. */
+  .fd-side .fd-card{flex:1}
+}
+@supports(height:100dvh){
+  @media(min-width:1200px){
+    .fd-fold{min-height:calc(100dvh - var(--header) - 44px)}
+  }
+}
+@media(max-width:1199px){
+  .fd-main,.fd-more-grid{grid-template-columns:1fr}
+}
+@media(max-width:760px){
+  .fd-opp{flex-wrap:wrap}
+  .fd-opp-side{width:100%;justify-content:space-between}
+  .fd-hero{padding:20px}
+}
+
+/* Doorgestreepte prijs naast de nieuwe. De oude blijft leesbaar — hem
+   weglaten maakt van een aanbieding gewoon een andere prijs. */
+.pricetag{display:inline-flex;align-items:baseline;gap:6px}
+.pricetag s{color:var(--ink-muted);font-weight:500}
+.pricetag strong{font-weight:800}
+.ed-pill{display:inline-flex;align-items:center;height:24px;padding:0 10px;border-radius:999px;
+  background:var(--accent-tint);color:var(--accent-deep);font-size:12px;font-weight:700;white-space:nowrap}
+.ed-pill.warn{background:rgba(217,164,65,.18);color:#7a5a12}
+.ed-pill.quiet{background:var(--surface-muted);color:var(--ink-muted)}
+.panel-foot .ed-prov{color:var(--ink-muted);font-weight:500;font-size:13px}
+.panel-head{display:flex;flex-direction:column;gap:0;padding:0;border-bottom:1px solid var(--line)}
+.panel-head.plain{display:flex;flex-direction:row;align-items:flex-start;justify-content:space-between;gap:12px;padding:18px 20px 16px}
+.panel-head h2{font-size:20px;line-height:26px;font-weight:700}
+.panel-head .sub{color:var(--ink-muted);font-weight:500;margin-top:2px;font-size:13px}
+.panel-actions{display:flex;align-items:center;gap:10px;flex:none;padding-top:2px}
+.panel-status{font-size:12px;font-weight:600;color:var(--ink-muted);white-space:nowrap}
+.panel-status.warn{color:var(--warning)}
+/* De lade schuift alleen omhoog en omlaag. Een keuzelijst wil zo breed
+   worden als zijn langste optie ("Manual therapy, spine · 90 min") en een
+   blok in een flexkolom mag standaard niet onder zijn inhoud krimpen; samen
+   duwde dat de hele inhoud zijwaarts uit beeld. Elk blok mag nu krimpen, en
+   wat er dan nog uitsteekt wordt afgekapt in plaats van gescrold. */
+.panel-body{flex:1;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;padding:20px;
+  display:flex;flex-direction:column;gap:18px}
+.panel-body>*,.panel-body .field,.panel-body .apptrow>*{min-width:0;max-width:100%}
+.panel-body .select,.panel-body .input,.panel-body textarea{max-width:100%}
+.panel-body>*{flex:0 0 auto} /* scrollen, niet krimpen: anders knijpt een volle lade zijn kaarten dicht */
+.apptrow{min-width:0}
+.panel-foot{border-top:1px solid var(--line);padding:14px 20px;display:flex;align-items:center;justify-content:space-between;gap:12px}
+.panel .btn-sm{height:40px;padding:0 14px}
+.apptrow{display:flex;flex-direction:column;gap:8px;border:1px solid var(--line);border-radius:var(--r-control);padding:12px}
+.photo-drop{width:110px;height:110px;border:1.5px dashed var(--line-input-strong);border-radius:var(--r-control);display:grid;place-items:center;cursor:pointer;color:var(--ink-muted);font-weight:600;font-size:13px;overflow:hidden;background:var(--surface-muted)}
+@media(hover:hover){.photo-drop:hover{border-color:var(--ink);color:var(--ink)}}
+.photo-drop img{width:100%;height:100%;object-fit:cover}
+.photo-drop .hint{display:flex;flex-direction:column;align-items:center;gap:4px}
+.pthumb{width:44px;height:44px;border-radius:8px;object-fit:contain;flex:none}
+.pthumb.ph{display:grid;place-items:center;background:var(--surface-sunken);color:var(--ink-muted);font-weight:700}
+
+/* ── Inline editing in list rows ─────────────────────────────── */
+.cell{border:1px solid transparent;background:transparent;border-radius:6px;padding:6px 8px;font:inherit;font-weight:500;width:100%;max-width:230px}
+@media(hover:hover){.cell:hover{border-color:var(--line-input)}}
+.cell:focus{border-color:var(--ink);background:var(--surface);outline:none}
+.cell.bold{font-weight:700}
+.cell.num{text-align:right;font-variant-numeric:tabular-nums;max-width:96px}
+.cell.sel{appearance:none;cursor:pointer;max-width:150px;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23727272' stroke-width='2.5' stroke-linecap='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 6px center;padding-right:26px}
+tr.dim{opacity:.6}
+.rowact{display:flex;align-items:center;gap:8px;justify-content:flex-end}
+
+/* ── iPad-style register ─────────────────────────────────────── */
+/* Kassa is een vast scherm: geen paginascroll, drie kolommen die het venster vullen. */
+body.till-mode{overflow:hidden}
+body.till-mode #view{height:calc(100vh - var(--header));padding:20px 26px;overflow:hidden}
+/* Op de kassa zit de balk in het raster en niet over de volle breedte:
+   naast de bon, niet erboven. Dus geen negatieve marges die naar de
+   schermrand lopen, en niet sticky — dat scherm scrolt niet, en dan zou
+   top:var(--header) de balk alleen maar omlaag duwen. Alleen de onderlijn
+   blijft, als scheiding tussen de soorten en de tegels. */
+body.till-mode .toolbar{position:static;margin:0;padding:0 0 16px}
+
+/* De bon loopt van boven naar beneden door: hij begint waar de topbar
+   ophoudt en eindigt onderaan. De artikelsoorten staan daarnaast, boven
+   de tegels — dus de balk beslaat alleen de linkerkolommen. */
+.pos{display:grid;grid-template-columns:var(--cat-w,132px) 1fr var(--rec-w,428px);grid-template-rows:auto minmax(0,1fr);
+  gap:20px;height:100%;min-height:0}
+.pos.pos-nocats{grid-template-columns:1fr var(--rec-w,428px)}
+.pos>*{min-height:0;min-width:0}
+.pos>.toolbar{grid-area:1/1/2/3}
+.pos-cats{grid-area:2/1/3/2}
+.pos-items{grid-area:2/2/3/3}
+.pos-receipt{grid-area:1/3/3/4}
+.pos.pos-nocats>.toolbar{grid-area:1/1/2/2}
+.pos.pos-nocats .pos-items{grid-area:2/1/3/2}
+.pos.pos-nocats .pos-receipt{grid-area:1/2/3/3}
+.pos-cats{display:flex;flex-direction:column;gap:8px;overflow-y:auto;overflow-x:hidden;
+  overscroll-behavior:contain;scrollbar-width:none}
+.pos-cats::-webkit-scrollbar{display:none}
+/* Categorietegel: icoon boven, naam eronder. De actieve staat is een lichte
+   kaart met een streep aan de kop; de rest ligt vlak in de achtergrond, zodat
+   in één oogopslag te zien is waar je staat. */
+.catbtn{flex:none;position:relative;width:100%;min-height:var(--cat-h,74px);
+  border:1px solid transparent;border-radius:var(--r-control);background:var(--surface-muted);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;
+  padding:10px 6px;color:var(--ink-muted);text-align:center;overflow:hidden}
+.catbtn .catbtn-ic{display:grid;place-items:center;flex:none}
+/* Een telbolletje bij de uren: een leeg uur hoef je niet open te tikken. */
+.catbtn .catbtn-n{position:absolute;top:6px;right:6px;min-width:20px;height:18px;padding:0 5px;
+  border-radius:999px;background:var(--accent-deep);color:#fff;
+  display:inline-flex;align-items:center;justify-content:center;line-height:1;
+  font-size:11px;font-weight:800;font-variant-numeric:tabular-nums}
+.catbtn .catbtn-n.zero{background:transparent;color:var(--ink-muted);opacity:.55}
+.catbtn .catbtn-l{font-size:13px;font-weight:600;line-height:16px;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.catbtn::before{content:"";position:absolute;left:0;top:50%;transform:translateY(-50%);
+  width:4px;height:0;border-radius:0 4px 4px 0;background:var(--accent-deep);transition:height .15s}
+.catbtn.on{background:var(--surface);border-color:var(--line);color:var(--ink);
+  box-shadow:0 1px 2px rgba(0,0,0,.05)}
+.catbtn.on::before{height:52%}
+@media(hover:hover){.catbtn:hover{color:var(--ink)}}
+.catbtn:active{transform:scale(.985)}
+.pos-items{overflow:hidden;display:flex;flex-direction:column}
+.chips{display:flex;gap:8px;flex-wrap:wrap}
+.chip{height:46px;padding:0 20px;flex:none;white-space:nowrap;border-radius:var(--r-pill);border:1px solid var(--line-input-strong);font-size:16px;font-weight:600;color:var(--ink-muted);
+  display:inline-flex;align-items:center;justify-content:center;line-height:1}
+@media(hover:hover){.chip:hover{border-color:var(--ink);color:var(--ink)}}
+.chip.on{background:var(--ink);border-color:var(--ink);color:#fff}
+/* Het tegelraster telt zijn eigen kolommen uit: zoveel als er op de
+   beschikbare breedte passen. De rijen rekken niet op tot ze het vlak
+   vullen — een halfvolle categorie laat gewoon lucht onder zich staan.
+   Wat er niet op past scrollt.
+
+   De hoogte is een bovengrens, geen vaste maat. Drie rijen moeten er hoe
+   dan ook in passen, ook op een iPad mini in landschap waar de hoogte
+   krapper uitvalt dan je op papier uitrekent. Daarom meet de rij zich aan
+   de ruimte die er werkelijk is (100% van dit vlak, min de twee tussen-
+   ruimtes) en neemt hij de kleinste van de twee. Op een ruim scherm wint
+   --tile-h en blijft de tegel gewoon 168 hoog.
+
+   Geen padding onderin: vier pixels onder de laatste rij is al genoeg om
+   een scrollbalk op te roepen terwijl alles in beeld staat. */
+.pos-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(var(--tile-min,132px),1fr));
+  grid-auto-rows:var(--tile-h,168px);align-content:start;
+  gap:12px;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;
+  flex:1;min-height:0}
+.pos-grid{grid-auto-rows:min(var(--tile-h,168px),calc((100% - 24px)/3))}
+/* Staat het adviesblok erboven, dan houdt de kassa twee hele rijen over
+   in plaats van drie geperste. */
+.pos-items.has-advice .pos-grid{grid-auto-rows:min(var(--tile-h,168px),calc((100% - 12px)/2))}
+.pos-tile{border:1px solid var(--line);border-radius:var(--r-control);background:var(--surface);
+  padding:var(--tile-pad,10px);
+  display:flex;flex-direction:column;gap:6px;text-align:left;min-height:0;overflow:hidden}
+@media(hover:hover){.pos-tile:hover{border-color:var(--ink)}}
+.pos-tile:active{transform:scale(.985)}
+/* De foto is het herkenpunt aan de kas, maar hij hoeft de tegel niet leeg te
+   drukken: een vaste hoogte houdt de tegel klein. Contain houdt de hele
+   tekening in beeld en de achtergrondkleur komt uit het item, dus geen
+   randen in een afwijkende tint. */
+/* De foto is het herkenpunt en krijgt daarom alles wat er overblijft: de
+   tegel heeft een vaste hoogte, de naam een vaste twee regels, en wat
+   daartussen zit is foto. Prijs en aantal liggen er als laagje overheen,
+   zodat ze geen eigen regel opeten. */
+.pos-tile .ptile-img{position:relative;flex:1;min-height:var(--tile-img,96px);
+  border-radius:8px;background:var(--surface-muted);
+  display:grid;place-items:center;overflow:hidden}
+.pos-tile .ptile-img img{width:100%;height:100%;object-fit:contain}
+.pos-tile .ptile-letter{font-size:34px;font-weight:800;color:var(--ink-muted)}
+/* Klein en terughoudend: de prijs mag afleesbaar zijn zonder de foto
+   te overstemmen. Een matglazen plaatje houdt hem leesbaar op elke tint. */
+.pos-tile .ptile-p{position:absolute;left:6px;bottom:6px;
+  padding:2px 7px;border-radius:999px;background:rgba(255,255,255,.9);
+  color:var(--ink);font-size:12px;font-weight:800;line-height:16px;
+  font-variant-numeric:tabular-nums;backdrop-filter:blur(2px)}
+.pos-tile .ptile-q{position:absolute;right:6px;top:6px;
+  min-width:22px;height:20px;padding:0 6px;border-radius:999px;
+  background:var(--accent-deep);color:#fff;
+  display:inline-flex;align-items:center;justify-content:center;line-height:1;
+  font-size:11px;font-weight:800;font-variant-numeric:tabular-nums;white-space:nowrap}
+/* Twee regels zijn altijd gereserveerd, ook voor een korte naam. Zo staat de
+   onderkant van elke tegel gelijk en zakt een lange naam de knop niet uit
+   elkaar. Wat langer is dan twee regels wordt afgekapt. Dezelfde maat als het
+   categorielabel, alleen zwaarder gezet — de naam is waar je op mikt. */
+.pos-tile .ptile-n{flex:none;height:var(--tile-name,32px);
+  font-size:13px;font-weight:800;line-height:16px;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+/* Het aantal ligt op de foto, dus de rand hoeft het niet nog eens te zeggen. */
+.pos-tile{position:relative}
+.pos-tile.in-cart{border-color:var(--accent-deep)}
+.pos-tile[disabled]{opacity:.45;pointer-events:none}
+.pos-total{font-size:34px;font-weight:800;font-variant-numeric:tabular-nums;line-height:1}
+.pay-btn{height:64px;font-size:20px;width:100%}
+.paygrid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+/* Bon: vast frame. De hoogte hangt aan het venster, niet aan de inhoud, zodat
+   totalen en betaalknop altijd op dezelfde plek staan. Regels scrollen binnenin. */
+.pos-receipt{height:100%;display:flex;flex-direction:column}
+.pos-receipt .card-header{flex:none}
+/* De bon stond op overflow:hidden, met de gedachte dat regels zich
+   comprimeren in plaats van dat er een schuifbalk komt. Op een breed scherm
+   klopt dat, maar op een iPad mini is er domweg te weinig hoogte: dan viel
+   alles onder de rand gewoon weg. Comprimeren blijft de eerste oplossing,
+   schuiven is de tweede. */
+.receipt-body{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;
+  overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
+.receipt-body .empty{min-height:100%;justify-content:center;padding:24px}
+/* Lange bon: regels worden compacter in plaats van dat er een scrollbalk komt. */
+.receipt-body.tight .basket-line{padding:9px 20px;gap:10px}
+.receipt-body.tight .basket-line .bold{font-size:15px;line-height:19px}
+.receipt-body.tight .btn-sq{width:30px;height:30px}
+.receipt-foot{flex:none}
+/* Twee markeringen op de bon. Alles wat je deze verkoop hebt aangeslagen houdt
+   een olijfgroene balk — die blijft staan terwijl je verder tikt. De laatste
+   regel wordt helemaal groen gevuld, zodat je over de kassa heen in één blik
+   ziet wat er zojuist bij kwam, ook als de bon al vol staat. Niet zo zwaar
+   als de betaalknop: die is vol accent-deep met witte tekst, dit is een vlak
+   waar zwarte tekst gewoon op leesbaar blijft. */
+.basket-line.added{box-shadow:inset 4px 0 0 var(--accent)}
+.bl-each{font-size:12px;font-weight:500;color:var(--ink-muted)}
+/* Veeg naar links: de regel schuift opzij en legt de acties eronder bloot.
+   De acties staan er altijd al, de regel schuift er alleen overheen. */
+/* pan-y zegt de browser dat verticaal schuiven van hem is; alleen de
+   horizontale beweging houden wij zelf voor de veeg. */
+.bl-row{position:relative;overflow:hidden;touch-action:pan-y}
+.bl-actions{position:absolute;inset:0 0 0 auto;display:flex}
+.bl-act{width:88px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;
+  font-size:12px;font-weight:700;background:var(--accent-deep);color:#fff}
+.bl-act.del{background:var(--danger)}
+.bl-row .basket-line{position:relative;background:var(--surface);transition:transform .18s;touch-action:pan-y}
+.bl-row.open .basket-line{transform:translateX(-176px)}
+/* Deze regel moet ná .bl-row .basket-line staan: die zet er anders met
+   gelijke specificiteit de witte achtergrond overheen. Dat was precies
+   waarom de vulling tot nu toe onzichtbaar bleef. */
+.bl-row .basket-line.just-added{background:var(--accent-glow);
+  box-shadow:inset 5px 0 0 var(--accent-deep)}
+.basket-line.just-added .bl-each{color:var(--accent-ink)}
+.basket-line.just-added .bl-thumb.ph{background:rgba(255,255,255,.75);color:var(--accent-ink)}
+.basket-line.just-added .btn-sq{background:rgba(255,255,255,.7);border-color:var(--accent-deep);
+  color:var(--accent-ink)}
+.basket-line.just-added .was{color:var(--accent-ink)}
+/* De prullenbak zit op de plek van de min: bij één stuk is minder er nul,
+   en dat is verwijderen. Rood, zodat je het verschil ziet voordat je hem
+   indrukt in plaats van erna. */
+.basket-line .bl-bin{color:var(--danger);border-color:rgba(198,40,40,.32)}
+@media(hover:hover){.basket-line .bl-bin:hover{background:rgba(198,40,40,.10)}}
+
+/* De drie puntjes per regel. De rij knipt normaal alles af — dat is nodig
+   voor het vegen — dus staat hij open zolang zijn eigen menu open is. */
+.bl-more{flex:none;margin-left:2px}
+.bl-more .menu{min-width:190px;z-index:30}
+.bl-row.mopen{overflow:visible;z-index:5}
+.menu-row.danger{color:var(--danger)}
+@media(hover:hover){.menu-row.danger:hover{background:rgba(198,40,40,.08)}}
+.receipt-body.tight .bl-more .btn-sq{width:32px;height:32px}
+
+.bl-thumb{width:52px;height:52px;border-radius:8px;object-fit:contain;flex:none;background:var(--surface-muted)}
+.bl-thumb.ph{display:grid;place-items:center;color:var(--ink-muted);font-weight:800}
+.receipt-body.tight .bl-thumb{width:38px;height:38px}
+.line-disc{display:inline-flex;align-items:center;gap:5px;margin-top:4px;padding:2px 8px;border-radius:var(--r-pill);
+  background:var(--accent-tint);color:var(--accent-deep);font-size:12px;font-weight:700}
+.was{font-size:12px;font-weight:600;color:var(--ink-muted);text-decoration:line-through}
+.basket-line.just-added .bold{color:var(--ink)}
+.receipt-extra{display:flex;align-items:center;gap:12px;padding:12px 20px;border-top:1px dashed var(--line);font-weight:600}
+.receipt-extra .x{margin-left:auto;display:flex;align-items:center;gap:10px}
+.receipt-note{padding:12px 20px;border-top:1px dashed var(--line);display:flex;gap:10px;align-items:flex-start;
+  font-size:13px;font-weight:500;color:var(--ink-muted)}
+.pay-row{display:flex;gap:10px;align-items:stretch;position:relative}
+.pay-row .pay-btn{flex:1}
+.btn-actions{width:64px;height:64px;padding:0;flex:none}
+
+/* ── Split button + create menu ──────────────────────────────── */
+.split{position:relative;display:flex}
+.split-main{border-radius:var(--r-control) 0 0 var(--r-control);padding:0 18px}
+.split-caret{border-radius:0 var(--r-control) var(--r-control) 0;width:46px;padding:0;border-left:1px solid rgba(255,255,255,.25)}
+.menu{position:absolute;top:calc(100% + 8px);right:0;z-index:45;min-width:min(290px,86vw);max-width:calc(100vw - 24px);background:var(--surface);
+  border:1px solid var(--line);border-radius:var(--r-control);box-shadow:var(--shadow-popover,0 8px 28px -6px rgba(0,0,0,.16));padding:6px;animation:up .14s}
+/* Standaard hangt een menu rechts onder zijn knop en klapt het naar links
+   open. Staat die knop dicht bij de linkerrand, dan valt het buiten beeld;
+   keepMenuInView() draait het dan om. Deze regel staat na .menu zodat hij
+   de right-waarde daarvan verslaat. */
+.menu.menu-flip{left:0;right:auto;transform-origin:top left}
+/* Naar boven openend menu (kassa: naast de betaalknop). Staat na .menu en is
+   specifieker, anders wint de top-waarde van .menu en klapt hij alsnog omlaag. */
+.menu.menu-up{top:auto;bottom:calc(100% + 8px);left:0;right:auto;min-width:270px;transform-origin:bottom left}
+.menu-label{padding:8px 12px 4px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-muted)}
+.menu-item{display:flex;align-items:flex-start;gap:10px;width:100%;padding:10px 12px;border-radius:6px;text-align:left}
+@media(hover:hover){.menu-item:hover{background:var(--surface-muted)}}
+.menu-item .mi-t{font-weight:600}
+.menu-item .mi-s{display:block;font-size:12px;font-weight:500;color:var(--ink-muted);margin-top:2px}
+.menu-sep{height:1px;background:var(--line);margin:6px 0}
+.menu-sub{display:block;font-size:12px;font-weight:500;color:var(--ink-muted)}
+/* Een filterrij: icoon, wat je filtert, en waarop. De keuzelijst staat
+   rechts en krijgt de ruimte die overblijft. */
+.filterrow{display:flex;align-items:center;gap:12px;padding:8px 12px}
+.filterrow .fi{color:var(--ink-muted);line-height:0;flex:none}
+.filterrow .fl{font-weight:500;color:var(--ink-muted);flex:none;min-width:88px}
+.filterrow .fsel{flex:1;min-width:0;border:0;background-color:transparent;font-weight:700;
+  color:var(--ink);height:36px;padding-left:0}
+/* De filterknop is een pil, net als de tabbladen en de kassategels: het is
+   een schakelaar, geen actie. Volledig rond, dus de radius volgt de hoogte
+   in plaats van een vaste 20px — op een knop van 50px hoog leest die als
+   een afgeronde rechthoek en niet als een pil. */
+.btn-pill{border-radius:999px;padding:0 18px}
+/* Een open menu verdient het hele scherm. Het waas dimt alles eronder —
+   licht genoeg om te zien waar je was, zwaar genoeg om de aandacht bij het
+   menu te houden. Erop klikken sluit, want het valt buiten .pop. */
+.pop-scrim{position:fixed;inset:0;z-index:41;background:rgba(26,26,26,.22);
+  animation:scrimIn .14s ease-out}
+@keyframes scrimIn{from{opacity:0}to{opacity:1}}
+.toolbar.popped{z-index:46}
+/* De knop die het menu opende blijft herkenbaar boven het waas staan. */
+.btn.open{position:relative}
+.btn-pill.open{background:var(--accent-tint);border-color:var(--accent-deep);color:var(--accent-deep);
+  box-shadow:0 0 0 4px rgba(155,160,126,.28)}
+.btn-pill.open .caret{color:var(--accent-deep)}
+.btn-primary.open{box-shadow:0 0 0 4px rgba(155,160,126,.45)}
+/* De punthaak wijst naar beneden als er nog iets uit te klappen valt en
+   draait om zodra het menu openstaat. */
+.caret{line-height:0;transition:transform .15s;color:var(--ink-muted)}
+.caret.up{transform:rotate(180deg)}
+.menu-tick{width:18px;line-height:0;flex:none;color:var(--accent-deep)}
+.menu-row.on{font-weight:700;color:var(--ink)}
+.btn-pill .fbadge{margin-left:8px}
+.fbadge{display:inline-grid;place-items:center;min-width:22px;height:22px;padding:0 6px;
+  border-radius:99px;background:var(--accent);color:var(--ink);font-size:12px;font-weight:800}
+.btn-subtle.on{border-color:var(--ink);color:var(--ink)}
+.menu-item[disabled]{opacity:.4;pointer-events:none}
+.menu-item .mi-t{align-self:center}
+
+/* ── Catalog + import wizard ─────────────────────────────────── */
+/* De categoriekop staat als volledige rij binnen de lijst, zodat alle
+   groepen dezelfde kolommen delen. De cel eromheen levert geen eigen
+   opvulling of lijn: die zitten al in .catgroup zelf. */
+.catgroup-row>td{padding:0;border-bottom:0}
+.catgroup{padding:10px 16px;background:var(--surface-muted);border-bottom:1px solid var(--line);
+  font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;color:var(--ink-muted);display:flex;justify-content:space-between}
+.steps{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.step{display:flex;align-items:center;gap:8px;font-weight:600;color:var(--ink-muted);font-size:13px}
+.step .n{width:24px;height:24px;border-radius:99px;display:grid;place-items:center;background:var(--surface-muted);font-size:12px;font-weight:800}
+.step.on{color:var(--ink)} .step.on .n{background:var(--ink);color:#fff}
+.step.done .n{background:var(--success);color:#fff}
+.step-sep{width:18px;height:1px;background:var(--line)}
+.drop{border:1.5px dashed var(--line-input-strong);border-radius:var(--r-control);padding:40px;text-align:center;background:var(--surface-muted);cursor:pointer}
+@media(hover:hover){.drop:hover{border-color:var(--ink)}}
+.filerow{display:flex;align-items:center;gap:12px;border:1px solid var(--line);border-radius:var(--r-control);padding:12px 14px}
+.prog{display:flex;align-items:center;gap:10px;padding:10px 0;font-weight:600}
+.prog .dotp{width:18px;height:18px;border-radius:99px;border:2px solid var(--line-input-strong);flex:none}
+.prog.done .dotp{background:var(--success);border-color:var(--success)}
+.prog.busy .dotp{border-color:var(--ink);border-top-color:transparent;animation:spin .7s linear infinite}
+.prog.todo{color:var(--ink-muted)}
+@keyframes spin{to{transform:rotate(360deg)}}
+.warn{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--warning);white-space:nowrap}
+.warn.dup{color:var(--danger)}
+.diff td{padding:10px 14px}
+.diff .old{color:var(--ink-muted);text-decoration:line-through}
+.diff .new{font-weight:700}
+.sumrow2{display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--line)}
+
+/* ── Mobile employee app ─────────────────────────────────────── */
+body.mobile-mode .sidebar,body.mobile-mode .topbar{display:none}
+body.mobile-mode .shell{padding-left:0}
+body.mobile-mode main{padding:0}
+.mobar{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 20px;border-bottom:1px solid var(--line);background:var(--surface-muted)}
+.phone{width:392px;height:800px;margin:28px auto;border:11px solid #111;border-radius:40px;overflow:hidden;display:flex;flex-direction:column;background:var(--surface);box-shadow:0 24px 60px -24px rgba(0,0,0,.45)}
+.mo-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 16px;border-bottom:1px solid var(--line);background:var(--surface-muted)}
+.mo-head .t{font-size:18px;font-weight:800}
+.mo-head .s{font-size:12px;font-weight:600;color:var(--ink-muted)}
+.mo-body{flex:1;overflow-y:auto;overscroll-behavior:contain;padding:16px;
+  display:flex;flex-direction:column;gap:12px}
+.mo-card{border:1px solid var(--line);border-radius:var(--r-control);padding:14px}
+.mo-card.warm{background:var(--event-warm);border-color:transparent}
+.mo-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.mo-tile{border:1px solid var(--line);border-radius:var(--r-control);padding:12px;text-align:left;min-height:140px;display:flex;flex-direction:column;justify-content:space-between;gap:6px}
+.mo-tile:active{transform:scale(.98)}
+.mo-bar{border-top:1px solid var(--line);padding:12px 16px;display:flex;align-items:center;gap:12px}
+.mo-tabs{display:flex;border-top:1px solid var(--line);background:var(--surface)}
+.mo-tab{flex:1;padding:10px 0 16px;display:flex;flex-direction:column;align-items:center;gap:4px;font-size:11px;font-weight:700;color:var(--ink-muted)}
+.mo-tab.on{color:var(--ink)}
+.rank-row{display:flex;align-items:center;gap:12px;border:1px solid var(--line);border-radius:var(--r-control);padding:12px}
+.rank-row.me{border-color:var(--ink)}
+.rank-n{width:30px;height:30px;flex:none;border-radius:99px;display:grid;place-items:center;font-weight:800;background:var(--surface-muted)}
+.rank-row.top .rank-n{background:var(--event-warm)}
+.rank-bar{height:6px;border-radius:99px;background:var(--surface-muted);overflow:hidden;margin-top:6px}
+.rank-bar span{display:block;height:100%;background:var(--ink)}
+.mp-photos{display:flex;gap:12px;margin:8px 0}
+.mp-photo{width:110px;height:80px;border:1.5px dashed var(--line-input-strong);border-radius:var(--r-control);
+  display:grid;place-items:center;background:var(--surface-muted);color:var(--ink-muted);font-weight:600;font-size:13px}
+.mp-photo.cover{border-style:solid;border-color:var(--accent);background:var(--accent-tint);color:var(--accent-deep)}
+
+/* ── Steunkleur ───────────────────────────────────────────────
+   Olijfgroen markeert wat je kunt doen (primaire knoppen) en wat aan of
+   gekozen staat (tabs, chips, toggles, vinkjes). Tekst en lijnen blijven zwart. */
+.btn-primary{background:var(--accent-deep);color:#fff}
+@media(hover:hover){.btn-primary:hover{background:var(--accent-strong)}}
+.btn-primary:active{background:var(--accent-deep)}
+@media(hover:hover){.btn-secondary:hover{background:var(--accent-tint);border-color:var(--accent-deep);color:var(--accent-deep)}}
+@media(hover:hover){.btn-subtle:hover{border-color:var(--accent-deep);color:var(--accent-deep)}}
+.ttab.on,.catchip.on,.chip.on{background:var(--accent-deep);border-color:var(--accent-deep);color:#fff}
+@media(hover:hover){.ttab:hover,.catchip:hover,.chip:hover{border-color:var(--accent-deep);color:var(--accent-deep)}}
+@media(hover:hover){.ttab.on:hover,.catchip.on:hover,.chip.on:hover{color:#fff}}
+.snav button.active{background:var(--accent-deep);color:#fff}
+@media(hover:hover){.snav button:hover{background:var(--accent-tint);color:var(--accent-deep)}}
+.tab.active{border-bottom-color:var(--accent-deep);color:var(--accent-deep)}
+.toggle.on{background:var(--accent-deep)}
+.check.on{background:var(--accent-deep);border-color:var(--accent-deep)}
+@media(hover:hover){.picker:hover{border-color:var(--accent-deep)}}
+@media(hover:hover){.pos-tile:hover{border-color:var(--accent-deep)}}
+.applogo{background:var(--accent-deep);color:#fff}
+.badge.accent{background:var(--accent-tint);color:var(--accent-deep)}
+:focus-visible{outline-color:var(--accent-deep)}
+
+@media(max-width:700px){
+  .pos,.pos.pos-nocats{grid-template-columns:1fr;grid-template-rows:none;height:auto}
+  /* Eén kolom: alles gewoon onder elkaar, dus geen vaste rasterplekken. */
+  .pos>.toolbar,.pos-cats,.pos-items,.pos-receipt{grid-area:auto}
+  body.till-mode{overflow:auto}
+  body.till-mode #view{height:auto;overflow:visible;padding:20px 16px}
+  /* Hier scrolt de kassa wél als een gewone pagina, dus plakt de balk weer
+     onder de topbar zoals op elk ander scherm. */
+  body.till-mode .toolbar{position:sticky}
+  .pos-cats{flex-direction:row;flex-wrap:nowrap;overflow-x:auto;overflow-y:hidden}
+  .pos-cats .catchip{width:auto}
+  .pos-cats .catbtn{width:auto;min-width:82px;min-height:66px}
+  .pos-receipt{height:auto;min-height:420px}
+  .phone{width:100%;height:auto;min-height:100vh;border:0;border-radius:0;margin:0}
+}
+/* De lade is 480 breed. Op een iPad mini in landschap (1133) blijft er dan
+   nog 579 over voor de hele pagina: de balk slaat om, de paginanaam wordt
+   afgekapt en een menu klapt buiten beeld. De grens lag op 1100 en die 33
+   pixels waren precies het gat waar de mini in viel.
+
+   Vanaf hier legt de lade zich er dus overheen in plaats van de pagina op
+   te schuiven. Dat dekt de mini (1133), de Air (1180) en de Pro 11 (1194);
+   een echt breed scherm (1280 en hoger) schuift nog gewoon op. */
+@media(max-width:1200px){body.panel-open .shell{padding-right:0}}
+@media(max-width:1200px){
+  .checkout-grid,.profile-grid,.settings-layout{grid-template-columns:1fr}
+  .grid4{grid-template-columns:repeat(2,1fr)}
+  /* Onder elkaar valt er niets meer naast elkaar te schuiven: dan schuift
+     de pagina weer als geheel, anders krijg je twee vensters in een kolom. */
+  .snav,.settings-pane{position:static;max-height:none;overflow:visible}
+  /* En de sectielijst wordt een strook: naast elkaar, schuivend, met de
+     koppen als scheiding ertussen in plaats van als regel erboven. */
+  .snav{flex-direction:row;align-items:center;gap:6px;overflow-x:auto;
+    scrollbar-width:none;padding-bottom:10px;border-bottom:1px solid var(--line)}
+  .snav::-webkit-scrollbar{display:none}
+  .snav button{flex:none;white-space:nowrap;padding:10px 16px;border:1px solid var(--line);
+    border-radius:var(--r-pill)}
+  .snav button.active{border-color:transparent}
+  /* Het kopje boven een groep wordt een stille scheiding ernaast. */
+  .settings-layout .snav .snav-label{flex:none;align-self:center;padding:0 10px;margin:0;
+    border-left:1px solid var(--line);line-height:1.1}
+  .settings-layout .snav .snav-label:first-child{border-left:0;padding-left:0}
+}
+/* ── Nazorg en vervolgafspraak ────────────────────────────────
+   De voorleesregel is het hart van allebei de schermen: hij moet er
+   uitzien als iets wat je opleest, niet als een label. Vandaar het
+   citaatstreepje links en de zachte olijftint erachter. */
+.say{background:var(--accent-tint);border-left:3px solid var(--accent);border-radius:0 6px 6px 0;
+  padding:10px 12px;font-size:14px;line-height:19px;font-weight:600;color:var(--ink)}
+.say-lead{font-size:16px;line-height:22px;padding:14px 16px}
+.say-label{display:block;font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;
+  color:var(--accent-deep);margin-bottom:4px}
+
+/* Adviesveld boven de tegels: een eigen vlak, geen strookje aan de bon. De
+   voorleeszin is hier de hoofdzaak en staat daarom op 17px. Vaste hoogte,
+   zodat de tegels eronder niet verspringen zodra het advies verschijnt. */
+/* Het advies mag nooit meer dan één tegelrij innemen: daaronder moeten
+   twee volle rijen producten overblijven. De maat hieronder komt op zo'n
+   124px uit, dus de grens knipt in de praktijk niets weg — hij staat er
+   voor het geval een langere tekst of een extra knop erbij komt. */
+.advice{flex:none;max-height:var(--tile-h,168px);overflow:hidden;
+  border:1px solid var(--accent-line);background:var(--accent-tint);
+  border-radius:var(--r-tile);padding:12px 16px;margin-bottom:12px;
+  display:flex;flex-direction:column;gap:6px}
+.advice-label{font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;
+  color:var(--accent-deep)}
+.advice-row{display:flex;align-items:center;gap:14px}
+.advice-thumb{width:56px;height:56px;border-radius:8px;object-fit:contain;flex:none}
+.advice-text{flex:1;min-width:0;display:flex;flex-direction:column;gap:6px}
+.advice .say{background:transparent;border-left:0;padding:0;font-size:15px;line-height:20px;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.advice-meta{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:13px}
+.advice-saves{color:var(--accent-deep);font-weight:600}
+.advice-act{flex:none;display:flex;flex-direction:column;gap:6px;align-items:stretch}
+.advice-act .btn{height:40px}
+.advice-act .btn-sm{height:32px}
+.advice-act .btn-primary{white-space:nowrap}
+
+/* Het scherm na het afrekenen. Zelfde vaste hoogte als de kassa: links
+   wat er betaald is, rechts waar het om gaat. */
+.rebook{display:grid;grid-template-columns:320px 1fr;gap:20px;height:100%;min-height:0}
+.rebook>*{min-height:0}
+.rb-side{padding:20px;display:flex;flex-direction:column;gap:4px;overflow:auto}
+.rb-paid{display:flex;align-items:center;gap:6px;font-weight:700;color:var(--accent-deep)}
+.rb-amount{font-size:34px;font-weight:800;line-height:1.1}
+.rb-lines{margin-top:14px;border-top:1px solid var(--line);padding-top:12px;
+  display:flex;flex-direction:column;gap:8px}
+.rb-line{display:flex;gap:10px;font-weight:600;font-size:14px}
+.rb-main{display:flex;flex-direction:column;min-height:0}
+.rb-head{padding:20px 24px 0}
+.rb-head h2{font-size:24px;font-weight:700}
+.rb-body{flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;padding:16px 24px;
+  display:flex;flex-direction:column;gap:16px}
+.rb-cust{display:flex;align-items:center;gap:12px;border:1px solid var(--line);
+  border-radius:var(--r-control);padding:12px 14px}
+.rb-pick{display:flex;flex-direction:column;gap:8px}
+.rb-picklist{display:flex;flex-direction:column;gap:6px}
+.rb-pickrow{display:flex;align-items:center;gap:12px;border:1px solid var(--line);
+  border-radius:var(--r-control);padding:10px 14px;width:100%}
+.rb-slots{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:6px}
+.slot{display:flex;flex-direction:column;gap:2px;align-items:flex-start;text-align:left;
+  border:1px solid var(--line-input-strong);border-radius:var(--r-control);padding:12px 14px;
+  font-weight:600;color:var(--ink)}
+.slot.on{border-color:var(--accent-deep);background:var(--accent-tint);box-shadow:inset 0 0 0 1px var(--accent-deep)}
+/* Gekozen betaalmethode in de modal. */
+.picker.on{border-color:var(--accent-deep);background:var(--accent-tint);box-shadow:inset 0 0 0 1px var(--accent-deep)}
+.rb-act{display:flex;gap:10px;align-items:center;padding:16px 24px;border-top:1px solid var(--line)}
+.rb-done{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:8px;text-align:center;padding:24px}
+.rb-check{width:64px;height:64px;border-radius:50%;display:grid;place-items:center;
+  background:var(--accent-tint);color:var(--accent-deep);margin-bottom:4px}
+.rb-done h2{font-size:24px;font-weight:700}
+
+/* ── Touch en iPad ────────────────────────────────────────────
+   Alles wat het prototype met een vinger bedienbaar maakt staat in dit
+   ene blok, net als de steunkleur — in één keer terug te draaien.
+   Uitzondering: de hover-regels hierboven staan sinds deze ronde in
+   @media(hover:hover), want die moesten per regel worden ingepakt. */
+
+/* Vensterhoogte. 100vh is op iOS de hoogte mét de balken van Safari
+   weggeschoven, dus hoger dan wat je ziet. De kassa scrollt niet, dus
+   de betaalknop viel onder de balk. dvh is de zichtbare hoogte; de
+   home-indicator vraagt er in standalone nog wat vanaf. */
+@supports(height:100dvh){
+  body.till-mode #view{height:calc(100dvh - var(--header) - env(safe-area-inset-bottom,0px))}
+  .modal{max-height:88dvh}
+}
+/* Alleen boven het breekpunt schuiven de twee kolommen zelf; daaronder
+   schuift de pagina en mag er geen hoogtegrens op staan. Deze stond
+   eerder zonder breedtevoorwaarde en zette hem daar dus weer terug. */
+@media(min-width:1201px){
+  @supports(height:100dvh){
+    .snav,.settings-pane{max-height:calc(100dvh - var(--snav-top) - 24px)}
+  }
+}
+.sidebar{padding-bottom:calc(5px + env(safe-area-inset-bottom,0px))}
+/* Geen doorveren aan de rand en geen pull-to-refresh: de kassa is een
+   vast scherm, dat moet ook zo aanvoelen. En Safari mag de tekst in
+   liggende stand niet zelf opblazen. */
+html,body{overscroll-behavior:none;-webkit-text-size-adjust:100%}
+/* Geen gereserveerde strook meer langs de pagina: die was er om te
+   voorkomen dat de opmaak verspringt zodra er een balk bijkomt, maar nu er
+   nergens meer een balk breedte inneemt valt er ook niets te verspringen.
+   Wat overbleef was een witte rand rechts, altijd zichtbaar. */
+/* Zolang een paneel of venster openstaat beweegt de pagina eronder niet
+   mee. Zonder dit scrolt de agenda achter het formulier door zodra je
+   over de kop of de voet van het paneel scrolt, en dat leest als los
+   vliegende inhoud. */
+body.panel-open,body.modal-open{overflow:hidden}
+html:has(body.panel-open),html:has(body.modal-open){overflow:hidden}
+/* min(max(...)) en niet clamp(): bij een smal scherm zakt 94vw ónder de
+   ondergrens, en clamp geeft dan de ondergrens terug — een lade die
+   breder is dan het scherm. */
+:root{--panel-w:min(max(480px,33vw),94vw)}
+
+/* Grove pointer: vinger of pen. */
+@media(pointer:coarse){
+  /* Safari zoomt in zodra je een veld aantikt dat kleiner is dan 16px.
+     Daarna staat het hele scherm scheef. Dus: nergens onder de 16. */
+  input,select,textarea,.cell{font-size:16px}
+  .cell.num{max-width:110px}
+
+  /* Raakvlakken naar 44px, het minimum dat Apple aanhoudt. */
+  .btn-sq{width:44px;height:44px}
+  .btn-sm{height:44px}
+  .btn-icon{width:52px}          /* vergrootglas in de kassabalk */
+  .iconbtn{min-width:44px;min-height:44px;padding:10px}
+  .modal-close{padding:10px}
+  .ttab,.catchip{height:44px}
+  .receipt-body.tight .btn-sq{width:38px;height:38px}
+  .toggle{height:28px}
+  .toggle .knob{width:24px;height:24px}
+  .check{width:26px;height:26px}
+  .drag-h{padding:11px}
+
+  /* Slepen aan de greep mag de pagina niet meescrollen, en een lange
+     druk mag geen tekstselectie of vergrootglas oproepen. */
+  .drag-h{touch-action:none;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
+  .bl-row{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
+
+  /* Brede tabellen mogen zijwaarts schuiven in plaats van te persen. */
+  .card:has(>table){overflow-x:auto}
+}
+
+/* iPad staand (820px). De categoriekolom past er niet meer naast, dus
+   die gaat als schuivende rij bovenaan en de bon wordt smaller. Liggend
+   (1180px) blijft alles staan waar het stond. Onder 900px neemt het
+   compacte blok hieronder het over: daar is 820px al te ruim gedacht. */
+@media(min-width:901px) and (max-width:1080px){
+  .pos{grid-template-columns:1fr 320px;grid-template-rows:auto auto minmax(0,1fr)}
+  /* Drie rijen: de soortenbalk, de schuivende categorierij, en de tegels.
+     De bon loopt er in één kolom langs, van boven tot onder. */
+  .pos>.toolbar{grid-area:1/1/2/2}
+  .pos-cats{grid-area:2/1/3/2;flex-direction:row;overflow-x:auto;overflow-y:hidden;
+    gap:8px;flex:none;scrollbar-width:none}
+  .pos-cats::-webkit-scrollbar{display:none}
+  .pos-cats .catchip{width:auto}
+  .pos-cats .catbtn{width:auto;min-width:86px;min-height:66px}
+  .pos-items{grid-area:3/1/4/2}
+  .pos-receipt{grid-area:1/2/4/3}
+  .pos.pos-nocats{grid-template-columns:1fr 320px;grid-template-rows:auto minmax(0,1fr)}
+  .pos.pos-nocats>.toolbar{grid-area:1/1/2/2}
+  .pos.pos-nocats .pos-items{grid-area:2/1/3/2}
+  .pos.pos-nocats .pos-receipt{grid-area:1/2/3/3}
+  .receipt-body .basket-line{padding-left:14px;padding-right:14px}
+  .advice-row{flex-wrap:wrap}
+  .advice-act{flex-direction:row;width:100%}
+  .advice-act .btn{flex:1}
+  .rebook{grid-template-columns:260px 1fr}
+  .rb-slots{grid-template-columns:1fr}
+}
+
+/* ── Compacte tablet (iPad mini, Split View) ───────────────────
+   Tussen 701 en 900px staat er te weinig ruimte voor de layout van
+   820px, en te veel voor de telefoonlayout. Rekenvoorbeeld: op 744px
+   houdt een iPad mini staand na zijbalk en padding 618px over. Alles
+   hieronder herschikt binnen die 618 in plaats van te verkleinen. */
+@media(min-width:701px) and (max-width:900px){
+  /* Zijbalk en marges leveren samen zestig pixels werkruimte op. */
+  :root{--sidebar:58px}
+  .tile,.applogo{width:52px;height:52px}
+  main{padding:16px 14px 64px}
+  .toolbar{margin:-16px -14px 18px;padding:12px 14px}
+  .topbar{padding:0 14px}
+  .topbar h1{font-size:20px;line-height:26px}
+  .topbar-right{gap:14px}
+  .topbar-mid{margin:0 12px}
+  .locsw .k{display:none}
+
+  /* Agenda. De kolommen persten zich samen omdat .cal alles afknipte;
+     nu houdt elke kolom zijn minimum en schuift alleen het agendavlak
+     zijwaarts. De verticale schuif verhuist naar de pagina, anders
+     zou de kop losraken van het rooster eronder. */
+  .cal{overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch}
+  .cal-body{max-height:none;overflow:visible}
+  .cal-col{min-width:118px}
+  .cal-gutter{width:48px}
+  .event{padding:8px 10px}
+  .event .assignee{display:none}
+
+  /* Tabellen. Zonder minimumbreedte perst de tabel zich tot min-content
+     en breken de cellen woord voor woord af; nu schuift hij binnen de
+     kaart. De kolommen die een tik verderop toch al staan gaan uit. */
+  .card:has(>table){overflow-x:auto}
+  table{min-width:560px}
+  th.sec,td.sec{display:none}
+
+  /* Formulieren in een paneel of modal: één kolom. Twee kolommen in een
+     paneel van 480px laten 212px per veld over, drie kolommen 136px.
+     Op de pagina zelf is 658px breed genoeg voor twee kolommen, dus
+     daar blijft alles staan — kengetallen gaan niet onnodig stapelen. */
+  .panel .grid2,.panel .grid2.cols3,.panel .grid3,
+  .modal .grid2,.modal .grid2.cols3,.modal .grid3{grid-template-columns:1fr}
+  .hoursrow{flex-wrap:wrap;gap:10px}
+  .hoursrow input[type="time"]{width:auto!important;flex:1 1 104px;min-width:104px}
+
+  /* Kassa: bon smaller, categorieën als schuivende rij bovenaan. */
+  .pos{grid-template-columns:1fr minmax(248px,276px);grid-template-rows:auto auto minmax(0,1fr)}
+  /* Drie rijen: de soortenbalk, de schuivende categorierij, en de tegels.
+     De bon loopt er in één kolom langs, van boven tot onder. */
+  .pos>.toolbar{grid-area:1/1/2/2}
+  .pos-cats{grid-area:2/1/3/2;flex-direction:row;overflow-x:auto;overflow-y:hidden;
+    gap:8px;flex:none;scrollbar-width:none}
+  .pos-cats::-webkit-scrollbar{display:none}
+  .pos-cats .catchip{width:auto}
+  .pos-cats .catbtn{width:auto;min-width:86px;min-height:66px}
+  .pos-items{grid-area:3/1/4/2}
+  .pos-receipt{grid-area:1/2/4/3}
+  .pos.pos-nocats{grid-template-columns:1fr minmax(248px,276px);grid-template-rows:auto minmax(0,1fr)}
+  .pos.pos-nocats>.toolbar{grid-area:1/1/2/2}
+  .pos.pos-nocats .pos-items{grid-area:2/1/3/2}
+  .pos.pos-nocats .pos-receipt{grid-area:1/2/3/3}
+  /* Na de bon houdt het tegelvlak hier ongeveer 320px over. Met deze
+     maten staan er twee tegels naast elkaar in plaats van één brede. */
+  /* Na de bon houdt het tegelvlak hier ongeveer 362px over. Met een
+     tegelbreedte van 112px staan er drie naast elkaar in plaats van twee. */
+  :root{--tile-min:112px;--tile-h:146px;--tile-img:80px;--tile-pad:8px}
+  :root{--cat-h:64px;--cat-w:112px;--tile-name:30px}
+  .pos-tile .ptile-p{font-size:11px;line-height:15px}
+  .pos-tile .ptile-n{font-size:12px;line-height:15px}
+  .catbtn .catbtn-l{font-size:12px;line-height:15px}
+  .pos-cats .catchip{height:44px}
+  .advice-row{flex-wrap:wrap}
+  .advice-act{flex-direction:row;width:100%}
+  .advice-act .btn{flex:1}
+  .rebook{grid-template-columns:220px 1fr}
+  .rb-slots{grid-template-columns:repeat(2,1fr)}
+
+  /* Overlays houden marge tot de randen en scrollen van binnen. */
+  .overlay{padding:12px}
+  :root{--panel-w:min(460px,92vw)}
+  .menu-scroll{max-height:min(58vh,420px)}
+}
+
+/* Liggend op een compacte tablet is er breedte zat maar weinig hoogte:
+   744px min de balken. De agenda mag dan niet de halve pagina zijn. */
+@supports(height:100dvh){
+  @media(min-width:901px){
+    body.cal-mode #view{height:calc(100dvh - var(--header))}
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   Vier nieuwe modules: rollen en HQ, meerdere vestigingen,
+   reserveringsmotor met widget, en leveranciers.
+   Alles hieronder gebruikt dezelfde tokens als de rest van het
+   bestand — er komt geen tweede stijltaal bij.
+   ══════════════════════════════════════════════════════════════ */
+
+/* De zijbalk groeit mee met het aantal modules; hij mag schuiven
+   in plaats van tegels onder de vouw te duwen. */
+.sidebar{overflow-y:auto;overscroll-behavior:contain;scrollbar-width:none}
+.sidebar::-webkit-scrollbar{display:none}
+
+/* ── Popovers (vestigingskiezer, omgevingen, meldingen) ─────── */
+.pop{position:relative}
+.pop>.menu{left:auto;right:0}
+/* Standaard hangt een popover rechts uitgelijnd onder zijn knop. De
+   vestigingskiezer staat links in de balk, dus daar groeide het menu naar
+   links weg en verdween het half achter de zijbalk. .menu-left moet die
+   uitlijning omkeren, maar had één puntje minder specificiteit dan
+   .pop>.menu en verloor het dus stilzwijgend. Vandaar de zwaardere kiezer. */
+.pop>.menu.menu-left{left:0;right:auto}
+.menu-left{left:0;right:auto}
+.menu-wide{min-width:min(340px,86vw)}
+.menu-scroll{max-height:min(64vh,460px);overflow-y:auto;overscroll-behavior:contain}
+
+/* De actiebalk van elk overzicht: links wat het beeld beperkt of waar je
+   staat, rechts wat je kunt doen, alles op één regel. De linkerkant krimpt
+   mee in plaats van om te vallen.
+
+   Hier stonden drie namen voor precies dezelfde regels — toolbar-row voor
+   klanten, toolbar-cat voor de catalogus, toolbar-tabs voor de kassa en de
+   leveranciers. Dat is nu één naam, zodat een balk overal hetzelfde doet. */
+.toolbar-row .filters{flex:1;min-width:0;flex-wrap:nowrap;gap:12px}
+.toolbar-row .filters>*{min-width:0}
+@media(max-width:900px){
+  .toolbar-row .filters{overflow-x:auto;overscroll-behavior:contain;scrollbar-width:none}
+  .toolbar-row .filters::-webkit-scrollbar{display:none}
+}
+.cat-tabs{display:flex;align-items:center;gap:8px;flex:none}
+/* Alles op de actiebalk is even hoog als op de agenda: 50px. Een tabblad
+   is buiten deze balk een kleiner ding (38px in de topbar, 44px onder een
+   vinger), maar hier staat het naast Add en de filterpil en moet het
+   dezelfde maat hebben. Vandaar 999px in plaats van --r-pill: op 50px
+   leest die 20px als een afgeronde rechthoek, niet als een pil. */
+.toolbar .ttab{height:50px;padding:0 18px;border-radius:999px;font-size:16px}
+
+.menu-row{display:flex;align-items:center;gap:10px;width:100%;padding:10px 12px;border-radius:6px;text-align:left}
+@media(hover:hover){.menu-row:hover{background:var(--surface-muted)}}
+.menu-row .grow{flex:1;min-width:0}
+.menu-row .mi-s{display:block;font-size:12px;font-weight:500;color:var(--ink-muted);margin-top:2px}
+.menu-foot{border-top:1px solid var(--line);margin-top:6px;padding-top:6px}
+
+/* ── Vestigingskiezer ───────────────────────────────────────── */
+.locsw{display:flex;align-items:center;gap:8px;height:38px;padding:0 12px;border-radius:var(--r-pill);
+  border:1px solid var(--line-input-strong);font-size:14px;font-weight:600;white-space:nowrap}
+@media(hover:hover){.locsw:hover{border-color:var(--accent-deep);color:var(--accent-deep)}}
+.locsw .k{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--ink-muted)}
+.locsw.multi{border-color:var(--accent-deep);background:var(--accent-tint);color:var(--accent-deep)}
+.locdot{width:8px;height:8px;border-radius:99px;background:var(--accent);flex:none}
+.locdot.off{background:var(--line-input-strong)}
+
+/* ── Supportsessie van Revelapps HQ ─────────────────────────── */
+/* Een balk die niet weg te klikken is: zolang HQ meekijkt moet dat
+   op elk scherm zichtbaar blijven, ook onderaan een lange pagina. */
+body.support-mode{padding-bottom:60px}
+body.support-mode .topbar{background:#fff6e8;border-bottom-color:var(--warning)}
+.supportbar{position:fixed;left:0;right:0;bottom:0;z-index:60;display:flex;align-items:center;gap:16px;
+  padding:10px 20px;background:var(--warning);color:#fff;font-weight:600}
+.supportbar .who{font-weight:800}
+.supportbar .sep{opacity:.5}
+.supportbar .grow{flex:1}
+.supportbar .btn{height:36px}
+.supportbar .btn-secondary{border-color:#fff;color:#fff}
+/* Preview: dezelfde balk, andere kleur — je kijkt mee, je grijpt niet in. */
+.supportbar.previewbar{background:var(--ink)}
+body.preview-mode{padding-bottom:60px}
+body.preview-mode .topbar{background:var(--accent-tint);border-bottom-color:var(--accent)}
+@media(hover:hover){.supportbar .btn-secondary:hover{background:rgba(255,255,255,.15);border-color:#fff;color:#fff}}
+
+/* ── Omgevingen: HQ en leveranciersportaal ──────────────────── */
+/* Andere omgeving, zelfde taal én dezelfde balk als de salonwerkomgeving.
+   Waar je bent staat in de titel en in de omgevingskiezer rechtsboven;
+   een eigen balkkleur per omgeving zei hetzelfde nog een keer. */
+body.book-mode .sidebar,body.book-mode .topbar,body.auth-mode .sidebar,body.auth-mode .topbar{display:none}
+body.auth-mode .shell{padding-left:0}
+body.auth-mode main{padding:0}
+body.book-mode .shell{padding-left:0}
+body.book-mode main{padding:0}
+.envtag{display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 10px;border-radius:var(--r-pill);
+  font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase}
+.envtag.hq{background:rgba(255,255,255,.16);color:#fff}
+.envtag.portal{background:rgba(0,0,0,.08);color:var(--ink)}
+
+/* ── Rechtenmatrix ──────────────────────────────────────────── */
+/* De groepen boven de matrix schuiven mee als ze niet passen. */
+.matrix-tabs{padding:16px 20px 0;overflow-x:auto;scrollbar-width:none}
+.matrix-tabs::-webkit-scrollbar{display:none}
+/* Breed van nature: de tabel schuift zijwaarts en de eerste kolom
+   blijft staan, anders raak je kwijt bij welk recht je zit. */
+.matrix-wrap{overflow-x:auto;max-width:100%}
+.matrix{min-width:760px}
+.matrix th,.matrix td{padding:10px 12px;vertical-align:middle}
+.matrix thead th{position:sticky;top:0;background:var(--surface-muted);z-index:2}
+.matrix .perm{position:sticky;left:0;background:var(--surface);min-width:280px;z-index:1}
+.matrix thead .perm{z-index:3;background:var(--surface-muted)}
+.matrix .permkey{display:block;font-size:11px;font-weight:600;color:var(--ink-muted);font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+.matrix tr:hover .perm{background:var(--surface-muted)}
+.scopesel{appearance:none;border:1px solid var(--line-input);border-radius:var(--r-pill);background:var(--surface);
+  height:32px;padding:0 26px 0 12px;font-size:13px;font-weight:600;cursor:pointer;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23727272' stroke-width='2.5' stroke-linecap='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right 8px center}
+.scopesel[data-on="1"]{border-color:var(--accent-deep);background-color:var(--accent-tint);color:var(--accent-deep)}
+.scopesel[disabled]{opacity:.55;cursor:not-allowed}
+.scopetag{display:inline-flex;align-items:center;height:26px;padding:0 10px;border-radius:var(--r-pill);
+  font-size:12px;font-weight:700;background:var(--surface-muted);color:var(--ink-muted)}
+.scopetag.on{background:var(--accent-tint);color:var(--accent-deep)}
+
+/* ── Kaartrijen: vestigingen, leveranciers, widgets ─────────── */
+.rowcard{display:flex;align-items:center;gap:16px;padding:16px 20px;border-bottom:1px solid var(--line);text-align:left;width:100%}
+.rowcard:last-child{border-bottom:0}
+@media(hover:hover){button.rowcard:hover{background:var(--surface-muted)}}
+.rowcard .grow{flex:1;min-width:0}
+.rowcard .t{font-weight:700}
+.rowcard .s{font-size:13px;font-weight:500;color:var(--ink-muted)}
+.rowcard .acts{display:flex;align-items:center;gap:8px;flex:none}
+.mark{width:44px;height:44px;border-radius:var(--r-control);flex:none;display:grid;place-items:center;
+  background:var(--surface-muted);font-weight:800;color:var(--ink-muted)}
+.mark.on{background:var(--accent-tint);color:var(--accent-deep)}
+
+/* ── Consent: wat een leverancier wel en niet ziet ──────────── */
+.consent{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.consent-col{border:1px solid var(--line);border-radius:var(--r-control);overflow:hidden}
+.consent-col h4{padding:10px 14px;font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.03em;
+  border-bottom:1px solid var(--line);background:var(--surface-muted)}
+.consent-col.yes h4{color:var(--success)}
+.consent-col.no h4{color:var(--danger)}
+.consent-col ul{list-style:none;padding:12px 14px;display:flex;flex-direction:column;gap:8px}
+.consent-col li{display:flex;gap:8px;font-weight:500;font-size:13px;line-height:18px}
+.consent-col li svg{flex:none;margin-top:1px}
+.consent-col.yes li svg{color:var(--success)}
+.consent-col.no li svg{color:var(--danger)}
+
+/* ── Statusverloop van een bestelling ───────────────────────── */
+.track{display:flex;align-items:flex-start;gap:0;padding:20px;overflow-x:auto}
+.track-step{flex:1;min-width:96px;display:flex;flex-direction:column;gap:6px;position:relative;padding-right:8px}
+.track-step .b{width:14px;height:14px;border-radius:99px;background:var(--surface-sunken);z-index:1}
+.track-step.done .b{background:var(--accent-deep)}
+.track-step.now .b{background:var(--accent-deep);box-shadow:0 0 0 4px var(--accent-tint)}
+.track-step:not(:last-child):after{content:"";position:absolute;left:14px;top:6px;right:0;height:2px;background:var(--surface-sunken)}
+.track-step.done:not(:last-child):after{background:var(--accent-deep)}
+.track-step .l{font-size:12px;font-weight:700}
+.track-step .d{font-size:11px;font-weight:500;color:var(--ink-muted)}
+
+/* ── Widget-editor met voorbeeld ────────────────────────────── */
+.wgrid{display:grid;grid-template-columns:380px 1fr;gap:24px;align-items:start}
+.wprev-frame{background:var(--surface-muted);border:1px solid var(--line);border-radius:var(--r-card);
+  padding:24px;display:flex;justify-content:center}
+.wprev-site{width:100%;max-width:720px;background:#fff;border-radius:10px;overflow:hidden;
+  box-shadow:0 10px 30px -18px rgba(0,0,0,.5)}
+.wprev-site.phone-w{max-width:320px}
+.wprev-chrome{display:flex;align-items:center;gap:6px;padding:10px 12px;background:#ececec}
+.wprev-chrome i{width:9px;height:9px;border-radius:99px;background:#c9c9c9;display:block}
+.wprev-chrome .url{flex:1;margin-left:8px;background:#fff;border-radius:99px;padding:4px 10px;font-size:11px;
+  font-weight:600;color:#8a8a8a;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.wprev-page{padding:20px}
+.wprev-hero{height:64px;border-radius:8px;background:#f1f1f1;margin-bottom:16px;display:flex;align-items:center;
+  padding:0 16px;font-weight:800;color:#b5b5b5}
+.wbox{border-radius:12px;padding:18px;border:1px solid rgba(0,0,0,.08)}
+.wbox.dark{background:#141414;color:#f5f5f5;border-color:rgba(255,255,255,.12)}
+.wbox h5{font-size:15px;font-weight:800;margin-bottom:2px}
+.wbox .sub{font-size:12px;font-weight:500;opacity:.65;margin-bottom:14px}
+.wbox .wstep{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap}
+.wbox .wchip{border-radius:99px;padding:6px 12px;font-size:12px;font-weight:700;border:1px solid rgba(0,0,0,.12)}
+.wbox.dark .wchip{border-color:rgba(255,255,255,.18)}
+.wbox .wslots{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px}
+.wbox .wslot{border-radius:8px;padding:9px 6px;text-align:center;font-size:12px;font-weight:700;
+  border:1px solid rgba(0,0,0,.12)}
+.wbox.dark .wslot{border-color:rgba(255,255,255,.18)}
+.wbox .wcta{border-radius:8px;padding:11px;text-align:center;font-size:14px;font-weight:800;color:#fff}
+.wbox .wfoot{margin-top:10px;font-size:11px;font-weight:600;opacity:.5;text-align:center}
+.code{background:var(--ink);color:#eaeaea;border-radius:var(--r-control);padding:14px 16px;
+  font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;line-height:19px;
+  white-space:pre;overflow-x:auto}
+.code .tag{color:#9aa07e}
+.code .att{color:#d8ecfb}
+
+/* ── Klantboekingsscherm (widget en boekingslink) ───────────── */
+.bookwrap{min-height:100vh;background:var(--surface-muted);padding:24px 16px 64px}
+.bookcard{max-width:680px;margin:0 auto;background:var(--surface);border:1px solid var(--line);
+  border-radius:var(--r-tile);overflow:hidden}
+.bookhead{padding:18px 22px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:14px}
+.bookhead .grow{flex:1}
+.bookbody{padding:22px;display:flex;flex-direction:column;gap:16px}
+.bookfoot{padding:16px 22px;border-top:1px solid var(--line);display:flex;align-items:center;gap:12px}
+.bsteps{display:flex;gap:6px;padding:0 22px 16px}
+.bstep{flex:1;height:4px;border-radius:99px;background:var(--surface-sunken)}
+.bstep.on{background:var(--accent-deep)}
+.bpick{display:flex;align-items:center;gap:14px;border:1px solid var(--line);border-radius:var(--r-control);
+  padding:14px 16px;width:100%;text-align:left}
+@media(hover:hover){.bpick:hover{border-color:var(--accent-deep)}}
+.bpick.on{border-color:var(--accent-deep);background:var(--accent-tint);box-shadow:inset 0 0 0 1px var(--accent-deep)}
+.bpick .grow{flex:1;min-width:0}
+.bpick .t{font-weight:700}
+.bpick .s{font-size:13px;font-weight:500;color:var(--ink-muted)}
+.bpick .p{font-weight:800;font-variant-numeric:tabular-nums}
+.bslots{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.bslot{border:1px solid var(--line-input-strong);border-radius:var(--r-control);padding:11px 4px;
+  font-weight:700;font-variant-numeric:tabular-nums}
+.bslot.on{border-color:var(--accent-deep);background:var(--accent-tint);color:var(--accent-deep);
+  box-shadow:inset 0 0 0 1px var(--accent-deep)}
+.bslot[disabled]{opacity:.35;text-decoration:line-through}
+.hold{display:flex;align-items:center;gap:8px;background:var(--accent-tint);border:1px solid var(--accent-line);
+  border-radius:var(--r-control);padding:10px 14px;font-weight:600;color:var(--accent-deep)}
+.hold.late{background:rgba(194,106,2,.12);border-color:rgba(194,106,2,.3);color:var(--warning)}
+.bdays{display:flex;gap:8px;overflow-x:auto;padding-bottom:4px;scrollbar-width:none}
+.bdays::-webkit-scrollbar{display:none}
+.bday{flex:none;border:1px solid var(--line-input-strong);border-radius:var(--r-control);padding:8px 14px;
+  display:flex;flex-direction:column;align-items:center;gap:2px;font-weight:700;min-width:76px}
+.bday .dw{font-size:11px;font-weight:700;color:var(--ink-muted);text-transform:uppercase}
+.bday.on{border-color:var(--accent-deep);background:var(--accent-tint);color:var(--accent-deep)}
+
+/* ── Kleine bouwstenen ──────────────────────────────────────── */
+.kv{display:flex;justify-content:space-between;gap:16px;padding:9px 0;border-bottom:1px solid var(--line);font-weight:500}
+.kv:last-child{border-bottom:0}
+.kv .k{color:var(--ink-muted)}
+.kv .v{font-weight:700;text-align:right}
+.note{border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:0 var(--r-control) var(--r-control) 0;
+  background:var(--accent-tint);padding:12px 14px;font-size:13px;font-weight:500;line-height:19px}
+.note.warn{border-left-color:var(--warning);background:rgba(194,106,2,.08);color:inherit}
+.note.danger{border-left-color:var(--danger);background:rgba(198,40,40,.07)}
+.snav .snav-label{padding:14px 16px 6px;font-size:11px;font-weight:800;text-transform:uppercase;
+  letter-spacing:.05em;color:var(--ink-muted)}
+.grid5{display:grid;grid-template-columns:repeat(5,1fr);gap:16px}
+.cardgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px}
+.minicard{border:1px solid var(--line);border-radius:var(--r-card);padding:18px;display:flex;flex-direction:column;gap:10px}
+.minicard .t{font-weight:700;font-size:16px}
+.minicard .s{font-size:13px;font-weight:500;color:var(--ink-muted)}
+.bar-h{height:8px;border-radius:99px;background:var(--surface-muted);overflow:hidden}
+.bar-h span{display:block;height:100%;background:var(--accent-deep)}
+.bar-h.warn span{background:var(--warning)}
+.bar-h.danger span{background:var(--danger)}
+.qty-in{width:88px;text-align:right}
+.stacked{display:flex;flex-direction:column;gap:24px}
+.hstack{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+@media(max-width:1200px){
+  .wgrid,.consent{grid-template-columns:1fr}
+  .grid5{grid-template-columns:repeat(2,1fr)}
+}
+@media(max-width:760px){
+  .bslots{grid-template-columns:repeat(3,1fr)}
+  .locsw .k{display:none}
+  .topbar{padding:0 14px}
+}
+
+/* ── AI-onboarding ─────────────────────────────────────────────
+   Een eigen omgeving: geen zijbalk, geen tabbladen, geen tandwiel.
+   Een salon die zich aanmeldt kent de app nog niet, dus staat er
+   per moment één vraag en één knop op het scherm. */
+body.ob-mode .sidebar,body.ob-mode .topbar{display:none}
+body.ob-mode .shell{padding-left:0}
+body.ob-mode main{padding:0}
+/* Op het bronscherm past alles in het beeld: geen paginascroll. */
+body.ob-src,body.ob-src .shell{overflow:hidden}
+body.ob-src .ob{height:100vh;min-height:0}
+@supports(height:100dvh){body.ob-src .ob{height:100dvh}}
+
+.ob{min-height:100vh;background:
+  radial-gradient(1200px 620px at 12% -8%,var(--accent-tint),transparent 60%),
+  radial-gradient(900px 520px at 96% 4%,#eef3f8,transparent 62%),var(--surface-muted);
+  display:flex;flex-direction:column}
+.ob-top{position:sticky;top:0;z-index:8;display:flex;align-items:center;gap:12px;
+  padding:12px 20px;background:rgba(255,255,255,.82);backdrop-filter:blur(10px);
+  border-bottom:1px solid var(--line)}
+.ob-top .brand{font-weight:800;font-size:16px;letter-spacing:-.01em}
+.ob-top .grow{flex:1}
+.ob-body{flex:1;width:100%;max-width:1180px;margin:0 auto;padding:26px 20px 90px}
+/* Het bronscherm past in één beeld. Het is de eerste indruk en er valt
+   maar één ding te doen; scrollen om de knop te vinden hoort daar niet
+   bij. De body wordt hier een vlak dat de hoogte vult en zijn inhoud
+   centreert, en alles wat kan groeien krijgt zijn eigen maximum. */
+body.ob-src .ob-body{display:flex;align-items:center;justify-content:center;
+  min-height:0;padding:14px 20px;overflow:auto}
+.ob-narrow{max-width:660px;margin:0 auto}
+
+/* ══ Onboarding: het bronscherm ═══════════════════════════════
+   Dit scherm staat vóór de werkomgeving. Iemand die hier binnenkomt
+   heeft nog niets met Velnes; hij moet zin krijgen. Daarom een warmer
+   en zachter palet dan de zwart-olijf van de werkomgeving — zand,
+   salie en een vleug blos. Het olijf blijft alleen in de knop staan:
+   dat is de draad naar waar hij straks terechtkomt.
+
+   Deze tinten gelden uitsluitend hier. De werkomgeving en de
+   marktplaats blijven hun eigen palet houden. */
+/* Het veld waar het kader op ligt.
+
+   position:fixed met inset:0, en niet height:100vh in de gewone stroom.
+   Dat is het hele punt: de onboarding wordt getekend binnen #view, in
+   main, in de shell — allemaal vlakken met eigen maten, eigen opvulling
+   en eigen overflow. Zolang het veld daarin meedraait, hangt het midden
+   af van die keten en staat het kader scheef zodra er één schakel anders
+   uitpakt. Vastgezet aan het venster is er geen keten meer: het veld is
+   altijd precies het zichtbare beeld, wat er ook omheen staat.
+
+   Het teken herhaalt zich eindeloos in een heel licht pastel; verder
+   gebeurt hier niets, zodat het kader alle aandacht krijgt. */
+.obw{
+  --sand:#f7f2ea; --sand-deep:#efe6d8; --sage:#e6ede4; --blush:#f4e7e1;
+  --obs-ink:#2f2c26; --obs-soft:#7d7669; --obs-line:rgba(47,44,38,.10);
+  /* Voluit en niet als inset-shorthand: die wordt niet overal even goed
+     gelezen, en juist hier mag er geen twijfel over bestaan. */
+  position:fixed;top:0;right:0;bottom:0;left:0;z-index:30;overflow:auto;
+  display:flex;padding:24px;
+  background-color:#f1ece2;background-repeat:repeat;background-size:132px 132px;
+  background-position:center}
+
+/* Het kader: één vlak in het midden, twee helften erin.
+
+   margin:auto en niet align-items:center. Bij centreren met align-items
+   loopt een kader dat groter is dan het veld aan de bovenkant het beeld
+   uit, en daar kun je niet naartoe scrollen — precies de kop die werd
+   afgesneden. Met margin:auto blijft de bovenkant bereikbaar. De hoogte
+   rekent bovendien tegen het veld (100%) en niet tegen het venster, dus
+   het kader kan per definitie niet groter worden dan waar het in ligt. */
+.obs{
+  margin:auto;flex:none;position:relative;
+  width:min(1120px,100%);height:min(700px,100%);
+  display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);
+  background:var(--sand);color:var(--obs-ink);
+  border:1px solid rgba(47,44,38,.07);border-radius:28px;overflow:hidden;
+  box-shadow:0 30px 80px -24px rgba(47,44,38,.28),0 2px 8px rgba(47,44,38,.05)}
+/* Een rastervak mag niet groeien onder zijn inhoud; anders duwt een lange
+   tekst het kader alsnog open. */
+.obs>*{min-width:0;min-height:0}
+
+/* ── Links: de enige vraag ── */
+.obs-left{position:relative;display:flex;flex-direction:column;min-width:0;min-height:0;
+  padding:28px 34px;overflow:hidden;
+  background:
+    radial-gradient(760px 460px at -10% 0%,var(--blush),transparent 62%),
+    radial-gradient(680px 520px at 110% 96%,var(--sage),transparent 60%),
+    var(--sand)}
+.obs-logo{flex:none;display:inline-flex;align-items:center;gap:9px;
+  color:var(--accent-deep);align-self:flex-start}
+.obs-logo .w{color:var(--obs-ink)}
+.obs-mid{flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column;
+  justify-content:center;gap:14px;max-width:440px;width:100%;margin:0 auto;padding:28px 0}
+/* Het label boven de kop: klein, in kapitalen, met de sparkle in goud.
+   Het zegt waar je bent voordat de kop zegt wat er gebeurt. */
+.obs-badge{align-self:flex-start;display:inline-flex;align-items:center;gap:7px;
+  height:32px;padding:0 14px 0 11px;border-radius:999px;
+  background:rgba(122,132,96,.14);color:var(--accent-deep);
+  font-size:12px;font-weight:800;letter-spacing:.09em;text-transform:uppercase}
+.obs-badge svg{color:#c9a227}
+
+/* De kop staat in een schreefletter: dat geeft de belofte gewicht dat een
+   schreefloze op deze maat niet haalt. Twee regels, twee kleuren — de
+   eerste stelt de voorwaarde, de tweede de uitkomst. */
+.obs-mid h1{font-family:'Playfair Display',Georgia,'Times New Roman',serif;
+  font-size:46px;line-height:52px;font-weight:700;letter-spacing:-.015em}
+.obs-mid h1 em{font-style:normal;color:var(--accent-deep)}
+.obs-mid .lead{font-size:15px;line-height:24px;font-weight:500;color:var(--obs-soft)}
+
+/* ── De balk ──────────────────────────────────────────────────
+   Eén regel voor alles: plak een link, of hang er een prijslijst of
+   foto's aan. Het uploadveld stond eronder als tweede handeling; nu
+   zit het als knop ín de balk, zodat er één ding te doen valt. */
+/* Geen slagschaduw: boven een verloop leest die als een vlek onder de balk
+   in plaats van als diepte. De rand doet het werk. */
+.obq{display:flex;align-items:center;gap:6px;padding:6px;
+  background:rgba(255,255,255,.86);backdrop-filter:blur(10px);
+  border:1px solid var(--obs-line);border-radius:999px;
+  transition:border-color .15s}
+.obq:focus-within{border-color:var(--accent)}
+.obq.bad{border-color:var(--danger)}
+.obq-in{flex:1;min-width:0;height:46px;padding:0 6px;border:0;background:transparent;
+  font-size:16px;font-weight:600;color:var(--obs-ink);outline:0}
+/* Een extra bron is een aanvulling, geen tweede hoofdvraag: zelfde vorm,
+   een maat kleiner. */
+.obq.obq-sm .obq-in{height:38px;font-size:14px}
+.obq.obq-sm .obq-clip,.obq.obq-sm .obq-go{width:38px;height:38px}
+.obq-in::placeholder{color:var(--obs-soft);font-weight:500}
+/* De twee knoppen zijn even groot en even rond: links iets aanhangen weegt
+   net zo zwaar als versturen. Alleen de vulling verschilt, want er is maar
+   één handeling die de stap afsluit. */
+.obq-clip,.obq-go{flex:none;width:46px;height:46px;display:grid;place-items:center;
+  border-radius:999px;transition:transform .14s,background .14s,color .14s}
+.obq-clip{background:rgba(47,44,38,.05);border:1px solid var(--obs-line);color:var(--obs-soft)}
+@media(hover:hover){.obq-clip:hover{background:rgba(47,44,38,.09);color:var(--obs-ink);transform:scale(1.04)}}
+.obq-go{background:var(--accent-deep);color:#fff;border:1px solid var(--accent-deep)}
+.obq-go[disabled]{opacity:.35}
+@media(hover:hover){.obq-go:not([disabled]):hover{transform:scale(1.04)}}
+
+/* Wat er aanhangt: kleine plaatjes onder de balk, geen tweede formulier. */
+.obs-chips{display:flex;flex-wrap:wrap;gap:7px}
+.obs-chip{display:inline-flex;align-items:center;gap:7px;max-width:100%;
+  height:32px;padding:0 6px 0 10px;border-radius:999px;
+  background:rgba(255,255,255,.8);border:1px solid var(--obs-line);
+  font-size:12px;font-weight:700;color:var(--obs-ink)}
+.obs-chip.warn{border-color:rgba(194,106,2,.4);color:var(--warning)}
+.obs-chip img{width:22px;height:22px;border-radius:6px;object-fit:cover}
+.obs-chip .t{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.obs-chip button{display:grid;place-items:center;width:22px;height:22px;
+  border-radius:999px;color:var(--obs-soft);flex:none}
+@media(hover:hover){.obs-chip button:hover{background:rgba(47,44,38,.08)}}
+
+.obs-alt{font-size:13px;font-weight:600;color:var(--obs-soft)}
+.obs-alt button{font-weight:700;color:var(--accent-deep);text-decoration:underline;
+  text-underline-offset:2px}
+.obs-srcs{font-size:12px;font-weight:600;color:var(--obs-soft);opacity:.8}
+.obs-tell{width:100%;min-height:104px;resize:vertical;padding:12px 14px;
+  border:1px solid var(--obs-line);border-radius:14px;background:rgba(255,255,255,.8);
+  font:inherit;font-size:14px;font-weight:500;color:var(--obs-ink);outline:0}
+.obs-tell:focus{border-color:var(--accent)}
+.obs-err{font-size:13px;font-weight:700;color:var(--danger)}
+.obs-foot{flex:none;display:flex;align-items:center;gap:14px;
+  font-size:12px;font-weight:600;color:var(--obs-soft)}
+.obs-foot button{font-weight:700;color:var(--obs-soft);text-decoration:underline;
+  text-underline-offset:2px}
+
+/* ── Rechts: het bewegende vlak ───────────────────────────────
+   Geen foto maar een animatie: drijvende vlakken in salie en blos, met
+   daarboven de kaartjes die Velnes straks voor deze salon bouwt. Het is
+   opzettelijk traag — het moet ademen, niet knipperen. */
+.obs-right{position:relative;margin:12px 12px 12px 0;border-radius:20px;overflow:hidden;
+  background:linear-gradient(155deg,var(--sand-deep),var(--blush) 46%,var(--sage))}
+
+/* ── De foto's ────────────────────────────────────────────────
+   Drie beelden die om beurten in beeld komen, elk met een heel trage
+   inzoom zodat het leeft zonder dat er iets beweegt waar je naar moet
+   kijken. Twintig seconden per beeld, met een lange overvloeier: het
+   mag nooit als een diavoorstelling voelen. */
+.obs-photos{position:absolute;inset:0}
+.obs-photo{position:absolute;inset:0;background-size:cover;background-position:center 28%;
+  opacity:0;will-change:transform,opacity;animation:obFace 60s ease-in-out infinite}
+.obs-photo.f1{animation-delay:0s}
+.obs-photo.f2{animation-delay:20s}
+.obs-photo.f3{animation-delay:40s}
+@keyframes obFace{
+  0%{opacity:0;transform:scale(1.04)}
+  4%{opacity:1}
+  30%{opacity:1;transform:scale(1.11)}
+  36%{opacity:0;transform:scale(1.12)}
+  100%{opacity:0;transform:scale(1.04)}}
+
+/* De sluier houdt het pastel vast en houdt de kaartjes leesbaar, hoe
+   licht of donker de foto eronder ook uitvalt. */
+.obs-veil{position:absolute;inset:0;
+  background:
+    linear-gradient(155deg,rgba(247,242,234,.58),rgba(244,231,225,.34) 44%,rgba(230,237,228,.5)),
+    linear-gradient(180deg,rgba(47,44,38,.10),transparent 34%,rgba(47,44,38,.16))}
+
+/* De kaartjes komen om beurten op en zakken weer weg. */
+.obs-cards{position:absolute;inset:0}
+.obs-card{position:absolute;display:flex;align-items:center;gap:10px;
+  padding:11px 14px;border-radius:16px;
+  background:rgba(255,255,255,.74);backdrop-filter:blur(14px);
+  border:1px solid rgba(255,255,255,.7);box-shadow:0 14px 34px rgba(47,44,38,.12);
+  font-size:13px;font-weight:700;color:var(--obs-ink);
+  opacity:0;animation:obCard 12s ease-in-out infinite}
+.obs-card .s{display:block;font-size:11px;font-weight:600;color:var(--obs-soft);margin-top:1px}
+.obs-card img{width:36px;height:36px;border-radius:10px;object-fit:contain;flex:none}
+.obs-card .dot{width:8px;height:8px;border-radius:99px;background:var(--accent);flex:none}
+.obs-card.c1{left:9%;top:17%;animation-delay:0s}
+.obs-card.c2{right:8%;top:38%;animation-delay:2.4s}
+.obs-card.c3{left:15%;bottom:20%;animation-delay:4.8s}
+.obs-card.c4{right:14%;bottom:10%;animation-delay:7.2s}
+@keyframes obCard{
+  0%{opacity:0;transform:translateY(16px) scale(.96)}
+  8%{opacity:1;transform:translateY(0) scale(1)}
+  34%{opacity:1;transform:translateY(-6px) scale(1)}
+  44%{opacity:0;transform:translateY(-14px) scale(.98)}
+  100%{opacity:0;transform:translateY(16px) scale(.96)}}
+
+/* ── De hap uit de hoek ───────────────────────────────────────
+   Uit de rechterbovenhoek van het beeldvlak is een ronde hap genomen; het
+   merkteken ligt daarin. Het teken staat daarom náást het beeldvlak in de
+   opmaak en niet erin — een masker geldt ook voor alles wat een element
+   bevat, dus binnenin zou het mee weggesneden worden. */
+.obs-right{
+  -webkit-mask-image:radial-gradient(circle 35px at calc(100% - 45px) 45px,
+    transparent 0 35px,#000 35.5px);
+  mask-image:radial-gradient(circle 35px at calc(100% - 45px) 45px,
+    transparent 0 35px,#000 35.5px);
+  -webkit-mask-repeat:no-repeat;mask-repeat:no-repeat}
+
+/* Het merkteken in die hap toont hoe ver de onboarding is. */
+/* In de bovenbalk van de latere stappen staat hetzelfde teken gewoon in
+   de rij mee; alleen op het bronscherm hangt hij in de hoek. */
+.ob-top .obs-ring{position:relative;top:auto;right:auto;box-shadow:none;
+  background:transparent;border-color:transparent}
+.ob-top .obs-ring .pct{display:none}
+/* Het kader is de maat: de hap zit 12 pixels marge plus 45 vanaf de rand,
+   dus het teken hangt op 30 en meet 54 — dan valt het midden samen. */
+.obs>.obs-ring{position:absolute;top:30px;right:30px;z-index:3;
+  background:transparent;border-color:transparent;box-shadow:none}
+.obs-ring{position:relative;
+  width:54px;height:54px;display:grid;place-items:center;border-radius:999px;
+  background:rgba(255,255,255,.8);backdrop-filter:blur(10px);
+  border:1px solid rgba(255,255,255,.75);box-shadow:0 8px 22px rgba(47,44,38,.14);
+  color:var(--accent-deep)}
+.obs-ring svg.track{position:absolute;inset:0;width:100%;height:100%;transform:rotate(-90deg)}
+.obs-ring .arc{transition:stroke-dashoffset .5s cubic-bezier(.16,1,.3,1)}
+.obs-ring .mk{position:relative;line-height:0;animation:pupBreathe 4.2s ease-in-out infinite}
+.obs-ring .pct{position:absolute;bottom:-17px;left:50%;transform:translateX(-50%);
+  font-size:10px;font-weight:800;color:var(--obs-soft);font-variant-numeric:tabular-nums}
+
+@media(prefers-reduced-motion:reduce){
+  .obs-photo,.obs-card,.obs-ring .mk{animation:none}
+  .obs-card{opacity:1}
+  /* Zonder overvloeier blijft er één beeld staan. */
+  .obs-photo.f1{opacity:1}
+}
+/* Smal: het bewegende vlak is sier, dus dat gaat er als eerste af. */
+/* Smal: het bewegende vlak is sier, dus dat gaat er als eerste af en het
+   kader mag de hele breedte pakken. */
+@media(max-width:900px){
+  .obw{padding:12px}
+  .obs{grid-template-columns:1fr;height:100%;border-radius:22px}
+  .obs-right{display:none}
+  .obs-left{padding:22px 20px 26px}
+  .obs-mid h1{font-size:34px;line-height:40px}
+}
+@media(max-height:680px){
+  .obw{padding:12px}
+  .obs-mid{padding:14px 0;gap:10px}
+  .obs-mid h1{font-size:32px;line-height:38px}
+  .obs-mid .lead,.obs-srcs{display:none}
+}
+/* Heel klein: het kader mag het beeld gewoon vullen. */
+@media(max-width:560px){
+  .obw{padding:0}
+  .obs{border-radius:0;border:0;box-shadow:none}
+}
+
+/* ── De handelingen op de bon ─────────────────────────────────
+   Als lijst in een lade in plaats van als popover: er is ruimte om te
+   zeggen waar iets voor is, en om te tonen wat er al is toegepast. */
+.sale-acts{display:flex;flex-direction:column;border:1px solid var(--line);
+  border-radius:var(--r-tile);overflow:hidden;background:var(--surface)}
+.sale-act{display:flex;align-items:center;gap:12px;padding:13px 14px;text-align:left;
+  border-bottom:1px solid var(--line);background:transparent;color:var(--ink)}
+.sale-acts .sale-act:last-child{border-bottom:0}
+.sale-act .ic{flex:none;display:grid;place-items:center;width:34px;height:34px;
+  border-radius:9px;background:var(--surface-muted);color:var(--ink-muted)}
+.sale-act .grow{flex:1;min-width:0}
+.sale-act .t{display:block;font-size:14px;font-weight:700}
+.sale-act .s{display:block;font-size:12px;font-weight:500;line-height:16px;color:var(--ink-muted)}
+.sale-act .now{flex:none;padding:3px 9px;border-radius:999px;background:var(--accent-tint);
+  border:1px solid var(--accent-line);color:var(--accent-deep);
+  font-size:12px;font-weight:800;font-variant-numeric:tabular-nums;max-width:120px;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sale-act>svg:last-child{flex:none;color:var(--ink-muted)}
+.sale-act[disabled]{opacity:.45}
+@media(hover:hover){.sale-act:not([disabled]):hover{background:var(--surface-muted)}}
+.sale-act.danger .t{color:var(--danger)}
+.sale-act.danger .ic{color:var(--danger)}
+
+/* ── De twee vinkjes in de afspraaklade ───────────────────────
+   Ze staan bovenaan, want ze bepalen wat er daaronder te zien is. Aan
+   staat als een lichte kaart met een accentrand — dezelfde taal als de
+   categorietegels in de kassa. */
+.appt-modes{display:flex;flex-direction:column;gap:8px}
+.appt-mode{display:flex;align-items:flex-start;gap:11px;padding:11px 13px;
+  border:1px solid var(--line);border-radius:var(--r-control);
+  background:var(--surface-muted);cursor:pointer}
+.appt-mode input{flex:none;width:18px;height:18px;margin-top:1px;accent-color:var(--accent-deep)}
+.appt-mode .t{display:block;font-size:14px;font-weight:700}
+.appt-mode .s{display:block;font-size:12px;font-weight:500;color:var(--ink-muted);line-height:16px}
+.appt-mode.on{background:var(--surface);border-color:var(--accent-deep)}
+@media(hover:hover){.appt-mode:not(.on):hover{border-color:var(--line-strong)}}
+
+/* ── De tien schermen: links ──────────────────────────────────
+   Zelfde kader, andere inhoud. Alles wat hier binnenkomt schuift zacht
+   omhoog, zodat het voelt alsof er iets gebouwd wordt en niet alsof er
+   een pagina omslaat. */
+.obs-mid h1.sm{font-size:38px;line-height:44px}
+.obs-mid>*{animation:obIn .34s cubic-bezier(.16,1,.3,1) both}
+@keyframes obIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+
+.ob-urlok{display:inline-flex;align-items:center;gap:9px;align-self:stretch;
+  height:46px;padding:0 14px;border-radius:999px;background:rgba(255,255,255,.86);
+  border:1px solid var(--obs-line);font-size:15px;font-weight:700}
+.ob-urlok .grow{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ob-urlok svg:first-child{color:var(--accent-deep);flex:none}
+.ob-urlok svg:last-child{color:#c9a227;flex:none}
+
+.ob-doing{display:flex;align-items:center;gap:8px;font-size:16px;font-weight:800}
+.ob-doing svg{color:#c9a227}
+.ob-bar{display:block;height:5px;border-radius:99px;background:rgba(47,44,38,.10);overflow:hidden}
+.ob-bar i{display:block;height:100%;width:36%;border-radius:99px;background:var(--accent-deep);
+  animation:obSlide 1.5s ease-in-out infinite}
+@keyframes obSlide{0%{transform:translateX(-110%)}100%{transform:translateX(320%)}}
+
+/* Wat er gevonden is. Eén regel per vondst, aangevinkt zodra hij binnen is. */
+.ob-finds{display:flex;flex-direction:column;gap:9px}
+.ob-find{display:flex;align-items:center;gap:10px;font-size:14px;font-weight:700;
+  color:var(--obs-soft);animation:obIn .3s cubic-bezier(.16,1,.3,1) both}
+.ob-find.on{color:var(--obs-ink)}
+/* Gevonden maar leeg: geen vinkje maar een teken dat het ontbreekt. */
+.ob-find.miss{color:var(--warning)}
+.ob-find.miss svg{color:var(--warning)}
+.ob-find svg{color:var(--accent-deep);flex:none}
+.ob-find .ring{flex:none;width:15px;height:15px;border-radius:99px;
+  border:2px solid rgba(47,44,38,.22)}
+.ob-find .ring.spin{border-top-color:var(--accent-deep);animation:obSpin .8s linear infinite}
+@keyframes obSpin{to{transform:rotate(360deg)}}
+.ob-sum{font-size:13px;font-weight:700;color:var(--obs-soft)}
+.ob-miss{display:flex;align-items:center;gap:7px;font-size:13px;font-weight:600;
+  color:var(--warning)}
+.ob-ok{display:grid;place-items:center;width:56px;height:56px;border-radius:999px;
+  background:rgba(122,132,96,.16);color:var(--accent-deep)}
+
+.ob-otp{display:flex;gap:9px}
+.ob-otp-in{width:100%;max-width:56px;height:60px;text-align:center;border-radius:14px;
+  border:1px solid var(--obs-line);background:rgba(255,255,255,.86);
+  font-size:24px;font-weight:800;color:var(--obs-ink);outline:0;font-variant-numeric:tabular-nums}
+.ob-otp-in:focus{border-color:var(--accent-deep)}
+
+/* ── Rechts: het gebouwde ─────────────────────────────────────
+   Zodra er iets echts staat vervalt het sfeerbeeld en wordt het vlak een
+   werkblad: wit, met het product erin op ware grootte. */
+.ob-right-plain{background:#efece5;display:flex;flex-direction:column;gap:0;padding:12px}
+.ob-canvas{flex:1;min-height:0;overflow:hidden;border-radius:14px;background:#fff;
+  box-shadow:0 10px 30px -14px rgba(47,44,38,.35);animation:obIn .4s cubic-bezier(.16,1,.3,1) both}
+
+.ob-tabs{flex:none;display:flex;gap:7px;padding:0 0 10px}
+.ob-tab{display:inline-flex;align-items:center;gap:7px;height:34px;padding:0 13px;
+  border-radius:999px;border:1px solid rgba(47,44,38,.12);background:rgba(255,255,255,.7);
+  font-size:12px;font-weight:800;color:var(--obs-soft)}
+.ob-tab .dot{width:8px;height:8px;border-radius:99px;border:2px solid currentColor;opacity:.5}
+.ob-tab.done{color:var(--accent-deep)}
+.ob-tab.on{background:var(--accent-deep);border-color:var(--accent-deep);color:#fff}
+.ob-tab[disabled]{opacity:.75}
+
+/* De marktplaatspagina. */
+.ob-mk{height:100%;display:flex;flex-direction:column;overflow:hidden;font-size:12px}
+.ob-mk-bar{flex:none;display:flex;align-items:center;gap:10px;padding:11px 14px;
+  border-bottom:1px solid var(--line)}
+.ob-mk-bar .mark{color:var(--accent-deep);line-height:0}
+.ob-mk-bar .nm b{display:block;font-size:14px;font-weight:800;line-height:16px}
+.ob-mk-bar .nm i{display:block;font-style:normal;font-size:9px;font-weight:700;
+  letter-spacing:.14em;text-transform:uppercase;color:var(--ink-muted)}
+.ob-mk-bar .nav{flex:1;text-align:right;font-size:10px;font-weight:600;color:var(--ink-muted)}
+.ob-mk-bar .cta{flex:none;padding:6px 11px;border-radius:8px;background:var(--accent-deep);
+  color:#fff;font-size:11px;font-weight:800}
+.ob-mk-hero{flex:none;height:150px;position:relative;overflow:hidden;
+  background:linear-gradient(120deg,#e7dccf,#d8cbbb 45%,#cdd6c9);opacity:0;
+  transition:opacity .5s ease}
+.ob-mk-hero.on{opacity:1}
+.ob-mk-hero .txt{position:absolute;left:18px;top:18px;right:40%}
+.ob-mk-hero h4{font-family:'Playfair Display',Georgia,serif;font-size:22px;line-height:26px;
+  font-weight:700;color:#2f2c26}
+.ob-mk-hero p{margin-top:6px;font-size:11px;font-weight:600;color:#5d564b}
+.ob-mk-hero .loc{display:inline-flex;align-items:center;gap:5px;margin-top:8px;
+  font-size:10px;font-weight:700;color:#5d564b}
+.ob-mk-body{flex:1;min-height:0;padding:14px;display:flex;flex-direction:column;gap:10px;overflow:hidden}
+.ob-mk-h{display:flex;align-items:baseline;justify-content:space-between;
+  font-size:13px;font-weight:800}
+.ob-mk-h span{font-size:10px;font-weight:700;color:var(--ink-muted)}
+.ob-mk-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px}
+.ob-mk-card{display:flex;flex-direction:column;gap:3px;min-width:0}
+.ob-mk-card .ph{display:grid;place-items:center;height:58px;border-radius:9px;
+  background:var(--surface-muted);color:var(--accent-deep);margin-bottom:3px}
+.ob-mk-card .t{font-size:11px;font-weight:800;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ob-mk-card .s{font-size:10px;font-weight:600;color:var(--ink-muted)}
+.ob-mk-card .p{font-size:11px;font-weight:800}
+.ob-skel{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px}
+.ob-skel span{display:block;height:86px;border-radius:9px;background:var(--surface-muted);
+  animation:obPulse 1.3s ease-in-out infinite}
+@keyframes obPulse{0%,100%{opacity:1}50%{opacity:.45}}
+.ob-mk-foot{display:flex;gap:16px;flex-wrap:wrap;padding-top:8px;border-top:1px solid var(--line);
+  font-size:10px;font-weight:600;color:var(--ink-muted)}
+.ob-mk-foot span{display:inline-flex;align-items:center;gap:6px}
+.ob-mk-foot b{font-weight:800;color:var(--ink)}
+
+/* De eigen site met de module erop. */
+.ob-wsite{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 240px;gap:18px;
+  padding:22px;background:linear-gradient(120deg,#efe9e1,#e6ded4)}
+.ob-wcopy .hi{font-size:11px;font-weight:700;color:var(--ink-muted)}
+.ob-wcopy h4{font-family:'Playfair Display',Georgia,serif;font-size:26px;line-height:30px;font-weight:700}
+.ob-wcopy .sub{font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--ink-muted)}
+.ob-wcopy p{margin-top:10px;font-size:12px;font-weight:600;color:var(--ink-muted)}
+.ob-wcopy .btn-fake{display:inline-block;margin-top:12px;padding:8px 14px;border-radius:8px;
+  background:var(--accent-deep);color:#fff;font-size:11px;font-weight:800}
+.ob-wcard{align-self:start;background:#fff;border-radius:12px;padding:14px;
+  box-shadow:0 14px 34px -14px rgba(47,44,38,.35);display:flex;flex-direction:column;gap:7px}
+.ob-wcard h5{font-size:13px;font-weight:800;margin-bottom:2px}
+.ob-wcard .lb{font-size:10px;font-weight:700;color:var(--ink-muted)}
+.ob-wcard .sel{display:flex;align-items:center;justify-content:space-between;
+  padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-size:11px;font-weight:700}
+.ob-wcard .go{display:flex;align-items:center;justify-content:center;gap:6px;margin-top:4px;
+  padding:10px;border-radius:8px;background:var(--accent-deep);color:#fff;
+  font-size:11px;font-weight:800}
+.ob-wcard .pw{text-align:center;font-size:9px;font-weight:600;color:var(--ink-muted)}
+
+/* De werkomgeving. */
+.ob-db{height:100%;display:grid;grid-template-columns:118px minmax(0,1fr);overflow:hidden}
+.ob-db-side{background:#3f4433;color:rgba(255,255,255,.78);padding:12px 9px;
+  display:flex;flex-direction:column;gap:3px}
+.ob-db-side .brand{display:flex;align-items:center;gap:7px;color:#fff;
+  font-size:12px;font-weight:800;padding:2px 6px 10px}
+.ob-db-side .r{display:flex;align-items:center;gap:8px;padding:6px 7px;border-radius:7px;
+  font-size:10px;font-weight:700}
+.ob-db-side .r.on{background:rgba(255,255,255,.14);color:#fff}
+.ob-db-main{padding:14px;display:flex;flex-direction:column;gap:11px;min-width:0;overflow:hidden}
+.ob-db-head h4{font-size:16px;font-weight:800}
+.ob-db-head p{font-size:11px;font-weight:600;color:var(--ink-muted)}
+.ob-db-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.ob-db-stat{border:1px solid var(--line);border-radius:9px;padding:8px 10px}
+.ob-db-stat .l{display:block;font-size:9px;font-weight:700;color:var(--ink-muted)}
+.ob-db-stat .v{display:block;font-size:19px;font-weight:800;line-height:24px}
+.ob-db-cols{flex:1;min-height:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+.ob-db-card{border:1px solid var(--line);border-radius:10px;padding:10px;min-width:0;overflow:hidden}
+.ob-db-card .h{display:flex;justify-content:space-between;font-size:11px;font-weight:800;margin-bottom:7px}
+.ob-db-card .h span{font-size:9px;font-weight:700;color:var(--ink-muted)}
+.ob-db-card .empty{display:flex;flex-direction:column;align-items:center;gap:3px;padding:16px 0;
+  color:var(--ink-muted)}
+.ob-db-card .empty b{font-size:11px;color:var(--ink)}
+.ob-db-card .empty span{font-size:10px;font-weight:600}
+.ob-db-card .row{display:flex;align-items:center;gap:8px;padding:5px 0;font-size:10px;font-weight:700}
+.ob-db-card .row .t{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ob-db-card .row .d{color:var(--ink-muted)}
+.ob-db-card .row .p{font-variant-numeric:tabular-nums}
+
+@media(max-width:900px){.ob-right-plain{display:none}}
+
+/* ── De puppet ────────────────────────────────────────────────
+   Het Velnes-teken is de gids. Hij ademt, kijkt rond en beweegt
+   mee met wat hij zegt. Nooit een gezichtje: wel levend, niet kinderlijk. */
+.puppet{position:relative;display:inline-grid;place-items:center;flex:none;
+  width:var(--ps,64px);height:var(--ps,64px)}
+.puppet .disc{position:absolute;inset:0;border-radius:99px;
+  background:linear-gradient(150deg,#fff,var(--accent-tint));
+  border:1px solid var(--accent-line);box-shadow:0 6px 20px rgba(111,115,87,.16)}
+.puppet .face{position:relative;color:var(--accent-deep);line-height:0;
+  animation:pupBreathe 4.2s ease-in-out infinite;transform-origin:50% 56%}
+.puppet .ring{position:absolute;inset:-6px;border-radius:99px;border:2px solid var(--accent);
+  opacity:0;pointer-events:none}
+.puppet.is-think .face{animation:pupThink 2.6s cubic-bezier(.6,0,.4,1) infinite}
+.puppet.is-talk .face{animation:pupTalk .62s ease-in-out infinite}
+.puppet.is-happy .face{animation:pupHappy 1.5s ease-in-out infinite}
+.puppet.is-wait .face{animation:pupBreathe 5.6s ease-in-out infinite;opacity:.85}
+.puppet.is-talk .ring{animation:pupRing 1.6s ease-out infinite}
+.puppet.is-talk .ring.r2{animation-delay:.55s}
+.puppet.is-think .ring{animation:pupRing 2.2s ease-out infinite;border-color:var(--accent-line)}
+@keyframes pupBreathe{0%,100%{transform:scale(1) rotate(0)}50%{transform:scale(1.05) rotate(4deg)}}
+@keyframes pupThink{0%{transform:rotate(0) scale(1)}50%{transform:rotate(180deg) scale(.9)}100%{transform:rotate(360deg) scale(1)}}
+@keyframes pupTalk{0%,100%{transform:scale(1) rotate(-3deg)}50%{transform:scale(1.11) rotate(3deg)}}
+@keyframes pupHappy{0%,100%{transform:translateY(0) scale(1)}30%{transform:translateY(-7px) scale(1.08)}60%{transform:translateY(0) scale(.97)}}
+@keyframes pupRing{0%{opacity:.5;transform:scale(.8)}100%{opacity:0;transform:scale(1.45)}}
+.voice{display:inline-flex;align-items:flex-end;gap:3px;height:14px}
+.voice i{width:3px;border-radius:99px;background:var(--accent-deep);height:4px;
+  animation:vb .7s ease-in-out infinite}
+.voice i:nth-child(2){animation-delay:.09s}.voice i:nth-child(3){animation-delay:.18s}
+.voice i:nth-child(4){animation-delay:.27s}.voice i:nth-child(5){animation-delay:.36s}
+@keyframes vb{0%,100%{height:4px}50%{height:14px}}
+
+/* ── Startscherm ── */
+.ob-hero{display:flex;flex-direction:column;align-items:center;gap:14px;text-align:center;
+  padding:4px 0}
+.ob-hero h1{font-size:30px;line-height:37px;font-weight:800;letter-spacing:-.02em;max-width:620px}
+.ob-hero p.lead{font-size:15px;line-height:22px;font-weight:500;color:var(--ink-muted);max-width:520px}
+/* Bij weinig hoogte gaat er eerst van de sier af, niet van de bediening:
+   de pop krimpt, de kop wordt kleiner, de uitleg valt weg. */
+@media(max-height:820px){
+  .ob-hero .puppet{--ps:76px!important}
+  .ob-hero h1{font-size:26px;line-height:32px}
+}
+@media(max-height:700px){
+  .ob-hero .puppet{--ps:56px!important}
+  .ob-hero h1{font-size:22px;line-height:28px}
+  .ob-hero p.lead{display:none}
+  .ob-srcs{display:none}
+}
+.ob-urlbox{width:100%;max-width:620px;display:flex;flex-direction:column;gap:12px;
+  background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:18px;
+  box-shadow:0 18px 44px rgba(0,0,0,.07)}
+.ob-urlrow{display:flex;gap:10px}
+.ob-urlrow .input{flex:1;height:52px;font-size:16px}
+.ob-urlrow .btn{height:52px;padding:0 22px;font-size:16px}
+.ob-srcs{display:flex;flex-wrap:wrap;gap:8px;justify-content:center}
+.ob-src{display:inline-flex;align-items:center;gap:7px;height:34px;padding:0 13px;border-radius:var(--r-pill);
+  border:1px solid var(--line-input);background:var(--surface);font-size:13px;font-weight:600;color:var(--ink-muted)}
+.ob-src .d{width:8px;height:8px;border-radius:99px;background:var(--accent)}
+
+/* ── Meer bronnen ──────────────────────────────────────────────
+   Eén veld staat er om te beginnen. Zodra daar iets bruikbaars in
+   staat schuift het volgende eronder open — nooit drie lege vakken
+   die zeggen dat je nog veel werk hebt. */
+.ob-more{display:flex;flex-direction:column;gap:10px}
+.ob-morerow{display:flex;gap:10px;align-items:center;animation:findIn .32s cubic-bezier(.2,.8,.3,1) both}
+.ob-morerow .input{flex:1;height:48px;font-size:15px}
+.ob-morerow .tagsrc{font-size:12px;font-weight:700;color:var(--accent-deep);
+  background:var(--accent-tint);border:1px solid var(--accent-line);border-radius:99px;
+  padding:5px 11px;white-space:nowrap}
+.ob-morerow .drop{width:44px;height:44px;flex:none;padding:0}
+
+/* Uploaden en vertellen zitten achter een knop: het beginscherm blijft
+   één vraag, en wie meer heeft klapt het zelf open. */
+.ob-add{display:flex;flex-wrap:wrap;gap:8px;justify-content:center}
+.ob-addbtn{display:inline-flex;align-items:center;gap:8px;height:42px;padding:0 16px;
+  border-radius:var(--r-pill);border:1px dashed var(--line-input-strong);background:var(--surface);
+  font-size:14px;font-weight:700;color:var(--ink-muted)}
+@media(hover:hover){.ob-addbtn:hover{border-style:solid;border-color:var(--accent-deep);color:var(--accent-deep)}}
+.ob-files{display:flex;flex-direction:column;gap:8px;max-height:180px;overflow-y:auto;
+  overscroll-behavior:contain}
+.ob-file{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--line);
+  border-radius:10px;background:var(--surface);font-size:13px;font-weight:600;text-align:left;
+  animation:findIn .32s cubic-bezier(.2,.8,.3,1) both}
+.ob-file .thumb{width:38px;height:38px;border-radius:8px;flex:none;object-fit:cover;
+  background:var(--surface-sunken)}
+.ob-file .mark{width:38px;height:38px;border-radius:8px;flex:none;display:grid;place-items:center;
+  background:var(--accent-tint);color:var(--accent-deep)}
+.ob-file .grow{flex:1;min-width:0}
+.ob-file .s{display:block;font-size:12px;font-weight:500;color:var(--ink-muted)}
+.ob-file .s.warn{color:var(--warning-deep,#8a6d1f)}
+.ob-tell{width:100%;min-height:104px;max-height:34vh;border:1px solid var(--line-input);border-radius:12px;
+  background:var(--surface);padding:14px;font:inherit;font-size:15px;font-weight:500;line-height:23px;
+  resize:vertical}
+.ob-tell:focus{border-color:var(--ink);outline:none}
+.ob-tellhint{font-size:13px;font-weight:500;color:var(--ink-muted);text-align:left}
+
+/* ── Werkscherm: gesprek links, voortgang rechts ── */
+.ob-stage{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,.85fr);gap:22px;align-items:start}
+.ob-card{background:var(--surface);border:1px solid var(--line);border-radius:16px;
+  box-shadow:0 12px 34px rgba(0,0,0,.05)}
+.ob-chat{padding:22px;display:flex;flex-direction:column;gap:16px;min-height:430px}
+.ob-said{display:flex;gap:12px;align-items:flex-start}
+.ob-bubble{background:var(--accent-tint);border:1px solid var(--accent-line);border-radius:4px 14px 14px 14px;
+  padding:12px 15px;font-size:16px;line-height:23px;font-weight:600;max-width:100%}
+.ob-bubble.me{background:var(--surface-muted);border-color:var(--line);border-radius:14px 4px 14px 14px;
+  font-weight:600;color:var(--ink);margin-left:auto}
+.ob-said.me{justify-content:flex-end}
+.ob-hist{display:flex;flex-direction:column;gap:10px}
+.ob-hist .ob-bubble{font-size:14px;line-height:20px;padding:9px 13px;opacity:.75}
+.ob-ask{display:flex;flex-direction:column;gap:10px;margin-top:auto}
+.ob-ask .input{height:52px;font-size:16px}
+.ob-choice{display:flex;align-items:center;gap:12px;width:100%;text-align:left;
+  border:1px solid var(--line-input);border-radius:12px;padding:14px 16px;background:var(--surface);
+  font-size:15px;font-weight:700;transition:border-color .12s,background .12s}
+@media(hover:hover){.ob-choice:hover{border-color:var(--accent-deep);background:var(--accent-tint)}}
+.ob-choice .s{display:block;font-size:13px;font-weight:500;color:var(--ink-muted)}
+.ob-choice .grow{flex:1;min-width:0}
+.ob-typing{display:inline-flex;gap:4px;align-items:center;height:22px}
+.ob-typing i{width:6px;height:6px;border-radius:99px;background:var(--accent-deep);opacity:.5;
+  animation:tdot 1.1s ease-in-out infinite}
+.ob-typing i:nth-child(2){animation-delay:.15s}.ob-typing i:nth-child(3){animation-delay:.3s}
+@keyframes tdot{0%,100%{transform:translateY(0);opacity:.4}50%{transform:translateY(-4px);opacity:1}}
+
+/* ── Voortgang en vondsten ── */
+.ob-side{display:flex;flex-direction:column;gap:14px;position:sticky;top:78px}
+.ob-prog{padding:18px 20px;display:flex;flex-direction:column;gap:14px}
+.ob-prog h3{font-size:15px;font-weight:800}
+.ob-steps{display:flex;flex-direction:column;gap:9px}
+.ob-step{display:flex;align-items:center;gap:10px;font-size:14px;font-weight:600;color:var(--ink-muted)}
+.ob-step .ic{width:20px;height:20px;border-radius:99px;flex:none;display:grid;place-items:center;
+  border:2px solid var(--line-strong);color:transparent}
+.ob-step.done{color:var(--ink)}
+.ob-step.done .ic{background:var(--accent-deep);border-color:var(--accent-deep);color:#fff}
+.ob-step.busy{color:var(--ink)}
+.ob-step.busy .ic{border-color:var(--accent-deep);border-right-color:transparent;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.ob-finds{display:flex;flex-direction:column;gap:8px}
+.ob-find{display:flex;align-items:center;gap:9px;padding:10px 12px;border:1px solid var(--line);
+  border-radius:10px;font-size:13px;font-weight:600;background:var(--surface);
+  animation:findIn .4s cubic-bezier(.2,.8,.3,1) both}
+.ob-find .n{margin-left:auto;font-weight:800;font-variant-numeric:tabular-nums}
+@keyframes findIn{from{opacity:0;transform:translateY(8px) scale(.97)}to{opacity:1;transform:none}}
+.ob-pct{font-size:13px;font-weight:700;color:var(--ink-muted);font-variant-numeric:tabular-nums}
+
+/* ── Vergrendelde preview ── */
+.ob-lock{position:relative;border-radius:16px;overflow:hidden;border:1px solid var(--line);background:var(--surface)}
+.ob-lock .blur{filter:blur(7px);opacity:.5;pointer-events:none;user-select:none}
+.ob-lock .over{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;
+  justify-content:center;gap:10px;text-align:center;padding:24px;
+  background:linear-gradient(180deg,rgba(255,255,255,.55),rgba(255,255,255,.94))}
+.ob-lock .over h3{font-size:19px;font-weight:800}
+.ob-skel{padding:20px;display:flex;flex-direction:column;gap:12px}
+.ob-skel .b{height:14px;border-radius:99px;background:var(--surface-sunken)}
+.ob-skel .b.w1{width:60%}.ob-skel .b.w2{width:85%}.ob-skel .b.w3{width:40%}
+.ob-skel .ph{height:96px;border-radius:10px;background:linear-gradient(120deg,var(--surface-sunken),var(--surface-muted))}
+
+/* ── Mailmock ── */
+.ob-mail{border:1px solid var(--line);border-radius:14px;overflow:hidden;background:var(--surface)}
+.ob-mail .mh{padding:12px 16px;background:var(--surface-muted);border-bottom:1px solid var(--line);
+  font-size:13px;font-weight:600;color:var(--ink-muted)}
+.ob-mail .mb{padding:24px 22px;display:flex;flex-direction:column;gap:14px;align-items:flex-start}
+.ob-phone{width:100%;max-width:330px;margin:0 auto;border:10px solid var(--ink);border-radius:34px;
+  overflow:hidden;background:var(--surface);box-shadow:0 24px 60px rgba(0,0,0,.25)}
+.ob-phone .notch{height:22px;background:var(--ink)}
+
+/* ── Preview van de salonpagina ── */
+.ob-page{border:1px solid var(--line);border-radius:16px;overflow:hidden;background:var(--surface)}
+.ob-cover{height:180px;background:linear-gradient(120deg,var(--accent),#c9cbb4 55%,var(--event-sky));
+  position:relative;display:flex;align-items:flex-end;padding:18px 20px}
+.ob-cover .nm{font-size:26px;font-weight:800;color:#fff;text-shadow:0 2px 14px rgba(0,0,0,.35)}
+.ob-shots{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;padding:6px}
+.ob-shot{aspect-ratio:4/3;border-radius:8px;position:relative;overflow:hidden;
+  background:linear-gradient(135deg,var(--accent-tint),var(--surface-sunken))}
+.ob-shot span{position:absolute;left:6px;bottom:5px;font-size:10px;font-weight:700;color:var(--ink-muted)}
+.ob-shot.flag{outline:2px solid var(--warning);outline-offset:-2px}
+.ob-svc{display:flex;align-items:center;gap:12px;padding:11px 16px;border-bottom:1px solid var(--line)}
+.ob-svc:last-child{border-bottom:0}
+.ob-svc .grow{flex:1;min-width:0}
+.ob-svc .t{font-weight:700}
+.ob-svc .s{font-size:12px;font-weight:500;color:var(--ink-muted)}
+.ob-svc .p{font-weight:800;font-variant-numeric:tabular-nums;white-space:nowrap}
+
+/* ── Statuslabels per veld ── */
+.flag{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:var(--r-pill);
+  font-size:11px;font-weight:800;letter-spacing:.02em;white-space:nowrap}
+.flag.found{background:rgba(30,125,69,.12);color:var(--success)}
+.flag.check{background:rgba(194,106,2,.15);color:var(--warning)}
+.flag.missing{background:var(--surface-sunken);color:var(--ink-muted)}
+.flag.wrong{background:rgba(198,40,40,.12);color:var(--danger)}
+.flag.confirmed{background:var(--accent-tint);color:var(--accent-deep)}
+.ob-fieldrow{display:flex;align-items:center;gap:12px;width:100%;text-align:left;padding:12px 16px;
+  border-bottom:1px solid var(--line);background:var(--surface)}
+.ob-fieldrow:last-child{border-bottom:0}
+@media(hover:hover){button.ob-fieldrow:hover{background:var(--surface-muted)}}
+.ob-fieldrow .grow{flex:1;min-width:0}
+.ob-fieldrow .k{font-size:12px;font-weight:700;color:var(--ink-muted)}
+.ob-fieldrow .v{font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ob-src-note{font-size:11px;font-weight:600;color:var(--ink-muted)}
+
+/* ── Statusladder ── */
+.ob-ladder{display:flex;flex-direction:column;gap:0}
+.ob-rung{display:flex;gap:12px;align-items:flex-start;padding:0 0 0 4px}
+.ob-rung .rail{display:flex;flex-direction:column;align-items:center;align-self:stretch}
+.ob-rung .dot{width:14px;height:14px;border-radius:99px;border:2px solid var(--line-strong);
+  background:var(--surface);flex:none;margin-top:3px}
+.ob-rung .line{flex:1;width:2px;background:var(--line-strong);min-height:18px}
+.ob-rung.on .dot{background:var(--accent-deep);border-color:var(--accent-deep)}
+.ob-rung.now .dot{border-color:var(--accent-deep);box-shadow:0 0 0 4px var(--accent-tint)}
+.ob-rung .txt{padding-bottom:14px}
+.ob-rung .t{font-weight:700;font-size:14px}
+.ob-rung .s{font-size:12px;font-weight:500;color:var(--ink-muted)}
+.ob-rung.off .t{color:var(--ink-muted)}
+
+.ob-pill{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 12px;border-radius:var(--r-pill);
+  background:var(--surface);border:1px solid var(--line);font-size:12px;font-weight:700}
+.ob-strength{height:6px;border-radius:99px;background:var(--surface-sunken);overflow:hidden}
+.ob-strength span{display:block;height:100%;background:var(--danger);transition:width .2s,background .2s}
+.ob-strength.ok span{background:var(--warning)}
+.ob-strength.good span{background:var(--success)}
+
+@media(max-width:960px){
+  .ob-stage{grid-template-columns:1fr}
+  .ob-side{position:static}
+  .ob-hero h1{font-size:27px;line-height:34px}
+  .ob-body{padding:18px 14px 80px}
+  .ob-urlrow{flex-direction:column}
+  .ob-shots{grid-template-columns:repeat(2,1fr)}
+}
+

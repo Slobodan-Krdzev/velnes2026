@@ -75,9 +75,9 @@ describe('workspace shell', () => {
     await userEvent.type(await screen.findByLabelText('Email'), 'maria@velnes.mk');
     await userEvent.type(screen.getByLabelText('Password'), 'velnes-demo');
     await userEvent.click(screen.getByRole('button', { name: 'Sign in' }));
-    await waitFor(() => expect(screen.getByText('Maria Petrovska')).toBeDefined());
-    expect(screen.getByText('Settings')).toBeDefined(); // owner sees it
-    expect(screen.getByText('Cash register')).toBeDefined();
+    await waitFor(() => expect(screen.getByTitle('Maria Petrovska')).toBeDefined());
+    expect(screen.getByLabelText('Settings')).toBeDefined(); // owner sees it
+    expect(screen.getByLabelText('Cash register')).toBeDefined();
   });
 
   it('hides areas the role does not allow', async () => {
@@ -86,10 +86,10 @@ describe('workspace shell', () => {
     await userEvent.type(await screen.findByLabelText('Email'), 'ana@velnes.mk');
     await userEvent.type(screen.getByLabelText('Password'), 'velnes-demo');
     await userEvent.click(screen.getByRole('button', { name: 'Sign in' }));
-    await waitFor(() => expect(screen.getByText('Ana Dimitrova')).toBeDefined());
-    expect(screen.queryByText('Settings')).toBeNull();
-    expect(screen.queryByText('Catalog')).toBeNull();
-    expect(screen.getByText('Calendar')).toBeDefined();
+    await waitFor(() => expect(screen.getByTitle('Ana Dimitrova')).toBeDefined());
+    expect(screen.queryByLabelText('Settings')).toBeNull();
+    expect(screen.queryByLabelText('Catalog')).toBeNull();
+    expect(screen.getByLabelText('Calendar')).toBeDefined();
   });
 
   it('switches the whole chrome to Macedonian and Albanian', async () => {
@@ -98,15 +98,18 @@ describe('workspace shell', () => {
     await userEvent.type(await screen.findByLabelText('Email'), 'maria@velnes.mk');
     await userEvent.type(screen.getByLabelText('Password'), 'velnes-demo');
     await userEvent.click(screen.getByRole('button', { name: 'Sign in' }));
-    await waitFor(() => expect(screen.getByText('Calendar')).toBeDefined());
+    await waitFor(() => expect(screen.getByLabelText('Calendar')).toBeDefined());
 
-    await userEvent.selectOptions(screen.getByLabelText('Language'), 'mk');
-    await waitFor(() => expect(screen.getByText('Календар')).toBeDefined());
-    expect(screen.getByText('Каса')).toBeDefined();
+    // Language lives in the avatar (environment) menu, prototype-style.
+    await userEvent.click(screen.getByTitle('Maria Petrovska'));
+    await userEvent.click(screen.getByRole('button', { name: 'Македонски' }));
+    await waitFor(() => expect(screen.getByLabelText('Календар')).toBeDefined());
+    expect(screen.getByLabelText('Каса')).toBeDefined();
 
-    await userEvent.selectOptions(screen.getByLabelText('Јазик'), 'sq');
-    await waitFor(() => expect(screen.getByText('Kalendari')).toBeDefined());
-    expect(screen.getByText('Arka')).toBeDefined();
+    await userEvent.click(screen.getByTitle('Maria Petrovska'));
+    await userEvent.click(screen.getByRole('button', { name: 'Shqip' }));
+    await waitFor(() => expect(screen.getByLabelText('Kalendari')).toBeDefined());
+    expect(screen.getByLabelText('Arka')).toBeDefined();
   });
 
   it('shows the login error for wrong credentials', async () => {

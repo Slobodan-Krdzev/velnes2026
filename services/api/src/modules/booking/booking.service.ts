@@ -434,8 +434,9 @@ async function toContract(trx: Trx, id: string): Promise<Appointment> {
   const a = await trx
     .selectFrom('appointments as a')
     .leftJoin('services as s', 's.id', 'a.serviceId')
+    .leftJoin('serviceCategories as sc', 'sc.id', 's.categoryId')
     .selectAll('a')
-    .select('s.name as serviceName')
+    .select(['s.name as serviceName', 'sc.name as serviceCategory'])
     .where('a.id', '=', id)
     .executeTakeFirstOrThrow();
   return {
@@ -449,6 +450,7 @@ async function toContract(trx: Trx, id: string): Promise<Appointment> {
     title: a.title,
     serviceId: a.serviceId,
     serviceName: a.serviceName,
+    serviceCategory: a.serviceCategory,
     variantId: a.variantId,
     variantLabel: a.variantLabel,
     modifierNames: a.modifierNames,

@@ -1,10 +1,11 @@
-import { Button, Card, Field, Input } from '@velnes/ui';
+import { Button, Input } from '@velnes/ui';
 import { useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { ApiError } from '../api/client.js';
 import { useSession } from '../session.js';
 
+/** The prototype's viewLogin(), markup verbatim. */
 export function Login() {
   const { t } = useTranslation();
   const { login } = useSession();
@@ -33,38 +34,52 @@ export function Login() {
   };
 
   return (
-    <div className="login-page">
-      <Card className="login-card">
-        <div className="login-brand">
-          <span className="login-mark">V</span>
-          <h1>{t('login.title')}</h1>
-          <p className="muted">{t('login.subtitle')}</p>
+    <div
+      className="auth-wrap"
+      style={{
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: 'var(--surface-muted)',
+      }}
+    >
+      <form className="card" style={{ width: 'min(420px,94vw)', padding: 28 }} onSubmit={submit}>
+        <h1 style={{ margin: '0 0 4px' }}>Velnes</h1>
+        <p className="muted" style={{ fontWeight: 500, margin: '0 0 18px' }}>
+          {t('login.subtitle')}
+        </p>
+        <div className="field">
+          <label htmlFor="login-email">{t('login.email')}</label>
+          <Input
+            id="login-email"
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            autoComplete="username"
+            required
+          />
         </div>
-        <form onSubmit={submit} className="login-form">
-          <Field label={t('login.email')}>
-            <Input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              autoComplete="username"
-              required
-            />
-          </Field>
-          <Field label={t('login.password')}>
-            <Input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              autoComplete="current-password"
-              required
-            />
-          </Field>
-          {error ? <p className="error-text" role="alert">{error}</p> : null}
-          <Button type="submit" disabled={working}>
-            {working ? t('login.working') : t('login.submit')}
-          </Button>
-        </form>
-      </Card>
+        <div className="field">
+          <label htmlFor="login-pass">{t('login.password')}</label>
+          <Input
+            id="login-pass"
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            autoComplete="current-password"
+            required
+          />
+        </div>
+        {error ? (
+          <p role="alert" style={{ color: 'var(--danger)', fontWeight: 600, marginTop: 10 }}>
+            {error}
+          </p>
+        ) : null}
+        <Button type="submit" disabled={working} style={{ marginTop: 14, width: '100%' }}>
+          {working ? t('login.working') : t('login.submit')}
+        </Button>
+      </form>
     </div>
   );
 }

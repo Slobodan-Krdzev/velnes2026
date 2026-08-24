@@ -97,6 +97,20 @@ export const en = {
   'refusal.MISSING_REQUIRED': 'Choose {{groups}} first',
 
   // Languages (each in its own tongue, for the switcher)
+  'cal.add': 'Add',
+  'cal.filters': 'Filters',
+  'cal.view': 'View',
+  'cal.employeesFilter': 'Employees',
+  'cal.allEmployees': 'All employees',
+  'cal.prev': 'Previous',
+  'cal.next': 'Next',
+  'cal.pickDate': 'Pick a date',
+  'shell.showDataFor': 'Show data for',
+  'shell.signedIn': 'Signed in',
+  'shell.locations': '{{count}} locations',
+  'shell.open': 'Open',
+  'shell.setup': 'Setup',
+
   'lang.en': 'English',
   'lang.mk': 'Македонски',
   'lang.sq': 'Shqip',

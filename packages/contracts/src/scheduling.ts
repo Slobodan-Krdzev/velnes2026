@@ -111,6 +111,7 @@ export const AppointmentSchema = z.object({
   title: z.string(),
   serviceId: z.uuid().nullable(),
   serviceName: z.string().nullable(),
+  serviceCategory: z.string().nullable(),
   variantId: z.uuid().nullable(),
   variantLabel: z.string().nullable(),
   modifierNames: z.array(z.string()),

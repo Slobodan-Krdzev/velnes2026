@@ -34,7 +34,8 @@ const appointment = {
   status: 'confirmed',
   title: 'Katerina Stojanovska',
   serviceId: SVC,
-  serviceName: 'Manual therapy',
+  serviceName: 'Follow-up session',
+  serviceCategory: 'Manual therapy',
   variantId: null,
   variantLabel: null,
   modifierNames: [],
@@ -154,7 +155,7 @@ async function openCalendar() {
   window.history.pushState({}, '', '/calendar');
   localStorage.setItem('velnes.refresh', 'rt');
   render(<App />);
-  await waitFor(() => expect(screen.getByText('Katerina Stojanovska')).toBeDefined());
+  await waitFor(() => expect(screen.getByTitle(/Katerina/)).toBeDefined());
 }
 
 describe('calendar', () => {
@@ -171,18 +172,16 @@ describe('calendar', () => {
     mockApi();
     await openCalendar();
     const event = screen.getByTitle(/Katerina/);
-    expect(event.className).toContain('tone-manual');
-    expect(within(event).getByText('10:00')).toBeDefined();
+    expect(event.className).toContain('ev-manual');
+    // A 45-minute block only carries the head row, like the prototype.
+    expect(within(event).getByText('Follow-up session')).toBeDefined();
   });
 
   it('books through the drawer: service → slot → book', async () => {
     mockApi();
     await openCalendar();
-    await userEvent.click(screen.getByRole('button', { name: 'New appointment' }));
-    await userEvent.selectOptions(
-      screen.getByLabelText('Service'),
-      SVC,
-    );
+    await userEvent.click(screen.getByRole('button', { name: 'Add' }));
+    await userEvent.selectOptions(screen.getByLabelText(/Service/), SVC);
     await userEvent.click(await screen.findByRole('button', { name: '09:30' }));
     expect(await screen.findByText(/30 min/)).toBeDefined();
     await userEvent.click(screen.getByRole('button', { name: 'Book' }));
@@ -203,11 +202,14 @@ describe('calendar', () => {
         ),
     });
     await openCalendar();
-    // Flip the chrome to Macedonian first.
-    await userEvent.selectOptions(screen.getByLabelText('Language'), 'mk');
-    await waitFor(() => expect(screen.getByText('Нов термин')).toBeDefined());
-    await userEvent.click(screen.getByRole('button', { name: 'Нов термин' }));
-    await userEvent.selectOptions(screen.getByLabelText('Услуга'), SVC);
+    // Flip the chrome to Macedonian first (avatar menu).
+    await userEvent.click(screen.getByTitle('Maria Petrovska'));
+    await userEvent.click(screen.getByRole('button', { name: 'Македонски' }));
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Додади' })).toBeDefined(),
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Додади' }));
+    await userEvent.selectOptions(screen.getByLabelText(/Услуга/), SVC);
     await userEvent.click(await screen.findByRole('button', { name: '09:30' }));
     await userEvent.click(screen.getByRole('button', { name: 'Закажи' }));
     const alert = await screen.findByRole('alert');
