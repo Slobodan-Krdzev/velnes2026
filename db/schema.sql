@@ -36,6 +36,31 @@ COMMENT ON EXTENSION pgcrypto IS 'cryptographic functions';
 
 
 --
+-- Name: appointment_kind; Type: TYPE; Schema: public; Owner: -
+--
+
+CREATE TYPE public.appointment_kind AS ENUM (
+    'appointment',
+    'blocked',
+    'absence',
+    'chore',
+    'note'
+);
+
+
+--
+-- Name: appointment_status; Type: TYPE; Schema: public; Owner: -
+--
+
+CREATE TYPE public.appointment_status AS ENUM (
+    'booked',
+    'confirmed',
+    'cancelled',
+    'no_show'
+);
+
+
+--
 -- Name: employee_access; Type: TYPE; Schema: public; Owner: -
 --
 
@@ -115,6 +140,26 @@ CREATE TYPE public.payment_account_status AS ENUM (
 
 
 --
+-- Name: schedule_exception_source; Type: TYPE; Schema: public; Owner: -
+--
+
+CREATE TYPE public.schedule_exception_source AS ENUM (
+    'MANUAL',
+    'PUBLIC_HOLIDAY'
+);
+
+
+--
+-- Name: schedule_exception_type; Type: TYPE; Schema: public; Owner: -
+--
+
+CREATE TYPE public.schedule_exception_type AS ENUM (
+    'CLOSED',
+    'CUSTOM_HOURS'
+);
+
+
+--
 -- Name: service_status; Type: TYPE; Schema: public; Owner: -
 --
 
@@ -139,6 +184,18 @@ CREATE TYPE public.stock_movement_kind AS ENUM (
 
 
 --
+-- Name: timing_status; Type: TYPE; Schema: public; Owner: -
+--
+
+CREATE TYPE public.timing_status AS ENUM (
+    'none',
+    'suggested',
+    'approved',
+    'dismissed'
+);
+
+
+--
 -- Name: current_tenant(); Type: FUNCTION; Schema: app; Owner: -
 --
 
@@ -152,6 +209,62 @@ $$;
 SET default_tablespace = '';
 
 SET default_table_access_method = heap;
+
+--
+-- Name: appointment_history; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.appointment_history (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    tenant_id uuid NOT NULL,
+    appointment_id uuid NOT NULL,
+    at timestamp with time zone DEFAULT now() NOT NULL,
+    what text NOT NULL,
+    by_name text DEFAULT ''::text NOT NULL,
+    source text DEFAULT 'staff'::text NOT NULL
+);
+
+ALTER TABLE ONLY public.appointment_history FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: appointments; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.appointments (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    tenant_id uuid NOT NULL,
+    location_id uuid NOT NULL,
+    date date NOT NULL,
+    start_min integer NOT NULL,
+    duration_min integer NOT NULL,
+    prep_min integer DEFAULT 0 NOT NULL,
+    reset_min integer DEFAULT 0 NOT NULL,
+    kind public.appointment_kind DEFAULT 'appointment'::public.appointment_kind NOT NULL,
+    status public.appointment_status DEFAULT 'booked'::public.appointment_status NOT NULL,
+    title text DEFAULT ''::text NOT NULL,
+    service_id uuid,
+    variant_id uuid,
+    variant_label text,
+    modifier_option_ids uuid[] DEFAULT '{}'::uuid[] NOT NULL,
+    modifier_names text[] DEFAULT '{}'::text[] NOT NULL,
+    employee_id uuid,
+    any_emp boolean DEFAULT false NOT NULL,
+    customer_id uuid,
+    price integer DEFAULT 0 NOT NULL,
+    quoted jsonb,
+    source text DEFAULT 'staff'::text NOT NULL,
+    deposit integer DEFAULT 0 NOT NULL,
+    paid text DEFAULT 'unpaid'::text NOT NULL,
+    po_id uuid,
+    pmo_id uuid,
+    widget_id uuid,
+    idempotency_key text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+ALTER TABLE ONLY public.appointments FORCE ROW LEVEL SECURITY;
+
 
 --
 -- Name: audit_log; Type: TABLE; Schema: public; Owner: -
@@ -197,6 +310,60 @@ ALTER TABLE ONLY public.businesses FORCE ROW LEVEL SECURITY;
 
 
 --
+-- Name: customers; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.customers (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    tenant_id uuid NOT NULL,
+    name text NOT NULL,
+    email text,
+    phone text,
+    cust_group text DEFAULT 'New'::text NOT NULL,
+    since date DEFAULT now() NOT NULL,
+    visits integer DEFAULT 0 NOT NULL,
+    spend integer DEFAULT 0 NOT NULL,
+    points integer DEFAULT 0 NOT NULL,
+    prepaid integer DEFAULT 0 NOT NULL,
+    blacklisted boolean DEFAULT false NOT NULL,
+    no_shows integer DEFAULT 0 NOT NULL,
+    note text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+ALTER TABLE ONLY public.customers FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: emp_timings; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.emp_timings (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    tenant_id uuid NOT NULL,
+    employee_id uuid NOT NULL,
+    service_id uuid NOT NULL,
+    variant_id uuid,
+    location_id uuid,
+    observed_n integer DEFAULT 0 NOT NULL,
+    observed_median_min integer,
+    pace_factor numeric(5,2),
+    window_from date,
+    window_to date,
+    computed_at date,
+    recommended_min integer,
+    status public.timing_status DEFAULT 'none'::public.timing_status NOT NULL,
+    dismissed_at_n integer DEFAULT 0 NOT NULL,
+    approved_min integer,
+    approved_by text,
+    approved_at date,
+    source text DEFAULT 'observed'::text NOT NULL
+);
+
+ALTER TABLE ONLY public.emp_timings FORCE ROW LEVEL SECURITY;
+
+
+--
 -- Name: employee_locations; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -239,10 +406,64 @@ CREATE TABLE public.employees (
     status public.employee_status DEFAULT 'invited'::public.employee_status NOT NULL,
     twofa_enabled boolean DEFAULT false NOT NULL,
     color text,
-    created_at timestamp with time zone DEFAULT now() NOT NULL
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    hours jsonb
 );
 
 ALTER TABLE ONLY public.employees FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: holds; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.holds (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    tenant_id uuid NOT NULL,
+    key text NOT NULL,
+    location_id uuid NOT NULL,
+    date date NOT NULL,
+    start_min integer NOT NULL,
+    employee_id uuid,
+    service_id uuid,
+    until timestamp with time zone NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+ALTER TABLE ONLY public.holds FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: holiday_calendar_years; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.holiday_calendar_years (
+    country_code text NOT NULL,
+    country_name text NOT NULL,
+    year integer NOT NULL,
+    verified boolean DEFAULT false NOT NULL,
+    source text DEFAULT ''::text NOT NULL
+);
+
+ALTER TABLE ONLY public.holiday_calendar_years FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: holidays; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.holidays (
+    id text NOT NULL,
+    country_code text NOT NULL,
+    year integer NOT NULL,
+    date date NOT NULL,
+    name text NOT NULL,
+    type text NOT NULL,
+    applies text DEFAULT 'Everyone'::text NOT NULL,
+    moved_from date
+);
+
+ALTER TABLE ONLY public.holidays FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -478,6 +699,27 @@ ALTER TABLE ONLY public.roles FORCE ROW LEVEL SECURITY;
 
 
 --
+-- Name: schedule_exceptions; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.schedule_exceptions (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    tenant_id uuid NOT NULL,
+    location_id uuid NOT NULL,
+    start_date date NOT NULL,
+    end_date date,
+    type public.schedule_exception_type NOT NULL,
+    periods jsonb,
+    reason text,
+    source public.schedule_exception_source DEFAULT 'MANUAL'::public.schedule_exception_source NOT NULL,
+    holiday_id text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+ALTER TABLE ONLY public.schedule_exceptions FORCE ROW LEVEL SECURITY;
+
+
+--
 -- Name: schema_migrations; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -612,6 +854,22 @@ ALTER TABLE ONLY public.user_credentials FORCE ROW LEVEL SECURITY;
 
 
 --
+-- Name: appointment_history appointment_history_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.appointment_history
+    ADD CONSTRAINT appointment_history_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: appointments appointments_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.appointments
+    ADD CONSTRAINT appointments_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: audit_log audit_log_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -625,6 +883,30 @@ ALTER TABLE ONLY public.audit_log
 
 ALTER TABLE ONLY public.businesses
     ADD CONSTRAINT businesses_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: customers customers_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.customers
+    ADD CONSTRAINT customers_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: emp_timings emp_timings_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.emp_timings
+    ADD CONSTRAINT emp_timings_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: emp_timings emp_timings_tenant_id_employee_id_service_id_variant_id_loc_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.emp_timings
+    ADD CONSTRAINT emp_timings_tenant_id_employee_id_service_id_variant_id_loc_key UNIQUE NULLS NOT DISTINCT (tenant_id, employee_id, service_id, variant_id, location_id);
 
 
 --
@@ -649,6 +931,38 @@ ALTER TABLE ONLY public.employee_skills
 
 ALTER TABLE ONLY public.employees
     ADD CONSTRAINT employees_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: holds holds_key_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.holds
+    ADD CONSTRAINT holds_key_key UNIQUE (key);
+
+
+--
+-- Name: holds holds_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.holds
+    ADD CONSTRAINT holds_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: holiday_calendar_years holiday_calendar_years_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.holiday_calendar_years
+    ADD CONSTRAINT holiday_calendar_years_pkey PRIMARY KEY (country_code, year);
+
+
+--
+-- Name: holidays holidays_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.holidays
+    ADD CONSTRAINT holidays_pkey PRIMARY KEY (id);
 
 
 --
@@ -772,6 +1086,14 @@ ALTER TABLE ONLY public.roles
 
 
 --
+-- Name: schedule_exceptions schedule_exceptions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.schedule_exceptions
+    ADD CONSTRAINT schedule_exceptions_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: schema_migrations schema_migrations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -844,10 +1166,59 @@ ALTER TABLE ONLY public.user_credentials
 
 
 --
+-- Name: appointment_history_tenant; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX appointment_history_tenant ON public.appointment_history USING btree (tenant_id, appointment_id, at);
+
+
+--
+-- Name: appointments_day; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX appointments_day ON public.appointments USING btree (tenant_id, location_id, date);
+
+
+--
+-- Name: appointments_emp; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX appointments_emp ON public.appointments USING btree (tenant_id, employee_id, date);
+
+
+--
+-- Name: appointments_idempotency; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX appointments_idempotency ON public.appointments USING btree (tenant_id, idempotency_key) WHERE (idempotency_key IS NOT NULL);
+
+
+--
 -- Name: audit_log_tenant; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX audit_log_tenant ON public.audit_log USING btree (tenant_id, ts DESC);
+
+
+--
+-- Name: customers_contact; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX customers_contact ON public.customers USING btree (tenant_id, phone, email);
+
+
+--
+-- Name: customers_tenant; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX customers_tenant ON public.customers USING btree (tenant_id, name);
+
+
+--
+-- Name: emp_timings_tenant; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX emp_timings_tenant ON public.emp_timings USING btree (tenant_id, status);
 
 
 --
@@ -876,6 +1247,20 @@ CREATE UNIQUE INDEX employees_email_global ON public.employees USING btree (lowe
 --
 
 CREATE INDEX employees_tenant ON public.employees USING btree (tenant_id, status);
+
+
+--
+-- Name: holds_slot; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX holds_slot ON public.holds USING btree (tenant_id, location_id, date, start_min);
+
+
+--
+-- Name: holidays_country; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX holidays_country ON public.holidays USING btree (country_code, year, date);
 
 
 --
@@ -956,6 +1341,13 @@ CREATE INDEX refresh_tokens_family ON public.refresh_tokens USING btree (tenant_
 
 
 --
+-- Name: schedule_exceptions_tenant; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX schedule_exceptions_tenant ON public.schedule_exceptions USING btree (tenant_id, location_id, start_date);
+
+
+--
 -- Name: service_categories_tenant; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -998,6 +1390,70 @@ CREATE INDEX stock_movements_tenant ON public.stock_movements USING btree (tenan
 
 
 --
+-- Name: appointment_history appointment_history_appointment_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.appointment_history
+    ADD CONSTRAINT appointment_history_appointment_id_fkey FOREIGN KEY (appointment_id) REFERENCES public.appointments(id) ON DELETE CASCADE;
+
+
+--
+-- Name: appointment_history appointment_history_tenant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.appointment_history
+    ADD CONSTRAINT appointment_history_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.businesses(id);
+
+
+--
+-- Name: appointments appointments_customer_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.appointments
+    ADD CONSTRAINT appointments_customer_id_fkey FOREIGN KEY (customer_id) REFERENCES public.customers(id);
+
+
+--
+-- Name: appointments appointments_employee_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.appointments
+    ADD CONSTRAINT appointments_employee_id_fkey FOREIGN KEY (employee_id) REFERENCES public.employees(id);
+
+
+--
+-- Name: appointments appointments_location_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.appointments
+    ADD CONSTRAINT appointments_location_id_fkey FOREIGN KEY (location_id) REFERENCES public.locations(id);
+
+
+--
+-- Name: appointments appointments_service_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.appointments
+    ADD CONSTRAINT appointments_service_id_fkey FOREIGN KEY (service_id) REFERENCES public.services(id);
+
+
+--
+-- Name: appointments appointments_tenant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.appointments
+    ADD CONSTRAINT appointments_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.businesses(id);
+
+
+--
+-- Name: appointments appointments_variant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.appointments
+    ADD CONSTRAINT appointments_variant_id_fkey FOREIGN KEY (variant_id) REFERENCES public.service_variants(id);
+
+
+--
 -- Name: audit_log audit_log_actor_employee_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1019,6 +1475,54 @@ ALTER TABLE ONLY public.audit_log
 
 ALTER TABLE ONLY public.businesses
     ADD CONSTRAINT businesses_owner_fk FOREIGN KEY (owner_employee_id) REFERENCES public.employees(id);
+
+
+--
+-- Name: customers customers_tenant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.customers
+    ADD CONSTRAINT customers_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.businesses(id);
+
+
+--
+-- Name: emp_timings emp_timings_employee_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.emp_timings
+    ADD CONSTRAINT emp_timings_employee_id_fkey FOREIGN KEY (employee_id) REFERENCES public.employees(id);
+
+
+--
+-- Name: emp_timings emp_timings_location_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.emp_timings
+    ADD CONSTRAINT emp_timings_location_id_fkey FOREIGN KEY (location_id) REFERENCES public.locations(id);
+
+
+--
+-- Name: emp_timings emp_timings_service_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.emp_timings
+    ADD CONSTRAINT emp_timings_service_id_fkey FOREIGN KEY (service_id) REFERENCES public.services(id);
+
+
+--
+-- Name: emp_timings emp_timings_tenant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.emp_timings
+    ADD CONSTRAINT emp_timings_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.businesses(id);
+
+
+--
+-- Name: emp_timings emp_timings_variant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.emp_timings
+    ADD CONSTRAINT emp_timings_variant_id_fkey FOREIGN KEY (variant_id) REFERENCES public.service_variants(id);
 
 
 --
@@ -1083,6 +1587,46 @@ ALTER TABLE ONLY public.employees
 
 ALTER TABLE ONLY public.employees
     ADD CONSTRAINT employees_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.businesses(id);
+
+
+--
+-- Name: holds holds_employee_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.holds
+    ADD CONSTRAINT holds_employee_id_fkey FOREIGN KEY (employee_id) REFERENCES public.employees(id);
+
+
+--
+-- Name: holds holds_location_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.holds
+    ADD CONSTRAINT holds_location_id_fkey FOREIGN KEY (location_id) REFERENCES public.locations(id);
+
+
+--
+-- Name: holds holds_service_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.holds
+    ADD CONSTRAINT holds_service_id_fkey FOREIGN KEY (service_id) REFERENCES public.services(id);
+
+
+--
+-- Name: holds holds_tenant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.holds
+    ADD CONSTRAINT holds_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.businesses(id);
+
+
+--
+-- Name: holidays holidays_country_code_year_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.holidays
+    ADD CONSTRAINT holidays_country_code_year_fkey FOREIGN KEY (country_code, year) REFERENCES public.holiday_calendar_years(country_code, year);
 
 
 --
@@ -1310,6 +1854,22 @@ ALTER TABLE ONLY public.roles
 
 
 --
+-- Name: schedule_exceptions schedule_exceptions_location_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.schedule_exceptions
+    ADD CONSTRAINT schedule_exceptions_location_id_fkey FOREIGN KEY (location_id) REFERENCES public.locations(id);
+
+
+--
+-- Name: schedule_exceptions schedule_exceptions_tenant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.schedule_exceptions
+    ADD CONSTRAINT schedule_exceptions_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.businesses(id);
+
+
+--
 -- Name: service_categories service_categories_parent_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1438,6 +1998,18 @@ ALTER TABLE ONLY public.user_credentials
 
 
 --
+-- Name: appointment_history; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.appointment_history ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: appointments; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.appointments ENABLE ROW LEVEL SECURITY;
+
+--
 -- Name: audit_log; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -1464,6 +2036,18 @@ CREATE POLICY auth_login_lookup ON public.user_credentials FOR SELECT USING ((cu
 ALTER TABLE public.businesses ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: customers; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.customers ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: emp_timings; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.emp_timings ENABLE ROW LEVEL SECURITY;
+
+--
 -- Name: employee_locations; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -1480,6 +2064,24 @@ ALTER TABLE public.employee_skills ENABLE ROW LEVEL SECURITY;
 --
 
 ALTER TABLE public.employees ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: holds; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.holds ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: holiday_calendar_years; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.holiday_calendar_years ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: holidays; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.holidays ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: legal_entities; Type: ROW SECURITY; Schema: public; Owner: -
@@ -1542,6 +2144,20 @@ ALTER TABLE public.product_categories ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.products ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: holiday_calendar_years read_all; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY read_all ON public.holiday_calendar_years FOR SELECT USING (true);
+
+
+--
+-- Name: holidays read_all; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY read_all ON public.holidays FOR SELECT USING (true);
+
+
+--
 -- Name: refresh_tokens; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -1552,6 +2168,12 @@ ALTER TABLE public.refresh_tokens ENABLE ROW LEVEL SECURITY;
 --
 
 ALTER TABLE public.roles ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: schedule_exceptions; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.schedule_exceptions ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: service_categories; Type: ROW SECURITY; Schema: public; Owner: -
@@ -1604,10 +2226,38 @@ CREATE POLICY tenant_append ON public.stock_movements FOR INSERT WITH CHECK ((te
 
 
 --
+-- Name: appointment_history tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY tenant_isolation ON public.appointment_history USING ((tenant_id = app.current_tenant())) WITH CHECK ((tenant_id = app.current_tenant()));
+
+
+--
+-- Name: appointments tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY tenant_isolation ON public.appointments USING ((tenant_id = app.current_tenant())) WITH CHECK ((tenant_id = app.current_tenant()));
+
+
+--
 -- Name: businesses tenant_isolation; Type: POLICY; Schema: public; Owner: -
 --
 
 CREATE POLICY tenant_isolation ON public.businesses USING ((id = app.current_tenant())) WITH CHECK ((id = app.current_tenant()));
+
+
+--
+-- Name: customers tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY tenant_isolation ON public.customers USING ((tenant_id = app.current_tenant())) WITH CHECK ((tenant_id = app.current_tenant()));
+
+
+--
+-- Name: emp_timings tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY tenant_isolation ON public.emp_timings USING ((tenant_id = app.current_tenant())) WITH CHECK ((tenant_id = app.current_tenant()));
 
 
 --
@@ -1629,6 +2279,13 @@ CREATE POLICY tenant_isolation ON public.employee_skills USING ((tenant_id = app
 --
 
 CREATE POLICY tenant_isolation ON public.employees USING ((tenant_id = app.current_tenant())) WITH CHECK ((tenant_id = app.current_tenant()));
+
+
+--
+-- Name: holds tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY tenant_isolation ON public.holds USING ((tenant_id = app.current_tenant())) WITH CHECK ((tenant_id = app.current_tenant()));
 
 
 --
@@ -1706,6 +2363,13 @@ CREATE POLICY tenant_isolation ON public.products USING ((tenant_id = app.curren
 --
 
 CREATE POLICY tenant_isolation ON public.roles USING ((tenant_id = app.current_tenant())) WITH CHECK ((tenant_id = app.current_tenant()));
+
+
+--
+-- Name: schedule_exceptions tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY tenant_isolation ON public.schedule_exceptions USING ((tenant_id = app.current_tenant())) WITH CHECK ((tenant_id = app.current_tenant()));
 
 
 --
@@ -1793,4 +2457,7 @@ INSERT INTO public.schema_migrations (version) VALUES
     ('20260824120002'),
     ('20260824120003'),
     ('20260824150004'),
-    ('20260824150005');
+    ('20260824150005'),
+    ('20260824180006'),
+    ('20260824180007'),
+    ('20260824180008');

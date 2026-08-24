@@ -6,6 +6,7 @@ import type {
 } from '@velnes/contracts';
 import { LOC_EDGES } from '@velnes/contracts';
 import { sql } from 'kysely';
+import { localIso } from '../scheduling/scheduling.service.js';
 import type { Trx } from '../../db/index.js';
 import type { Locations } from '../../db/types.js';
 import type { Selectable } from 'kysely';
@@ -34,7 +35,7 @@ function toContract(l: LocationRow): Location {
     invPrefix: l.invPrefix,
     online: l.online,
     cancelHours: l.cancelHours,
-    opened: l.opened ? l.opened.toISOString().slice(0, 10) : null,
+    opened: l.opened ? localIso(l.opened) : null,
     lifecycle: l.lifecycle,
   };
 }

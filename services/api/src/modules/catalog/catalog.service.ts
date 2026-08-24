@@ -60,15 +60,17 @@ async function masterService(trx: Trx, serviceId: string): Promise<MasterService
 export async function svcAt(
   trx: Trx,
   serviceId: string,
-  locationId: string,
+  locationId: string | null,
 ): Promise<ResolvedServiceConfig> {
   const s = await masterService(trx, serviceId);
-  const c = await trx
-    .selectFrom('locationCatalogServices')
-    .selectAll()
-    .where('serviceId', '=', serviceId)
-    .where('locationId', '=', locationId)
-    .executeTakeFirst();
+  const c = locationId
+    ? await trx
+        .selectFrom('locationCatalogServices')
+        .selectAll()
+        .where('serviceId', '=', serviceId)
+        .where('locationId', '=', locationId)
+        .executeTakeFirst()
+    : undefined;
   if (c)
     return {
       active: c.active,
@@ -128,7 +130,7 @@ export async function svcVariants(trx: Trx, serviceId: string, locationId: strin
 export async function svcChoice(
   trx: Trx,
   serviceId: string,
-  locationId: string,
+  locationId: string | null,
   variantId: string | null,
 ): Promise<ServiceChoice> {
   const cfg = await svcAt(trx, serviceId, locationId);
@@ -217,8 +219,9 @@ async function svcTiming(trx: Trx, serviceId: string, locationId: string) {
 
 /**
  * svcLine — one quoted line: variant choice + modifiers + prep/reset.
- * The duration basis is 'catalog' until the timing engine (Phase 3)
- * plugs effTreatment into this exact spot.
+ * The treatment minutes come from effTreatment (this employee's pace
+ * or approved time; catalog when neither applies), the price from the
+ * variant choice — pace never changes what the customer pays.
  */
 export async function svcLine(
   trx: Trx,
@@ -230,10 +233,18 @@ export async function svcLine(
     employeeId?: string | null | undefined;
   },
 ): Promise<LineQuoteResponse> {
+  const { effTreatment } = await import('../timing/timing.service.js');
   const base = await svcChoice(trx, req.serviceId, req.locationId, req.variantId ?? null);
   const groups = await modifierGroups(trx, req.serviceId);
   const t = modTotals(groups, req.modifierOptionIds);
-  const treatmentMin = Math.max(5, base.durationMin + t.min);
+  const eff = await effTreatment(
+    trx,
+    req.serviceId,
+    req.locationId,
+    req.variantId ?? null,
+    req.employeeId ?? null,
+  );
+  const treatmentMin = Math.max(5, eff.min + t.min);
   const w = await svcTiming(trx, req.serviceId, req.locationId);
   return {
     vid: base.vid,
@@ -243,7 +254,7 @@ export async function svcLine(
     prepMin: w.prep,
     resetMin: w.reset,
     operationalMin: w.prep + treatmentMin + w.reset,
-    basis: 'catalog',
+    basis: eff.basis,
     modNames: t.names,
     missingRequired: modMissing(groups, req.modifierOptionIds),
   };

@@ -9,10 +9,13 @@ import {
 } from 'fastify-type-provider-zod';
 import { authRoutes } from './modules/auth/auth.routes.js';
 import { auditRoutes } from './modules/audit/audit.routes.js';
+import { bookingRoutes } from './modules/booking/booking.routes.js';
 import { catalogRoutes } from './modules/catalog/catalog.routes.js';
 import { healthRoutes } from './modules/health/health.routes.js';
 import { locationsRoutes } from './modules/locations/locations.routes.js';
+import { schedulingRoutes } from './modules/scheduling/scheduling.routes.js';
 import { stockRoutes } from './modules/stock/stock.routes.js';
+import { timingRoutes } from './modules/timing/timing.routes.js';
 import { authPlugin } from './plugins/auth.js';
 
 export async function buildServer() {
@@ -37,6 +40,9 @@ export async function buildServer() {
       auditRoutes(api);
       catalogRoutes(api);
       stockRoutes(api);
+      schedulingRoutes(api);
+      bookingRoutes(api);
+      timingRoutes(api);
     },
     { prefix: API_PREFIX },
   );

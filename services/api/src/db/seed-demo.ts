@@ -54,6 +54,15 @@ export const demo = {
   o1: '70000000-0000-4000-8000-000000000011',
   o2: '70000000-0000-4000-8000-000000000012',
   o3: '70000000-0000-4000-8000-000000000013',
+  c1: '80000000-0000-4000-8000-000000000001',
+  c2: '80000000-0000-4000-8000-000000000002',
+  c3: '80000000-0000-4000-8000-000000000003',
+  c4: '80000000-0000-4000-8000-000000000004',
+  c5: '80000000-0000-4000-8000-000000000005',
+  c6: '80000000-0000-4000-8000-000000000006',
+  et1: '90000000-0000-4000-8000-000000000001',
+  et2: '90000000-0000-4000-8000-000000000002',
+  et3: '90000000-0000-4000-8000-000000000003',
 } as const;
 
 const vid = (svc: number, n: number) =>
@@ -131,14 +140,15 @@ const financePerms = mkPerms({
   'inventory.view': 'business',
 });
 
-const stdHours = (satEnd = '15:00') => ({
-  0: null,
-  1: [['09:00', '20:00']],
-  2: [['09:00', '20:00']],
-  3: [['09:00', '20:00']],
-  4: [['09:00', '20:00']],
-  5: [['09:00', '20:00']],
-  6: [['09:00', satEnd]],
+/** Weekly hours, prototype shape: 0=Monday … 6=Sunday(null=off). */
+const stdHours = (satEnd = '15:00'): Record<string, [string, string][] | null> => ({
+  0: [['09:00', '19:00']],
+  1: [['09:00', '19:00']],
+  2: [['09:00', '19:00']],
+  3: [['09:00', '19:00']],
+  4: [['09:00', '19:00']],
+  5: [['09:00', satEnd]],
+  6: null,
 });
 
 const payments = { cash: true, card: true, online: true, rounding: false, tip: true };
@@ -151,6 +161,8 @@ export async function seedDemo(adminUrl: string) {
     await q('BEGIN');
     await q(`TRUNCATE audit_log, refresh_tokens, user_credentials, payment_accounts,
       legal_entity_locations, legal_entities, employee_locations,
+      emp_timings, holds, appointment_history, appointments, customers,
+      schedule_exceptions, holidays, holiday_calendar_years,
       stock_movements, location_catalog_products, products, product_categories,
       employee_skills, location_catalog_variants, location_catalog_services,
       service_modifier_options, service_modifier_groups, service_variants,
@@ -181,6 +193,15 @@ export async function seedDemo(adminUrl: string) {
         [id, demo.business, name, std, locked, description, JSON.stringify(perms)],
       );
 
+    // Hours per the prototype: Ana is off Mondays, Elena off Tuesdays
+    // and works to 17:00.
+    const empHours: Record<string, Record<string, [string, string][] | null>> = {
+      [demo.empMaria]: stdHours(),
+      [demo.empAna]: { ...stdHours(), 0: null },
+      [demo.empElena]: { ...stdHours('17:00'), 1: null },
+      [demo.empNikola]: stdHours(),
+      [demo.empBojan]: stdHours(),
+    };
     const emps: [string, string, string, string, string, string, string, boolean, string, boolean, string][] = [
       [demo.empMaria, 'Maria Petrovska', 'Physiotherapist', 'maria@velnes.mk', '+389 70 111 222', 'owner', demo.roleOwner, true, 'active', true, 'olive'],
       [demo.empAna, 'Ana Dimitrova', 'Rehab coach', 'ana@velnes.mk', '+389 70 222 333', 'staff', demo.roleEmployee, true, 'active', false, 'clay'],
@@ -190,9 +211,9 @@ export async function seedDemo(adminUrl: string) {
     ];
     for (const [id, name, title, email, phone, access, roleId, bookable, status, twofa, color] of emps)
       await q(
-        `INSERT INTO employees (id, tenant_id, name, role_title, email, phone, access, role_id, bookable, status, twofa_enabled, color)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
-        [id, demo.business, name, title, email, phone, access, roleId, bookable, status, twofa, color],
+        `INSERT INTO employees (id, tenant_id, name, role_title, email, phone, access, role_id, bookable, status, twofa_enabled, color, hours)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+        [id, demo.business, name, title, email, phone, access, roleId, bookable, status, twofa, color, JSON.stringify(empHours[id])],
       );
     await q(`UPDATE businesses SET owner_employee_id=$1 WHERE id=$2`, [
       demo.empMaria,
@@ -418,6 +439,112 @@ export async function seedDemo(adminUrl: string) {
           [stock, demo.locCentar, id],
         );
       }
+
+    // ── Customers (minimal profile; Phase 9 adds intelligence) ────
+    const custRows: [string, string, string, string, string, string, number, number, number, number, boolean, number, string | null][] = [
+      [demo.c1, 'Katerina Stojanovska', 'katerina.s@example.com', '+389 70 221 884', 'Regulars', '2022-03-14', 38, 98500, 320, 2700, false, 0, 'Prefers Maria. Recovering from a hamstring tear, left leg.'],
+      [demo.c2, 'Ivana Nikolikj', 'ivana.n@example.com', '+389 71 448 209', 'Regulars', '2023-01-08', 21, 53650, 140, 0, false, 0, null],
+      [demo.c3, 'Bojan Ilievski', 'bojan.i@example.com', '+389 75 903 117', 'New', '2025-11-02', 2, 4200, 10, 0, true, 3, null],
+      [demo.c4, 'Marija Angelovska', 'marija.a@example.com', '+389 78 552 640', 'VIP', '2020-06-21', 96, 318600, 980, 7200, false, 0, 'Always books the last slot of the day.'],
+      [demo.c5, 'Stefan Georgiev', 'stefan.g@example.com', '+389 70 118 776', 'Regulars', '2024-04-30', 12, 23300, 60, 0, false, 0, null],
+      [demo.c6, 'Elena Todorova', 'elena.t@example.com', '+389 72 664 301', 'New', '2026-01-19', 1, 1700, 5, 0, false, 0, null],
+    ];
+    for (const [id, name, email, phone, grp, since, visits, spend, points, prepaid, bl, ns, note] of custRows)
+      await q(
+        `INSERT INTO customers (id, tenant_id, name, email, phone, cust_group, since, visits, spend, points, prepaid, blacklisted, no_shows, note)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
+        [id, demo.business, name, email, phone, grp, since, visits, spend, points, prepaid, bl, ns, note],
+      );
+
+    // ── Holiday calendar (MK, from the prototype, verbatim) ───────
+    await q(
+      `INSERT INTO holiday_calendar_years (country_code, country_name, year, verified, source) VALUES
+       ('MK','North Macedonia',2026,true,'Official 2026 calendar'),
+       ('MK','North Macedonia',2027,false,'Provisional — Bajram not yet confirmed')`,
+    );
+    const mk: [string, string, string, string, string | null][] = [
+      ['2026-01-01', "New Year's Day", 'PUBLIC_HOLIDAY', 'Everyone', null],
+      ['2026-01-07', 'Orthodox Christmas', 'RELIGIOUS', 'Everyone', null],
+      ['2026-03-20', 'Ramazan Bajram (Eid al-Fitr)', 'RELIGIOUS', 'Everyone', null],
+      ['2026-04-10', 'Good Friday', 'RELIGIOUS', 'Orthodox Christians', null],
+      ['2026-04-13', 'Orthodox Easter Monday', 'RELIGIOUS', 'Everyone', null],
+      ['2026-05-01', 'Labour Day', 'PUBLIC_HOLIDAY', 'Everyone', null],
+      ['2026-05-25', 'Saints Cyril and Methodius Day', 'PUBLIC_HOLIDAY', 'Everyone', '2026-05-24'],
+      ['2026-08-03', 'Republic Day', 'PUBLIC_HOLIDAY', 'Everyone', '2026-08-02'],
+      ['2026-09-08', 'Independence Day', 'PUBLIC_HOLIDAY', 'Everyone', null],
+      ['2026-10-12', 'Revolution Day', 'PUBLIC_HOLIDAY', 'Everyone', '2026-10-11'],
+      ['2026-10-23', 'Day of the Macedonian Revolutionary Struggle', 'PUBLIC_HOLIDAY', 'Everyone', null],
+      ['2026-12-08', 'Saint Clement of Ohrid Day', 'RELIGIOUS', 'Everyone', null],
+      ['2027-01-01', "New Year's Day", 'PUBLIC_HOLIDAY', 'Everyone', null],
+      ['2027-01-07', 'Orthodox Christmas', 'RELIGIOUS', 'Everyone', null],
+      ['2027-04-30', 'Good Friday', 'RELIGIOUS', 'Orthodox Christians', null],
+      ['2027-05-03', 'Orthodox Easter Monday', 'RELIGIOUS', 'Everyone', null],
+      ['2027-05-24', 'Saints Cyril and Methodius Day', 'PUBLIC_HOLIDAY', 'Everyone', null],
+      ['2027-08-02', 'Republic Day', 'PUBLIC_HOLIDAY', 'Everyone', null],
+      ['2027-09-08', 'Independence Day', 'PUBLIC_HOLIDAY', 'Everyone', null],
+      ['2027-10-11', 'Revolution Day', 'PUBLIC_HOLIDAY', 'Everyone', null],
+      ['2027-10-25', 'Day of the Macedonian Revolutionary Struggle', 'PUBLIC_HOLIDAY', 'Everyone', '2027-10-23'],
+      ['2027-12-08', 'Saint Clement of Ohrid Day', 'RELIGIOUS', 'Everyone', null],
+    ];
+    for (const [date, name, type, applies, moved] of mk)
+      await q(
+        `INSERT INTO holidays (id, country_code, year, date, name, type, applies, moved_from)
+         VALUES ($1,'MK',$2,$3,$4,$5,$6,$7)`,
+        [`mk-${date}`, Number(date.slice(0, 4)), date, name, type, applies, moved],
+      );
+
+    // ── Demo appointments this week (weekday slots that satisfy the
+    //    booking gate: Wednesday + Thursday, morning) ───────────────
+    const now = new Date();
+    const monday = new Date(now);
+    monday.setDate(now.getDate() - ((now.getDay() + 6) % 7));
+    const isoAt = (offset: number) => {
+      const d = new Date(monday);
+      d.setDate(monday.getDate() + offset);
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    };
+    const appts: [string, string, number, number, string, string, string, string, number][] = [
+      // [date, locId, startMin, durMin, serviceId, empId, custId, title, price]
+      [isoAt(2), demo.locCentar, 540, 60, demo.s4, demo.empMaria, demo.c1, 'Katerina Stojanovska', 1500],
+      [isoAt(2), demo.locCentar, 660, 45, demo.s1, demo.empMaria, demo.c2, 'Ivana Nikolikj', 1800],
+      [isoAt(3), demo.locCentar, 600, 50, demo.s6, demo.empElena, demo.c5, 'Stefan Georgiev', 2200],
+    ];
+    for (const [date, locId, start, dur, sid, emp, cust, title, price] of appts) {
+      const r = await q(
+        `INSERT INTO appointments (tenant_id, location_id, date, start_min, duration_min, prep_min, reset_min, kind, status, title, service_id, employee_id, customer_id, price, quoted, source)
+         VALUES ($1,$2,$3,$4,$5,0,10,'appointment','confirmed',$6,$7,$8,$9,$10,$11,'staff') RETURNING id`,
+        [demo.business, locId, date, start, dur, title, sid, emp, cust, price,
+          JSON.stringify({ treatmentMin: dur, prepMin: 0, resetMin: 10, basis: 'catalog' })],
+      );
+      await q(
+        `INSERT INTO appointment_history (tenant_id, appointment_id, what, by_name, source)
+         VALUES ($1,$2,'Created','Nikola Trajkov','staff')`,
+        [demo.business, r.rows[0].id],
+      );
+    }
+
+    // ── Timing records — the prototype's et1/et2/et3 showcase ─────
+    const today = new Date();
+    const iso = (d: Date) => d.toISOString().slice(0, 10);
+    const daysAgo = (n: number) => {
+      const d = new Date(today);
+      d.setDate(d.getDate() - n);
+      return iso(d);
+    };
+    const timings: [string, string, string, number, number, string, number, string, number | null, string | null, string | null][] = [
+      // [id, empId, sid, observedN, median, pace, recommended, status, approvedMin, approvedBy, approvedAt]
+      [demo.et1, demo.empMaria, demo.s1, 18, 51, '1.13', 50, 'suggested', null, null, null],
+      [demo.et2, demo.empElena, demo.s8, 22, 40, '0.89', 40, 'approved', 40, 'Elena Petrova', daysAgo(30)],
+      [demo.et3, demo.empAna, demo.s4, 26, 49, '0.82', 50, 'suggested', 60, 'Elena Petrova', daysAgo(186)],
+    ];
+    for (const [id, emp, sid, n, med, pace, rec, status, appr, apprBy, apprAt] of timings)
+      await q(
+        `INSERT INTO emp_timings (id, tenant_id, employee_id, service_id, variant_id, location_id,
+           observed_n, observed_median_min, pace_factor, window_from, window_to, computed_at,
+           recommended_min, status, approved_min, approved_by, approved_at, source)
+         VALUES ($1,$2,$3,$4,NULL,NULL,$5,$6,$7,$8,$9,$9,$10,$11,$12,$13,$14,'observed')`,
+        [id, demo.business, emp, sid, n, med, pace, daysAgo(96), iso(today), rec, status, appr, apprBy, apprAt],
+      );
 
     const hash = await argon2.hash(DEMO_PASSWORD);
     for (const [id] of emps)

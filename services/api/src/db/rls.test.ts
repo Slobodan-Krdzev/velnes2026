@@ -60,6 +60,12 @@ describe('row-level security', () => {
       'location_catalog_products',
       'stock_movements',
       'employee_skills',
+      'appointments',
+      'appointment_history',
+      'customers',
+      'emp_timings',
+      'schedule_exceptions',
+      'holds',
     ]) {
       const r = await api.query(`SELECT count(*)::int AS n FROM ${table}`);
       expect(r.rows[0].n, table).toBe(0);

@@ -188,7 +188,7 @@ export const LineQuoteResponseSchema = z.object({
   prepMin: z.number().int(),
   resetMin: z.number().int(),
   operationalMin: z.number().int(),
-  basis: z.enum(['catalog', 'approved', 'pace']),
+  basis: z.enum(['catalog', 'employee-approved', 'employee-pace']),
   modNames: z.array(z.string()),
   missingRequired: z.array(z.string()),
 });

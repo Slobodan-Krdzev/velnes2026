@@ -7,3 +7,5 @@ export * from './audit.js';
 export * from './catalog.js';
 export * from './pricing.js';
 export * from './stock.js';
+export * from './scheduling.js';
+export * from './timing.js';

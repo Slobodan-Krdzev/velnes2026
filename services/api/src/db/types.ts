@@ -5,6 +5,10 @@
 
 import type { ColumnType } from "kysely";
 
+export type AppointmentKind = "absence" | "appointment" | "blocked" | "chore" | "note";
+
+export type AppointmentStatus = "booked" | "cancelled" | "confirmed" | "no_show";
+
 export type EmployeeAccess = "desk" | "manager" | "owner" | "staff";
 
 export type EmployeeStatus = "active" | "invited";
@@ -33,13 +37,63 @@ export type LocationLifecycle = "ACTIVE" | "APPROVED" | "CHANGES_REQUIRED" | "CL
 
 export type ModifierGroupType = "multi" | "single";
 
+export type Numeric = ColumnType<string, number | string, number | string>;
+
 export type PaymentAccountStatus = "active" | "incomplete";
+
+export type ScheduleExceptionSource = "MANUAL" | "PUBLIC_HOLIDAY";
+
+export type ScheduleExceptionType = "CLOSED" | "CUSTOM_HOURS";
 
 export type ServiceStatus = "active" | "draft";
 
 export type StockMovementKind = "adjustment" | "delivery" | "own_use" | "sale" | "transfer_in" | "transfer_out";
 
 export type Timestamp = ColumnType<Date, Date | string, Date | string>;
+
+export type TimingStatus = "approved" | "dismissed" | "none" | "suggested";
+
+export interface AppointmentHistory {
+  appointmentId: string;
+  at: Generated<Timestamp>;
+  byName: Generated<string>;
+  id: Generated<string>;
+  source: Generated<string>;
+  tenantId: string;
+  what: string;
+}
+
+export interface Appointments {
+  anyEmp: Generated<boolean>;
+  createdAt: Generated<Timestamp>;
+  customerId: string | null;
+  date: Timestamp;
+  deposit: Generated<number>;
+  durationMin: number;
+  employeeId: string | null;
+  id: Generated<string>;
+  idempotencyKey: string | null;
+  kind: Generated<AppointmentKind>;
+  locationId: string;
+  modifierNames: Generated<string[]>;
+  modifierOptionIds: Generated<string[]>;
+  paid: Generated<string>;
+  pmoId: string | null;
+  poId: string | null;
+  prepMin: Generated<number>;
+  price: Generated<number>;
+  quoted: Json | null;
+  resetMin: Generated<number>;
+  serviceId: string | null;
+  source: Generated<string>;
+  startMin: number;
+  status: Generated<AppointmentStatus>;
+  tenantId: string;
+  title: Generated<string>;
+  variantId: string | null;
+  variantLabel: string | null;
+  widgetId: string | null;
+}
 
 export interface AuditLog {
   action: string;
@@ -70,6 +124,24 @@ export interface Businesses {
   vat: string | null;
 }
 
+export interface Customers {
+  blacklisted: Generated<boolean>;
+  createdAt: Generated<Timestamp>;
+  custGroup: Generated<string>;
+  email: string | null;
+  id: Generated<string>;
+  name: string;
+  noShows: Generated<number>;
+  note: string | null;
+  phone: string | null;
+  points: Generated<number>;
+  prepaid: Generated<number>;
+  since: Generated<Timestamp>;
+  spend: Generated<number>;
+  tenantId: string;
+  visits: Generated<number>;
+}
+
 export interface EmployeeLocations {
   employeeId: string;
   locationId: string;
@@ -82,6 +154,7 @@ export interface Employees {
   color: string | null;
   createdAt: Generated<Timestamp>;
   email: string;
+  hours: Json | null;
   id: Generated<string>;
   name: string;
   phone: string | null;
@@ -96,6 +169,60 @@ export interface EmployeeSkills {
   employeeId: string;
   serviceId: string;
   tenantId: string;
+}
+
+export interface EmpTimings {
+  approvedAt: Timestamp | null;
+  approvedBy: string | null;
+  approvedMin: number | null;
+  computedAt: Timestamp | null;
+  dismissedAtN: Generated<number>;
+  employeeId: string;
+  id: Generated<string>;
+  locationId: string | null;
+  observedMedianMin: number | null;
+  observedN: Generated<number>;
+  paceFactor: Numeric | null;
+  recommendedMin: number | null;
+  serviceId: string;
+  source: Generated<string>;
+  status: Generated<TimingStatus>;
+  tenantId: string;
+  variantId: string | null;
+  windowFrom: Timestamp | null;
+  windowTo: Timestamp | null;
+}
+
+export interface Holds {
+  createdAt: Generated<Timestamp>;
+  date: Timestamp;
+  employeeId: string | null;
+  id: Generated<string>;
+  key: string;
+  locationId: string;
+  serviceId: string | null;
+  startMin: number;
+  tenantId: string;
+  until: Timestamp;
+}
+
+export interface HolidayCalendarYears {
+  countryCode: string;
+  countryName: string;
+  source: Generated<string>;
+  verified: Generated<boolean>;
+  year: number;
+}
+
+export interface Holidays {
+  applies: Generated<string>;
+  countryCode: string;
+  date: Timestamp;
+  id: string;
+  movedFrom: Timestamp | null;
+  name: string;
+  type: string;
+  year: number;
 }
 
 export interface LegalEntities {
@@ -244,6 +371,20 @@ export interface Roles {
   tenantId: string;
 }
 
+export interface ScheduleExceptions {
+  createdAt: Generated<Timestamp>;
+  endDate: Timestamp | null;
+  holidayId: string | null;
+  id: Generated<string>;
+  locationId: string;
+  periods: Json | null;
+  reason: string | null;
+  source: Generated<ScheduleExceptionSource>;
+  startDate: Timestamp;
+  tenantId: string;
+  type: ScheduleExceptionType;
+}
+
 export interface SchemaMigrations {
   version: string;
 }
@@ -325,11 +466,18 @@ export interface UserCredentials {
 }
 
 export interface DB {
+  appointmentHistory: AppointmentHistory;
+  appointments: Appointments;
   auditLog: AuditLog;
   businesses: Businesses;
+  customers: Customers;
   employeeLocations: EmployeeLocations;
   employees: Employees;
   employeeSkills: EmployeeSkills;
+  empTimings: EmpTimings;
+  holds: Holds;
+  holidayCalendarYears: HolidayCalendarYears;
+  holidays: Holidays;
   legalEntities: LegalEntities;
   legalEntityLocations: LegalEntityLocations;
   locationCatalogProducts: LocationCatalogProducts;
@@ -342,6 +490,7 @@ export interface DB {
   products: Products;
   refreshTokens: RefreshTokens;
   roles: Roles;
+  scheduleExceptions: ScheduleExceptions;
   schemaMigrations: SchemaMigrations;
   serviceCategories: ServiceCategories;
   serviceModifierGroups: ServiceModifierGroups;
