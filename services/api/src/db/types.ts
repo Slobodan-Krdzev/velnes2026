@@ -31,7 +31,13 @@ export type LegalEntityStatus = "pending" | "verified";
 
 export type LocationLifecycle = "ACTIVE" | "APPROVED" | "CHANGES_REQUIRED" | "CLOSED" | "DRAFT" | "RESUBMITTED" | "SUBMITTED" | "SUSPENDED" | "UNDER_REVIEW";
 
+export type ModifierGroupType = "multi" | "single";
+
 export type PaymentAccountStatus = "active" | "incomplete";
+
+export type ServiceStatus = "active" | "draft";
+
+export type StockMovementKind = "adjustment" | "delivery" | "own_use" | "sale" | "transfer_in" | "transfer_out";
 
 export type Timestamp = ColumnType<Date, Date | string, Date | string>;
 
@@ -86,6 +92,12 @@ export interface Employees {
   twofaEnabled: Generated<boolean>;
 }
 
+export interface EmployeeSkills {
+  employeeId: string;
+  serviceId: string;
+  tenantId: string;
+}
+
 export interface LegalEntities {
   createdAt: Generated<Timestamp>;
   currency: Generated<string>;
@@ -105,6 +117,40 @@ export interface LegalEntityLocations {
   legalEntityId: string;
   locationId: string;
   tenantId: string;
+}
+
+export interface LocationCatalogProducts {
+  active: Generated<boolean>;
+  locationId: string;
+  lowStock: Generated<number>;
+  openedAmount: Generated<number>;
+  pos: Generated<boolean>;
+  price: number;
+  productId: string;
+  stock: Generated<number>;
+  tenantId: string;
+}
+
+export interface LocationCatalogServices {
+  active: Generated<boolean>;
+  durationMin: number;
+  locationId: string;
+  online: Generated<boolean>;
+  pos: Generated<boolean>;
+  prepMin: number | null;
+  price: number;
+  resetMin: number | null;
+  serviceId: string;
+  tenantId: string;
+}
+
+export interface LocationCatalogVariants {
+  active: Generated<boolean>;
+  durationMin: number | null;
+  locationId: string;
+  price: number | null;
+  tenantId: string;
+  variantId: string;
 }
 
 export interface LocationLifecycleLog {
@@ -148,6 +194,32 @@ export interface PaymentAccounts {
   tenantId: string | null;
 }
 
+export interface ProductCategories {
+  id: Generated<string>;
+  name: string;
+  parentId: string | null;
+  sort: Generated<number>;
+  tenantId: string;
+}
+
+export interface Products {
+  active: Generated<boolean>;
+  categoryId: string | null;
+  cost: number | null;
+  createdAt: Generated<Timestamp>;
+  id: Generated<string>;
+  name: string;
+  own: Generated<boolean>;
+  price: Generated<number>;
+  sellerLegalEntityId: string | null;
+  sizeAmount: number | null;
+  sizeUnit: string | null;
+  sku: string | null;
+  tenantId: string;
+  use: string | null;
+  vat: Generated<number>;
+}
+
 export interface RefreshTokens {
   createdAt: Generated<Timestamp>;
   employeeId: string;
@@ -176,6 +248,75 @@ export interface SchemaMigrations {
   version: string;
 }
 
+export interface ServiceCategories {
+  id: Generated<string>;
+  name: string;
+  parentId: string | null;
+  sort: Generated<number>;
+  tenantId: string;
+}
+
+export interface ServiceModifierGroups {
+  id: Generated<string>;
+  name: string;
+  required: Generated<boolean>;
+  serviceId: string;
+  sort: Generated<number>;
+  tenantId: string;
+  type: Generated<ModifierGroupType>;
+}
+
+export interface ServiceModifierOptions {
+  durationMin: Generated<number>;
+  groupId: string;
+  id: Generated<string>;
+  name: string;
+  price: Generated<number>;
+  sort: Generated<number>;
+  tenantId: string;
+}
+
+export interface Services {
+  categoryId: string | null;
+  createdAt: Generated<Timestamp>;
+  durationMin: number;
+  id: Generated<string>;
+  name: string;
+  online: Generated<boolean>;
+  pos: Generated<boolean>;
+  prepMin: number | null;
+  price: number;
+  resetMin: number | null;
+  sort: Generated<number>;
+  status: Generated<ServiceStatus>;
+  tenantId: string;
+  vat: Generated<number>;
+}
+
+export interface ServiceVariants {
+  durationMin: number;
+  id: Generated<string>;
+  label: string;
+  price: number;
+  serviceId: string;
+  sort: Generated<number>;
+  std: Generated<boolean>;
+  tenantId: string;
+}
+
+export interface StockMovements {
+  actorEmployeeId: string | null;
+  at: Generated<Timestamp>;
+  id: Generated<string>;
+  kind: StockMovementKind;
+  locationId: string;
+  note: string | null;
+  productId: string;
+  qty: number;
+  ref: string | null;
+  tenantId: string;
+}
+
 export interface UserCredentials {
   employeeId: string;
   passwordHash: string;
@@ -188,13 +329,25 @@ export interface DB {
   businesses: Businesses;
   employeeLocations: EmployeeLocations;
   employees: Employees;
+  employeeSkills: EmployeeSkills;
   legalEntities: LegalEntities;
   legalEntityLocations: LegalEntityLocations;
+  locationCatalogProducts: LocationCatalogProducts;
+  locationCatalogServices: LocationCatalogServices;
+  locationCatalogVariants: LocationCatalogVariants;
   locationLifecycleLog: LocationLifecycleLog;
   locations: Locations;
   paymentAccounts: PaymentAccounts;
+  productCategories: ProductCategories;
+  products: Products;
   refreshTokens: RefreshTokens;
   roles: Roles;
   schemaMigrations: SchemaMigrations;
+  serviceCategories: ServiceCategories;
+  serviceModifierGroups: ServiceModifierGroups;
+  serviceModifierOptions: ServiceModifierOptions;
+  services: Services;
+  serviceVariants: ServiceVariants;
+  stockMovements: StockMovements;
   userCredentials: UserCredentials;
 }

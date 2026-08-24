@@ -47,7 +47,20 @@ describe('row-level security', () => {
   });
 
   it('yields no tenant rows without tenant context', async () => {
-    for (const table of ['businesses', 'locations', 'employees', 'roles', 'audit_log']) {
+    for (const table of [
+      'businesses',
+      'locations',
+      'employees',
+      'roles',
+      'audit_log',
+      'services',
+      'service_variants',
+      'location_catalog_services',
+      'products',
+      'location_catalog_products',
+      'stock_movements',
+      'employee_skills',
+    ]) {
       const r = await api.query(`SELECT count(*)::int AS n FROM ${table}`);
       expect(r.rows[0].n, table).toBe(0);
     }

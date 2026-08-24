@@ -5,6 +5,7 @@ import type {
   ReadinessResponse,
 } from '@velnes/contracts';
 import { LOC_EDGES } from '@velnes/contracts';
+import { sql } from 'kysely';
 import type { Trx } from '../../db/index.js';
 import type { Locations } from '../../db/types.js';
 import type { Selectable } from 'kysely';
@@ -56,9 +57,8 @@ export async function locLive(trx: Trx, id: string): Promise<boolean> {
 
 /**
  * The readiness gate: five hard requirements, cosmetics never block.
- * The service and staff checks read the catalog, which arrives in
- * Phase 2 — until then they honestly report not-ready (a location
- * with no bookable service genuinely cannot go live).
+ * A service is bookable at a location when its resolved config is
+ * active AND online (override row, else the master item).
  */
 export async function locReadiness(trx: Trx, id: string): Promise<ReadinessResponse> {
   const l = await trx
@@ -76,6 +76,31 @@ export async function locReadiness(trx: Trx, id: string): Promise<ReadinessRespo
     .where('legalEntities.status', '=', 'verified')
     .executeTakeFirst();
 
+  const bookableAt = (trx2: Trx) =>
+    trx2
+      .selectFrom('services as s')
+      .leftJoin('locationCatalogServices as lcs', (join) =>
+        join.onRef('lcs.serviceId', '=', 's.id').on('lcs.locationId', '=', id),
+      )
+      .select('s.id')
+      .where(
+        sql<boolean>`coalesce(lcs.active, s.status = 'active') and coalesce(lcs.online, s.online)`,
+      );
+
+  const svcOk = await bookableAt(trx).limit(1).executeTakeFirst();
+
+  const staffOk = await trx
+    .selectFrom('employees as e')
+    .innerJoin('employeeLocations as el', 'el.employeeId', 'e.id')
+    .innerJoin('employeeSkills as sk', 'sk.employeeId', 'e.id')
+    .select('e.id')
+    .where('el.locationId', '=', id)
+    .where('e.bookable', '=', true)
+    .where('e.status', '=', 'active')
+    .where('sk.serviceId', 'in', bookableAt(trx))
+    .limit(1)
+    .executeTakeFirst();
+
   const items = [
     { k: 'legal' as const, label: 'Verified legal entity attached', ok: !!legal },
     {
@@ -87,12 +112,12 @@ export async function locReadiness(trx: Trx, id: string): Promise<ReadinessRespo
     {
       k: 'service' as const,
       label: 'At least one active, online-bookable service',
-      ok: false, // catalog arrives in Phase 2
+      ok: !!svcOk,
     },
     {
       k: 'staff' as const,
       label: 'Staff assigned who can deliver a bookable service',
-      ok: false, // depends on catalog skills, Phase 2
+      ok: !!staffOk,
     },
   ];
   return { items, ok: items.every((i) => i.ok) };

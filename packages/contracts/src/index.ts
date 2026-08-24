@@ -4,3 +4,6 @@ export * from './permissions.js';
 export * from './auth.js';
 export * from './locations.js';
 export * from './audit.js';
+export * from './catalog.js';
+export * from './pricing.js';
+export * from './stock.js';
