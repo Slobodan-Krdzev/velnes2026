@@ -9,8 +9,9 @@ export default async function globalSetup() {
   } catch {
     /* CI provides env vars */
   }
-  const adminUrl =
-    process.env.DATABASE_URL ?? 'postgres://velnes:velnes@localhost:5432/velnes?sslmode=disable';
+  let adminUrl =
+    process.env.DATABASE_URL ?? 'postgres://velnes:velnes@localhost:5432/velnes';
+  if (!adminUrl.includes('sslmode')) adminUrl += (adminUrl.includes('?') ? '&' : '?') + 'sslmode=disable';
   execFileSync(
     path.join(root, 'node_modules/.bin/dbmate'),
     ['-u', adminUrl, '-d', path.join(root, 'db/migrations'), '--no-dump-schema', 'up'],
