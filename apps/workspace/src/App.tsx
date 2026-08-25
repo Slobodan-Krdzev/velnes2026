@@ -5,6 +5,7 @@ import { I18nextProvider, useTranslation } from 'react-i18next';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { ToastProvider } from './lib/toast.js';
 import { CalendarPage } from './pages/calendar/Calendar.js';
+import { CatalogPage } from './pages/catalog/Catalog.js';
 import { InvoicesPage } from './pages/till/Invoices.js';
 import { TillPage } from './pages/till/Till.js';
 import { Login } from './pages/Login.js';
@@ -49,7 +50,7 @@ export function App() {
                 <Route path="/calendar" element={<CalendarPage />} />
                 <Route path="/till" element={<TillPage />} />
                 <Route path="/till/invoices" element={<InvoicesPage />} />
-                <Route path="/catalog" element={<Placeholder title="nav.catalog" />} />
+                <Route path="/catalog" element={<CatalogPage />} />
                 <Route path="/customers" element={<Placeholder title="nav.customers" />} />
                 <Route path="/reports" element={<Placeholder title="nav.reports" />} />
                 <Route path="/settings" element={<Placeholder title="nav.settings" />} />
