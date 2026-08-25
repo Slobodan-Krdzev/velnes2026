@@ -49,6 +49,10 @@ export const I = {
     '<path d="M3 6h2.4M10.6 6h10.4M3 12h10.4M18.6 12h2.4M3 18h4.9M13.1 18h7.9"/>' +
     '<circle cx="8" cy="6" r="2.6"/><circle cx="16" cy="12" r="2.6"/><circle cx="10.5" cy="18" r="2.6"/>',
   grid: '<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
+  dots:
+    '<circle cx="12" cy="5" r="1.7" fill="currentColor" stroke="none"/>' +
+    '<circle cx="12" cy="12" r="1.7" fill="currentColor" stroke="none"/>' +
+    '<circle cx="12" cy="19" r="1.7" fill="currentColor" stroke="none"/>',
 } as const;
 
 export function Icon({ d, size = 24, w = 2 }: { d: string; size?: number; w?: number }) {
