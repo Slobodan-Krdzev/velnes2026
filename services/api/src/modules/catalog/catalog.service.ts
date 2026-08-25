@@ -198,7 +198,7 @@ export function modMissing(
 
 /** svcTiming — prep/reset minutes: location override → master →
  *  defaults (prep 0, reset 10). All zero when timing is off. */
-async function svcTiming(trx: Trx, serviceId: string, locationId: string) {
+export async function svcTiming(trx: Trx, serviceId: string, locationId: string) {
   const biz = await trx
     .selectFrom('businesses')
     .select('timingEnabled')
@@ -287,12 +287,36 @@ export async function priceFor(
     locationId: string;
     variantId?: string | null | undefined;
     customerId?: string | null | undefined;
+    date?: string | undefined;
+    slotId?: string | null | undefined;
   },
 ): Promise<PriceForResponse> {
   const base = await listPrice(trx, req.serviceId, req.locationId, req.variantId ?? null);
   const options: PriceForResponse['options'] = [
     { kind: 'list' as const, price: base, label: 'Normal price', spends: false, ref: null },
   ];
+
+  // A last-minute offer — only when this opportunity really falls
+  // under it, this customer may see the phase, and the variant is in.
+  if (req.slotId) {
+    const { offerFor, phaseAllows, applyRule, offerLabel, nowMins } = await import(
+      '../marketing/marketing.service.js'
+    );
+    const hit = await offerFor(trx, req.slotId, nowMins());
+    if (
+      hit &&
+      (await phaseAllows(trx, hit.phase, req.customerId ?? null)) &&
+      ((hit.offer.eligibleVariantIds ?? []).length === 0 ||
+        (req.variantId != null && hit.offer.eligibleVariantIds.includes(req.variantId)))
+    )
+      options.push({
+        kind: 'offer',
+        price: applyRule(hit.phase, base),
+        label: offerLabel(hit.phase),
+        spends: false,
+        ref: hit.offer.id,
+      });
+  }
 
   // A personal offer: a promise to one customer for one service. The
   // till and the booking flow redeem it here; the list button is an
@@ -311,6 +335,27 @@ export async function priceFor(
         ref: po.id,
       });
   }
+  // The member offer: the staged window decides who sees it now.
+  {
+    const { memberOfferFor } = await import('../marketing/marketing.service.js');
+    const { localIso } = await import('../scheduling/scheduling.service.js');
+    const pmo = await memberOfferFor(
+      trx,
+      req.serviceId,
+      req.date ?? localIso(new Date()),
+      req.customerId ?? null,
+      req.variantId ?? null,
+    );
+    if (pmo)
+      options.push({
+        kind: 'member',
+        price: pmo.price,
+        label: pmo.stage === 3 ? 'Special offer' : 'Velnes Premium offer',
+        spends: false,
+        ref: pmo.id,
+      });
+  }
+
   const noSpend = options.filter((o) => !o.spends);
   const best = noSpend.reduce((a, b) => (b.price < a.price ? b : a), noSpend[0]!);
   const choices = options.filter((o) => o.spends);

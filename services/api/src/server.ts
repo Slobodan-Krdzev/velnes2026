@@ -21,6 +21,7 @@ import { timingRoutes } from './modules/timing/timing.routes.js';
 import { widgetsRoutes } from './modules/widgets/widgets.routes.js';
 import { hqRoutes } from './modules/hq/hq.routes.js';
 import { customersRoutes } from './modules/customers/customers.routes.js';
+import { marketingRoutes } from './modules/marketing/marketing.routes.js';
 import { registrationsRoutes } from './modules/registrations/registrations.routes.js';
 import { authPlugin } from './plugins/auth.js';
 import { publicRoutes } from './public/public.routes.js';
@@ -56,6 +57,7 @@ export async function buildServer() {
       registrationsRoutes(api);
       hqRoutes(api);
       customersRoutes(api);
+      marketingRoutes(api);
     },
     { prefix: API_PREFIX },
   );

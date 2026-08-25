@@ -366,6 +366,20 @@ export interface Invoices {
   total: number;
 }
 
+export interface LastMinuteOffers {
+  createdAt: Generated<Timestamp>;
+  createdBy: string | null;
+  date: Timestamp;
+  eligibleVariantIds: Generated<string[]>;
+  id: Generated<string>;
+  locationId: string;
+  phases: Json;
+  slotIds: string[];
+  slots: Json;
+  status: Generated<string>;
+  tenantId: string;
+}
+
 export interface LegalEntities {
   createdAt: Generated<Timestamp>;
   currency: Generated<string>;
@@ -475,6 +489,25 @@ export interface LoyaltyLedger {
   tenantId: string;
 }
 
+export interface MemberRecs {
+  candidates: Json;
+  createdAt: Generated<Timestamp>;
+  date: Timestamp;
+  employeeId: string | null;
+  endAt: string;
+  id: Generated<string>;
+  locationId: string;
+  normalPrice: number;
+  offerId: string | null;
+  recPct: number;
+  recPrice: number;
+  serviceId: string;
+  startAt: string;
+  status: Generated<string>;
+  tenantId: string;
+  variantId: string | null;
+}
+
 export interface MerchantTransactions {
   amount: number;
   checkoutId: string;
@@ -514,6 +547,26 @@ export interface PersonalOffers {
   status: Generated<string>;
   tenantId: string;
   validUntil: Timestamp;
+  variantId: string | null;
+}
+
+export interface PremiumOffers {
+  candidates: Json;
+  createdAt: Generated<Timestamp>;
+  date: Timestamp;
+  employeeId: string | null;
+  endAt: string;
+  id: Generated<string>;
+  locationId: string;
+  normalPrice: number;
+  pct: number;
+  price: number;
+  recId: string | null;
+  serviceId: string;
+  stage: Generated<number>;
+  startAt: string;
+  status: Generated<string>;
+  tenantId: string;
   variantId: string | null;
 }
 
@@ -735,6 +788,7 @@ export interface DB {
   invoiceCounters: InvoiceCounters;
   invoiceLines: InvoiceLines;
   invoices: Invoices;
+  lastMinuteOffers: LastMinuteOffers;
   legalEntities: LegalEntities;
   legalEntityLocations: LegalEntityLocations;
   locationCatalogProducts: LocationCatalogProducts;
@@ -744,9 +798,11 @@ export interface DB {
   locations: Locations;
   loyaltyConfig: LoyaltyConfig;
   loyaltyLedger: LoyaltyLedger;
+  memberRecs: MemberRecs;
   merchantTransactions: MerchantTransactions;
   paymentAccounts: PaymentAccounts;
   personalOffers: PersonalOffers;
+  premiumOffers: PremiumOffers;
   productCategories: ProductCategories;
   products: Products;
   refreshTokens: RefreshTokens;

@@ -735,6 +735,28 @@ ALTER TABLE ONLY public.invoices FORCE ROW LEVEL SECURITY;
 
 
 --
+-- Name: last_minute_offers; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.last_minute_offers (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    tenant_id uuid NOT NULL,
+    location_id uuid NOT NULL,
+    date date NOT NULL,
+    slot_ids text[] NOT NULL,
+    slots jsonb NOT NULL,
+    eligible_variant_ids uuid[] DEFAULT '{}'::uuid[] NOT NULL,
+    phases jsonb NOT NULL,
+    status text DEFAULT 'live'::text NOT NULL,
+    created_by uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT last_minute_offers_status_check CHECK ((status = ANY (ARRAY['live'::text, 'ended'::text])))
+);
+
+ALTER TABLE ONLY public.last_minute_offers FORCE ROW LEVEL SECURITY;
+
+
+--
 -- Name: legal_entities; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -909,6 +931,33 @@ ALTER TABLE ONLY public.loyalty_ledger FORCE ROW LEVEL SECURITY;
 
 
 --
+-- Name: member_recs; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.member_recs (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    tenant_id uuid NOT NULL,
+    location_id uuid NOT NULL,
+    date date NOT NULL,
+    start_at text NOT NULL,
+    end_at text NOT NULL,
+    service_id uuid NOT NULL,
+    employee_id uuid,
+    normal_price integer NOT NULL,
+    rec_pct integer NOT NULL,
+    rec_price integer NOT NULL,
+    candidates jsonb NOT NULL,
+    status text DEFAULT 'pending'::text NOT NULL,
+    offer_id uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    variant_id uuid,
+    CONSTRAINT member_recs_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'approved'::text, 'declined'::text])))
+);
+
+ALTER TABLE ONLY public.member_recs FORCE ROW LEVEL SECURITY;
+
+
+--
 -- Name: merchant_transactions; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -971,6 +1020,34 @@ CREATE TABLE public.personal_offers (
 );
 
 ALTER TABLE ONLY public.personal_offers FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: premium_offers; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.premium_offers (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    tenant_id uuid NOT NULL,
+    rec_id uuid,
+    location_id uuid NOT NULL,
+    date date NOT NULL,
+    start_at text NOT NULL,
+    end_at text NOT NULL,
+    service_id uuid NOT NULL,
+    employee_id uuid,
+    normal_price integer NOT NULL,
+    pct integer NOT NULL,
+    price integer NOT NULL,
+    candidates jsonb NOT NULL,
+    stage integer DEFAULT 1 NOT NULL,
+    status text DEFAULT 'live'::text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    variant_id uuid,
+    CONSTRAINT premium_offers_status_check CHECK ((status = ANY (ARRAY['live'::text, 'done'::text])))
+);
+
+ALTER TABLE ONLY public.premium_offers FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -1518,6 +1595,14 @@ ALTER TABLE ONLY public.invoices
 
 
 --
+-- Name: last_minute_offers last_minute_offers_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.last_minute_offers
+    ADD CONSTRAINT last_minute_offers_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: legal_entities legal_entities_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1590,6 +1675,14 @@ ALTER TABLE ONLY public.loyalty_ledger
 
 
 --
+-- Name: member_recs member_recs_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.member_recs
+    ADD CONSTRAINT member_recs_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: merchant_transactions merchant_transactions_idempotency_key_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1619,6 +1712,14 @@ ALTER TABLE ONLY public.payment_accounts
 
 ALTER TABLE ONLY public.personal_offers
     ADD CONSTRAINT personal_offers_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: premium_offers premium_offers_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.premium_offers
+    ADD CONSTRAINT premium_offers_pkey PRIMARY KEY (id);
 
 
 --
@@ -1949,6 +2050,13 @@ CREATE UNIQUE INDEX invoices_idempotency ON public.invoices USING btree (tenant_
 --
 
 CREATE INDEX invoices_tenant ON public.invoices USING btree (tenant_id, location_id, date DESC);
+
+
+--
+-- Name: last_minute_offers_loc; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX last_minute_offers_loc ON public.last_minute_offers USING btree (location_id, date, status);
 
 
 --
@@ -2568,6 +2676,22 @@ ALTER TABLE ONLY public.invoices
 
 
 --
+-- Name: last_minute_offers last_minute_offers_location_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.last_minute_offers
+    ADD CONSTRAINT last_minute_offers_location_id_fkey FOREIGN KEY (location_id) REFERENCES public.locations(id);
+
+
+--
+-- Name: last_minute_offers last_minute_offers_tenant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.last_minute_offers
+    ADD CONSTRAINT last_minute_offers_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.businesses(id);
+
+
+--
 -- Name: legal_entities legal_entities_tenant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2728,6 +2852,30 @@ ALTER TABLE ONLY public.loyalty_ledger
 
 
 --
+-- Name: member_recs member_recs_location_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.member_recs
+    ADD CONSTRAINT member_recs_location_id_fkey FOREIGN KEY (location_id) REFERENCES public.locations(id);
+
+
+--
+-- Name: member_recs member_recs_service_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.member_recs
+    ADD CONSTRAINT member_recs_service_id_fkey FOREIGN KEY (service_id) REFERENCES public.services(id);
+
+
+--
+-- Name: member_recs member_recs_tenant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.member_recs
+    ADD CONSTRAINT member_recs_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.businesses(id);
+
+
+--
 -- Name: merchant_transactions merchant_transactions_checkout_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2813,6 +2961,38 @@ ALTER TABLE ONLY public.personal_offers
 
 ALTER TABLE ONLY public.personal_offers
     ADD CONSTRAINT personal_offers_variant_id_fkey FOREIGN KEY (variant_id) REFERENCES public.service_variants(id);
+
+
+--
+-- Name: premium_offers premium_offers_location_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.premium_offers
+    ADD CONSTRAINT premium_offers_location_id_fkey FOREIGN KEY (location_id) REFERENCES public.locations(id);
+
+
+--
+-- Name: premium_offers premium_offers_rec_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.premium_offers
+    ADD CONSTRAINT premium_offers_rec_id_fkey FOREIGN KEY (rec_id) REFERENCES public.member_recs(id);
+
+
+--
+-- Name: premium_offers premium_offers_service_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.premium_offers
+    ADD CONSTRAINT premium_offers_service_id_fkey FOREIGN KEY (service_id) REFERENCES public.services(id);
+
+
+--
+-- Name: premium_offers premium_offers_tenant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.premium_offers
+    ADD CONSTRAINT premium_offers_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.businesses(id);
 
 
 --
@@ -3325,6 +3505,12 @@ ALTER TABLE public.invoice_lines ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.invoices ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: last_minute_offers; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.last_minute_offers ENABLE ROW LEVEL SECURITY;
+
+--
 -- Name: legal_entities; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -3379,6 +3565,12 @@ ALTER TABLE public.loyalty_config ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.loyalty_ledger ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: member_recs; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.member_recs ENABLE ROW LEVEL SECURITY;
+
+--
 -- Name: merchant_transactions; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -3395,6 +3587,12 @@ ALTER TABLE public.payment_accounts ENABLE ROW LEVEL SECURITY;
 --
 
 ALTER TABLE public.personal_offers ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: premium_offers; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.premium_offers ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: product_categories; Type: ROW SECURITY; Schema: public; Owner: -
@@ -3663,6 +3861,13 @@ CREATE POLICY tenant_isolation ON public.invoices USING ((tenant_id = app.curren
 
 
 --
+-- Name: last_minute_offers tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY tenant_isolation ON public.last_minute_offers USING ((tenant_id = app.current_tenant())) WITH CHECK ((tenant_id = app.current_tenant()));
+
+
+--
 -- Name: legal_entities tenant_isolation; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -3719,6 +3924,13 @@ CREATE POLICY tenant_isolation ON public.loyalty_config USING ((tenant_id = app.
 
 
 --
+-- Name: member_recs tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY tenant_isolation ON public.member_recs USING ((tenant_id = app.current_tenant())) WITH CHECK ((tenant_id = app.current_tenant()));
+
+
+--
 -- Name: merchant_transactions tenant_isolation; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -3737,6 +3949,13 @@ CREATE POLICY tenant_isolation ON public.payment_accounts USING (((tenant_id = a
 --
 
 CREATE POLICY tenant_isolation ON public.personal_offers USING ((tenant_id = app.current_tenant())) WITH CHECK ((tenant_id = app.current_tenant()));
+
+
+--
+-- Name: premium_offers tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY tenant_isolation ON public.premium_offers USING ((tenant_id = app.current_tenant())) WITH CHECK ((tenant_id = app.current_tenant()));
 
 
 --
@@ -3911,4 +4130,5 @@ INSERT INTO public.schema_migrations (version) VALUES
     ('20260826090013'),
     ('20260826100014'),
     ('20260826110015'),
-    ('20260826130016');
+    ('20260826130016'),
+    ('20260826150017');

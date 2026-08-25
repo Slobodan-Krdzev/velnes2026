@@ -70,7 +70,16 @@ describe('customers, intelligence and personal offers', () => {
     await admin.query(`DELETE FROM merchant_transactions WHERE checkout_id IN (SELECT id FROM checkouts WHERE invoice_id IN (SELECT id FROM invoices WHERE idempotency_key LIKE 'po-sale-%'))`);
     await admin.query(`DELETE FROM checkouts WHERE invoice_id IN (SELECT id FROM invoices WHERE idempotency_key LIKE 'po-sale-%')`);
     await admin.query(`DELETE FROM invoice_lines WHERE invoice_id IN (SELECT id FROM invoices WHERE idempotency_key LIKE 'po-sale-%')`);
-    await admin.query(`DELETE FROM loyalty_ledger WHERE customer_id=$1 AND reason NOT IN ('Opening balance')`, [demo.c4]);
+    for (const cid of [demo.c1, demo.c4]) {
+      await admin.query(
+        `DELETE FROM loyalty_ledger WHERE customer_id=$1 AND reason <> 'Opening balance'`,
+        [cid],
+      );
+      await admin.query(
+        `UPDATE customers SET points=(SELECT COALESCE(SUM(points),0) FROM loyalty_ledger WHERE customer_id=$1) WHERE id=$1`,
+        [cid],
+      );
+    }
     await admin.query(`DELETE FROM invoices WHERE idempotency_key LIKE 'po-sale-%'`);
     await admin.query(`DELETE FROM customer_activity WHERE tenant_id=$1`, [demo.business]);
     await admin.query(`DELETE FROM personal_offers WHERE tenant_id=$1`, [demo.business]);

@@ -22,9 +22,10 @@ export const PriceForRequestSchema = z.object({
   serviceId: z.uuid(),
   locationId: z.uuid(),
   variantId: z.uuid().nullable().optional(),
-  customerId: z.uuid().nullable().optional(), // personal/member offers, later
+  customerId: z.uuid().nullable().optional(),
   channel: z.string().nullable().optional(),
   date: z.iso.date().optional(),
+  slotId: z.string().nullable().optional(), // a last-minute capacity slot
 });
 export type PriceForRequest = z.infer<typeof PriceForRequestSchema>;
 

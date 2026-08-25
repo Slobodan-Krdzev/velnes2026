@@ -102,6 +102,8 @@ export function catalogRoutes(app: FastifyInstance) {
             locationId: req.query.locationId,
             variantId: req.query.variantId ?? null,
             customerId: req.query.customerId ?? null,
+            date: req.query.date,
+            slotId: req.query.slotId ?? null,
           }),
         );
       } catch (e) {

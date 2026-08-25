@@ -170,7 +170,7 @@ export async function seedDemo(adminUrl: string) {
     await q(`TRUNCATE audit_log, refresh_tokens, user_credentials, payment_accounts,
       legal_entity_locations, legal_entities, employee_locations,
       integration_events, widgets, registrations, hq_users,
-      customer_activity, personal_offers,
+      customer_activity, personal_offers, last_minute_offers, member_recs, premium_offers,
       tax_rules, service_recipes, loyalty_ledger, loyalty_config,
       discount_codes, gift_cards, checkout_items, merchant_transactions,
       checkouts, invoice_lines, invoices, invoice_counters,
