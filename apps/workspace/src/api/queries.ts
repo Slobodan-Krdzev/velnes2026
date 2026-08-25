@@ -15,7 +15,7 @@ import {
   type BookRequest,
 } from '@velnes/contracts';
 import type { z } from 'zod';
-import { get, patch, post } from './client.js';
+import { get, patch, post } from '@velnes/client';
 
 export const useLocations = () =>
   useQuery({

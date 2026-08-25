@@ -150,6 +150,9 @@ importers:
       '@tanstack/react-query':
         specifier: ^5.102.1
         version: 5.102.1(react@19.2.8)
+      '@velnes/client':
+        specifier: workspace:^
+        version: link:../../packages/client
       '@velnes/contracts':
         specifier: workspace:^
         version: link:../../packages/contracts
@@ -193,6 +196,31 @@ importers:
       vite:
         specifier: ^8.2.2
         version: 8.2.2(@types/node@26.2.0)(esbuild@0.28.2)(tsx@4.23.12)(yaml@2.9.0)
+
+  packages/client:
+    dependencies:
+      '@velnes/contracts':
+        specifier: workspace:^
+        version: link:../contracts
+      i18next:
+        specifier: '>=25'
+        version: 25.10.10(typescript@5.9.3)
+      react:
+        specifier: ^19.0.0
+        version: 19.2.8
+      react-i18next:
+        specifier: '>=15'
+        version: 17.0.12(i18next@25.10.10(typescript@5.9.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(typescript@5.9.3)
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
+    devDependencies:
+      '@types/react':
+        specifier: ^19.0.0
+        version: 19.2.18
+      '@velnes/config':
+        specifier: workspace:^
+        version: link:../config
 
   packages/config:
     dependencies:

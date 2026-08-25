@@ -2,8 +2,8 @@ import { Button, Input } from '@velnes/ui';
 import { useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
-import { ApiError } from '../api/client.js';
-import { useSession } from '../session.js';
+import { ApiError } from '@velnes/client';
+import { useSession } from '@velnes/client';
 
 /** The prototype's viewLogin(), markup verbatim. */
 export function Login() {

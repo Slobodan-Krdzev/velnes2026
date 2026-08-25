@@ -5,11 +5,11 @@ import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { z } from 'zod';
-import { get, post } from '../../api/client.js';
+import { get, post } from '@velnes/client';
 import { useAppointments, useLocations } from '../../api/queries.js';
 import { money } from '../../lib/money.js';
 import { useToast } from '../../lib/toast.js';
-import { useSession } from '../../session.js';
+import { useSession } from '@velnes/client';
 import { useScope } from '../../shell/Shell.js';
 import { localIso } from '../calendar/Calendar.js';
 

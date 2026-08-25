@@ -3,12 +3,12 @@ import { I, Icon } from '@velnes/ui';
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
-import { post } from '../../api/client.js';
+import { post } from '@velnes/client';
 import { useAppointments, useLocationCatalog, useLocations } from '../../api/queries.js';
 import { money } from '../../lib/money.js';
 import { useToast } from '../../lib/toast.js';
-import { refusalText } from '../../refusal.js';
-import { useSession } from '../../session.js';
+import { refusalText } from '@velnes/client';
+import { useSession } from '@velnes/client';
 import { useScope } from '../../shell/Shell.js';
 import { localIso } from '../calendar/Calendar.js';
 

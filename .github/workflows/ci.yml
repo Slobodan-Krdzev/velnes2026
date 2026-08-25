@@ -5,6 +5,9 @@ on:
     branches: [main]
   pull_request:
 
+permissions:
+  contents: write
+
 jobs:
   checks:
     runs-on: ubuntu-latest
@@ -40,3 +43,13 @@ jobs:
       - run: pnpm e2e
         env:
           E2E_API_DATABASE_URL: postgres://velnes_api:velnes_api@localhost:5432/velnes
+      - name: Publish e2e failure evidence
+        if: failure()
+        run: |
+          mkdir -p /tmp/dbg && find test-results -name 'error-context.md' -exec sh -c 'cp "$1" /tmp/dbg/$(echo "$1" | tr "/" "_")' _ {} \; 2>/dev/null || true
+          ls /tmp/dbg | head
+          git config user.email ci@velnes && git config user.name ci
+          git checkout --orphan ci-debug && git rm -rf --cached . >/dev/null 2>&1 || true
+          rm -rf ci-debug-out && mkdir ci-debug-out && cp /tmp/dbg/* ci-debug-out/ 2>/dev/null || echo 'no contexts' > ci-debug-out/empty.txt
+          git add -f ci-debug-out && git commit -m "e2e failure evidence $GITHUB_RUN_ID" >/dev/null
+          git push -f origin ci-debug

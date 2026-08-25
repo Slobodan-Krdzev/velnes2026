@@ -3,7 +3,7 @@ import { empColorOf, I, Icon } from '@velnes/ui';
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAppointments, useEmployees, useLocations } from '../../api/queries.js';
-import { useSession } from '../../session.js';
+import { useSession } from '@velnes/client';
 import { useScope } from '../../shell/Shell.js';
 import { AppointmentDrawer } from './AppointmentDrawer.js';
 

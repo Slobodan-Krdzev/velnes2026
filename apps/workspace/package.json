@@ -18,6 +18,7 @@
   },
   "dependencies": {
     "@tanstack/react-query": "^5.102.1",
+    "@velnes/client": "workspace:^",
     "@velnes/contracts": "workspace:^",
     "@velnes/i18n": "workspace:^",
     "@velnes/ui": "workspace:^",

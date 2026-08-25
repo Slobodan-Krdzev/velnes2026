@@ -3,7 +3,7 @@ import { I, Icon } from '@velnes/ui';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { z } from 'zod';
-import { api, post } from '../../api/client.js';
+import { api, post } from '@velnes/client';
 import type { ResolvedProduct } from './Catalog.js';
 
 const OkSchema = z.object({ ok: z.literal(true) });

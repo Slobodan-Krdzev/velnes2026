@@ -10,7 +10,7 @@ import {
   useLineQuote,
   useLocationCatalog,
 } from '../../api/queries.js';
-import { refusalText } from '../../refusal.js';
+import { refusalText } from '@velnes/client';
 
 const uuid = () =>
   crypto.randomUUID ? crypto.randomUUID() : String(Math.random()).slice(2) + Date.now();

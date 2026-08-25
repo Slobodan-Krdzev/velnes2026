@@ -2,7 +2,7 @@ import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from '../../App.js';
-import { setAccessToken } from '../../api/client.js';
+import { setAccessToken } from '@velnes/client';
 
 const LOC1 = '20000000-0000-4000-8000-000000000001';
 const LOC2 = '20000000-0000-4000-8000-000000000002';

@@ -23,7 +23,7 @@ import {
   post,
   setAccessToken,
   setRefreshToken,
-} from './api/client.js';
+} from './client.js';
 
 interface Session {
   me: MeResponse | null;

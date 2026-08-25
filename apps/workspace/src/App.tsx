@@ -11,7 +11,7 @@ import { SettingsPage } from './pages/settings/Settings.js';
 import { InvoicesPage } from './pages/till/Invoices.js';
 import { TillPage } from './pages/till/Till.js';
 import { Login } from './pages/Login.js';
-import { SessionProvider, useSession } from './session.js';
+import { SessionProvider, useSession } from '@velnes/client';
 import { Shell } from './shell/Shell.js';
 
 const queryClient = new QueryClient({

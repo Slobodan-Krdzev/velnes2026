@@ -15,11 +15,11 @@ import { empColorOf, EMP_COLORS, I, Icon } from '@velnes/ui';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { z } from 'zod';
-import { api, get, post } from '../../api/client.js';
+import { api, get, post } from '@velnes/client';
 import { useEmployees, useLocations } from '../../api/queries.js';
 import { useToast } from '../../lib/toast.js';
-import { refusalText } from '../../refusal.js';
-import { useSession } from '../../session.js';
+import { refusalText } from '@velnes/client';
+import { useSession } from '@velnes/client';
 
 const OkSchema = z.object({ ok: z.literal(true) });
 const IdSchema = z.object({ id: z.string() });

@@ -5,7 +5,7 @@ import { createContext, useContext, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useLocations } from '../api/queries.js';
-import { useSession } from '../session.js';
+import { useSession } from '@velnes/client';
 
 /** Location scope — the prototype's loc-switch: chosen once in the
  *  topbar, honoured by every screen. 'all' = every assigned location. */

@@ -4,10 +4,10 @@ import { I, Icon } from '@velnes/ui';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
-import { get, post } from '../../api/client.js';
+import { get, post } from '@velnes/client';
 import { money } from '../../lib/money.js';
 import { useToast } from '../../lib/toast.js';
-import { useSession } from '../../session.js';
+import { useSession } from '@velnes/client';
 
 const TONE: Record<string, string> = { Paid: 'success', Refunded: 'danger' };
 
