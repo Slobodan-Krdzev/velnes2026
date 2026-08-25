@@ -32,5 +32,21 @@ modify anything under `reference/`.
 ## Layout
 `apps/{workspace,employee,booking,supplier,hq}` · `services/api`
 (Fastify; widget surface is a separate narrow plugin scope) ·
-`packages/{contracts,ui,config}` · `db/{migrations,seed}` ·
+`packages/{contracts,ui,config,i18n,client}` · `db/migrations` ·
 `reference/prototype` · `docs/`
+
+## Status (2026-08-26)
+All ten phases built: foundations, catalog/pricing, scheduling,
+till/checkout, workspace app, employee PWA, booking page + widget,
+registrations + HQ app, customers/CI/offers/Premium, supplier chain +
+portal. Per-phase docs live in `docs/` (FOUNDATIONS, CATALOG,
+SCHEDULING, TILL, I18N, WORKSPACE, EMPLOYEE-APP, BOOKING-PAGE,
+REGISTRATIONS-HQ, CUSTOMERS-MARKETING, SUPPLIERS) — each ends with
+its honest deferrals, which together form the backlog.
+Search/discovery is NOT started — it waits for Alex's §5 answers.
+All apps are trilingual (en/mk/sq, `packages/i18n`, completeness
+tested); MK/SQ dictionaries still need native review.
+Principals: tenant employees, `hq_users`, `supplier_users` — three
+token shapes that reject each other by construction; RLS context
+modes: `app.tenant_id`, `app.auth`, `app.public`, `app.hq`,
+`app.supplier_id`, `app.reg_token`.
