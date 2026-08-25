@@ -89,7 +89,7 @@ describe('the supplier chain', () => {
     // her own connections (RLS) — so the sup3 request is invisible.
     const salons = await get(`${API_PREFIX}/portal/salons`, vesnaToken);
     expect(
-      salons.json().salons.every((s: { status: string }) => s.status !== 'pending' || s.note !== 'New customer'),
+      salons.json().salons.every((s: { status: string; note: string }) => s.status !== 'pending' || s.note !== 'New customer'),
     ).toBe(true);
   });
 

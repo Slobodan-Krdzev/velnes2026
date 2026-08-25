@@ -7,7 +7,6 @@ import {
   SupplierListSchema,
   SupplierProductListSchema,
   SupplierPromotionListSchema,
-  SupplierSchema,
 } from '@velnes/contracts';
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
