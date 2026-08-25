@@ -39,5 +39,10 @@ export default defineConfig({
       port: 4175,
       reuseExistingServer: false,
     },
+    {
+      command: 'pnpm --filter @velnes/hq exec vite preview --port 4177',
+      port: 4177,
+      reuseExistingServer: false,
+    },
   ],
 });

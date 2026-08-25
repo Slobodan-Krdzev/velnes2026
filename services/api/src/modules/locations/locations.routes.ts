@@ -1,5 +1,8 @@
 import {
+  LegalEntityListSchema,
+  LocationCreateSchema,
   LocationListResponseSchema,
+  LocationSchema,
   ReadinessResponseSchema,
   TransitionRequestSchema,
   TransitionResponseSchema,
@@ -10,6 +13,7 @@ import { z } from 'zod';
 import { withTenant } from '../../db/index.js';
 import { can, permsFor } from '../auth/authz.service.js';
 import {
+  createLocation,
   listLocations,
   LocationError,
   locReadiness,
@@ -37,6 +41,49 @@ export function locationsRoutes(app: FastifyInstance) {
     handler: async (req) => ({
       locations: await withTenant(req.claims.ten, (trx) => listLocations(trx)),
     }),
+  });
+
+  r.route({
+    method: 'GET',
+    url: '/legal-entities',
+    preHandler: [app.authenticate],
+    schema: { response: { 200: LegalEntityListSchema } },
+    handler: async (req) =>
+      withTenant(req.claims.ten, async (trx) => ({
+        entities: (
+          await trx
+            .selectFrom('legalEntities')
+            .select(['id', 'name', 'taxId', 'status', 'isDefault'])
+            .where('ownerType', '=', 'salon')
+            .orderBy('isDefault', 'desc')
+            .orderBy('name')
+            .execute()
+        ).map((e) => ({ ...e, status: String(e.status) })),
+      })),
+  });
+
+  r.route({
+    method: 'POST',
+    url: '/locations',
+    preHandler: [app.authenticate],
+    schema: {
+      body: LocationCreateSchema,
+      response: { 200: LocationSchema, 403: ErrorSchema, 404: ErrorSchema, 409: ErrorSchema },
+    },
+    handler: async (req, reply) => {
+      try {
+        return await withTenant(req.claims.ten, async (trx) => {
+          const perms = await permsFor(trx, req.claims);
+          if (!can(perms, 'locations.manage'))
+            throw new LocationError('OWNER_ONLY', 'Missing permission: locations.manage');
+          return createLocation(trx, req.claims, req.body);
+        });
+      } catch (e) {
+        if (e instanceof LocationError)
+          return reply.code(statusFor[e.code]).send({ error: e.code, message: e.message });
+        throw e;
+      }
+    },
   });
 
   r.route({

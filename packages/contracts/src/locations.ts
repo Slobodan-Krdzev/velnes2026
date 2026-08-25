@@ -48,6 +48,66 @@ export const LocationListResponseSchema = z.object({
 });
 export type LocationListResponse = z.infer<typeof LocationListResponseSchema>;
 
+export const LegalEntityRowSchema = z.object({
+  id: z.uuid(),
+  name: z.string(),
+  taxId: z.string().nullable(),
+  status: z.string(),
+  isDefault: z.boolean(),
+});
+export const LegalEntityListSchema = z.object({
+  entities: z.array(LegalEntityRowSchema),
+});
+
+/** The New-location wizard's one door: create (scratch or snapshot
+ *  copy), attach or create the legal entity, optionally submit to HQ
+ *  in the same act. */
+export const CopyChecklistSchema = z.object({
+  services: z.boolean().default(true),
+  prices: z.boolean().default(true),
+  timing: z.boolean().default(true),
+  products: z.boolean().default(true),
+  hours: z.boolean().default(true),
+  policies: z.boolean().default(true),
+  payments: z.boolean().default(true),
+});
+export type CopyChecklist = z.infer<typeof CopyChecklistSchema>;
+
+export const LocationCreateSchema = z.object({
+  name: z.string().min(1),
+  city: z.string().min(1),
+  address: z.string().min(1),
+  zip: z.string().default(''),
+  country: z.string().default('North Macedonia'),
+  tz: z.string().default('Europe/Skopje'),
+  phone: z.string().default(''),
+  rooms: z.coerce.number().int().min(1).default(2),
+  invPrefix: z.string().default(''),
+  mode: z.enum(['scratch', 'copy']),
+  srcLocationId: z.uuid().nullable().default(null),
+  copy: CopyChecklistSchema.default({
+    services: true,
+    prices: true,
+    timing: true,
+    products: true,
+    hours: true,
+    policies: true,
+    payments: true,
+  }),
+  legal: z.discriminatedUnion('mode', [
+    z.object({ mode: z.literal('existing'), legalEntityId: z.uuid() }),
+    z.object({
+      mode: z.literal('new'),
+      name: z.string().min(1),
+      taxId: z.string().min(1),
+      vat: z.string().default(''),
+      currency: z.string().default('MKD'),
+    }),
+  ]),
+  submit: z.boolean().default(false),
+});
+export type LocationCreate = z.infer<typeof LocationCreateSchema>;
+
 export const TransitionRequestSchema = z.object({
   to: LocationLifecycleSchema,
   reason: z.string().optional(),

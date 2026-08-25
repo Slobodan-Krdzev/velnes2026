@@ -79,6 +79,19 @@ export function Login() {
         <Button type="submit" disabled={working} style={{ marginTop: 14, width: '100%' }}>
           {working ? t('login.working') : t('login.submit')}
         </Button>
+        <div className="menu-sep" style={{ margin: '16px 0' }} />
+        <div style={{ textAlign: 'center' }}>
+          <p className="muted" style={{ fontWeight: 500, margin: '0 0 6px' }}>
+            {t('reg.newHere')}
+          </p>
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm"
+            onClick={() => navigate('/register')}
+          >
+            {t('reg.createSalon')}
+          </button>
+        </div>
       </form>
     </div>
   );

@@ -421,6 +421,7 @@ export interface Locations {
   address: string | null;
   cancelHours: Generated<number>;
   city: string | null;
+  country: Generated<string>;
   createdAt: Generated<Timestamp>;
   hours: Json | null;
   id: Generated<string>;
@@ -434,6 +435,7 @@ export interface Locations {
   rooms: Generated<number>;
   tenantId: string;
   tz: Generated<string>;
+  zip: string | null;
 }
 
 export interface LoyaltyConfig {

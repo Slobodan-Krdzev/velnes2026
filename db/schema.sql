@@ -842,7 +842,9 @@ CREATE TABLE public.locations (
     hours jsonb,
     payments jsonb,
     lifecycle public.location_lifecycle DEFAULT 'DRAFT'::public.location_lifecycle NOT NULL,
-    created_at timestamp with time zone DEFAULT now() NOT NULL
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    zip text,
+    country text DEFAULT 'North Macedonia'::text NOT NULL
 );
 
 ALTER TABLE ONLY public.locations FORCE ROW LEVEL SECURITY;
@@ -3741,4 +3743,5 @@ INSERT INTO public.schema_migrations (version) VALUES
     ('20260825170011'),
     ('20260825190012'),
     ('20260826090013'),
-    ('20260826100014');
+    ('20260826100014'),
+    ('20260826110015');

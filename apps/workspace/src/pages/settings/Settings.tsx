@@ -18,6 +18,7 @@ import { z } from 'zod';
 import { api, get, post } from '@velnes/client';
 import { useEmployees, useLocations } from '../../api/queries.js';
 import { BookingSection } from './BookingSection.js';
+import { NewLocationWizard } from './NewLocation.js';
 import { useToast } from '../../lib/toast.js';
 import { refusalText } from '@velnes/client';
 import { useSession } from '@velnes/client';
@@ -101,6 +102,7 @@ function LocationsSection() {
   const locations = useLocations();
   const employees = useEmployees();
   const [error, setError] = useState<string | null>(null);
+  const [adding, setAdding] = useState(false);
   const isOwner = me?.access === 'owner';
 
   const transition = async (id: string, to: string) => {
@@ -116,6 +118,7 @@ function LocationsSection() {
   };
 
   const all = locations.data?.locations ?? [];
+  if (adding) return <NewLocationWizard done={() => setAdding(false)} />;
   return (
     <div className="stacked">
       {error ? (
@@ -149,6 +152,9 @@ function LocationsSection() {
       <div className="card">
         <div className="card-header">
           <h2>{t('settings.locations')}</h2>
+          <button className="btn btn-primary btn-sm" onClick={() => setAdding(true)}>
+            {t('nloc.addLocation')} <Icon d={I.plus} size={18} w={2.5} />
+          </button>
         </div>
         {all.map((l) => (
           <LocationRow key={l.id} l={l} isOwner={isOwner} transition={transition} />
