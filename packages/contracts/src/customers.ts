@@ -211,6 +211,7 @@ export const PersonalOfferStatusSchema = z.enum(['live', 'cancelled', 'redeemed'
 export const PersonalOfferSchema = z.object({
   id: z.uuid(),
   customerId: z.uuid(),
+  customerName: z.string().optional(),
   serviceId: z.uuid(),
   serviceName: z.string(),
   variantId: z.uuid().nullable(),

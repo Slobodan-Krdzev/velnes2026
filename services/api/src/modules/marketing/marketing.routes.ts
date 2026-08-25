@@ -3,6 +3,8 @@ import type {
   MemberRecSchema} from '@velnes/contracts';
 import {
   CapacityResponseSchema,
+  DiscountCodeListSchema,
+  PersonalOfferListSchema,
   MemberRecListSchema,
   OfferCreateSchema,
   OfferListSchema,
@@ -14,6 +16,7 @@ import { z } from 'zod';
 import { withTenant } from '../../db/index.js';
 import { can, permsFor } from '../auth/authz.service.js';
 import { localIso } from '../scheduling/scheduling.service.js';
+import { personalOffersAll } from '../customers/customers.service.js';
 import {
   createOffer,
   MarketingError,
@@ -34,6 +37,47 @@ function sendErr(reply: FastifyReply, e: unknown) {
 
 export function marketingRoutes(app: FastifyInstance) {
   const r = app.withTypeProvider<ZodTypeProvider>();
+
+  r.route({
+    method: 'GET',
+    url: '/discount-codes',
+    preHandler: [app.authenticate],
+    schema: { response: { 200: DiscountCodeListSchema } },
+    handler: async (req) =>
+      withTenant(req.claims.ten, async (trx) => {
+        const rows = await trx.selectFrom('discountCodes').selectAll().orderBy('starts').execute();
+        const today = localIso(new Date());
+        return {
+          codes: rows.map((d) => {
+            const starts = localIso(d.starts);
+            const ends = localIso(d.ends);
+            return {
+              id: d.id,
+              code: d.code,
+              type: d.type,
+              value: d.value,
+              used: d.used,
+              usageLimit: d.usageLimit,
+              starts,
+              ends,
+              status: (today < starts ? 'Scheduled' : today > ends ? 'Expired' : 'Active') as
+                | 'Active'
+                | 'Scheduled'
+                | 'Expired',
+            };
+          }),
+        };
+      }),
+  });
+
+  r.route({
+    method: 'GET',
+    url: '/personal-offers',
+    preHandler: [app.authenticate],
+    schema: { response: { 200: PersonalOfferListSchema } },
+    handler: async (req) =>
+      withTenant(req.claims.ten, async (trx) => ({ offers: await personalOffersAll(trx) })),
+  });
 
   const gate = async (
     trx: Parameters<typeof permsFor>[0],

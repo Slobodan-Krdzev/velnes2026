@@ -137,3 +137,16 @@ export const PremiumOfferSchema = z.object({
   status: z.enum(['live', 'done']),
 });
 export const PremiumOfferListSchema = z.object({ offers: z.array(PremiumOfferSchema) });
+
+export const DiscountCodeRowSchema = z.object({
+  id: z.uuid(),
+  code: z.string(),
+  type: z.string(),
+  value: z.number(),
+  used: z.number().int(),
+  usageLimit: z.number().int().nullable(),
+  starts: z.iso.date(),
+  ends: z.iso.date(),
+  status: z.enum(['Active', 'Scheduled', 'Expired']),
+});
+export const DiscountCodeListSchema = z.object({ codes: z.array(DiscountCodeRowSchema) });

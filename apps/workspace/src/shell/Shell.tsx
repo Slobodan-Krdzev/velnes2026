@@ -22,6 +22,7 @@ const NAV: { to: string; key: string; icon: string; size: number; perm: PermKey 
   { to: '/till', key: 'nav.till', icon: I.register, size: 26, perm: 'pos.checkout' },
   { to: '/catalog', key: 'nav.catalog', icon: I.products, size: 30, perm: 'catalog.view' },
   { to: '/customers', key: 'nav.customers', icon: I.users, size: 30, perm: 'customers.view_assigned' },
+  { to: '/marketing', key: 'nav.marketing', icon: I.mail, size: 30, perm: 'marketing.personal_offers' },
   { to: '/reports', key: 'nav.reports', icon: I.reports, size: 30, perm: 'reports.view_own' },
 ];
 const FOOT: typeof NAV = [

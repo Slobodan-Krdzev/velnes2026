@@ -86,6 +86,34 @@ export function poStatus(po: { status: string; validUntil: Date }): PersonalOffe
   return 'live';
 }
 
+/** All personal offers across customers — the marketing list. */
+export async function personalOffersAll(trx: Trx): Promise<(PersonalOffer & { customerName: string })[]> {
+  const rows = await trx
+    .selectFrom('personalOffers as p')
+    .innerJoin('services as s', 's.id', 'p.serviceId')
+    .innerJoin('customers as c', 'c.id', 'p.customerId')
+    .selectAll('p')
+    .select(['s.name as serviceName', 'c.name as customerName'])
+    .orderBy('p.createdAt', 'desc')
+    .limit(100)
+    .execute();
+  return rows.map((p) => ({
+    id: p.id,
+    customerId: p.customerId,
+    customerName: p.customerName,
+    serviceId: p.serviceId,
+    serviceName: p.serviceName,
+    variantId: p.variantId,
+    locationId: p.locationId,
+    specialPrice: p.specialPrice,
+    normalPrice: p.normalPrice,
+    validUntil: localIso(p.validUntil),
+    intent: p.intent,
+    status: poStatus(p),
+    createdAt: p.createdAt.toISOString(),
+  }));
+}
+
 export async function personalOffersFor(trx: Trx, customerId: string): Promise<PersonalOffer[]> {
   const rows = await trx
     .selectFrom('personalOffers as p')
