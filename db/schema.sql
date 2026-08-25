@@ -182,6 +182,25 @@ CREATE TYPE public.payment_account_status AS ENUM (
 
 
 --
+-- Name: purchase_order_status; Type: TYPE; Schema: public; Owner: -
+--
+
+CREATE TYPE public.purchase_order_status AS ENUM (
+    'draft',
+    'approval',
+    'submitted',
+    'accepted',
+    'partial',
+    'processing',
+    'shipped',
+    'partdelivered',
+    'delivered',
+    'cancelled',
+    'disputed'
+);
+
+
+--
 -- Name: registration_status; Type: TYPE; Schema: public; Owner: -
 --
 
@@ -1084,10 +1103,54 @@ CREATE TABLE public.products (
     size_amount integer,
     size_unit text,
     seller_legal_entity_id uuid,
-    created_at timestamp with time zone DEFAULT now() NOT NULL
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    supplier_product_id uuid
 );
 
 ALTER TABLE ONLY public.products FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: purchase_order_lines; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.purchase_order_lines (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    tenant_id uuid NOT NULL,
+    order_id uuid NOT NULL,
+    supplier_product_id uuid NOT NULL,
+    qty integer NOT NULL,
+    price integer NOT NULL,
+    free integer DEFAULT 0 NOT NULL,
+    recv integer DEFAULT 0 NOT NULL,
+    dmg integer DEFAULT 0 NOT NULL,
+    sort integer DEFAULT 0 NOT NULL,
+    CONSTRAINT purchase_order_lines_qty_check CHECK ((qty > 0))
+);
+
+ALTER TABLE ONLY public.purchase_order_lines FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: purchase_orders; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.purchase_orders (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    tenant_id uuid NOT NULL,
+    ref text NOT NULL,
+    supplier_id uuid NOT NULL,
+    location_id uuid NOT NULL,
+    status public.purchase_order_status DEFAULT 'draft'::public.purchase_order_status NOT NULL,
+    created_by uuid,
+    by_name text DEFAULT ''::text NOT NULL,
+    expected date,
+    offer_id uuid,
+    track text DEFAULT ''::text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+ALTER TABLE ONLY public.purchase_orders FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -1304,6 +1367,122 @@ CREATE TABLE public.stock_movements (
 );
 
 ALTER TABLE ONLY public.stock_movements FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: supplier_connections; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.supplier_connections (
+    tenant_id uuid NOT NULL,
+    supplier_id uuid NOT NULL,
+    status text DEFAULT 'pending'::text NOT NULL,
+    customer_no text DEFAULT ''::text NOT NULL,
+    connected date,
+    share jsonb DEFAULT '{}'::jsonb NOT NULL,
+    location_ids uuid[] DEFAULT '{}'::uuid[] NOT NULL,
+    note text DEFAULT ''::text NOT NULL,
+    CONSTRAINT supplier_connections_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'connected'::text, 'declined'::text])))
+);
+
+ALTER TABLE ONLY public.supplier_connections FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: supplier_products; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.supplier_products (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    supplier_id uuid NOT NULL,
+    brand text DEFAULT ''::text NOT NULL,
+    name text NOT NULL,
+    sku text DEFAULT ''::text NOT NULL,
+    ean text DEFAULT ''::text NOT NULL,
+    size text DEFAULT ''::text NOT NULL,
+    pack integer DEFAULT 1 NOT NULL,
+    buy integer DEFAULT 0 NOT NULL,
+    rrp integer DEFAULT 0 NOT NULL,
+    vat integer DEFAULT 18 NOT NULL,
+    moq integer DEFAULT 1 NOT NULL,
+    stock integer DEFAULT 0 NOT NULL,
+    lead text DEFAULT ''::text NOT NULL,
+    use text DEFAULT 'both'::text NOT NULL,
+    category text DEFAULT ''::text NOT NULL,
+    descr text DEFAULT ''::text NOT NULL,
+    sample boolean DEFAULT false NOT NULL,
+    own_size integer,
+    own_unit text,
+    active boolean DEFAULT true NOT NULL
+);
+
+ALTER TABLE ONLY public.supplier_products FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: supplier_promotions; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.supplier_promotions (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    supplier_id uuid NOT NULL,
+    brand text DEFAULT ''::text NOT NULL,
+    title text NOT NULL,
+    kind text DEFAULT 'pct'::text NOT NULL,
+    product_ids uuid[] DEFAULT '{}'::uuid[] NOT NULL,
+    starts date NOT NULL,
+    ends date NOT NULL,
+    min_order integer DEFAULT 0 NOT NULL,
+    usage_limit integer DEFAULT 0 NOT NULL,
+    terms text DEFAULT ''::text NOT NULL,
+    audience text DEFAULT 'Connected salons only'::text NOT NULL,
+    value integer DEFAULT 0 NOT NULL,
+    per integer DEFAULT 0 NOT NULL,
+    active boolean DEFAULT true NOT NULL
+);
+
+ALTER TABLE ONLY public.supplier_promotions FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: supplier_users; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.supplier_users (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    supplier_id uuid NOT NULL,
+    name text NOT NULL,
+    email text NOT NULL,
+    role text DEFAULT 'sr_account'::text NOT NULL,
+    password_hash text NOT NULL,
+    status text DEFAULT 'active'::text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT supplier_users_status_check CHECK ((status = ANY (ARRAY['active'::text, 'disabled'::text])))
+);
+
+ALTER TABLE ONLY public.supplier_users FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: suppliers; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.suppliers (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    name text NOT NULL,
+    type text DEFAULT 'Distributor'::text NOT NULL,
+    territory text DEFAULT ''::text NOT NULL,
+    verified boolean DEFAULT false NOT NULL,
+    min_order integer DEFAULT 0 NOT NULL,
+    lead text DEFAULT ''::text NOT NULL,
+    terms text DEFAULT ''::text NOT NULL,
+    contact text DEFAULT ''::text NOT NULL,
+    manager text DEFAULT ''::text NOT NULL,
+    rating numeric(3,1),
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+ALTER TABLE ONLY public.suppliers FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -1747,6 +1926,22 @@ ALTER TABLE ONLY public.products
 
 
 --
+-- Name: purchase_order_lines purchase_order_lines_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.purchase_order_lines
+    ADD CONSTRAINT purchase_order_lines_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: purchase_orders purchase_orders_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.purchase_orders
+    ADD CONSTRAINT purchase_orders_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: refresh_tokens refresh_tokens_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1864,6 +2059,54 @@ ALTER TABLE ONLY public.services
 
 ALTER TABLE ONLY public.stock_movements
     ADD CONSTRAINT stock_movements_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: supplier_connections supplier_connections_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.supplier_connections
+    ADD CONSTRAINT supplier_connections_pkey PRIMARY KEY (tenant_id, supplier_id);
+
+
+--
+-- Name: supplier_products supplier_products_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.supplier_products
+    ADD CONSTRAINT supplier_products_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: supplier_promotions supplier_promotions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.supplier_promotions
+    ADD CONSTRAINT supplier_promotions_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: supplier_users supplier_users_email_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.supplier_users
+    ADD CONSTRAINT supplier_users_email_key UNIQUE (email);
+
+
+--
+-- Name: supplier_users supplier_users_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.supplier_users
+    ADD CONSTRAINT supplier_users_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: suppliers suppliers_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.suppliers
+    ADD CONSTRAINT suppliers_pkey PRIMARY KEY (id);
 
 
 --
@@ -2148,6 +2391,27 @@ CREATE INDEX product_categories_tenant ON public.product_categories USING btree 
 --
 
 CREATE INDEX products_tenant ON public.products USING btree (tenant_id, active);
+
+
+--
+-- Name: purchase_order_lines_order; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX purchase_order_lines_order ON public.purchase_order_lines USING btree (order_id);
+
+
+--
+-- Name: purchase_orders_supplier; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX purchase_orders_supplier ON public.purchase_orders USING btree (supplier_id, status);
+
+
+--
+-- Name: purchase_orders_tenant; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX purchase_orders_tenant ON public.purchase_orders USING btree (tenant_id, status);
 
 
 --
@@ -3028,11 +3292,67 @@ ALTER TABLE ONLY public.products
 
 
 --
+-- Name: products products_supplier_product_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.products
+    ADD CONSTRAINT products_supplier_product_id_fkey FOREIGN KEY (supplier_product_id) REFERENCES public.supplier_products(id);
+
+
+--
 -- Name: products products_tenant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.products
     ADD CONSTRAINT products_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.businesses(id);
+
+
+--
+-- Name: purchase_order_lines purchase_order_lines_order_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.purchase_order_lines
+    ADD CONSTRAINT purchase_order_lines_order_id_fkey FOREIGN KEY (order_id) REFERENCES public.purchase_orders(id);
+
+
+--
+-- Name: purchase_order_lines purchase_order_lines_supplier_product_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.purchase_order_lines
+    ADD CONSTRAINT purchase_order_lines_supplier_product_id_fkey FOREIGN KEY (supplier_product_id) REFERENCES public.supplier_products(id);
+
+
+--
+-- Name: purchase_order_lines purchase_order_lines_tenant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.purchase_order_lines
+    ADD CONSTRAINT purchase_order_lines_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.businesses(id);
+
+
+--
+-- Name: purchase_orders purchase_orders_location_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.purchase_orders
+    ADD CONSTRAINT purchase_orders_location_id_fkey FOREIGN KEY (location_id) REFERENCES public.locations(id);
+
+
+--
+-- Name: purchase_orders purchase_orders_supplier_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.purchase_orders
+    ADD CONSTRAINT purchase_orders_supplier_id_fkey FOREIGN KEY (supplier_id) REFERENCES public.suppliers(id);
+
+
+--
+-- Name: purchase_orders purchase_orders_tenant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.purchase_orders
+    ADD CONSTRAINT purchase_orders_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.businesses(id);
 
 
 --
@@ -3225,6 +3545,46 @@ ALTER TABLE ONLY public.stock_movements
 
 ALTER TABLE ONLY public.stock_movements
     ADD CONSTRAINT stock_movements_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.businesses(id);
+
+
+--
+-- Name: supplier_connections supplier_connections_supplier_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.supplier_connections
+    ADD CONSTRAINT supplier_connections_supplier_id_fkey FOREIGN KEY (supplier_id) REFERENCES public.suppliers(id);
+
+
+--
+-- Name: supplier_connections supplier_connections_tenant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.supplier_connections
+    ADD CONSTRAINT supplier_connections_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.businesses(id);
+
+
+--
+-- Name: supplier_products supplier_products_supplier_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.supplier_products
+    ADD CONSTRAINT supplier_products_supplier_id_fkey FOREIGN KEY (supplier_id) REFERENCES public.suppliers(id);
+
+
+--
+-- Name: supplier_promotions supplier_promotions_supplier_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.supplier_promotions
+    ADD CONSTRAINT supplier_promotions_supplier_id_fkey FOREIGN KEY (supplier_id) REFERENCES public.suppliers(id);
+
+
+--
+-- Name: supplier_users supplier_users_supplier_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.supplier_users
+    ADD CONSTRAINT supplier_users_supplier_id_fkey FOREIGN KEY (supplier_id) REFERENCES public.suppliers(id);
 
 
 --
@@ -3589,6 +3949,27 @@ ALTER TABLE public.payment_accounts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.personal_offers ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: supplier_products platform_read; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY platform_read ON public.supplier_products FOR SELECT USING (((current_setting('app.tenant_id'::text, true) IS NOT NULL) OR (current_setting('app.supplier_id'::text, true) IS NOT NULL) OR (current_setting('app.hq'::text, true) = '1'::text)));
+
+
+--
+-- Name: supplier_promotions platform_read; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY platform_read ON public.supplier_promotions FOR SELECT USING (((current_setting('app.tenant_id'::text, true) IS NOT NULL) OR (current_setting('app.supplier_id'::text, true) IS NOT NULL)));
+
+
+--
+-- Name: suppliers platform_read; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY platform_read ON public.suppliers FOR SELECT USING (((current_setting('app.tenant_id'::text, true) IS NOT NULL) OR (current_setting('app.supplier_id'::text, true) IS NOT NULL) OR (current_setting('app.hq'::text, true) = '1'::text)));
+
+
+--
 -- Name: premium_offers; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -3626,6 +4007,18 @@ CREATE POLICY public_key_lookup ON public.widgets FOR SELECT USING ((current_set
 
 CREATE POLICY public_slug_lookup ON public.businesses FOR SELECT USING ((current_setting('app.public'::text, true) = '1'::text));
 
+
+--
+-- Name: purchase_order_lines; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.purchase_order_lines ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: purchase_orders; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.purchase_orders ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: holiday_calendar_years read_all; Type: POLICY; Schema: public; Owner: -
@@ -3706,6 +4099,110 @@ ALTER TABLE public.services ENABLE ROW LEVEL SECURITY;
 --
 
 ALTER TABLE public.stock_movements ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: supplier_connections; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.supplier_connections ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: supplier_connections supplier_decide; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY supplier_decide ON public.supplier_connections FOR UPDATE USING (((supplier_id)::text = current_setting('app.supplier_id'::text, true))) WITH CHECK (((supplier_id)::text = current_setting('app.supplier_id'::text, true)));
+
+
+--
+-- Name: supplier_users supplier_login_lookup; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY supplier_login_lookup ON public.supplier_users FOR SELECT USING ((current_setting('app.auth'::text, true) = 'login'::text));
+
+
+--
+-- Name: supplier_users supplier_own; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY supplier_own ON public.supplier_users USING (((supplier_id)::text = current_setting('app.supplier_id'::text, true))) WITH CHECK (((supplier_id)::text = current_setting('app.supplier_id'::text, true)));
+
+
+--
+-- Name: supplier_products; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.supplier_products ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: purchase_orders supplier_progress; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY supplier_progress ON public.purchase_orders FOR UPDATE USING ((((supplier_id)::text = current_setting('app.supplier_id'::text, true)) AND (status <> 'draft'::public.purchase_order_status) AND (status <> 'approval'::public.purchase_order_status))) WITH CHECK (((supplier_id)::text = current_setting('app.supplier_id'::text, true)));
+
+
+--
+-- Name: supplier_promotions; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.supplier_promotions ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: businesses supplier_read; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY supplier_read ON public.businesses FOR SELECT USING (((current_setting('app.supplier_id'::text, true) IS NOT NULL) AND (id IN ( SELECT supplier_connections.tenant_id
+   FROM public.supplier_connections
+  WHERE ((supplier_connections.supplier_id)::text = current_setting('app.supplier_id'::text, true))))));
+
+
+--
+-- Name: purchase_order_lines supplier_read; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY supplier_read ON public.purchase_order_lines FOR SELECT USING ((EXISTS ( SELECT 1
+   FROM public.purchase_orders o
+  WHERE ((o.id = purchase_order_lines.order_id) AND ((o.supplier_id)::text = current_setting('app.supplier_id'::text, true)) AND (o.status <> 'draft'::public.purchase_order_status) AND (o.status <> 'approval'::public.purchase_order_status)))));
+
+
+--
+-- Name: purchase_orders supplier_read; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY supplier_read ON public.purchase_orders FOR SELECT USING ((((supplier_id)::text = current_setting('app.supplier_id'::text, true)) AND (status <> 'draft'::public.purchase_order_status) AND (status <> 'approval'::public.purchase_order_status)));
+
+
+--
+-- Name: supplier_connections supplier_read; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY supplier_read ON public.supplier_connections FOR SELECT USING (((supplier_id)::text = current_setting('app.supplier_id'::text, true)));
+
+
+--
+-- Name: supplier_users; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.supplier_users ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: supplier_products supplier_write; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY supplier_write ON public.supplier_products USING (((supplier_id)::text = current_setting('app.supplier_id'::text, true))) WITH CHECK (((supplier_id)::text = current_setting('app.supplier_id'::text, true)));
+
+
+--
+-- Name: supplier_promotions supplier_write; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY supplier_write ON public.supplier_promotions USING (((supplier_id)::text = current_setting('app.supplier_id'::text, true))) WITH CHECK (((supplier_id)::text = current_setting('app.supplier_id'::text, true)));
+
+
+--
+-- Name: suppliers; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.suppliers ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: tax_rules; Type: ROW SECURITY; Schema: public; Owner: -
@@ -3973,6 +4470,20 @@ CREATE POLICY tenant_isolation ON public.products USING ((tenant_id = app.curren
 
 
 --
+-- Name: purchase_order_lines tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY tenant_isolation ON public.purchase_order_lines USING ((tenant_id = app.current_tenant())) WITH CHECK ((tenant_id = app.current_tenant()));
+
+
+--
+-- Name: purchase_orders tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY tenant_isolation ON public.purchase_orders USING ((tenant_id = app.current_tenant())) WITH CHECK ((tenant_id = app.current_tenant()));
+
+
+--
 -- Name: roles tenant_isolation; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -4026,6 +4537,13 @@ CREATE POLICY tenant_isolation ON public.service_variants USING ((tenant_id = ap
 --
 
 CREATE POLICY tenant_isolation ON public.services USING ((tenant_id = app.current_tenant())) WITH CHECK ((tenant_id = app.current_tenant()));
+
+
+--
+-- Name: supplier_connections tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY tenant_isolation ON public.supplier_connections USING ((tenant_id = app.current_tenant())) WITH CHECK ((tenant_id = app.current_tenant()));
 
 
 --
@@ -4131,4 +4649,5 @@ INSERT INTO public.schema_migrations (version) VALUES
     ('20260826100014'),
     ('20260826110015'),
     ('20260826130016'),
-    ('20260826150017');
+    ('20260826150017'),
+    ('20260826170018');

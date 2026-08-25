@@ -68,6 +68,16 @@ export const demo = {
   et3: '90000000-0000-4000-8000-000000000003',
   p8: '70000000-0000-4000-8000-000000000008',
   p9: '70000000-0000-4000-8000-000000000009',
+  sup1: 'd1000000-0000-4000-8000-000000000001',
+  sup2: 'd1000000-0000-4000-8000-000000000002',
+  sup3: 'd1000000-0000-4000-8000-000000000003',
+  sup4: 'd1000000-0000-4000-8000-000000000004',
+  supUserVesna: 'd3000000-0000-4000-8000-000000000001',
+  supUserGoran: 'd3000000-0000-4000-8000-000000000002',
+  po1: 'd4000000-0000-4000-8000-000000000001',
+  po2: 'd4000000-0000-4000-8000-000000000002',
+  po3: 'd4000000-0000-4000-8000-000000000003',
+  po4: 'd4000000-0000-4000-8000-000000000004',
   gift1: 'a0000000-0000-4000-8000-000000000001',
   gift2: 'a0000000-0000-4000-8000-000000000002',
   gift3: 'a0000000-0000-4000-8000-000000000003',
@@ -171,6 +181,8 @@ export async function seedDemo(adminUrl: string) {
       legal_entity_locations, legal_entities, employee_locations,
       integration_events, widgets, registrations, hq_users,
       customer_activity, personal_offers, last_minute_offers, member_recs, premium_offers,
+      purchase_order_lines, purchase_orders, supplier_connections, supplier_promotions,
+      supplier_users, supplier_products, suppliers,
       tax_rules, service_recipes, loyalty_ledger, loyalty_config,
       discount_codes, gift_cards, checkout_items, merchant_transactions,
       checkouts, invoice_lines, invoices, invoice_counters,
@@ -672,6 +684,84 @@ export async function seedDemo(adminUrl: string) {
         [id, demo.business, hash],
       );
 
+    // ── The supplier chain (prototype seed, verbatim shapes) ──────
+    const spid = (n: number) => `d2000000-0000-4000-8000-0000000000${String(n).padStart(2, '0')}`;
+    const supRows: [string, string, string, string, boolean, number, string, string, string, string, number][] = [
+      [demo.sup1, 'BeautyPro MK', 'Distributor', 'North Macedonia', true, 6000, '2–3 business days', '30 days invoice', 'Vesna Todorova · vesna@beautypro.mk · +389 2 3090 100', 'Vesna Todorova', 4.6],
+      [demo.sup2, 'Aroma Nordic Direct', 'Brand supplier', 'Europe', true, 12000, '5–7 working days', 'Prepaid', 'orders@aromanordic.se', 'Karin Ek', 4.2],
+      [demo.sup3, 'Adriatic Beauty Group', 'Distributor', 'North Macedonia, Kosovo', true, 6000, '1–2 working days', '14 days invoice', 'sales@adriaticbeauty.com', '—', 4.4],
+      [demo.sup4, 'Skopje Salon Supplies', 'Wholesaler', 'Skopje region', false, 3600, 'Same day', 'Pay on delivery', 'info@salonsupplies.mk', '—', 3.9],
+    ];
+    for (const [id, name, type, terr, ver, minO, lead, terms, contact, manager, rating] of supRows)
+      await q(
+        `INSERT INTO suppliers (id, name, type, territory, verified, min_order, lead, terms, contact, manager, rating)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+        [id, name, type, terr, ver, minO, lead, terms, contact, manager, rating],
+      );
+
+    // n, sup, brand, name, sku, ean, size, pack, buy, rrp, moq, stock, lead, use, cat, sample, ownSize, ownUnit, link
+    const spRows: [number, string, string, string, string, string, string, number, number, number, number, number, string, string, string, boolean, number | null, string | null, string | null][] = [
+      [1, demo.sup1, 'Thera-Band', 'Thera-Band resistance set, 3 levels', 'TB-SET-03', '3474636975918', '3 bands', 6, 550, 990, 1, 240, '2–3 business days', 'both', 'Home exercise', false, null, null, demo.p1],
+      [9, demo.sup1, 'Thera-Band', 'Arnica massage oil 200 ml', 'TB-ARN-200', '3474637154639', '200 ml', 6, 900, 1450, 1, 90, '2–3 business days', 'both', 'Recovery aids', false, null, null, demo.p2],
+      [2, demo.sup1, 'Thera-Band', 'Ultrasound gel 5 l', 'TB-GEL-5L', '3474630372184', '5 l', 12, 380, 0, 3, 180, '2 days', 'pro', 'Clinic supplies', false, null, null, null],
+      [3, demo.sup1, 'Thera-Band', 'Couch roll 50 cm — 9 rolls', 'TB-CCH-50', '3474630372191', '9 rolls', 6, 310, 0, 2, 64, '2 days', 'pro', 'Clinic supplies', false, null, null, demo.p8],
+      [4, demo.sup1, 'CureTape', 'CureTape kinesiology tape 5 m', 'CT-CLA-5M', '896364002435', '5 m', 6, 1000, 1600, 1, 0, '10 days', 'retail', 'Recovery aids', false, null, null, demo.p3],
+      [5, demo.sup2, 'Nordic', 'Nordic reusable cold pack', 'NR-CLD-01', '7350045670012', '27x12 cm', 4, 850, 1450, 2, 96, '6 days', 'both', 'Recovery aids', false, null, null, demo.p5],
+      [6, demo.sup2, 'Nordic', 'Nordic posture brace, size M', 'NR-BRC-M', '7350045670104', 'size M', 4, 1050, 1700, 2, 41, '6 days', 'retail', 'Supports', false, null, null, demo.p6],
+      [7, demo.sup1, 'Thera-Band', 'Nitrile gloves M — pack of 100', 'TB-GLV-100', '3474630372207', '100 pcs', 1, 470, 0, 1, 220, '2 days', 'pro', 'Clinic supplies', false, null, null, demo.p9],
+      [8, demo.sup3, 'OrthoPro', 'OrthoPro trigger point ball', 'OP-TPB-06', '8606105320019', '6 cm', 12, 270, 550, 6, 500, '1 day', 'both', 'Home exercise', false, null, null, demo.p4],
+      [10, demo.sup1, 'Thera-Band', 'Warming massage balm 100 ml — sample', 'TB-WRM-100S', '3474630372313', '100 ml', 1, 0, 0, 1, 60, '3 days', 'pro', 'Clinic supplies', true, 100, 'ml', null],
+      [11, demo.sup2, 'Nordic', 'Nordic arnica gel 50 ml — sample', 'NR-ARN-50S', '7350045670210', '50 ml', 1, 0, 0, 1, 24, '6 days', 'pro', 'Recovery aids', true, 50, 'ml', null],
+    ];
+    for (const [n, sup, brand, name, sku, ean, size, pack, buy, rrp, moq, stock, lead, use, cat, sample, ownSize, ownUnit, link] of spRows) {
+      await q(
+        `INSERT INTO supplier_products (id, supplier_id, brand, name, sku, ean, size, pack, buy, rrp, moq, stock, lead, use, category, sample, own_size, own_unit)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)`,
+        [spid(n), sup, brand, name, sku, ean, size, pack, buy, rrp, moq, stock, lead, use, cat, sample, ownSize, ownUnit],
+      );
+      if (link)
+        await q(`UPDATE products SET supplier_product_id=$1 WHERE id=$2`, [spid(n), link]);
+    }
+
+    // Connections: BeautyPro + Aroma connected, Skopje Supplies pending.
+    await q(
+      `INSERT INTO supplier_connections (tenant_id, supplier_id, status, customer_no, connected, share, location_ids) VALUES
+       ($1,$2,'connected','MK-4821','2026-08-04','{"orders":true,"stock":true,"sales":true,"training":true}',$3),
+       ($1,$4,'connected','AN-99120','2026-06-19','{"orders":true,"stock":false,"sales":false,"training":true}',$5),
+       ($1,$6,'pending','',NULL,'{}',$5)`,
+      [demo.business, demo.sup1, `{${demo.locCentar},${demo.locAerodrom}}`, demo.sup2, `{${demo.locCentar}}`, demo.sup4],
+    );
+
+    // Purchase orders (prototype po1–po4, verbatim).
+    const poRows: [string, string, string, string, string, string, string | null, string, string, [number, number, number, number, number, number][]][] = [
+      [demo.po1, 'CEN-0042', demo.sup1, demo.locCentar, 'shipped', '2026-08-02', '2026-08-07', 'Maria Petrovska', 'MK-PARCEL-88213', [[1, 12, 550, 2, 0, 0], [3, 6, 310, 0, 0, 0]]],
+      [demo.po2, 'AER-0031', demo.sup1, demo.locAerodrom, 'delivered', '2026-07-21', '2026-07-24', 'Ana Dimitrova', 'MK-PARCEL-87104', [[2, 12, 380, 0, 12, 0], [7, 2, 470, 0, 2, 0]]],
+      [demo.po3, 'CEN-0043', demo.sup2, demo.locCentar, 'approval', '2026-08-06', null as unknown as string, 'Elena Ristova', '', [[5, 8, 850, 0, 0, 0], [6, 4, 1050, 0, 0, 0]]],
+      [demo.po4, 'CEN-0041', demo.sup1, demo.locCentar, 'disputed', '2026-07-11', '2026-07-15', 'Maria Petrovska', 'MK-PARCEL-86550', [[4, 6, 1000, 0, 4, 2]]],
+    ];
+    for (const [id, ref, sup, loc, status, created, expected, byName, track, lines] of poRows) {
+      await q(
+        `INSERT INTO purchase_orders (id, tenant_id, ref, supplier_id, location_id, status, by_name, expected, track, created_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+        [id, demo.business, ref, sup, loc, status, byName, expected, track, created],
+      );
+      for (const [i, [n, qty, price, free, recv, dmg]] of lines.entries())
+        await q(
+          `INSERT INTO purchase_order_lines (tenant_id, order_id, supplier_product_id, qty, price, free, recv, dmg, sort)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+          [demo.business, id, spid(n), qty, price, free, recv, dmg, i],
+        );
+    }
+
+    // Supplier promotions (prototype supplierOffers).
+    await q(
+      `INSERT INTO supplier_promotions (supplier_id, brand, title, kind, product_ids, starts, ends, min_order, usage_limit, terms, audience, value, per) VALUES
+       ($1,'Thera-Band','Buy 10 resistance sets, receive 2 free','bxgy',$2,'2026-08-01','2026-08-31',0,400,'Applies per order line. Free units are invoiced at 0 ден and count for stock.','Connected salons only',2,10),
+       ($1,'Thera-Band','Colour launch bundle − 15%','pct',$3,'2026-08-05','2026-08-31',15000,0,'15% off tape and recovery aids from 15.000 ден per order.','Salons with more than 20 colour treatments a month',15,0),
+       ($4,'Nordic','Free tester with every 6 masks','gift',$5,'2026-07-01','2026-08-15',0,120,'One 15 ml tester per 6 units, while stock lasts.','All connected salons',1,6)`,
+      [demo.sup1, `{${spid(1)}}`, `{${spid(2)},${spid(3)}}`, demo.sup2, `{${spid(5)}}`],
+    );
+
     // Revelapps HQ staff (prototype's hqUsers) — same demo password.
     const hqRows: [string, string, string, string][] = [
       [demo.hqIvana, 'Ivana Markovska', 'ivana@revelapps.com', 'hq_super'],
@@ -682,6 +772,17 @@ export async function seedDemo(adminUrl: string) {
       await q(
         `INSERT INTO hq_users (id, name, email, role, password_hash) VALUES ($1,$2,$3,$4,$5)`,
         [id, name, email, role, hash],
+      );
+
+    // BeautyPro's portal people — same demo password.
+    const supUsers: [string, string, string, string][] = [
+      [demo.supUserVesna, 'Vesna Todorova', 'vesna@beautypro.mk', 'sr_account'],
+      [demo.supUserGoran, 'Goran Iliev', 'goran@beautypro.mk', 'sr_order'],
+    ];
+    for (const [id, name, email, role] of supUsers)
+      await q(
+        `INSERT INTO supplier_users (id, supplier_id, name, email, role, password_hash) VALUES ($1,$2,$3,$4,$5,$6)`,
+        [id, demo.sup1, name, email, role, hash],
       );
 
     await q(

@@ -2,8 +2,10 @@ import jwt from '@fastify/jwt';
 import {
   AccessClaimsSchema,
   HqClaimsSchema,
+  SupplierClaimsSchema,
   type AccessClaims,
   type HqClaims,
+  type SupplierClaims,
 } from '@velnes/contracts';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import fp from 'fastify-plugin';
@@ -13,10 +15,12 @@ declare module 'fastify' {
   interface FastifyInstance {
     authenticate: (req: FastifyRequest, reply: FastifyReply) => Promise<void>;
     authenticateHq: (req: FastifyRequest, reply: FastifyReply) => Promise<void>;
+    authenticateSupplier: (req: FastifyRequest, reply: FastifyReply) => Promise<void>;
   }
   interface FastifyRequest {
     claims: AccessClaims;
     hqClaims: HqClaims;
+    supplierClaims: SupplierClaims;
   }
 }
 
@@ -25,6 +29,7 @@ export const authPlugin = fp(async (app: FastifyInstance) => {
 
   app.decorateRequest('claims');
   app.decorateRequest('hqClaims');
+  app.decorateRequest('supplierClaims');
   app.decorate('authenticate', async (req: FastifyRequest, reply: FastifyReply) => {
     try {
       const payload = await req.jwtVerify();
@@ -39,6 +44,14 @@ export const authPlugin = fp(async (app: FastifyInstance) => {
     try {
       const payload = await req.jwtVerify();
       req.hqClaims = HqClaimsSchema.parse(payload);
+    } catch {
+      await reply.code(401).send({ error: 'UNAUTHORIZED' });
+    }
+  });
+  app.decorate('authenticateSupplier', async (req: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const payload = await req.jwtVerify();
+      req.supplierClaims = SupplierClaimsSchema.parse(payload);
     } catch {
       await reply.code(401).send({ error: 'UNAUTHORIZED' });
     }

@@ -49,6 +49,8 @@ export type Numeric = ColumnType<string, number | string, number | string>;
 
 export type PaymentAccountStatus = "active" | "incomplete";
 
+export type PurchaseOrderStatus = "accepted" | "approval" | "cancelled" | "delivered" | "disputed" | "draft" | "partdelivered" | "partial" | "processing" | "shipped" | "submitted";
+
 export type RegistrationStatus = "active" | "changes_required" | "declined" | "pending_review" | "resubmitted" | "under_review";
 
 export type ScheduleExceptionSource = "MANUAL" | "PUBLIC_HOLIDAY";
@@ -591,9 +593,38 @@ export interface Products {
   sizeAmount: number | null;
   sizeUnit: string | null;
   sku: string | null;
+  supplierProductId: string | null;
   tenantId: string;
   use: string | null;
   vat: Generated<number>;
+}
+
+export interface PurchaseOrderLines {
+  dmg: Generated<number>;
+  free: Generated<number>;
+  id: Generated<string>;
+  orderId: string;
+  price: number;
+  qty: number;
+  recv: Generated<number>;
+  sort: Generated<number>;
+  supplierProductId: string;
+  tenantId: string;
+}
+
+export interface PurchaseOrders {
+  byName: Generated<string>;
+  createdAt: Generated<Timestamp>;
+  createdBy: string | null;
+  expected: Timestamp | null;
+  id: Generated<string>;
+  locationId: string;
+  offerId: string | null;
+  ref: string;
+  status: Generated<PurchaseOrderStatus>;
+  supplierId: string;
+  tenantId: string;
+  track: Generated<string>;
 }
 
 export interface RefreshTokens {
@@ -730,6 +761,85 @@ export interface StockMovements {
   tenantId: string;
 }
 
+export interface SupplierConnections {
+  connected: Timestamp | null;
+  customerNo: Generated<string>;
+  locationIds: Generated<string[]>;
+  note: Generated<string>;
+  share: Generated<Json>;
+  status: Generated<string>;
+  supplierId: string;
+  tenantId: string;
+}
+
+export interface SupplierProducts {
+  active: Generated<boolean>;
+  brand: Generated<string>;
+  buy: Generated<number>;
+  category: Generated<string>;
+  descr: Generated<string>;
+  ean: Generated<string>;
+  id: Generated<string>;
+  lead: Generated<string>;
+  moq: Generated<number>;
+  name: string;
+  ownSize: number | null;
+  ownUnit: string | null;
+  pack: Generated<number>;
+  rrp: Generated<number>;
+  sample: Generated<boolean>;
+  size: Generated<string>;
+  sku: Generated<string>;
+  stock: Generated<number>;
+  supplierId: string;
+  use: Generated<string>;
+  vat: Generated<number>;
+}
+
+export interface SupplierPromotions {
+  active: Generated<boolean>;
+  audience: Generated<string>;
+  brand: Generated<string>;
+  ends: Timestamp;
+  id: Generated<string>;
+  kind: Generated<string>;
+  minOrder: Generated<number>;
+  per: Generated<number>;
+  productIds: Generated<string[]>;
+  starts: Timestamp;
+  supplierId: string;
+  terms: Generated<string>;
+  title: string;
+  usageLimit: Generated<number>;
+  value: Generated<number>;
+}
+
+export interface Suppliers {
+  contact: Generated<string>;
+  createdAt: Generated<Timestamp>;
+  id: Generated<string>;
+  lead: Generated<string>;
+  manager: Generated<string>;
+  minOrder: Generated<number>;
+  name: string;
+  rating: Numeric | null;
+  terms: Generated<string>;
+  territory: Generated<string>;
+  type: Generated<string>;
+  verified: Generated<boolean>;
+}
+
+export interface SupplierUsers {
+  createdAt: Generated<Timestamp>;
+  email: string;
+  id: Generated<string>;
+  name: string;
+  passwordHash: string;
+  role: Generated<string>;
+  status: Generated<string>;
+  supplierId: string;
+}
+
 export interface TaxRules {
   id: Generated<string>;
   itemClass: string;
@@ -805,6 +915,8 @@ export interface DB {
   premiumOffers: PremiumOffers;
   productCategories: ProductCategories;
   products: Products;
+  purchaseOrderLines: PurchaseOrderLines;
+  purchaseOrders: PurchaseOrders;
   refreshTokens: RefreshTokens;
   registrations: Registrations;
   roles: Roles;
@@ -817,6 +929,11 @@ export interface DB {
   services: Services;
   serviceVariants: ServiceVariants;
   stockMovements: StockMovements;
+  supplierConnections: SupplierConnections;
+  supplierProducts: SupplierProducts;
+  supplierPromotions: SupplierPromotions;
+  suppliers: Suppliers;
+  supplierUsers: SupplierUsers;
   taxRules: TaxRules;
   userCredentials: UserCredentials;
   widgets: Widgets;

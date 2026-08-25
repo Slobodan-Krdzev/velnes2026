@@ -47,6 +47,18 @@ export async function withHq<T>(fn: (trx: Trx) => Promise<T>): Promise<T> {
   });
 }
 
+/**
+ * The supplier-context door: the portal's people read and progress
+ * their own orders and connections under `app.supplier_id` — never a
+ * tenant context.
+ */
+export async function withSupplier<T>(supplierId: string, fn: (trx: Trx) => Promise<T>): Promise<T> {
+  return db.transaction().execute(async (trx) => {
+    await sql`select set_config('app.supplier_id', ${supplierId}, true)`.execute(trx);
+    return fn(trx);
+  });
+}
+
 export async function closeDb() {
   await db.destroy();
 }
