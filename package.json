@@ -11,7 +11,8 @@
     "lint": "eslint .",
     "test": "pnpm -r test",
     "build": "pnpm -r build",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "e2e": "playwright test"
   },
   "devDependencies": {
     "@playwright/test": "^1.62.1",

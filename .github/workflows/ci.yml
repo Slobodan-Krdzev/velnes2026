@@ -36,3 +36,7 @@ jobs:
       - run: pnpm lint
       - run: pnpm test
       - run: pnpm build
+      - run: node_modules/.bin/playwright install --with-deps chromium
+      - run: pnpm e2e
+        env:
+          E2E_API_DATABASE_URL: postgres://velnes_api:velnes_api@localhost:5432/velnes
