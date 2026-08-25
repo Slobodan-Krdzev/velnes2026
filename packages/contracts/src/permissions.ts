@@ -123,3 +123,12 @@ export type Role = z.infer<typeof RoleSchema>;
 
 export const EmployeeAccessSchema = z.enum(['owner', 'manager', 'staff', 'desk']);
 export type EmployeeAccess = z.infer<typeof EmployeeAccessSchema>;
+
+export const RoleListResponseSchema = z.object({ roles: z.array(RoleSchema) });
+
+export const RoleWriteSchema = z.object({
+  name: z.string().min(1),
+  description: z.string().default(''),
+  perms: PermMapSchema,
+});
+export type RoleWrite = z.infer<typeof RoleWriteSchema>;

@@ -6,6 +6,8 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { ToastProvider } from './lib/toast.js';
 import { CalendarPage } from './pages/calendar/Calendar.js';
 import { CatalogPage } from './pages/catalog/Catalog.js';
+import { FlightdeckPage } from './pages/flightdeck/Flightdeck.js';
+import { SettingsPage } from './pages/settings/Settings.js';
 import { InvoicesPage } from './pages/till/Invoices.js';
 import { TillPage } from './pages/till/Till.js';
 import { Login } from './pages/Login.js';
@@ -46,14 +48,14 @@ export function App() {
                   </Protected>
                 }
               >
-                <Route path="/" element={<Placeholder title="nav.flightdeck" />} />
+                <Route path="/" element={<FlightdeckPage />} />
                 <Route path="/calendar" element={<CalendarPage />} />
                 <Route path="/till" element={<TillPage />} />
                 <Route path="/till/invoices" element={<InvoicesPage />} />
                 <Route path="/catalog" element={<CatalogPage />} />
                 <Route path="/customers" element={<Placeholder title="nav.customers" />} />
                 <Route path="/reports" element={<Placeholder title="nav.reports" />} />
-                <Route path="/settings" element={<Placeholder title="nav.settings" />} />
+                <Route path="/settings" element={<SettingsPage />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Route>
             </Routes>

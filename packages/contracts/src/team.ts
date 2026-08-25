@@ -41,3 +41,11 @@ export const CustomerListQuerySchema = z.object({
 export const CustomerListResponseSchema = z.object({
   customers: z.array(CustomerSchema),
 });
+
+export const EmployeePatchSchema = z.object({
+  bookable: z.boolean().optional(),
+  color: z.string().nullable().optional(),
+  access: EmployeeAccessSchema.optional(),
+  roleId: z.uuid().nullable().optional(),
+});
+export type EmployeePatch = z.infer<typeof EmployeePatchSchema>;
