@@ -585,9 +585,13 @@ export async function confirmBooking(
     serviceId: req.serviceId,
     locationId: req.locationId,
     variantId: line.vid,
+    customerId: custId,
   });
   const choice = await svcChoice(trx, req.serviceId, req.locationId, line.vid);
   const price = Math.max(0, pr.effective + (line.price - choice.price));
+  // A personal-offer price stamps the promise on the appointment;
+  // PAYING redeems it (finishSale), not booking.
+  const poId = pr.best.kind === 'personal' ? pr.best.ref : null;
 
   const sch = await scheduleFor(trx, req.locationId, req.date);
   const svc = await trx
@@ -617,6 +621,7 @@ export async function confirmBooking(
       anyEmp: req.employeeId === 'any',
       customerId: custId,
       price,
+      poId,
       quoted: JSON.stringify({
         treatmentMin: line.treatmentMin,
         prepMin: line.prepMin,

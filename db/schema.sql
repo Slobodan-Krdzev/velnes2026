@@ -414,6 +414,25 @@ ALTER TABLE ONLY public.checkouts FORCE ROW LEVEL SECURITY;
 
 
 --
+-- Name: customer_activity; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.customer_activity (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    tenant_id uuid NOT NULL,
+    customer_id uuid NOT NULL,
+    ts timestamp with time zone DEFAULT now() NOT NULL,
+    actor_employee_id uuid,
+    type text NOT NULL,
+    ref_type text DEFAULT ''::text NOT NULL,
+    ref_id text DEFAULT ''::text NOT NULL,
+    meta jsonb DEFAULT '{}'::jsonb NOT NULL
+);
+
+ALTER TABLE ONLY public.customer_activity FORCE ROW LEVEL SECURITY;
+
+
+--
 -- Name: customers; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -432,7 +451,10 @@ CREATE TABLE public.customers (
     blacklisted boolean DEFAULT false NOT NULL,
     no_shows integer DEFAULT 0 NOT NULL,
     note text,
-    created_at timestamp with time zone DEFAULT now() NOT NULL
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    birthday date,
+    tags text[] DEFAULT '{}'::text[] NOT NULL,
+    premium jsonb
 );
 
 ALTER TABLE ONLY public.customers FORCE ROW LEVEL SECURITY;
@@ -927,6 +949,31 @@ ALTER TABLE ONLY public.payment_accounts FORCE ROW LEVEL SECURITY;
 
 
 --
+-- Name: personal_offers; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.personal_offers (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    tenant_id uuid NOT NULL,
+    customer_id uuid NOT NULL,
+    service_id uuid NOT NULL,
+    variant_id uuid,
+    location_id uuid NOT NULL,
+    special_price integer NOT NULL,
+    normal_price integer NOT NULL,
+    valid_until date NOT NULL,
+    intent text DEFAULT ''::text NOT NULL,
+    status text DEFAULT 'live'::text NOT NULL,
+    created_by uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT personal_offers_special_price_check CHECK ((special_price >= 0)),
+    CONSTRAINT personal_offers_status_check CHECK ((status = ANY (ARRAY['live'::text, 'cancelled'::text, 'redeemed'::text])))
+);
+
+ALTER TABLE ONLY public.personal_offers FORCE ROW LEVEL SECURITY;
+
+
+--
 -- Name: product_categories; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1295,6 +1342,14 @@ ALTER TABLE ONLY public.checkouts
 
 
 --
+-- Name: customer_activity customer_activity_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.customer_activity
+    ADD CONSTRAINT customer_activity_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: customers customers_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1559,6 +1614,14 @@ ALTER TABLE ONLY public.payment_accounts
 
 
 --
+-- Name: personal_offers personal_offers_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.personal_offers
+    ADD CONSTRAINT personal_offers_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: product_categories product_categories_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1791,6 +1854,13 @@ CREATE INDEX checkouts_tenant ON public.checkouts USING btree (tenant_id, ts DES
 
 
 --
+-- Name: customer_activity_cust; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX customer_activity_cust ON public.customer_activity USING btree (customer_id, ts DESC);
+
+
+--
 -- Name: customers_contact; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -1949,6 +2019,13 @@ CREATE INDEX merchant_transactions_tenant ON public.merchant_transactions USING 
 --
 
 CREATE INDEX payment_accounts_tenant ON public.payment_accounts USING btree (tenant_id, legal_entity_id);
+
+
+--
+-- Name: personal_offers_cust; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX personal_offers_cust ON public.personal_offers USING btree (customer_id, status);
 
 
 --
@@ -2192,6 +2269,22 @@ ALTER TABLE ONLY public.checkouts
 
 ALTER TABLE ONLY public.checkouts
     ADD CONSTRAINT checkouts_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.businesses(id);
+
+
+--
+-- Name: customer_activity customer_activity_customer_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.customer_activity
+    ADD CONSTRAINT customer_activity_customer_id_fkey FOREIGN KEY (customer_id) REFERENCES public.customers(id);
+
+
+--
+-- Name: customer_activity customer_activity_tenant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.customer_activity
+    ADD CONSTRAINT customer_activity_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.businesses(id);
 
 
 --
@@ -2683,6 +2776,46 @@ ALTER TABLE ONLY public.payment_accounts
 
 
 --
+-- Name: personal_offers personal_offers_customer_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.personal_offers
+    ADD CONSTRAINT personal_offers_customer_id_fkey FOREIGN KEY (customer_id) REFERENCES public.customers(id);
+
+
+--
+-- Name: personal_offers personal_offers_location_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.personal_offers
+    ADD CONSTRAINT personal_offers_location_id_fkey FOREIGN KEY (location_id) REFERENCES public.locations(id);
+
+
+--
+-- Name: personal_offers personal_offers_service_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.personal_offers
+    ADD CONSTRAINT personal_offers_service_id_fkey FOREIGN KEY (service_id) REFERENCES public.services(id);
+
+
+--
+-- Name: personal_offers personal_offers_tenant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.personal_offers
+    ADD CONSTRAINT personal_offers_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.businesses(id);
+
+
+--
+-- Name: personal_offers personal_offers_variant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.personal_offers
+    ADD CONSTRAINT personal_offers_variant_id_fkey FOREIGN KEY (variant_id) REFERENCES public.service_variants(id);
+
+
+--
 -- Name: product_categories product_categories_parent_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3019,6 +3152,12 @@ ALTER TABLE public.checkout_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.checkouts ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: customer_activity; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.customer_activity ENABLE ROW LEVEL SECURITY;
+
+--
 -- Name: customers; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -3252,6 +3391,12 @@ ALTER TABLE public.merchant_transactions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.payment_accounts ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: personal_offers; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.personal_offers ENABLE ROW LEVEL SECURITY;
+
+--
 -- Name: product_categories; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -3375,6 +3520,13 @@ ALTER TABLE public.tax_rules ENABLE ROW LEVEL SECURITY;
 --
 
 CREATE POLICY tenant_append ON public.audit_log FOR INSERT WITH CHECK ((tenant_id = app.current_tenant()));
+
+
+--
+-- Name: customer_activity tenant_append; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY tenant_append ON public.customer_activity FOR INSERT WITH CHECK ((tenant_id = app.current_tenant()));
 
 
 --
@@ -3581,6 +3733,13 @@ CREATE POLICY tenant_isolation ON public.payment_accounts USING (((tenant_id = a
 
 
 --
+-- Name: personal_offers tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY tenant_isolation ON public.personal_offers USING ((tenant_id = app.current_tenant())) WITH CHECK ((tenant_id = app.current_tenant()));
+
+
+--
 -- Name: product_categories tenant_isolation; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -3679,6 +3838,13 @@ CREATE POLICY tenant_read ON public.audit_log FOR SELECT USING ((tenant_id = app
 
 
 --
+-- Name: customer_activity tenant_read; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY tenant_read ON public.customer_activity FOR SELECT USING ((tenant_id = app.current_tenant()));
+
+
+--
 -- Name: integration_events tenant_read; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -3744,4 +3910,5 @@ INSERT INTO public.schema_migrations (version) VALUES
     ('20260825190012'),
     ('20260826090013'),
     ('20260826100014'),
-    ('20260826110015');
+    ('20260826110015'),
+    ('20260826130016');

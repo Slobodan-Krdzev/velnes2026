@@ -2,7 +2,7 @@ import type { AccessClaims, Invoice, SaleRequest, SaleResponse } from '@velnes/c
 import { sql } from 'kysely';
 import type { Trx } from '../../db/index.js';
 import { logAudit } from '../audit/audit.service.js';
-import { prodAt, svcLine } from '../catalog/catalog.service.js';
+import { priceFor, prodAt, svcChoice, svcLine } from '../catalog/catalog.service.js';
 import { locLive } from '../locations/locations.service.js';
 import { localIso, todayIso } from '../scheduling/scheduling.service.js';
 
@@ -32,7 +32,12 @@ interface ResolvedLine {
 export const lineTotal = (l: ResolvedLine) => Math.max(0, l.price * l.qty - l.lineDiscount);
 
 /** Resolve every basket line at the door: real prices, real classes. */
-async function resolveLines(trx: Trx, locationId: string, lines: SaleRequest['lines']) {
+async function resolveLines(
+  trx: Trx,
+  locationId: string,
+  lines: SaleRequest['lines'],
+  customerId: string | null = null,
+) {
   const out: ResolvedLine[] = [];
   for (const l of lines) {
     if (l.kind === 'appointment') {
@@ -69,17 +74,33 @@ async function resolveLines(trx: Trx, locationId: string, lines: SaleRequest['li
         .select(['name', 'vat'])
         .where('id', '=', l.serviceId)
         .executeTakeFirstOrThrow();
+      // The till asks the same pricing door as the booking flow: a
+      // known customer gets their personal offer applied here, plus
+      // the modifier delta on top.
+      let price = line.price;
+      let poId: string | null = null;
+      if (customerId) {
+        const pr = await priceFor(trx, {
+          serviceId: l.serviceId,
+          locationId,
+          variantId: l.variantId ?? null,
+          customerId,
+        });
+        const choice = await svcChoice(trx, l.serviceId, locationId, l.variantId ?? null);
+        price = Math.max(0, pr.effective + (line.price - choice.price));
+        if (pr.best.kind === 'personal') poId = pr.best.ref;
+      }
       out.push({
         description: s.name + (line.label ? ` · ${line.label}` : ''),
         qty: l.qty,
-        price: line.price,
+        price,
         lineDiscount: l.lineDiscount,
         itemClass: 'service',
         serviceId: l.serviceId,
         productId: null,
         appointmentId: null,
         vat: s.vat,
-        poId: null,
+        poId,
         pmoId: null,
       });
     } else {
@@ -347,7 +368,7 @@ export async function finishSale(
     );
   }
   const tenantId = claims.ten;
-  const lines = await resolveLines(trx, req.locationId, req.lines);
+  const lines = await resolveLines(trx, req.locationId, req.lines, req.customerId ?? null);
   const subtotal = lines.reduce((s, l) => s + lineTotal(l), 0);
 
   // Deductions in order — points, gift card, promo — never below zero;
@@ -409,7 +430,7 @@ export async function finishSale(
   const customer = req.customerId
     ? await trx
         .selectFrom('customers')
-        .select(['id', 'name'])
+        .select(['id', 'name', 'premium'])
         .where('id', '=', req.customerId)
         .executeTakeFirst()
     : undefined;
@@ -536,10 +557,46 @@ export async function finishSale(
       .execute();
   let pointsEarned = 0;
   if (customer && cfg?.active) {
-    pointsEarned = Math.round((total * cfg.points) / cfg.earnPer);
+    // Velnes Premium members earn 1.5× — the HQ-set rule, read
+    // through the one membership door.
+    const { isPremium, PREMIUM_LOYALTY_MULT } = await import('../customers/customers.service.js');
+    const mult = isPremium(customer.premium) ? PREMIUM_LOYALTY_MULT : 1;
+    pointsEarned = Math.round(((total * cfg.points) / cfg.earnPer) * mult);
     if (pointsEarned > 0)
-      await addPoints(trx, tenantId, customer.id, pointsEarned, lines[0]?.description ?? 'Sale', number);
+      await addPoints(
+        trx,
+        tenantId,
+        customer.id,
+        pointsEarned,
+        (lines[0]?.description ?? 'Sale') + (mult > 1 ? ` · ×${PREMIUM_LOYALTY_MULT} Velnes Premium` : ''),
+        number,
+      );
   }
+
+  // Paying redeems the personal-offer promises the lines carried.
+  for (const l of lines)
+    if (l.poId) {
+      const po = await trx
+        .selectFrom('personalOffers')
+        .select(['id', 'customerId', 'intent', 'specialPrice', 'serviceId'])
+        .where('id', '=', l.poId)
+        .where('status', '=', 'live')
+        .executeTakeFirst();
+      if (po) {
+        await trx
+          .updateTable('personalOffers')
+          .set({ status: 'redeemed' })
+          .where('id', '=', po.id)
+          .execute();
+        const { activityLog } = await import('../customers/customers.service.js');
+        await activityLog(trx, tenantId, po.customerId, req.employeeId ?? null, 'offer_redeemed', 'offer', po.id, {
+          intent: po.intent,
+          serviceId: po.serviceId,
+          amount: po.specialPrice,
+          override: false,
+        });
+      }
+    }
 
   // Stock: sold products out; own-use consumed per the recipes.
   const shortages: string[] = [];

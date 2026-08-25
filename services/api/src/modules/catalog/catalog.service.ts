@@ -282,12 +282,35 @@ async function listPrice(
  */
 export async function priceFor(
   trx: Trx,
-  req: { serviceId: string; locationId: string; variantId?: string | null | undefined },
+  req: {
+    serviceId: string;
+    locationId: string;
+    variantId?: string | null | undefined;
+    customerId?: string | null | undefined;
+  },
 ): Promise<PriceForResponse> {
   const base = await listPrice(trx, req.serviceId, req.locationId, req.variantId ?? null);
-  const options = [
+  const options: PriceForResponse['options'] = [
     { kind: 'list' as const, price: base, label: 'Normal price', spends: false, ref: null },
   ];
+
+  // A personal offer: a promise to one customer for one service. The
+  // till and the booking flow redeem it here; the list button is an
+  // administrative correction from now on.
+  if (req.customerId) {
+    const { livePersonalOffer } = await import('../customers/customers.service.js');
+    const choiceVid =
+      req.variantId ?? (await svcChoice(trx, req.serviceId, req.locationId, null)).vid;
+    const po = await livePersonalOffer(trx, req.customerId, req.serviceId, choiceVid);
+    if (po)
+      options.push({
+        kind: 'personal',
+        price: po.specialPrice,
+        label: 'Personal offer',
+        spends: false,
+        ref: po.id,
+      });
+  }
   const noSpend = options.filter((o) => !o.spends);
   const best = noSpend.reduce((a, b) => (b.price < a.price ? b : a), noSpend[0]!);
   const choices = options.filter((o) => o.spends);

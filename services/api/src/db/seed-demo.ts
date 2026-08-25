@@ -170,6 +170,7 @@ export async function seedDemo(adminUrl: string) {
     await q(`TRUNCATE audit_log, refresh_tokens, user_credentials, payment_accounts,
       legal_entity_locations, legal_entities, employee_locations,
       integration_events, widgets, registrations, hq_users,
+      customer_activity, personal_offers,
       tax_rules, service_recipes, loyalty_ledger, loyalty_config,
       discount_codes, gift_cards, checkout_items, merchant_transactions,
       checkouts, invoice_lines, invoices, invoice_counters,
@@ -469,6 +470,28 @@ export async function seedDemo(adminUrl: string) {
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
         [id, demo.business, name, email, phone, grp, since, visits, spend, points, prepaid, bl, ns, note],
       );
+
+    // Velnes Premium is a PLATFORM membership, mirrored read-only:
+    // two active members and one expired so the lifecycle shows
+    // honestly (prototype seeding, verbatim).
+    const day = (n: number) => {
+      const d = new Date();
+      d.setDate(d.getDate() + n);
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    };
+    const prem: [string, string, number, number][] = [
+      [demo.c4, 'active', -260, 20],
+      [demo.c1, 'active', -120, 8],
+      [demo.c6, 'expired', -400, -35],
+    ];
+    for (const [id, status, since, renews] of prem)
+      await q(`UPDATE customers SET premium=$2 WHERE id=$1`, [
+        id,
+        JSON.stringify({ status, since: day(since), renews: day(renews) }),
+      ]);
+    // Birthdays: Marija soon (feeds the suggestion), Katerina far off.
+    await q(`UPDATE customers SET birthday=$2 WHERE id=$1`, [demo.c4, `1988${day(9).slice(4)}`]);
+    await q(`UPDATE customers SET birthday=$2 WHERE id=$1`, [demo.c1, `1990${day(120).slice(4)}`]);
 
     // ── Holiday calendar (MK, from the prototype, verbatim) ───────
     await q(

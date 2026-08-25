@@ -71,15 +71,16 @@ describe('till & checkout doors', () => {
     expect(body.total).toBe(1853);
     expect(body.invoice.number).toBe('CEN-2026-0413'); // the counter continues the prototype
     expect(body.checkoutStatus).toBe('PAID');
-    // Points: −100 redeemed, earned on the PAID total: round(1853/60)=31.
-    expect(body.pointsEarned).toBe(31);
+    // Points: −100 redeemed, earned on the PAID total ×1.5 (Katerina
+    // is Velnes Premium): round(1853/60 × 1.5) = 46.
+    expect(body.pointsEarned).toBe(46);
     const bal = await admin.query(
       `SELECT COALESCE(SUM(points),0)::int AS n FROM loyalty_ledger WHERE customer_id=$1`,
       [demo.c1],
     );
     const cust = await admin.query(`SELECT points FROM customers WHERE id=$1`, [demo.c1]);
     expect(cust.rows[0].points).toBe(bal.rows[0].n); // balance = ledger sum
-    expect(bal.rows[0].n).toBe(320 - 100 + 31);
+    expect(bal.rows[0].n).toBe(320 - 100 + 46);
     const promo = await admin.query(`SELECT used FROM discount_codes WHERE code='SUMMER26'`);
     expect(promo.rows[0].used).toBe(49);
   });

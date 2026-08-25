@@ -20,6 +20,7 @@ import { tillRoutes } from './modules/till/till.routes.js';
 import { timingRoutes } from './modules/timing/timing.routes.js';
 import { widgetsRoutes } from './modules/widgets/widgets.routes.js';
 import { hqRoutes } from './modules/hq/hq.routes.js';
+import { customersRoutes } from './modules/customers/customers.routes.js';
 import { registrationsRoutes } from './modules/registrations/registrations.routes.js';
 import { authPlugin } from './plugins/auth.js';
 import { publicRoutes } from './public/public.routes.js';
@@ -54,6 +55,7 @@ export async function buildServer() {
       widgetsRoutes(api);
       registrationsRoutes(api);
       hqRoutes(api);
+      customersRoutes(api);
     },
     { prefix: API_PREFIX },
   );

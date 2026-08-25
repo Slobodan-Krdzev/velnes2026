@@ -15,3 +15,4 @@ export * from './public.js';
 export * from './widgets.js';
 export * from './registrations.js';
 export * from './hq.js';
+export * from './customers.js';

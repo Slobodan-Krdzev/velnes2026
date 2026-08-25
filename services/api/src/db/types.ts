@@ -160,7 +160,20 @@ export interface Checkouts {
   ts: Generated<Timestamp>;
 }
 
+export interface CustomerActivity {
+  actorEmployeeId: string | null;
+  customerId: string;
+  id: Generated<string>;
+  meta: Generated<Json>;
+  refId: Generated<string>;
+  refType: Generated<string>;
+  tenantId: string;
+  ts: Generated<Timestamp>;
+  type: string;
+}
+
 export interface Customers {
+  birthday: Timestamp | null;
   blacklisted: Generated<boolean>;
   createdAt: Generated<Timestamp>;
   custGroup: Generated<string>;
@@ -171,9 +184,11 @@ export interface Customers {
   note: string | null;
   phone: string | null;
   points: Generated<number>;
+  premium: Json | null;
   prepaid: Generated<number>;
   since: Generated<Timestamp>;
   spend: Generated<number>;
+  tags: Generated<string[]>;
   tenantId: string;
   visits: Generated<number>;
 }
@@ -486,6 +501,22 @@ export interface PaymentAccounts {
   tenantId: string | null;
 }
 
+export interface PersonalOffers {
+  createdAt: Generated<Timestamp>;
+  createdBy: string | null;
+  customerId: string;
+  id: Generated<string>;
+  intent: Generated<string>;
+  locationId: string;
+  normalPrice: number;
+  serviceId: string;
+  specialPrice: number;
+  status: Generated<string>;
+  tenantId: string;
+  validUntil: Timestamp;
+  variantId: string | null;
+}
+
 export interface ProductCategories {
   id: Generated<string>;
   name: string;
@@ -688,6 +719,7 @@ export interface DB {
   businesses: Businesses;
   checkoutItems: CheckoutItems;
   checkouts: Checkouts;
+  customerActivity: CustomerActivity;
   customers: Customers;
   discountCodes: DiscountCodes;
   employeeLocations: EmployeeLocations;
@@ -714,6 +746,7 @@ export interface DB {
   loyaltyLedger: LoyaltyLedger;
   merchantTransactions: MerchantTransactions;
   paymentAccounts: PaymentAccounts;
+  personalOffers: PersonalOffers;
   productCategories: ProductCategories;
   products: Products;
   refreshTokens: RefreshTokens;
