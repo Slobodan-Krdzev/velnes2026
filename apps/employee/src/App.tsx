@@ -1,29 +1,37 @@
-import { API_PREFIX, HealthResponseSchema, type HealthResponse } from '@velnes/contracts';
-import { AppShell } from '@velnes/ui';
-import { useEffect, useState } from 'react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { createI18n } from '@velnes/i18n';
+import { SessionProvider, useSession } from '@velnes/client';
+import { useMemo } from 'react';
+import { I18nextProvider, useTranslation } from 'react-i18next';
+import { EmployeeApp } from './Employee.js';
+import { MoLogin } from './MoLogin.js';
+import './employee.css';
+
+const queryClient = new QueryClient({
+  defaultOptions: { queries: { retry: 1, staleTime: 15_000 } },
+});
+
+function Gate() {
+  const { me, booting } = useSession();
+  const { t } = useTranslation();
+  if (booting)
+    return (
+      <div className="mo-app">
+        <div className="mo-body muted">{t('shell.loading')}</div>
+      </div>
+    );
+  return me ? <EmployeeApp /> : <MoLogin />;
+}
 
 export function App() {
-  const [health, setHealth] = useState<HealthResponse | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    fetch(`${API_PREFIX}/health`)
-      .then((res) => res.json())
-      .then((data: unknown) => setHealth(HealthResponseSchema.parse(data)))
-      .catch((err: unknown) => setError(err instanceof Error ? err.message : 'failed'));
-  }, []);
-
+  const i18n = useMemo(() => createI18n('en'), []);
   return (
-    <AppShell title="Velnes Employee">
-      {health ? (
-        <p>
-          API {health.status} · v{health.version} · {health.time}
-        </p>
-      ) : error ? (
-        <p>API unreachable: {error}</p>
-      ) : (
-        <p>Checking API…</p>
-      )}
-    </AppShell>
+    <I18nextProvider i18n={i18n}>
+      <QueryClientProvider client={queryClient}>
+        <SessionProvider>
+          <Gate />
+        </SessionProvider>
+      </QueryClientProvider>
+    </I18nextProvider>
   );
 }

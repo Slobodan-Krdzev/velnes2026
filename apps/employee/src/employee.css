@@ -1,0 +1,9 @@
+/* The prototype's .phone frame is a desktop demo artifact; on a real
+ * device the app IS the phone. Same inner anatomy, full viewport. */
+.mo-app {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+}

@@ -40,13 +40,18 @@ jobs:
       - run: pnpm test
       - run: pnpm build
       - run: node_modules/.bin/playwright install --with-deps chromium
-      - run: pnpm e2e
+      - name: e2e
+        shell: bash
+        run: |
+          set -o pipefail
+          pnpm e2e 2>&1 | tee /tmp/e2e.log
         env:
           E2E_API_DATABASE_URL: postgres://velnes_api:velnes_api@localhost:5432/velnes
       - name: Publish e2e failure evidence
         if: failure()
         run: |
           mkdir -p /tmp/dbg && find test-results -name 'error-context.md' -exec sh -c 'cp "$1" /tmp/dbg/$(echo "$1" | tr "/" "_")' _ {} \; 2>/dev/null || true
+          cp /tmp/e2e.log /tmp/dbg/e2e-output.log 2>/dev/null || true
           ls /tmp/dbg | head
           git config user.email ci@velnes && git config user.name ci
           git checkout --orphan ci-debug && git rm -rf --cached . >/dev/null 2>&1 || true
