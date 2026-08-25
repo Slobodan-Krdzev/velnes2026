@@ -1,5 +1,8 @@
 import {
   ActivityListSchema,
+  CustomerApptsSchema,
+  CustomerInvoicesSchema,
+  CustomerLoyaltySchema,
   CustomerInsightsSchema,
   CustomerPatchSchema,
   CustomerProfileSchema,
@@ -9,6 +12,7 @@ import {
 } from '@velnes/contracts';
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
+import { sql } from 'kysely';
 import { z } from 'zod';
 import { withTenant } from '../../db/index.js';
 import { can, permsFor } from '../auth/authz.service.js';
@@ -74,6 +78,9 @@ export function customersRoutes(app: FastifyInstance) {
           await trx
             .updateTable('customers')
             .set({
+              ...(b.name !== undefined ? { name: b.name } : {}),
+              ...(b.email !== undefined ? { email: b.email } : {}),
+              ...(b.phone !== undefined ? { phone: b.phone } : {}),
               ...(b.note !== undefined ? { note: b.note } : {}),
               ...(b.tags !== undefined ? { tags: b.tags } : {}),
               ...(b.group !== undefined ? { custGroup: b.group } : {}),
@@ -146,6 +153,123 @@ export function customersRoutes(app: FastifyInstance) {
             refType: a.refType,
             refId: a.refId,
             meta: (a.meta ?? {}) as Record<string, unknown>,
+          })),
+        };
+      }),
+  });
+
+  r.route({
+    method: 'GET',
+    url: '/customers/:id/appointments',
+    preHandler: [app.authenticate],
+    schema: { params: IdParams, response: { 200: CustomerApptsSchema } },
+    handler: async (req) =>
+      withTenant(req.claims.ten, async (trx) => {
+        const hhmm = (m: number) =>
+          `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+        const rows = await trx
+          .selectFrom('appointments as a')
+          .leftJoin('services as s', 's.id', 'a.serviceId')
+          .leftJoin('locations as l', 'l.id', 'a.locationId')
+          .leftJoin('employees as e', 'e.id', 'a.employeeId')
+          .selectAll('a')
+          .select(['s.name as svcName', 'l.name as locName', 'e.name as empName'])
+          .where('a.customerId', '=', req.params.id)
+          .where('a.kind', '=', 'appointment')
+          .orderBy('a.date', 'desc')
+          .orderBy('a.startMin', 'desc')
+          .limit(200)
+          .execute();
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const map = (a: (typeof rows)[number]) => ({
+          id: a.id,
+          date: a.date.toISOString().slice(0, 10),
+          start: hhmm(a.startMin),
+          end: hhmm(a.startMin + a.durationMin),
+          serviceName: a.svcName ?? a.title ?? '—',
+          locationName: a.locName ?? '—',
+          employeeName: a.empName,
+          status: a.status,
+          source: a.source,
+          price: a.price,
+        });
+        return {
+          upcoming: rows
+            .filter((a) => a.date.getTime() >= today.getTime())
+            .sort((a, b) => a.date.getTime() - b.date.getTime())
+            .map(map),
+          history: rows.filter((a) => a.date.getTime() < today.getTime()).map(map),
+        };
+      }),
+  });
+
+  r.route({
+    method: 'GET',
+    url: '/customers/:id/invoices',
+    preHandler: [app.authenticate],
+    schema: { params: IdParams, response: { 200: CustomerInvoicesSchema } },
+    handler: async (req) =>
+      withTenant(req.claims.ten, async (trx) => {
+        const rows = await trx
+          .selectFrom('invoices')
+          .selectAll()
+          .where('customerId', '=', req.params.id)
+          .orderBy('date', 'desc')
+          .limit(100)
+          .execute();
+        const totals = await trx
+          .selectFrom('invoiceLines')
+          .select(['invoiceId'])
+          .select((eb) => eb.fn.sum<string>(sql`qty * unit_price - line_discount`).as('sum'))
+          .where('invoiceId', 'in', rows.length ? rows.map((r) => r.id) : ['00000000-0000-4000-8000-000000000000'])
+          .groupBy('invoiceId')
+          .execute();
+        return {
+          invoices: rows.map((i) => {
+            const lineSum = Number(totals.find((t) => t.invoiceId === i.id)?.sum ?? 0);
+            return {
+              id: i.id,
+              number: i.number,
+              date: i.date.toISOString().slice(0, 10),
+              method: i.method,
+              total: Math.max(
+                0,
+                lineSum - i.cartDiscount - i.pointsRedeemed - i.giftAmount - i.promoAmount,
+              ) + i.tip + i.serviceCharge,
+            };
+          }),
+        };
+      }),
+  });
+
+  r.route({
+    method: 'GET',
+    url: '/customers/:id/loyalty',
+    preHandler: [app.authenticate],
+    schema: { params: IdParams, response: { 200: CustomerLoyaltySchema } },
+    handler: async (req) =>
+      withTenant(req.claims.ten, async (trx) => {
+        const rows = await trx
+          .selectFrom('loyaltyLedger')
+          .selectAll()
+          .where('customerId', '=', req.params.id)
+          .orderBy('at', 'desc')
+          .limit(100)
+          .execute();
+        const cfg = await trx.selectFrom('loyaltyConfig').selectAll().executeTakeFirst();
+        const balance = rows.reduce((n, r) => n + r.points, 0);
+        const step = cfg?.step ?? 100;
+        return {
+          balance,
+          worth: cfg ? Math.floor(balance / step) * cfg.worth : 0,
+          nextRewardAt: Math.ceil((balance + 1) / step) * step,
+          rows: rows.map((r) => ({
+            id: r.id,
+            reason: r.reason,
+            ref: r.ref || '—',
+            when: r.at.toISOString().slice(0, 10),
+            points: r.points,
           })),
         };
       }),

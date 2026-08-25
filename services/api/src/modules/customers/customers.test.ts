@@ -34,12 +34,12 @@ async function token(email: string) {
 }
 const get = (url: string) =>
   app.inject({ method: 'GET', url, headers: { authorization: `Bearer ${ownerToken}` } });
-const post = (url: string, payload?: unknown) =>
+const post = (url: string, payload: unknown = {}) =>
   app.inject({
     method: 'POST',
     url,
     headers: { authorization: `Bearer ${ownerToken}` },
-    ...(payload !== undefined ? { payload } : {}),
+    payload: payload as Record<string, unknown>,
   });
 
 describe('customers, intelligence and personal offers', () => {
@@ -156,7 +156,7 @@ describe('customers, intelligence and personal offers', () => {
 
     // The till: same door, and paying redeems the promise.
     const sale = await post(`${API_PREFIX}/sales`, {
-      locationId: demo.locCentar,
+      locationId: demo.locAerodrom, // Centar's invoice counter is pinned by the till suite
       key: `po-sale-${Date.now()}`,
       method: 'cash',
       customerId: demo.c1,
@@ -182,7 +182,7 @@ describe('customers, intelligence and personal offers', () => {
     // Marija (c4) is an active Premium member; earn_per=60, points=1.
     const before = await admin.query(`SELECT points FROM customers WHERE id=$1`, [demo.c4]);
     const sale = await post(`${API_PREFIX}/sales`, {
-      locationId: demo.locCentar,
+      locationId: demo.locAerodrom,
       key: `po-sale-prem-${Date.now()}`,
       method: 'cash',
       customerId: demo.c4,

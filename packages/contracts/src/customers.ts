@@ -56,11 +56,56 @@ export const CustomerProfileSchema = z.object({
 export type CustomerProfile = z.infer<typeof CustomerProfileSchema>;
 
 export const CustomerPatchSchema = z.object({
+  name: z.string().min(1).optional(),
+  email: z.string().nullable().optional(),
+  phone: z.string().nullable().optional(),
   note: z.string().nullable().optional(),
   tags: z.array(z.string()).optional(),
   group: z.string().optional(),
   birthday: z.string().nullable().optional(),
   blacklisted: z.boolean().optional(),
+});
+
+export const CustomerApptRowSchema = z.object({
+  id: z.uuid(),
+  date: z.iso.date(),
+  start: z.string(),
+  end: z.string(),
+  serviceName: z.string(),
+  locationName: z.string(),
+  employeeName: z.string().nullable(),
+  status: z.string(),
+  source: z.string(),
+  price: MoneySchema,
+});
+export const CustomerApptsSchema = z.object({
+  upcoming: z.array(CustomerApptRowSchema),
+  history: z.array(CustomerApptRowSchema),
+});
+
+export const CustomerInvoiceRowSchema = z.object({
+  id: z.uuid(),
+  number: z.string(),
+  date: z.iso.date(),
+  method: z.string(),
+  total: MoneySchema,
+});
+export const CustomerInvoicesSchema = z.object({
+  invoices: z.array(CustomerInvoiceRowSchema),
+});
+
+export const LoyaltyRowSchema = z.object({
+  id: z.uuid(),
+  reason: z.string(),
+  ref: z.string(),
+  when: z.iso.date(),
+  points: z.number().int(),
+});
+export const CustomerLoyaltySchema = z.object({
+  balance: z.number().int(),
+  worth: MoneySchema,
+  nextRewardAt: z.number().int(),
+  rows: z.array(LoyaltyRowSchema),
 });
 
 export const ActivityEntrySchema = z.object({

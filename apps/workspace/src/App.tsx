@@ -6,6 +6,7 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { ToastProvider } from './lib/toast.js';
 import { CalendarPage } from './pages/calendar/Calendar.js';
 import { CatalogPage } from './pages/catalog/Catalog.js';
+import { CustomersPage } from './pages/customers/Customers.js';
 import { FlightdeckPage } from './pages/flightdeck/Flightdeck.js';
 import { SettingsPage } from './pages/settings/Settings.js';
 import { InvoicesPage } from './pages/till/Invoices.js';
@@ -55,7 +56,8 @@ export function App() {
                 <Route path="/till" element={<TillPage />} />
                 <Route path="/till/invoices" element={<InvoicesPage />} />
                 <Route path="/catalog" element={<CatalogPage />} />
-                <Route path="/customers" element={<Placeholder title="nav.customers" />} />
+                <Route path="/customers" element={<CustomersPage />} />
+                <Route path="/customers/:id" element={<CustomersPage />} />
                 <Route path="/reports" element={<Placeholder title="nav.reports" />} />
                 <Route path="/settings" element={<SettingsPage />} />
                 <Route path="*" element={<Navigate to="/" replace />} />

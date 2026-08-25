@@ -80,6 +80,7 @@ export function teamRoutes(app: FastifyInstance) {
             phone: c.phone,
             group: c.custGroup,
             visits: c.visits,
+            spend: c.spend,
             points: c.points,
             blacklisted: c.blacklisted,
             noShows: c.noShows,

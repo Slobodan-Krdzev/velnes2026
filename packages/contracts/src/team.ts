@@ -28,6 +28,7 @@ export const CustomerSchema = z.object({
   phone: z.string().nullable(),
   group: z.string(),
   visits: z.number().int(),
+  spend: z.number().int(),
   points: z.number().int(),
   blacklisted: z.boolean(),
   noShows: z.number().int(),
