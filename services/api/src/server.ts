@@ -19,6 +19,8 @@ import { teamRoutes } from './modules/team/team.routes.js';
 import { tillRoutes } from './modules/till/till.routes.js';
 import { timingRoutes } from './modules/timing/timing.routes.js';
 import { widgetsRoutes } from './modules/widgets/widgets.routes.js';
+import { hqRoutes } from './modules/hq/hq.routes.js';
+import { registrationsRoutes } from './modules/registrations/registrations.routes.js';
 import { authPlugin } from './plugins/auth.js';
 import { publicRoutes } from './public/public.routes.js';
 
@@ -50,6 +52,8 @@ export async function buildServer() {
       tillRoutes(api);
       teamRoutes(api);
       widgetsRoutes(api);
+      registrationsRoutes(api);
+      hqRoutes(api);
     },
     { prefix: API_PREFIX },
   );

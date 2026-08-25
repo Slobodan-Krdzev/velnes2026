@@ -19,6 +19,9 @@ export const DEMO_PASSWORD = 'velnes-demo';
 // Stable ids so tests and docs can reference the world.
 export const demo = {
   business: '10000000-0000-4000-8000-000000000001',
+  hqIvana: 'c0000000-0000-4000-8000-000000000001',
+  hqDamjan: 'c0000000-0000-4000-8000-000000000002',
+  hqTea: 'c0000000-0000-4000-8000-000000000003',
   locCentar: '20000000-0000-4000-8000-000000000001',
   locAerodrom: '20000000-0000-4000-8000-000000000002',
   roleOwner: '30000000-0000-4000-8000-000000000001',
@@ -166,7 +169,7 @@ export async function seedDemo(adminUrl: string) {
     await q('BEGIN');
     await q(`TRUNCATE audit_log, refresh_tokens, user_credentials, payment_accounts,
       legal_entity_locations, legal_entities, employee_locations,
-      integration_events, widgets,
+      integration_events, widgets, registrations, hq_users,
       tax_rules, service_recipes, loyalty_ledger, loyalty_config,
       discount_codes, gift_cards, checkout_items, merchant_transactions,
       checkouts, invoice_lines, invoices, invoice_counters,
@@ -644,6 +647,18 @@ export async function seedDemo(adminUrl: string) {
       await q(
         `INSERT INTO user_credentials (employee_id, tenant_id, password_hash) VALUES ($1,$2,$3)`,
         [id, demo.business, hash],
+      );
+
+    // Revelapps HQ staff (prototype's hqUsers) — same demo password.
+    const hqRows: [string, string, string, string][] = [
+      [demo.hqIvana, 'Ivana Markovska', 'ivana@revelapps.com', 'hq_super'],
+      [demo.hqDamjan, 'Damjan Kostov', 'damjan@revelapps.com', 'hq_onboard'],
+      [demo.hqTea, 'Tea Nikolova', 'tea@revelapps.com', 'hq_support'],
+    ];
+    for (const [id, name, email, role] of hqRows)
+      await q(
+        `INSERT INTO hq_users (id, name, email, role, password_hash) VALUES ($1,$2,$3,$4,$5)`,
+        [id, name, email, role, hash],
       );
 
     await q(

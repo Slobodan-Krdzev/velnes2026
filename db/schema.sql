@@ -3126,6 +3126,13 @@ CREATE POLICY hq_read ON public.legal_entities FOR SELECT USING ((current_settin
 
 
 --
+-- Name: legal_entity_locations hq_read; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY hq_read ON public.legal_entity_locations FOR SELECT USING ((current_setting('app.hq'::text, true) = '1'::text));
+
+
+--
 -- Name: location_lifecycle_log hq_read; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -3733,4 +3740,5 @@ INSERT INTO public.schema_migrations (version) VALUES
     ('20260825090010'),
     ('20260825170011'),
     ('20260825190012'),
-    ('20260826090013');
+    ('20260826090013'),
+    ('20260826100014');

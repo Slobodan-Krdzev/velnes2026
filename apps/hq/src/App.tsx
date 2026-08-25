@@ -1,29 +1,59 @@
-import { API_PREFIX, HealthResponseSchema, type HealthResponse } from '@velnes/contracts';
-import { AppShell } from '@velnes/ui';
-import { useEffect, useState } from 'react';
+import type { HqLoginResponseSchema} from '@velnes/contracts';
+import { HqMeResponseSchema } from '@velnes/contracts';
+import { createI18n, type Lang } from '@velnes/i18n';
+import { useEffect, useMemo, useState } from 'react';
+import { I18nextProvider } from 'react-i18next';
+import type { z } from 'zod';
+import { getToken, hqGet, setToken } from './api.js';
+import { Hq } from './Hq.js';
+import { HqLogin } from './HqLogin.js';
+
+type HqUser = z.infer<typeof HqMeResponseSchema>;
 
 export function App() {
-  const [health, setHealth] = useState<HealthResponse | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const lang = (localStorage.getItem('velnes.hq.lang') as Lang) || 'en';
+  const i18n = useMemo(() => createI18n(lang), [lang]);
+  const [user, setUser] = useState<HqUser | null>(null);
+  const [booting, setBooting] = useState(!!getToken());
 
   useEffect(() => {
-    fetch(`${API_PREFIX}/health`)
-      .then((res) => res.json())
-      .then((data: unknown) => setHealth(HealthResponseSchema.parse(data)))
-      .catch((err: unknown) => setError(err instanceof Error ? err.message : 'failed'));
+    const out = () => setUser(null);
+    window.addEventListener('hq-signout', out);
+    return () => window.removeEventListener('hq-signout', out);
   }, []);
 
+  useEffect(() => {
+    if (!getToken()) return;
+    hqGet(HqMeResponseSchema, '/hq/me')
+      .then(setUser)
+      .catch(() => setToken(null))
+      .finally(() => setBooting(false));
+  }, []);
+
+  const setLang = (l: Lang) => {
+    localStorage.setItem('velnes.hq.lang', l);
+    void i18n.changeLanguage(l);
+  };
+
   return (
-    <AppShell title="Velnes HQ">
-      {health ? (
-        <p>
-          API {health.status} · v{health.version} · {health.time}
-        </p>
-      ) : error ? (
-        <p>API unreachable: {error}</p>
+    <I18nextProvider i18n={i18n}>
+      {booting ? null : user ? (
+        <Hq
+          user={user}
+          setLang={setLang}
+          signOut={() => {
+            setToken(null);
+            setUser(null);
+          }}
+        />
       ) : (
-        <p>Checking API…</p>
+        <HqLogin
+          onDone={(r: z.infer<typeof HqLoginResponseSchema>) => {
+            setToken(r.accessToken);
+            setUser(r.user);
+          }}
+        />
       )}
-    </AppShell>
+    </I18nextProvider>
   );
 }
