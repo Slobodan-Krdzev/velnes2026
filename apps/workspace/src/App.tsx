@@ -10,6 +10,7 @@ import { CustomersPage } from './pages/customers/Customers.js';
 import { FlightdeckPage } from './pages/flightdeck/Flightdeck.js';
 import { MarketingPage } from './pages/marketing/Marketing.js';
 import { SettingsPage } from './pages/settings/Settings.js';
+import { SuppliersPage } from './pages/suppliers/Suppliers.js';
 import { InvoicesPage } from './pages/till/Invoices.js';
 import { TillPage } from './pages/till/Till.js';
 import { Login } from './pages/Login.js';
@@ -57,6 +58,7 @@ export function App() {
                 <Route path="/till" element={<TillPage />} />
                 <Route path="/till/invoices" element={<InvoicesPage />} />
                 <Route path="/catalog" element={<CatalogPage />} />
+                <Route path="/suppliers" element={<SuppliersPage />} />
                 <Route path="/customers" element={<CustomersPage />} />
                 <Route path="/customers/:id" element={<CustomersPage />} />
                 <Route path="/marketing" element={<MarketingPage />} />
