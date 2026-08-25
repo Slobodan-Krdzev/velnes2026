@@ -1,8 +1,9 @@
+import type {
+  LastMinuteOfferSchema,
+  MemberRecSchema} from '@velnes/contracts';
 import {
   CapacityResponseSchema,
-  LastMinuteOfferSchema,
   MemberRecListSchema,
-  MemberRecSchema,
   OfferCreateSchema,
   OfferListSchema,
   PremiumOfferListSchema,
