@@ -49,6 +49,7 @@ export const SupplierProductSchema = z.object({
   category: z.string(),
   descr: z.string(),
   sample: z.boolean(),
+  active: z.boolean().optional(), // portal view only
   linkedProductId: z.uuid().nullable(), // the salon's own product
 });
 export type SupplierProduct = z.infer<typeof SupplierProductSchema>;

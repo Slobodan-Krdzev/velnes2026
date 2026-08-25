@@ -1,5 +1,6 @@
 import {
   PortalDashboardSchema,
+  SupplierPromotionListSchema,
   PortalSalonListSchema,
   PurchaseOrderListSchema,
   PurchaseOrderSchema,
@@ -265,7 +266,45 @@ export function portalRoutes(app: FastifyInstance) {
             category: p.category,
             descr: p.descr,
             sample: p.sample,
+            active: p.active,
             linkedProductId: null, // the salon's linkage is theirs
+          })),
+        };
+      }),
+  });
+
+  r.route({
+    method: 'GET',
+    url: '/portal/promotions',
+    preHandler: [app.authenticateSupplier],
+    schema: { response: { 200: SupplierPromotionListSchema } },
+    handler: async (req) =>
+      withSupplier(req.supplierClaims.sup, async (trx) => {
+        const rows = await trx
+          .selectFrom('supplierPromotions as p')
+          .innerJoin('suppliers as s', 's.id', 'p.supplierId')
+          .selectAll('p')
+          .select('s.name as supplierName')
+          .where('p.supplierId', '=', req.supplierClaims.sup)
+          .orderBy('p.starts', 'desc')
+          .execute();
+        return {
+          promotions: rows.map((p) => ({
+            id: p.id,
+            supplierId: p.supplierId,
+            supplierName: p.supplierName,
+            brand: p.brand,
+            title: p.title,
+            kind: p.kind,
+            productIds: p.productIds,
+            starts: localIso(p.starts),
+            ends: localIso(p.ends),
+            minOrder: p.minOrder,
+            usageLimit: p.usageLimit,
+            terms: p.terms,
+            audience: p.audience,
+            value: p.value,
+            per: p.per,
           })),
         };
       }),
