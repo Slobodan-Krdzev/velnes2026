@@ -1681,6 +1681,13 @@ CREATE UNIQUE INDEX appointments_idempotency ON public.appointments USING btree 
 
 
 --
+-- Name: appointments_widget_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX appointments_widget_idx ON public.appointments USING btree (widget_id) WHERE (widget_id IS NOT NULL);
+
+
+--
 -- Name: audit_log_tenant; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -3518,4 +3525,5 @@ INSERT INTO public.schema_migrations (version) VALUES
     ('20260824180008'),
     ('20260824210009'),
     ('20260825090010'),
-    ('20260825170011');
+    ('20260825170011'),
+    ('20260825190012');

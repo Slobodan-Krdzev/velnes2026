@@ -418,6 +418,13 @@ export async function publicRoutes(app: FastifyInstance) {
             source: 'widget',
             deposit: 0,
           });
+          // Attribute the booking to its widget for the stats card.
+          await trx
+            .updateTable('appointments')
+            .set({ widgetId: w.id })
+            .where('id', '=', a.id)
+            .where('widgetId', 'is', null)
+            .execute();
           const [locRow, empRow] = await Promise.all([
             trx.selectFrom('locations').select('name').where('id', '=', a.locationId).executeTakeFirst(),
             a.employeeId

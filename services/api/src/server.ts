@@ -18,6 +18,7 @@ import { stockRoutes } from './modules/stock/stock.routes.js';
 import { teamRoutes } from './modules/team/team.routes.js';
 import { tillRoutes } from './modules/till/till.routes.js';
 import { timingRoutes } from './modules/timing/timing.routes.js';
+import { widgetsRoutes } from './modules/widgets/widgets.routes.js';
 import { authPlugin } from './plugins/auth.js';
 import { publicRoutes } from './public/public.routes.js';
 
@@ -48,6 +49,7 @@ export async function buildServer() {
       timingRoutes(api);
       tillRoutes(api);
       teamRoutes(api);
+      widgetsRoutes(api);
     },
     { prefix: API_PREFIX },
   );

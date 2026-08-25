@@ -17,6 +17,7 @@ import { useTranslation } from 'react-i18next';
 import { z } from 'zod';
 import { api, get, post } from '@velnes/client';
 import { useEmployees, useLocations } from '../../api/queries.js';
+import { BookingSection } from './BookingSection.js';
 import { useToast } from '../../lib/toast.js';
 import { refusalText } from '@velnes/client';
 import { useSession } from '@velnes/client';
@@ -24,7 +25,7 @@ import { useSession } from '@velnes/client';
 const OkSchema = z.object({ ok: z.literal(true) });
 const IdSchema = z.object({ id: z.string() });
 
-type SectionId = 'locations' | 'team' | 'roles' | 'audit';
+type SectionId = 'locations' | 'team' | 'roles' | 'booking' | 'audit';
 
 export function SettingsPage() {
   const { t } = useTranslation();
@@ -35,6 +36,8 @@ export function SettingsPage() {
     ['#People', ''],
     ['team', t('settings.team')],
     ['roles', t('settings.roles')],
+    ['#Selling', ''],
+    ['booking', t('settings.booking')],
     ['#Governance', ''],
     ['audit', t('settings.audit')],
   ];
@@ -43,6 +46,7 @@ export function SettingsPage() {
     if (id === 'locations') return can('locations.manage');
     if (id === 'team') return can('users.manage');
     if (id === 'roles') return can('roles.manage');
+    if (id === 'booking') return can('widget.manage');
     return can('roles.manage');
   });
   const first = visible.find(([id]) => !id.startsWith('#'))?.[0] as SectionId | undefined;
@@ -81,6 +85,7 @@ export function SettingsPage() {
           {tab === 'locations' ? <LocationsSection /> : null}
           {tab === 'team' ? <TeamSection /> : null}
           {tab === 'roles' ? <RolesSection /> : null}
+          {tab === 'booking' ? <BookingSection /> : null}
           {tab === 'audit' ? <AuditSection /> : null}
         </div>
       </div>

@@ -12,3 +12,4 @@ export * from './timing.js';
 export * from './till.js';
 export * from './team.js';
 export * from './public.js';
+export * from './widgets.js';

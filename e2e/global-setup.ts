@@ -17,9 +17,11 @@ export default async function globalSetup() {
     ['-u', adminUrl, '-d', path.join(root, 'db/migrations'), '--no-dump-schema', 'up'],
     { stdio: 'inherit' },
   );
+  // tsx through pnpm: the root node_modules/.bin/tsx link does not
+  // exist in CI's pnpm layout (only the declaring package gets it).
   execFileSync(
-    path.join(root, 'node_modules/.bin/tsx'),
-    [path.join(root, 'services/api/src/db/seed-cli.ts')],
-    { stdio: 'inherit', env: process.env },
+    'pnpm',
+    ['--filter', '@velnes/api', 'exec', 'tsx', 'src/db/seed-cli.ts'],
+    { stdio: 'inherit', env: process.env, cwd: root },
   );
 }

@@ -83,6 +83,33 @@ it.
 It drops an iframe pointing at `/w?pk=…`; a `{velnes:'close'}`
 postMessage from the flow collapses it.
 
+## Settings › Online booking (`apps/workspace`)
+
+The prototype's `setBooking()` and `widgetEditor()`, backed by the
+widgets module (`/api/v1/widgets`, `/api/v1/integration-events`). Two
+permissions split it the way the prototype does: `widget.manage` for
+the widget itself (list, create, edit — and the Settings section's
+visibility), `integrations.manage` for keys and the event feed.
+
+- **Overview**: the three-ways explainer, the hosted booking link
+  (copy/open), the widget rowcards (locations · language · theme ·
+  key, live/draft, domain lock state, real booking counts), and the
+  Integration health table fed by `integration_events` — every
+  `DOMAIN_NOT_ALLOWED` and `SERVICE_NOT_FOUND` with its fix hint.
+- **Editor**: name, locations, first step, language (en/mk/sq),
+  service categories, cancellation policy, deposit mode; appearance
+  (theme, accent presets + free colour, button style, corners) with a
+  **live preview** rendered from the location's real catalog and real
+  availability — not a picture; allowed-websites editor (the CORS
+  allowlist); install card with the real `embed.js` snippet, and
+  key regeneration (audited as `Online booking / Regenerate widget
+  key` — the old key dies the same second).
+- A **draft** widget's key is invisible to the public surface; the
+  live toggle is audited both ways.
+- Bookings are attributed to their widget (`appointments.widget_id`,
+  migration 0012), which feeds the honest stats card: bookings +
+  0 ден commission. There is no made-up conversion percentage.
+
 ## Deliberate deviations from the prototype
 
 - **No coupon field** on Details yet — the public surface has no
@@ -103,5 +130,18 @@ postMessage from the flow collapses it.
   door-side pricing.
 - `apps/booking/src/App.test.tsx` — the full mocked-API journey,
   localized refusal rendering, widget-language switching.
+- `services/api/src/modules/widgets/widgets.test.ts` — permission
+  gates (owner vs staff), audited create/live/regenerate, draft keys
+  invisible publicly, old keys dead after regeneration.
+- `apps/workspace/src/pages/settings/BookingSection.test.tsx` — the
+  overview cards and health feed, domain/status edits through the
+  PATCH door, key regeneration reflected immediately.
 - `e2e/booking.spec.ts` — a real visitor journey against the seeded
   stack: slug → services → slot → hold countdown → book → reference.
+
+## Booking API (partner keys)
+
+Deferred honestly: the prototype's "Booking API" card (hashed partner
+keys, scopes, webhooks) is a separate feature. The overview explains
+the three ways and marks the API as "coming later"; nothing pretends
+to issue keys.
