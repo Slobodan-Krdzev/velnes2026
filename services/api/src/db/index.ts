@@ -34,6 +34,19 @@ export async function withTenant<T>(
   });
 }
 
+/**
+ * The HQ-context door: platform rows (hq_users, registrations) and
+ * read-only cross-tenant views open under `app.hq = '1'` — the same
+ * explicit-mode pattern as app.auth and app.public. Writes into a
+ * tenant's world still go through withTenant, never through here.
+ */
+export async function withHq<T>(fn: (trx: Trx) => Promise<T>): Promise<T> {
+  return db.transaction().execute(async (trx) => {
+    await sql`select set_config('app.hq', '1', true)`.execute(trx);
+    return fn(trx);
+  });
+}
+
 export async function closeDb() {
   await db.destroy();
 }

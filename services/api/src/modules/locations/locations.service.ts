@@ -131,10 +131,13 @@ export async function locReadiness(trx: Trx, id: string): Promise<ReadinessRespo
  */
 export async function locTransition(
   trx: Trx,
-  claims: AccessClaims,
+  claims: AccessClaims | null,
   id: string,
   to: LocationLifecycle,
   reason?: string,
+  // HQ reviewers act without an employee identity; the log still
+  // names them. Tenant calls leave this unset.
+  actor?: { employeeId: string | null; name: string },
 ): Promise<Location> {
   const l = await trx
     .selectFrom('locations')
@@ -157,12 +160,14 @@ export async function locTransition(
             .map((i) => i.label)
             .join(', '),
       );
-    const actor = await trx
-      .selectFrom('employees')
-      .select('access')
-      .where('id', '=', claims.sub)
-      .executeTakeFirst();
-    if (actor?.access !== 'owner')
+    const actorRow = claims
+      ? await trx
+          .selectFrom('employees')
+          .select('access')
+          .where('id', '=', claims.sub)
+          .executeTakeFirst()
+      : undefined;
+    if (actorRow?.access !== 'owner')
       throw new LocationError('OWNER_ONLY', 'Only account-level owners can activate a location');
   }
 
@@ -192,19 +197,19 @@ export async function locTransition(
       locationId: id,
       fromState: from,
       toState: to,
-      actorEmployeeId: claims.sub,
+      actorEmployeeId: actor ? actor.employeeId : (claims?.sub ?? null),
       reason: reason ?? null,
     })
     .execute();
 
-  const actorRow = await trx
-    .selectFrom('employees')
-    .select('name')
-    .where('id', '=', claims.sub)
-    .executeTakeFirst();
+  const actorName = actor
+    ? actor.name
+    : claims
+      ? ((await trx.selectFrom('employees').select('name').where('id', '=', claims.sub).executeTakeFirst())?.name ?? 'Unknown')
+      : 'Unknown';
   await logAudit(trx, l.tenantId, {
-    actorEmployeeId: claims.sub,
-    actorName: actorRow?.name ?? 'Unknown',
+    actorEmployeeId: actor ? actor.employeeId : (claims?.sub ?? null),
+    actorName,
     action: 'Location lifecycle',
     object: `Location · ${l.name}`,
     before: from,

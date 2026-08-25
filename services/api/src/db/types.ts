@@ -49,6 +49,8 @@ export type Numeric = ColumnType<string, number | string, number | string>;
 
 export type PaymentAccountStatus = "active" | "incomplete";
 
+export type RegistrationStatus = "active" | "changes_required" | "declined" | "pending_review" | "resubmitted" | "under_review";
+
 export type ScheduleExceptionSource = "MANUAL" | "PUBLIC_HOLIDAY";
 
 export type ScheduleExceptionType = "CLOSED" | "CUSTOM_HOURS";
@@ -282,6 +284,16 @@ export interface Holidays {
   year: number;
 }
 
+export interface HqUsers {
+  createdAt: Generated<Timestamp>;
+  email: string;
+  id: Generated<string>;
+  name: string;
+  passwordHash: string;
+  role: Generated<string>;
+  status: Generated<string>;
+}
+
 export interface IntegrationEvents {
   code: string;
   fix: Generated<string>;
@@ -510,6 +522,22 @@ export interface RefreshTokens {
   tokenHash: string;
 }
 
+export interface Registrations {
+  businessId: string | null;
+  draft: Json;
+  emailSentAt: Timestamp | null;
+  emailToken: Generated<string>;
+  emailVerifiedAt: Timestamp | null;
+  hqReason: string | null;
+  id: Generated<string>;
+  log: Generated<Json>;
+  resubmitToken: Generated<string>;
+  reviewedAt: Timestamp | null;
+  reviewedBy: string | null;
+  status: Generated<RegistrationStatus>;
+  ts: Generated<Timestamp>;
+}
+
 export interface Roles {
   baseRoleId: string | null;
   createdAt: Generated<Timestamp>;
@@ -668,6 +696,7 @@ export interface DB {
   holds: Holds;
   holidayCalendarYears: HolidayCalendarYears;
   holidays: Holidays;
+  hqUsers: HqUsers;
   integrationEvents: IntegrationEvents;
   invoiceCounters: InvoiceCounters;
   invoiceLines: InvoiceLines;
@@ -686,6 +715,7 @@ export interface DB {
   productCategories: ProductCategories;
   products: Products;
   refreshTokens: RefreshTokens;
+  registrations: Registrations;
   roles: Roles;
   scheduleExceptions: ScheduleExceptions;
   schemaMigrations: SchemaMigrations;

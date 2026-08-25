@@ -182,6 +182,20 @@ CREATE TYPE public.payment_account_status AS ENUM (
 
 
 --
+-- Name: registration_status; Type: TYPE; Schema: public; Owner: -
+--
+
+CREATE TYPE public.registration_status AS ENUM (
+    'pending_review',
+    'under_review',
+    'changes_required',
+    'resubmitted',
+    'active',
+    'declined'
+);
+
+
+--
 -- Name: schedule_exception_source; Type: TYPE; Schema: public; Owner: -
 --
 
@@ -595,6 +609,25 @@ ALTER TABLE ONLY public.holidays FORCE ROW LEVEL SECURITY;
 
 
 --
+-- Name: hq_users; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.hq_users (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    name text NOT NULL,
+    email text NOT NULL,
+    role text DEFAULT 'hq_support'::text NOT NULL,
+    password_hash text NOT NULL,
+    status text DEFAULT 'active'::text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT hq_users_role_check CHECK ((role = ANY (ARRAY['hq_super'::text, 'hq_onboard'::text, 'hq_support'::text, 'hq_tech'::text, 'hq_audit'::text]))),
+    CONSTRAINT hq_users_status_check CHECK ((status = ANY (ARRAY['active'::text, 'disabled'::text])))
+);
+
+ALTER TABLE ONLY public.hq_users FORCE ROW LEVEL SECURITY;
+
+
+--
 -- Name: integration_events; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -948,6 +981,29 @@ CREATE TABLE public.refresh_tokens (
 );
 
 ALTER TABLE ONLY public.refresh_tokens FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: registrations; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.registrations (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    ts timestamp with time zone DEFAULT now() NOT NULL,
+    status public.registration_status DEFAULT 'pending_review'::public.registration_status NOT NULL,
+    draft jsonb NOT NULL,
+    email_token uuid DEFAULT gen_random_uuid() NOT NULL,
+    email_sent_at timestamp with time zone,
+    email_verified_at timestamp with time zone,
+    resubmit_token uuid DEFAULT gen_random_uuid() NOT NULL,
+    hq_reason text,
+    reviewed_by text,
+    reviewed_at timestamp with time zone,
+    business_id uuid,
+    log jsonb DEFAULT '[]'::jsonb NOT NULL
+);
+
+ALTER TABLE ONLY public.registrations FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -1349,6 +1405,22 @@ ALTER TABLE ONLY public.holidays
 
 
 --
+-- Name: hq_users hq_users_email_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.hq_users
+    ADD CONSTRAINT hq_users_email_key UNIQUE (email);
+
+
+--
+-- Name: hq_users hq_users_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.hq_users
+    ADD CONSTRAINT hq_users_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: integration_events integration_events_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1522,6 +1594,14 @@ ALTER TABLE ONLY public.refresh_tokens
 
 ALTER TABLE ONLY public.refresh_tokens
     ADD CONSTRAINT refresh_tokens_token_hash_key UNIQUE (token_hash);
+
+
+--
+-- Name: registrations registrations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.registrations
+    ADD CONSTRAINT registrations_pkey PRIMARY KEY (id);
 
 
 --
@@ -1891,6 +1971,13 @@ CREATE INDEX refresh_tokens_family ON public.refresh_tokens USING btree (tenant_
 
 
 --
+-- Name: registrations_queue; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX registrations_queue ON public.registrations USING btree (status, ts DESC);
+
+
+--
 -- Name: schedule_exceptions_tenant; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2015,6 +2102,14 @@ ALTER TABLE ONLY public.appointments
 
 ALTER TABLE ONLY public.appointments
     ADD CONSTRAINT appointments_variant_id_fkey FOREIGN KEY (variant_id) REFERENCES public.service_variants(id);
+
+
+--
+-- Name: appointments appointments_widget_fk; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.appointments
+    ADD CONSTRAINT appointments_widget_fk FOREIGN KEY (widget_id) REFERENCES public.widgets(id) ON DELETE SET NULL;
 
 
 --
@@ -2642,6 +2737,14 @@ ALTER TABLE ONLY public.refresh_tokens
 
 
 --
+-- Name: registrations registrations_business_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.registrations
+    ADD CONSTRAINT registrations_business_id_fkey FOREIGN KEY (business_id) REFERENCES public.businesses(id);
+
+
+--
 -- Name: roles roles_base_role_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2850,6 +2953,20 @@ ALTER TABLE ONLY public.widgets
 
 
 --
+-- Name: registrations applicant_by_token; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY applicant_by_token ON public.registrations FOR SELECT USING (((resubmit_token)::text = current_setting('app.reg_token'::text, true)));
+
+
+--
+-- Name: registrations applicant_resubmit; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY applicant_resubmit ON public.registrations FOR UPDATE USING (((resubmit_token)::text = current_setting('app.reg_token'::text, true))) WITH CHECK (((resubmit_token)::text = current_setting('app.reg_token'::text, true)));
+
+
+--
 -- Name: appointment_history; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -2960,6 +3077,82 @@ ALTER TABLE public.holiday_calendar_years ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.holidays ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: hq_users hq_all; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY hq_all ON public.hq_users USING ((current_setting('app.hq'::text, true) = '1'::text)) WITH CHECK ((current_setting('app.hq'::text, true) = '1'::text));
+
+
+--
+-- Name: registrations hq_all; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY hq_all ON public.registrations USING ((current_setting('app.hq'::text, true) = '1'::text)) WITH CHECK ((current_setting('app.hq'::text, true) = '1'::text));
+
+
+--
+-- Name: hq_users hq_login_lookup; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY hq_login_lookup ON public.hq_users FOR SELECT USING ((current_setting('app.auth'::text, true) = 'login'::text));
+
+
+--
+-- Name: audit_log hq_read; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY hq_read ON public.audit_log FOR SELECT USING ((current_setting('app.hq'::text, true) = '1'::text));
+
+
+--
+-- Name: businesses hq_read; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY hq_read ON public.businesses FOR SELECT USING ((current_setting('app.hq'::text, true) = '1'::text));
+
+
+--
+-- Name: employees hq_read; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY hq_read ON public.employees FOR SELECT USING ((current_setting('app.hq'::text, true) = '1'::text));
+
+
+--
+-- Name: legal_entities hq_read; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY hq_read ON public.legal_entities FOR SELECT USING ((current_setting('app.hq'::text, true) = '1'::text));
+
+
+--
+-- Name: location_lifecycle_log hq_read; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY hq_read ON public.location_lifecycle_log FOR SELECT USING ((current_setting('app.hq'::text, true) = '1'::text));
+
+
+--
+-- Name: locations hq_read; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY hq_read ON public.locations FOR SELECT USING ((current_setting('app.hq'::text, true) = '1'::text));
+
+
+--
+-- Name: payment_accounts hq_read; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY hq_read ON public.payment_accounts FOR SELECT USING ((current_setting('app.hq'::text, true) = '1'::text));
+
+
+--
+-- Name: hq_users; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.hq_users ENABLE ROW LEVEL SECURITY;
+
+--
 -- Name: integration_events; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -3062,6 +3255,13 @@ ALTER TABLE public.product_categories ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.products ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: registrations public_apply; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY public_apply ON public.registrations FOR INSERT WITH CHECK ((current_setting('app.public'::text, true) = '1'::text));
+
+
+--
 -- Name: widgets public_key_lookup; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -3094,6 +3294,12 @@ CREATE POLICY read_all ON public.holidays FOR SELECT USING (true);
 --
 
 ALTER TABLE public.refresh_tokens ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: registrations; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.registrations ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: roles; Type: ROW SECURITY; Schema: public; Owner: -
@@ -3526,4 +3732,5 @@ INSERT INTO public.schema_migrations (version) VALUES
     ('20260824210009'),
     ('20260825090010'),
     ('20260825170011'),
-    ('20260825190012');
+    ('20260825190012'),
+    ('20260826090013');
