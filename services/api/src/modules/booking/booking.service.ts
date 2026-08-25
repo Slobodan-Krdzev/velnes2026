@@ -70,7 +70,7 @@ interface CheckReq {
   resetMin?: number | undefined;
 }
 
-async function empsFor(trx: Trx, locationId: string, serviceId: string) {
+export async function empsFor(trx: Trx, locationId: string, serviceId: string) {
   return trx
     .selectFrom('employees as e')
     .innerJoin('employeeLocations as el', 'el.employeeId', 'e.id')

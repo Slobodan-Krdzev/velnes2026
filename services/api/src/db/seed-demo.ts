@@ -166,6 +166,7 @@ export async function seedDemo(adminUrl: string) {
     await q('BEGIN');
     await q(`TRUNCATE audit_log, refresh_tokens, user_credentials, payment_accounts,
       legal_entity_locations, legal_entities, employee_locations,
+      integration_events, widgets,
       tax_rules, service_recipes, loyalty_ledger, loyalty_config,
       discount_codes, gift_cards, checkout_items, merchant_transactions,
       checkouts, invoice_lines, invoices, invoice_counters,
@@ -178,8 +179,8 @@ export async function seedDemo(adminUrl: string) {
       location_lifecycle_log, locations, employees, roles, businesses CASCADE`);
 
     await q(
-      `INSERT INTO businesses (id, name, country, vat, plan, since, timing_enabled)
-       VALUES ($1,'Velnes Fizio Centar','North Macedonia','MK4080012345678','Business','2026-02-14',true)`,
+      `INSERT INTO businesses (id, name, country, vat, plan, since, timing_enabled, slug)
+       VALUES ($1,'Velnes Fizio Centar','North Macedonia','MK4080012345678','Business','2026-02-14',true,'velnes-fizio')`,
       [demo.business],
     );
 
@@ -629,6 +630,13 @@ export async function seedDemo(adminUrl: string) {
     await q(
       `INSERT INTO invoice_counters (tenant_id, location_id, next) VALUES ($1,$2,413)`,
       [demo.business, demo.locCentar],
+    );
+
+    // The prototype's main widget, live on the salon site.
+    await q(
+      `INSERT INTO widgets (id, tenant_id, name, location_ids, categories, lang, theme, accent, radius, start_step, deposit, status, domains, publishable_key)
+       VALUES ('b0000000-0000-4000-8000-000000000001',$1,'Main site — all locations',$2,'{all}','en','light','#6f7357','12','location','none','live','{velnesstudio.mk}','pk_live_velnes_demo')`,
+      [demo.business, '{' + demo.locCentar + ',' + demo.locAerodrom + '}'],
     );
 
     const hash = await argon2.hash(DEMO_PASSWORD);

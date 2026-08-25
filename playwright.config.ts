@@ -16,8 +16,9 @@ export default defineConfig({
   },
   webServer: [
     {
-      command:
-        'node_modules/.bin/tsx services/api/src/index.ts',
+      // Through pnpm so the bin resolves the same on every machine —
+      // the root node_modules/.bin/tsx link is not guaranteed in CI.
+      command: 'pnpm --filter @velnes/api exec tsx src/index.ts',
       port: 3001,
       reuseExistingServer: false,
       env: {
@@ -31,6 +32,11 @@ export default defineConfig({
     {
       command: 'pnpm --filter @velnes/workspace exec vite preview --port 4173',
       port: 4173,
+      reuseExistingServer: false,
+    },
+    {
+      command: 'pnpm --filter @velnes/booking exec vite preview --port 4175',
+      port: 4175,
       reuseExistingServer: false,
     },
   ],

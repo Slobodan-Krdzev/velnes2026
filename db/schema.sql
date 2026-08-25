@@ -238,6 +238,16 @@ CREATE TYPE public.timing_status AS ENUM (
 
 
 --
+-- Name: widget_status; Type: TYPE; Schema: public; Owner: -
+--
+
+CREATE TYPE public.widget_status AS ENUM (
+    'live',
+    'draft'
+);
+
+
+--
 -- Name: current_tenant(); Type: FUNCTION; Schema: app; Owner: -
 --
 
@@ -345,7 +355,8 @@ CREATE TABLE public.businesses (
     since date,
     owner_employee_id uuid,
     timing_enabled boolean DEFAULT false NOT NULL,
-    created_at timestamp with time zone DEFAULT now() NOT NULL
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    slug text
 );
 
 ALTER TABLE ONLY public.businesses FORCE ROW LEVEL SECURITY;
@@ -581,6 +592,24 @@ CREATE TABLE public.holidays (
 );
 
 ALTER TABLE ONLY public.holidays FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: integration_events; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.integration_events (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    tenant_id uuid NOT NULL,
+    widget_id uuid,
+    level text DEFAULT 'error'::text NOT NULL,
+    code text NOT NULL,
+    msg text NOT NULL,
+    fix text DEFAULT ''::text NOT NULL,
+    ts timestamp with time zone DEFAULT now() NOT NULL
+);
+
+ALTER TABLE ONLY public.integration_events FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -1125,6 +1154,33 @@ ALTER TABLE ONLY public.user_credentials FORCE ROW LEVEL SECURITY;
 
 
 --
+-- Name: widgets; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.widgets (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    tenant_id uuid NOT NULL,
+    name text NOT NULL,
+    location_ids uuid[] DEFAULT '{}'::uuid[] NOT NULL,
+    categories text[] DEFAULT '{all}'::text[] NOT NULL,
+    lang text DEFAULT 'en'::text NOT NULL,
+    theme text DEFAULT 'light'::text NOT NULL,
+    btn_style text DEFAULT 'rounded'::text NOT NULL,
+    cancel_policy text DEFAULT 'inherit'::text NOT NULL,
+    accent text DEFAULT '#6f7357'::text NOT NULL,
+    radius text DEFAULT '12'::text NOT NULL,
+    start_step text DEFAULT 'location'::text NOT NULL,
+    deposit text DEFAULT 'none'::text NOT NULL,
+    status public.widget_status DEFAULT 'draft'::public.widget_status NOT NULL,
+    domains text[] DEFAULT '{}'::text[] NOT NULL,
+    publishable_key text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+ALTER TABLE ONLY public.widgets FORCE ROW LEVEL SECURITY;
+
+
+--
 -- Name: appointment_history appointment_history_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1154,6 +1210,14 @@ ALTER TABLE ONLY public.audit_log
 
 ALTER TABLE ONLY public.businesses
     ADD CONSTRAINT businesses_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: businesses businesses_slug_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.businesses
+    ADD CONSTRAINT businesses_slug_key UNIQUE (slug);
 
 
 --
@@ -1282,6 +1346,14 @@ ALTER TABLE ONLY public.holiday_calendar_years
 
 ALTER TABLE ONLY public.holidays
     ADD CONSTRAINT holidays_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: integration_events integration_events_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.integration_events
+    ADD CONSTRAINT integration_events_pkey PRIMARY KEY (id);
 
 
 --
@@ -1565,6 +1637,22 @@ ALTER TABLE ONLY public.user_credentials
 
 
 --
+-- Name: widgets widgets_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.widgets
+    ADD CONSTRAINT widgets_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: widgets widgets_publishable_key_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.widgets
+    ADD CONSTRAINT widgets_publishable_key_key UNIQUE (publishable_key);
+
+
+--
 -- Name: appointment_history_tenant; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -1674,6 +1762,13 @@ CREATE INDEX holds_slot ON public.holds USING btree (tenant_id, location_id, dat
 --
 
 CREATE INDEX holidays_country ON public.holidays USING btree (country_code, year, date);
+
+
+--
+-- Name: integration_events_tenant; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX integration_events_tenant ON public.integration_events USING btree (tenant_id, ts DESC);
 
 
 --
@@ -1842,6 +1937,13 @@ CREATE INDEX services_tenant ON public.services USING btree (tenant_id, status, 
 --
 
 CREATE INDEX stock_movements_tenant ON public.stock_movements USING btree (tenant_id, location_id, product_id, at);
+
+
+--
+-- Name: widgets_tenant; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX widgets_tenant ON public.widgets USING btree (tenant_id, status);
 
 
 --
@@ -2162,6 +2264,22 @@ ALTER TABLE ONLY public.holds
 
 ALTER TABLE ONLY public.holidays
     ADD CONSTRAINT holidays_country_code_year_fkey FOREIGN KEY (country_code, year) REFERENCES public.holiday_calendar_years(country_code, year);
+
+
+--
+-- Name: integration_events integration_events_tenant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.integration_events
+    ADD CONSTRAINT integration_events_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.businesses(id);
+
+
+--
+-- Name: integration_events integration_events_widget_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.integration_events
+    ADD CONSTRAINT integration_events_widget_id_fkey FOREIGN KEY (widget_id) REFERENCES public.widgets(id);
 
 
 --
@@ -2717,6 +2835,14 @@ ALTER TABLE ONLY public.user_credentials
 
 
 --
+-- Name: widgets widgets_tenant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.widgets
+    ADD CONSTRAINT widgets_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.businesses(id);
+
+
+--
 -- Name: appointment_history; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -2827,6 +2953,12 @@ ALTER TABLE public.holiday_calendar_years ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.holidays ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: integration_events; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.integration_events ENABLE ROW LEVEL SECURITY;
+
+--
 -- Name: invoice_counters; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -2923,6 +3055,20 @@ ALTER TABLE public.product_categories ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.products ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: widgets public_key_lookup; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY public_key_lookup ON public.widgets FOR SELECT USING ((current_setting('app.public'::text, true) = '1'::text));
+
+
+--
+-- Name: businesses public_slug_lookup; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY public_slug_lookup ON public.businesses FOR SELECT USING ((current_setting('app.public'::text, true) = '1'::text));
+
+
+--
 -- Name: holiday_calendar_years read_all; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -3007,6 +3153,13 @@ ALTER TABLE public.tax_rules ENABLE ROW LEVEL SECURITY;
 --
 
 CREATE POLICY tenant_append ON public.audit_log FOR INSERT WITH CHECK ((tenant_id = app.current_tenant()));
+
+
+--
+-- Name: integration_events tenant_append; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY tenant_append ON public.integration_events FOR INSERT WITH CHECK ((tenant_id = app.current_tenant()));
 
 
 --
@@ -3290,10 +3443,24 @@ CREATE POLICY tenant_isolation ON public.user_credentials USING ((tenant_id = ap
 
 
 --
+-- Name: widgets tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY tenant_isolation ON public.widgets USING ((tenant_id = app.current_tenant())) WITH CHECK ((tenant_id = app.current_tenant()));
+
+
+--
 -- Name: audit_log tenant_read; Type: POLICY; Schema: public; Owner: -
 --
 
 CREATE POLICY tenant_read ON public.audit_log FOR SELECT USING ((tenant_id = app.current_tenant()));
+
+
+--
+-- Name: integration_events tenant_read; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY tenant_read ON public.integration_events FOR SELECT USING ((tenant_id = app.current_tenant()));
 
 
 --
@@ -3324,6 +3491,12 @@ CREATE POLICY token_access ON public.refresh_tokens USING (true) WITH CHECK (tru
 ALTER TABLE public.user_credentials ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: widgets; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.widgets ENABLE ROW LEVEL SECURITY;
+
+--
 -- PostgreSQL database dump complete
 --
 
@@ -3344,4 +3517,5 @@ INSERT INTO public.schema_migrations (version) VALUES
     ('20260824180007'),
     ('20260824180008'),
     ('20260824210009'),
-    ('20260825090010');
+    ('20260825090010'),
+    ('20260825170011');

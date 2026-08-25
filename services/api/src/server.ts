@@ -19,6 +19,7 @@ import { teamRoutes } from './modules/team/team.routes.js';
 import { tillRoutes } from './modules/till/till.routes.js';
 import { timingRoutes } from './modules/timing/timing.routes.js';
 import { authPlugin } from './plugins/auth.js';
+import { publicRoutes } from './public/public.routes.js';
 
 export async function buildServer() {
   const app = Fastify({
@@ -50,6 +51,10 @@ export async function buildServer() {
     },
     { prefix: API_PREFIX },
   );
+
+  // The widget's public surface: its own narrow plugin scope with its
+  // own rate limiting, CORS-per-domain and caching (docs §2, §7).
+  await app.register(publicRoutes, { prefix: `${API_PREFIX}/public` });
 
   return app;
 }

@@ -1,29 +1,29 @@
-import { API_PREFIX, HealthResponseSchema, type HealthResponse } from '@velnes/contracts';
-import { AppShell } from '@velnes/ui';
-import { useEffect, useState } from 'react';
+import { createI18n } from '@velnes/i18n';
+import { useMemo } from 'react';
+import { I18nextProvider } from 'react-i18next';
+import { BrowserRouter, Navigate, Route, Routes, useParams, useSearchParams } from 'react-router-dom';
+import { BookingFlow } from './BookingFlow.js';
+
+function BySlug() {
+  const { slug } = useParams();
+  return <BookingFlow slug={slug ?? null} pk={null} source="link" />;
+}
+function ByKey() {
+  const [sp] = useSearchParams();
+  return <BookingFlow slug={null} pk={sp.get('pk')} source="widget" />;
+}
 
 export function App() {
-  const [health, setHealth] = useState<HealthResponse | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    fetch(`${API_PREFIX}/health`)
-      .then((res) => res.json())
-      .then((data: unknown) => setHealth(HealthResponseSchema.parse(data)))
-      .catch((err: unknown) => setError(err instanceof Error ? err.message : 'failed'));
-  }, []);
-
+  const i18n = useMemo(() => createI18n('en'), []);
   return (
-    <AppShell title="Velnes Booking">
-      {health ? (
-        <p>
-          API {health.status} · v{health.version} · {health.time}
-        </p>
-      ) : error ? (
-        <p>API unreachable: {error}</p>
-      ) : (
-        <p>Checking API…</p>
-      )}
-    </AppShell>
+    <I18nextProvider i18n={i18n}>
+      <BrowserRouter>
+        <Routes>
+          <Route path="/book/:slug" element={<BySlug />} />
+          <Route path="/w" element={<ByKey />} />
+          <Route path="*" element={<Navigate to="/book/velnes-fizio" replace />} />
+        </Routes>
+      </BrowserRouter>
+    </I18nextProvider>
   );
 }

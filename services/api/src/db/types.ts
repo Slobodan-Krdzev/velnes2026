@@ -61,6 +61,8 @@ export type Timestamp = ColumnType<Date, Date | string, Date | string>;
 
 export type TimingStatus = "approved" | "dismissed" | "none" | "suggested";
 
+export type WidgetStatus = "draft" | "live";
+
 export interface AppointmentHistory {
   appointmentId: string;
   at: Generated<Timestamp>;
@@ -128,6 +130,7 @@ export interface Businesses {
   ownerEmployeeId: string | null;
   plan: Generated<string>;
   since: Timestamp | null;
+  slug: string | null;
   timingEnabled: Generated<boolean>;
   vat: string | null;
 }
@@ -277,6 +280,17 @@ export interface Holidays {
   name: string;
   type: string;
   year: number;
+}
+
+export interface IntegrationEvents {
+  code: string;
+  fix: Generated<string>;
+  id: Generated<string>;
+  level: Generated<string>;
+  msg: string;
+  tenantId: string;
+  ts: Generated<Timestamp>;
+  widgetId: string | null;
 }
 
 export interface InvoiceCounters {
@@ -617,6 +631,26 @@ export interface UserCredentials {
   updatedAt: Generated<Timestamp>;
 }
 
+export interface Widgets {
+  accent: Generated<string>;
+  btnStyle: Generated<string>;
+  cancelPolicy: Generated<string>;
+  categories: Generated<string[]>;
+  createdAt: Generated<Timestamp>;
+  deposit: Generated<string>;
+  domains: Generated<string[]>;
+  id: Generated<string>;
+  lang: Generated<string>;
+  locationIds: Generated<string[]>;
+  name: string;
+  publishableKey: string;
+  radius: Generated<string>;
+  startStep: Generated<string>;
+  status: Generated<WidgetStatus>;
+  tenantId: string;
+  theme: Generated<string>;
+}
+
 export interface DB {
   appointmentHistory: AppointmentHistory;
   appointments: Appointments;
@@ -634,6 +668,7 @@ export interface DB {
   holds: Holds;
   holidayCalendarYears: HolidayCalendarYears;
   holidays: Holidays;
+  integrationEvents: IntegrationEvents;
   invoiceCounters: InvoiceCounters;
   invoiceLines: InvoiceLines;
   invoices: Invoices;
@@ -663,4 +698,5 @@ export interface DB {
   stockMovements: StockMovements;
   taxRules: TaxRules;
   userCredentials: UserCredentials;
+  widgets: Widgets;
 }

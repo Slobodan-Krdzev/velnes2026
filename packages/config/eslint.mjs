@@ -26,4 +26,11 @@ export default tseslint.config(
       ],
     },
   },
+  {
+    // Plain browser scripts served as-is (the widget embed loader).
+    files: ['apps/*/public/**/*.js'],
+    languageOptions: {
+      globals: { window: 'readonly', document: 'readonly', console: 'readonly', URL: 'readonly' },
+    },
+  },
 );
