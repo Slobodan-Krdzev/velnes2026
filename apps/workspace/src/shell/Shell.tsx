@@ -1,7 +1,7 @@
 import { LANGS, type Lang } from '@velnes/i18n';
 import type { PermKey } from '@velnes/contracts';
 import { Badge, I, Icon, VelnesMark } from '@velnes/ui';
-import { createContext, useContext, useMemo, useState } from 'react';
+import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useLocations } from '../api/queries.js';
@@ -56,6 +56,17 @@ export function Shell() {
   const [scopeMenu, setScopeMenu] = useState(false);
   const [envMenu, setEnvMenu] = useState(false);
   const scopeValue = useMemo(() => ({ scope, setScope }), [scope]);
+
+  // The prototype's per-route body modes: the register and the calendar
+  // are fixed screens — #view takes the viewport height and the page
+  // never scrolls. Without these classes the till's tile rows collapse.
+  useEffect(() => {
+    document.body.classList.toggle('till-mode', routerLoc.pathname === '/till');
+    document.body.classList.toggle('cal-mode', routerLoc.pathname === '/calendar');
+    return () => {
+      document.body.classList.remove('till-mode', 'cal-mode');
+    };
+  }, [routerLoc.pathname]);
   if (!me) return null;
 
   const myLocs = (locations.data?.locations ?? []).filter(
