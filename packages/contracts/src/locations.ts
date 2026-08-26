@@ -27,6 +27,14 @@ export const LOC_EDGES: Record<LocationLifecycle, LocationLifecycle[]> = {
   CLOSED: [],
 };
 
+/** The weekly template, prototype shape: weekday "0"(Mon)…"6"(Sun) →
+ *  a list of periods, or null for a closed day. */
+export const WeekHoursSchema = z.record(
+  z.string(),
+  z.array(z.tuple([z.string(), z.string()])).nullable(),
+);
+export type WeekHours = z.infer<typeof WeekHoursSchema>;
+
 export const LocationSchema = z.object({
   id: z.uuid(),
   name: z.string(),
@@ -40,6 +48,7 @@ export const LocationSchema = z.object({
   cancelHours: z.number().int(),
   opened: z.string().nullable(), // ISO date
   lifecycle: LocationLifecycleSchema,
+  hours: WeekHoursSchema.nullable(),
 });
 export type Location = z.infer<typeof LocationSchema>;
 

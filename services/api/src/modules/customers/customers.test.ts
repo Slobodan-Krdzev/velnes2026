@@ -47,6 +47,13 @@ describe('customers, intelligence and personal offers', () => {
     await app.ready();
     await admin.connect();
     ownerToken = await token('maria@velnes.mk');
+    // The seed books Katerina a demo visit THIS Wednesday morning —
+    // once the clock passes it, insights would count an 11th visit.
+    // Park it two weeks out for the duration of this suite.
+    await admin.query(
+      `UPDATE appointments SET date = date + 14 WHERE customer_id=$1 AND idempotency_key IS NULL`,
+      [demo.c1],
+    );
     // A steady rhythm for Katerina (c1): 10 completed visits, every
     // 14 days, same Wednesday-ish cadence, Maria — but stopped 30
     // days ago, so the rhythm exists and she is overdue (at_risk).
@@ -64,6 +71,10 @@ describe('customers, intelligence and personal offers', () => {
   afterAll(async () => {
     for (const id of histIds)
       await admin.query(`DELETE FROM appointments WHERE id=$1`, [id]);
+    await admin.query(
+      `UPDATE appointments SET date = date - 14 WHERE customer_id=$1 AND idempotency_key IS NULL`,
+      [demo.c1],
+    );
     await admin.query(`DELETE FROM appointments WHERE idempotency_key LIKE 'po-book-%'`);
     await admin.query(`DELETE FROM invoice_lines WHERE tenant_id=$1 AND description LIKE 'Follow-up%' AND invoice_id IN (SELECT id FROM invoices WHERE idempotency_key LIKE 'po-sale-%')`, [demo.business]);
     await admin.query(`DELETE FROM checkout_items WHERE checkout_id IN (SELECT id FROM checkouts WHERE invoice_id IN (SELECT id FROM invoices WHERE idempotency_key LIKE 'po-sale-%'))`);

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { WeekHoursSchema } from './locations.js';
 import { EmployeeAccessSchema } from './permissions.js';
 
 export const EmployeeSchema = z.object({
@@ -14,6 +15,7 @@ export const EmployeeSchema = z.object({
   color: z.string().nullable(),
   locationIds: z.array(z.uuid()),
   skillServiceIds: z.array(z.uuid()),
+  hours: WeekHoursSchema.nullable(),
 });
 export type Employee = z.infer<typeof EmployeeSchema>;
 
@@ -48,5 +50,10 @@ export const EmployeePatchSchema = z.object({
   color: z.string().nullable().optional(),
   access: EmployeeAccessSchema.optional(),
   roleId: z.uuid().nullable().optional(),
+  roleTitle: z.string().optional(),
+  // Weekly availability, weekday "0"(Mon)…"6"(Sun) → periods | null.
+  hours: WeekHoursSchema.optional(),
+  // Which services this person performs; empty = does everything.
+  skillServiceIds: z.array(z.uuid()).optional(),
 });
 export type EmployeePatch = z.infer<typeof EmployeePatchSchema>;

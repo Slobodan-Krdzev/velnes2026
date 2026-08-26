@@ -389,7 +389,13 @@ CREATE TABLE public.businesses (
     owner_employee_id uuid,
     timing_enabled boolean DEFAULT false NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
-    slug text
+    slug text,
+    address text,
+    city text,
+    phone text,
+    description text DEFAULT ''::text NOT NULL,
+    gallery jsonb DEFAULT '[]'::jsonb NOT NULL,
+    settings jsonb DEFAULT '{}'::jsonb NOT NULL
 );
 
 ALTER TABLE ONLY public.businesses FORCE ROW LEVEL SECURITY;
@@ -4650,4 +4656,5 @@ INSERT INTO public.schema_migrations (version) VALUES
     ('20260826110015'),
     ('20260826130016'),
     ('20260826150017'),
-    ('20260826170018');
+    ('20260826170018'),
+    ('20260826200019');

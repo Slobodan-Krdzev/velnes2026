@@ -1,16 +1,19 @@
 import {
   LegalEntityListSchema,
+  LocationPatchSchema,
   LocationCreateSchema,
   LocationListResponseSchema,
   LocationSchema,
   ReadinessResponseSchema,
   TransitionRequestSchema,
   TransitionResponseSchema,
+  type Location,
 } from '@velnes/contracts';
 import type { FastifyInstance } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { withTenant } from '../../db/index.js';
+import { logAudit } from '../audit/audit.service.js';
 import { can, permsFor } from '../auth/authz.service.js';
 import {
   createLocation,
@@ -84,6 +87,78 @@ export function locationsRoutes(app: FastifyInstance) {
         throw e;
       }
     },
+  });
+
+  r.route({
+    method: 'PATCH',
+    url: '/locations/:id',
+    preHandler: [app.authenticate],
+    schema: {
+      params: IdParams,
+      body: LocationPatchSchema,
+      response: { 200: LocationSchema, 403: ErrorSchema, 404: ErrorSchema },
+    },
+    handler: async (req, reply) =>
+      withTenant(req.claims.ten, async (trx) => {
+        const perms = await permsFor(trx, req.claims);
+        if (!can(perms, 'locations.manage'))
+          return reply
+            .code(403)
+            .send({ error: 'FORBIDDEN', message: 'Missing permission: locations.manage' });
+        const before = await trx
+          .selectFrom('locations')
+          .selectAll()
+          .where('id', '=', req.params.id)
+          .executeTakeFirst();
+        if (!before)
+          return reply.code(404).send({ error: 'NOT_FOUND', message: 'Unknown location' });
+        const b = req.body;
+        await trx
+          .updateTable('locations')
+          .set({
+            ...(b.hours !== undefined ? { hours: JSON.stringify(b.hours) } : {}),
+            ...(b.cancelHours !== undefined ? { cancelHours: b.cancelHours } : {}),
+            ...(b.invPrefix !== undefined ? { invPrefix: b.invPrefix } : {}),
+          })
+          .where('id', '=', req.params.id)
+          .execute();
+        // Changing the week changes real availability — that is an
+        // audited act, not a cosmetic edit.
+        if (b.hours !== undefined) {
+          const actor = await trx
+            .selectFrom('employees')
+            .select('name')
+            .where('id', '=', req.claims.sub)
+            .executeTakeFirst();
+          await logAudit(trx, req.claims.ten, {
+            actorEmployeeId: req.claims.sub,
+            actorName: actor?.name ?? '',
+            action: 'Working hours changed',
+            object: `Location · ${before.name}`,
+            locationName: before.name,
+          });
+        }
+        const row = await trx
+          .selectFrom('locations')
+          .selectAll()
+          .where('id', '=', req.params.id)
+          .executeTakeFirstOrThrow();
+        return {
+          id: row.id,
+          name: row.name,
+          city: row.city,
+          address: row.address,
+          tz: row.tz,
+          phone: row.phone,
+          rooms: row.rooms,
+          invPrefix: row.invPrefix,
+          online: row.online,
+          cancelHours: row.cancelHours,
+          opened: row.opened ? row.opened.toISOString().slice(0, 10) : null,
+          lifecycle: row.lifecycle,
+          hours: (row.hours ?? null) as Location['hours'],
+        };
+      }),
   });
 
   r.route({

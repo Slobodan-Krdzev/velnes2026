@@ -15,6 +15,7 @@ const app = await buildServer();
 const admin = new pg.Client({ connectionString: ADMIN_URL });
 let mariaToken = '';
 let anaToken = '';
+const GJORCHE = '20000000-0000-4000-8000-00000000dddd';
 
 const move = (payload: object, tok: string) =>
   app.inject({
@@ -48,6 +49,16 @@ describe('stock door', () => {
     anaToken = await login('ana@velnes.mk');
   });
   afterAll(async () => {
+    // Cleanup lives here, not inside the test body — a failed assertion
+    // must never leak the Gjorche fixture into later suites.
+    await admin.query(`DELETE FROM location_lifecycle_log WHERE location_id=$1`, [GJORCHE]);
+    await admin.query(`DELETE FROM employee_locations WHERE location_id=$1`, [GJORCHE]);
+    await admin.query(`DELETE FROM legal_entity_locations WHERE location_id=$1`, [GJORCHE]);
+    await admin.query(`DELETE FROM locations WHERE id=$1`, [GJORCHE]);
+    await admin.query(
+      `UPDATE roles SET perms = perms - 'locations.manage' || '{"locations.manage":"none"}' WHERE id=$1`,
+      [demo.roleFinance],
+    );
     await admin.end();
     await app.close();
     await closeDb();
@@ -135,7 +146,7 @@ describe('stock door', () => {
 
   it('readiness gate is now fully green for a prepared location — and activation stays owner-only', async () => {
     // Build a ready DRAFT location: entity attached, hours, catalog, staff.
-    const loc = '20000000-0000-4000-8000-00000000dddd';
+    const loc = GJORCHE;
     await admin.query(
       `INSERT INTO locations (id, tenant_id, name, city, address, hours, lifecycle)
        VALUES ($1,$2,'Gjorche','Skopje','Partizanska 10','{"1":[["09:00","20:00"]]}','APPROVED')`,
@@ -192,11 +203,6 @@ describe('stock door', () => {
     expect(act.statusCode).toBe(200);
     expect(act.json().location.lifecycle).toBe('ACTIVE');
     expect(act.json().location.online).toBe(true);
-
-    // Cleanup.
-    await admin.query(`DELETE FROM location_lifecycle_log WHERE location_id=$1`, [loc]);
-    await admin.query(`DELETE FROM employee_locations WHERE location_id=$1`, [loc]);
-    await admin.query(`DELETE FROM legal_entity_locations WHERE location_id=$1`, [loc]);
-    await admin.query(`DELETE FROM locations WHERE id=$1`, [loc]);
+    // Cleanup happens in afterAll — leak-proof against failed assertions.
   });
 });

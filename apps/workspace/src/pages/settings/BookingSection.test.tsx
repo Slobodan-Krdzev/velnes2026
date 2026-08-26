@@ -86,7 +86,7 @@ function mockApi(calls: { method: string; path: string; body?: unknown }[]) {
             {
               id: LOC1, name: 'Centar', city: 'Skopje', address: 'Macedonia Street 21',
               tz: 'Europe/Skopje', phone: null, rooms: 3, invPrefix: 'CEN-', online: true,
-              cancelHours: 24, opened: null, lifecycle: 'ACTIVE',
+              cancelHours: 24, opened: null, lifecycle: 'ACTIVE', hours: null,
             },
           ],
         });

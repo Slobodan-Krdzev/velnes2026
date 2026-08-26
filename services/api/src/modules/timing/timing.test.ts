@@ -37,6 +37,12 @@ describe('timing engine', () => {
     ).json().accessToken;
   });
   afterAll(async () => {
+    // The 12 crafted 'Obs' observations are fixtures, not demo data —
+    // remove them so customer-history suites see the seeded world.
+    await admin.query(
+      `DELETE FROM appointment_history WHERE appointment_id IN (SELECT id FROM appointments WHERE title='Obs')`,
+    );
+    await admin.query(`DELETE FROM appointments WHERE title='Obs'`);
     await admin.end();
     await app.close();
     await closeDb();

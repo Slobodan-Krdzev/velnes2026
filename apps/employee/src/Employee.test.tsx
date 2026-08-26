@@ -71,7 +71,7 @@ function mockApi(calls: { method: string; path: string; body?: unknown }[]) {
             {
               id: LOC, name: 'Aerodrom', city: 'Skopje', address: 'x', tz: 'Europe/Skopje',
               phone: null, rooms: 2, invPrefix: 'AER-', online: true, cancelHours: 24,
-              opened: null, lifecycle: 'ACTIVE',
+              opened: null, lifecycle: 'ACTIVE', hours: null,
             },
           ],
         });

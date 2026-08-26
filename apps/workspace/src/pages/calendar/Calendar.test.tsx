@@ -103,6 +103,7 @@ function mockApi(opts: { bookResponse?: () => Response } = {}) {
               cancelHours: 24,
               opened: null,
               lifecycle: 'ACTIVE',
+              hours: null,
             },
           ],
         });
@@ -122,6 +123,7 @@ function mockApi(opts: { bookResponse?: () => Response } = {}) {
               color: 'olive',
               locationIds: [LOC],
               skillServiceIds: [SVC],
+              hours: null,
             },
           ],
         });

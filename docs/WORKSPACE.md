@@ -30,6 +30,24 @@ owner-only Activate, team & access, the roles permission matrix
 constrained to scopeChoices, audit log) · Flightdeck (today's pulse +
 the timing-suggestions stack).
 
+**Settings parity (2026-08-26).** The full 13-section prototype nav
+with `SEC_PERM` gating and group-header hiding. Pure-choice config
+lives in one `businesses.settings` jsonb document behind GET/PATCH
+`/business-settings` (zod defaults fill unsaved sections; each
+section keeps the prototype's permission split); the business card
+(name/address/phone/description/gallery-as-data-URLs + read-only
+HQ-managed legal block + `timing_enabled`) sits behind GET/PATCH
+`/business`. Opening hours edits the location's real week + cancel
+window through audited PATCH `/locations/:id` — the same truth
+`scheduleFor` reads — with the Phase-3 exceptions/holidays doors for
+the Exceptions tab. Schedules & services persists per-employee
+roleTitle/week/skills through the extended employee PATCH. Honest
+deferrals: General's tz/currency/week-start render read-only (per-
+location / fixed for MK); the online-booking deposit and per-location
+online toggles wait for payments and a real door; marketplace choices
+are stored now, honored when §5 search/discovery starts; the form
+builder and commission stay disabled.
+
 **E2E.** Four Playwright journeys run in CI against the migrated +
 seeded stack: flightdeck, calendar booking, till sale → invoice →
 audit, and the trilingual chrome flip.

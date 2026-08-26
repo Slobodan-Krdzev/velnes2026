@@ -46,7 +46,7 @@ function mockApi(calls: { method: string; path: string; body?: unknown }[]) {
           location: {
             id: LOC2, name: 'Aerodrom', city: 'Skopje', address: 'x', tz: 'Europe/Skopje',
             phone: null, rooms: 2, invPrefix: 'AER-', online: true, cancelHours: 24,
-            opened: null, lifecycle: 'ACTIVE',
+            opened: null, lifecycle: 'ACTIVE', hours: null,
           },
         });
       if (path.includes('/locations') && method === 'GET')
@@ -55,19 +55,19 @@ function mockApi(calls: { method: string; path: string; body?: unknown }[]) {
             {
               id: LOC1, name: 'Centar', city: 'Skopje', address: 'Macedonia Street 21',
               tz: 'Europe/Skopje', phone: null, rooms: 3, invPrefix: 'CEN-', online: true,
-              cancelHours: 24, opened: null, lifecycle: 'ACTIVE',
+              cancelHours: 24, opened: null, lifecycle: 'ACTIVE', hours: null,
             },
             {
               id: LOC2, name: 'Aerodrom', city: 'Skopje', address: 'Jane Sandanski 82',
               tz: 'Europe/Skopje', phone: null, rooms: 2, invPrefix: 'AER-', online: false,
-              cancelHours: 24, opened: null, lifecycle: 'APPROVED',
+              cancelHours: 24, opened: null, lifecycle: 'APPROVED', hours: null,
             },
           ],
         });
       if (path.includes('/employees') && method === 'PATCH') return ok({
         id: '40000000-0000-4000-8000-000000000002', name: 'Ana Dimitrova', roleTitle: 'Rehab coach',
         email: 'ana@velnes.mk', phone: null, access: 'staff', roleId: ROLE, bookable: false,
-        status: 'active', color: 'clay', locationIds: [LOC2], skillServiceIds: [],
+        status: 'active', color: 'clay', locationIds: [LOC2], skillServiceIds: [], hours: null,
       });
       if (path.includes('/employees'))
         return ok({
@@ -76,7 +76,7 @@ function mockApi(calls: { method: string; path: string; body?: unknown }[]) {
               id: '40000000-0000-4000-8000-000000000002', name: 'Ana Dimitrova',
               roleTitle: 'Rehab coach', email: 'ana@velnes.mk', phone: null, access: 'staff',
               roleId: ROLE, bookable: true, status: 'active', color: 'clay',
-              locationIds: [LOC2], skillServiceIds: [],
+              locationIds: [LOC2], skillServiceIds: [], hours: null,
             },
           ],
         });
@@ -112,6 +112,9 @@ async function openSettings() {
   window.history.pushState({}, '', '/settings');
   localStorage.setItem('velnes.refresh', 'rt');
   render(<App />);
+  // The nav now opens on General — walk to Locations first.
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Locations' })).toBeDefined());
+  await userEvent.click(screen.getByRole('button', { name: 'Locations' }));
   await waitFor(() => expect(screen.getByText('Centar')).toBeDefined());
 }
 

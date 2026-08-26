@@ -195,9 +195,47 @@ export async function seedDemo(adminUrl: string) {
       location_lifecycle_log, locations, employees, roles, businesses CASCADE`);
 
     await q(
-      `INSERT INTO businesses (id, name, country, vat, plan, since, timing_enabled, slug)
-       VALUES ($1,'Velnes Fizio Centar','North Macedonia','MK4080012345678','Business','2026-02-14',true,'velnes-fizio')`,
-      [demo.business],
+      `INSERT INTO businesses (id, name, country, vat, plan, since, timing_enabled, slug,
+         address, city, phone, description, gallery, settings)
+       VALUES ($1,'Velnes Fizio Centar','North Macedonia','MK4080012345678','Business','2026-02-14',true,'velnes-fizio',
+         'Partizanski Odredi 14','Skopje','+389 2 3112 940',
+         'Physiotherapy, rehab and recovery in the centre of Skopje.',$2,$3)`,
+      [
+        demo.business,
+        JSON.stringify([
+          { id: 'g1', name: 'Treatment room', img: null, tone: '#6f7357' },
+          { id: 'g2', name: 'Reception', img: null, tone: '#8a8f6a' },
+          { id: 'g3', name: 'Rehab studio', img: null, tone: '#5c6049' },
+          { id: 'g4', name: 'Recovery corner', img: null, tone: '#a3a883' },
+        ]),
+        JSON.stringify({
+          ranking: { criteria: ['rank_reviews', 'rank_upsellcount'] },
+          customers: {
+            groups: [
+              { name: 'New', discountPct: 0 },
+              { name: 'Regulars', discountPct: 5 },
+              { name: 'VIP', discountPct: 10 },
+            ],
+            forms: { consult: true, intake: false },
+          },
+          sales: { defaultVat: 18, autoReceipt: true, allowDiscounts: true, roundCash: false },
+          marketplace: {
+            listed: true,
+            pitch: 'Physiotherapy and rehab in the centre of Skopje',
+            description:
+              'A small practice on Partizanski Odredi. Four therapists, two rooms each, no rush between appointments.',
+            categories: ['Physiotherapy', 'Rehab', 'Sports injury'],
+            showPrices: true,
+            showTeam: true,
+            showReviews: true,
+            autoConfirm: true,
+            depositNew: false,
+            depositPct: 10,
+            minLead: '2 hours',
+            cancelUntil: '24 hours before',
+          },
+        }),
+      ],
     );
 
     const roles: [string, string, boolean, boolean, string, PermMap][] = [

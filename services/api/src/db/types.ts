@@ -127,12 +127,18 @@ export interface AuditLog {
 }
 
 export interface Businesses {
+  address: string | null;
+  city: string | null;
   country: string;
   createdAt: Generated<Timestamp>;
+  description: Generated<string>;
+  gallery: Generated<Json>;
   id: Generated<string>;
   name: string;
   ownerEmployeeId: string | null;
+  phone: string | null;
   plan: Generated<string>;
+  settings: Generated<Json>;
   since: Timestamp | null;
   slug: string | null;
   timingEnabled: Generated<boolean>;

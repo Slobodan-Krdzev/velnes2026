@@ -18,7 +18,15 @@ import { z } from 'zod';
 import { api, get, post } from '@velnes/client';
 import { useEmployees, useLocations } from '../../api/queries.js';
 import { BookingSection } from './BookingSection.js';
+import { CompanySection } from './CompanySection.js';
+import { CustomersSettingsSection } from './CustomersSettingsSection.js';
+import { EmployeesSection } from './EmployeesSection.js';
+import { GeneralSection } from './GeneralSection.js';
+import { HoursSection } from './HoursSection.js';
+import { MarketplaceSection } from './MarketplaceSection.js';
 import { NewLocationWizard } from './NewLocation.js';
+import { RankingSection } from './RankingSection.js';
+import { SalesSection } from './SalesSection.js';
 import { useToast } from '../../lib/toast.js';
 import { refusalText } from '@velnes/client';
 import { useSession } from '@velnes/client';
@@ -26,32 +34,71 @@ import { useSession } from '@velnes/client';
 const OkSchema = z.object({ ok: z.literal(true) });
 const IdSchema = z.object({ id: z.string() });
 
-type SectionId = 'locations' | 'team' | 'roles' | 'booking' | 'audit';
+type SectionId =
+  | 'general'
+  | 'company'
+  | 'locations'
+  | 'team'
+  | 'roles'
+  | 'employees'
+  | 'ranking'
+  | 'calendar'
+  | 'booking'
+  | 'marketplace'
+  | 'customers'
+  | 'sales'
+  | 'audit';
+
+/** The prototype's SEC_PERM — every section hangs off one right. */
+const SEC_PERM: Record<SectionId, PermKey> = {
+  general: 'locations.manage',
+  company: 'locations.manage',
+  locations: 'locations.manage',
+  team: 'users.manage',
+  roles: 'roles.manage',
+  employees: 'users.manage',
+  ranking: 'ranking.manage',
+  calendar: 'locations.manage',
+  booking: 'widget.manage',
+  marketplace: 'widget.manage',
+  customers: 'customers.view_business',
+  sales: 'payments.manage',
+  audit: 'roles.manage',
+};
 
 export function SettingsPage() {
   const { t } = useTranslation();
   const { can } = useSession();
-  const sections: ([`#${string}`, string] | [SectionId, string])[] = [
+  const raw: ([`#${string}`, string] | [SectionId, string])[] = [
     ['#Business', ''],
+    ['general', t('settings.general')],
+    ['company', t('settings.company')],
     ['locations', t('settings.locations')],
     ['#People', ''],
     ['team', t('settings.team')],
     ['roles', t('settings.roles')],
+    ['employees', t('settings.employees')],
+    ['ranking', t('settings.ranking')],
     ['#Selling', ''],
+    ['calendar', t('settings.openingHours')],
     ['booking', t('settings.booking')],
+    ['marketplace', t('settings.marketplace')],
+    ['customers', t('settings.customersSection')],
+    ['sales', t('settings.sales')],
     ['#Governance', ''],
     ['audit', t('settings.audit')],
   ];
-  const visible = sections.filter(([id]) => {
-    if (id.startsWith('#')) return true;
-    if (id === 'locations') return can('locations.manage');
-    if (id === 'team') return can('users.manage');
-    if (id === 'roles') return can('roles.manage');
-    if (id === 'booking') return can('widget.manage');
-    return can('roles.manage');
+  const allowed = raw.filter(
+    ([id]) => id.startsWith('#') || can(SEC_PERM[id as SectionId]),
+  );
+  // A group header only stays when something is left under it.
+  const visible = allowed.filter(([id], i) => {
+    if (!id.startsWith('#')) return true;
+    const next = allowed[i + 1];
+    return !!next && !next[0].startsWith('#');
   });
   const first = visible.find(([id]) => !id.startsWith('#'))?.[0] as SectionId | undefined;
-  const [tab, setTab] = useState<SectionId>(first ?? 'locations');
+  const [tab, setTab] = useState<SectionId>(first ?? 'general');
 
   return (
     <>
@@ -83,10 +130,20 @@ export function SettingsPage() {
           )}
         </nav>
         <div className="settings-pane">
+          {tab === 'general' ? (
+            <GeneralSection openEmployees={() => setTab('employees')} />
+          ) : null}
+          {tab === 'company' ? <CompanySection /> : null}
           {tab === 'locations' ? <LocationsSection /> : null}
           {tab === 'team' ? <TeamSection /> : null}
           {tab === 'roles' ? <RolesSection /> : null}
+          {tab === 'employees' ? <EmployeesSection /> : null}
+          {tab === 'ranking' ? <RankingSection /> : null}
+          {tab === 'calendar' ? <HoursSection /> : null}
           {tab === 'booking' ? <BookingSection /> : null}
+          {tab === 'marketplace' ? <MarketplaceSection /> : null}
+          {tab === 'customers' ? <CustomersSettingsSection /> : null}
+          {tab === 'sales' ? <SalesSection /> : null}
           {tab === 'audit' ? <AuditSection /> : null}
         </div>
       </div>

@@ -59,6 +59,7 @@ test('a stranger registers, HQ activates, the owner signs into their own world',
   await expect(page.getByTitle('Petra Novak')).toBeVisible();
   // Their own world: the picked starter service, nobody else's data.
   await page.getByLabel('Settings', { exact: true }).click();
+  await page.getByRole('button', { name: 'Locations', exact: true }).click();
   await expect(page.getByText(`Studio Nova ${runId}`).first()).toBeVisible();
   await expect(page.getByText('APPROVED').first()).toBeVisible();
 });
@@ -71,6 +72,7 @@ test('an owner submits a new location, HQ approves the compound, the owner activ
   await page.getByRole('button', { name: 'Sign in' }).click();
   await expect(page.getByTitle('Maria Petrovska')).toBeVisible();
   await page.getByLabel('Settings', { exact: true }).click();
+  await page.getByRole('button', { name: 'Locations', exact: true }).click();
   await page.getByRole('button', { name: /Add location/ }).click();
   await page.getByText('Copy setup from an existing location').click();
   await page.getByRole('button', { name: 'Next' }).click();
@@ -100,6 +102,7 @@ test('an owner submits a new location, HQ approves the compound, the owner activ
 
   // ── Back in the workspace: the readiness gate opens, Maria activates.
   await page.reload();
+  await page.getByRole('button', { name: 'Locations', exact: true }).click();
   const card = page.locator('.rowcard', { hasText: `Debar Maalo ${runId}` });
   await expect(card.getByText('APPROVED')).toBeVisible();
   await card.getByRole('button', { name: 'Activate location' }).click();

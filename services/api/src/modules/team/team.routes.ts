@@ -7,6 +7,7 @@ import {
   PermMapSchema,
   RoleListResponseSchema,
   RoleWriteSchema,
+  type Employee,
 } from '@velnes/contracts';
 import type { FastifyInstance } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
@@ -49,6 +50,7 @@ export function teamRoutes(app: FastifyInstance) {
             skillServiceIds: skills
               .filter((s) => s.employeeId === e.id)
               .map((s) => s.serviceId),
+            hours: (e.hours ?? null) as Employee['hours'],
           })),
         };
       }),
@@ -123,9 +125,23 @@ export function teamRoutes(app: FastifyInstance) {
             ...(req.body.color !== undefined ? { color: req.body.color } : {}),
             ...(req.body.access !== undefined ? { access: req.body.access } : {}),
             ...(req.body.roleId !== undefined ? { roleId: req.body.roleId } : {}),
+            ...(req.body.roleTitle !== undefined ? { roleTitle: req.body.roleTitle } : {}),
+            ...(req.body.hours !== undefined ? { hours: JSON.stringify(req.body.hours) } : {}),
           })
           .where('id', '=', req.params.id)
           .execute();
+        // Skills: replace whole — empty means "does everything".
+        if (req.body.skillServiceIds !== undefined) {
+          await trx
+            .deleteFrom('employeeSkills')
+            .where('employeeId', '=', req.params.id)
+            .execute();
+          for (const sid of req.body.skillServiceIds)
+            await trx
+              .insertInto('employeeSkills')
+              .values({ tenantId: req.claims.ten, employeeId: req.params.id, serviceId: sid })
+              .execute();
+        }
         if (req.body.roleId !== undefined && req.body.roleId !== before.roleId) {
           const actor = await trx
             .selectFrom('employees')
@@ -173,6 +189,7 @@ export function teamRoutes(app: FastifyInstance) {
           color: e.color,
           locationIds: locs.map((l) => l.locationId),
           skillServiceIds: skills.map((s) => s.serviceId),
+          hours: (e.hours ?? null) as Employee['hours'],
         };
       }),
   });
