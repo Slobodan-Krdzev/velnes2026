@@ -1,6 +1,6 @@
 import type { Appointment } from '@velnes/contracts';
 import { empColorOf, I, Icon } from '@velnes/ui';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAppointments, useEmployees, useLocations } from '../../api/queries.js';
 import { useSession } from '@velnes/client';
@@ -192,6 +192,26 @@ export function CalendarPage() {
   const nowLine =
     nowTop === null ? null : <div className="cal-now" style={{ top: `${nowTop}%` }} />;
 
+  // The grid follows the clock: it opens centered on the red line and
+  // slides along whenever the line would drift out of view.
+  const calBodyRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const el = calBodyRef.current;
+    if (!el || nowTop === null) return;
+    const todayVisible = view === 'day' ? date === today : days7.includes(today);
+    if (!todayVisible) return;
+    const lineY = (el.scrollHeight * nowTop) / 100;
+    const margin = 40;
+    if (lineY < el.scrollTop + margin || lineY > el.scrollTop + el.clientHeight - margin) {
+      const target = Math.max(0, lineY - el.clientHeight / 2);
+      // jsdom has no element.scrollTo — fall back to the property.
+      if (typeof el.scrollTo === 'function') el.scrollTo({ top: target, behavior: 'smooth' });
+      else el.scrollTop = target;
+    }
+    // staff.length: the grid mounts only once employees answer — the
+    // first centering must wait for that.
+  }, [nowTop, view, date, today, weekStart, staff.length]);
+
   const gutter = (
     <div className="cal-gutter">
       {nowTop !== null ? (
@@ -342,7 +362,7 @@ export function CalendarPage() {
               </div>
             ))}
           </div>
-          <div className="cal-body">
+          <div className="cal-body" ref={calBodyRef}>
             <div className="cal-row">
               {gutter}
               {days7.map((iso) => (
@@ -377,7 +397,7 @@ export function CalendarPage() {
               );
             })}
           </div>
-          <div className="cal-body">
+          <div className="cal-body" ref={calBodyRef}>
             <div className="cal-row">
               {gutter}
               {staff.map((e) => (
