@@ -61,14 +61,17 @@ const SOURCE_KEYS: Record<string, string> = {
 
 export function ReportsPage() {
   const { t } = useTranslation();
-  const [period, setPeriod] = useState<Period>('week');
+  const [period, setPeriod] = useState<Period | 'custom'>('week');
+  const [custom, setCustom] = useState<[string, string]>(rangeFor('week'));
   const [tab, setTab] = useState<Tab>('services');
   const [filtersOpen, setFiltersOpen] = useState(false);
   const filtersRef = useOutsideClose(filtersOpen, () => setFiltersOpen(false));
-  const [from, to] = rangeFor(period);
+  const [from, to] = period === 'custom' ? custom : rangeFor(period);
+  const validRange = from <= to;
   const report = useQuery({
     queryKey: ['report', from, to],
     queryFn: () => get(ReportSchema, `/reports?from=${from}&to=${to}`),
+    enabled: validRange,
   });
   const r = report.data;
 
@@ -130,11 +133,12 @@ export function ReportsPage() {
     URL.revokeObjectURL(a.href);
   };
 
-  const periods: [Period, string][] = [
+  const periods: [Period | 'custom', string][] = [
     ['week', t('rep.thisWeek')],
     ['month', t('rep.thisMonth')],
     ['quarter', t('rep.thisQuarter')],
     ['year', t('rep.thisYear')],
+    ['custom', t('rep.custom')],
   ];
   const tabsDef: [Tab, string][] = [
     ['locations', t('rep.tabLocations')],
@@ -170,6 +174,7 @@ export function ReportsPage() {
                     role="menuitemradio"
                     aria-checked={period === p}
                     onClick={() => {
+                      if (p === 'custom') setCustom([from, to]);
                       setPeriod(p);
                       setFiltersOpen(false);
                     }}
@@ -185,9 +190,31 @@ export function ReportsPage() {
               </div>
             ) : null}
           </div>
-          <span className="badge accent tnum">
-            {from} → {to}
-          </span>
+          {period === 'custom' ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <input
+                className="input tnum"
+                type="date"
+                value={custom[0]}
+                max={custom[1]}
+                aria-label={t('rep.from')}
+                onChange={(e) => setCustom([e.target.value, custom[1]])}
+              />
+              <span className="muted">–</span>
+              <input
+                className="input tnum"
+                type="date"
+                value={custom[1]}
+                min={custom[0]}
+                aria-label={t('rep.to')}
+                onChange={(e) => setCustom([custom[0], e.target.value])}
+              />
+            </div>
+          ) : (
+            <span className="badge accent tnum">
+              {from} → {to}
+            </span>
+          )}
         </div>
         <div className="toolbar-actions">
           <button className="btn btn-secondary btn-w" onClick={csv} disabled={!r}>
