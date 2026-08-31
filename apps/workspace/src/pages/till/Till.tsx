@@ -1,8 +1,8 @@
 import { SaleResponseSchema, ValidateCodeResponseSchema, type SaleLine } from '@velnes/contracts';
 import { I, Icon } from '@velnes/ui';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { post } from '@velnes/client';
 import { useAppointments, useLocationCatalog, useLocations } from '../../api/queries.js';
 import { money } from '../../lib/money.js';
@@ -176,6 +176,37 @@ export function TillPage() {
       }));
 
   const tillQty = (id: string) => basket.reduce((n, l) => n + (l.refId === id ? l.qty : 0), 0);
+
+  // "Take payment" from the calendar drawer lands here with the
+  // appointment id — the prototype's apptpay puts it straight on the
+  // till and says so.
+  const routerLoc = useLocation();
+  const payAppt = (routerLoc.state as { payAppt?: string } | null)?.payAppt;
+  const [paid, setPaid] = useState<string | null>(null);
+  useEffect(() => {
+    if (!payAppt || paid === payAppt) return;
+    const a = todaysAppts.find((x) => x.id === payAppt);
+    if (!a) return;
+    setPaid(payAppt);
+    setBasket((b) =>
+      b.some((l) => l.refId === a.id)
+        ? b
+        : [
+            ...b,
+            {
+              key: uuid(),
+              kind: 'appointment' as const,
+              refId: a.id,
+              name: a.serviceName ?? a.title,
+              sub: a.title,
+              price: a.price,
+              qty: 1,
+              disc: 0,
+            },
+          ],
+    );
+    toast(t('till.onTill', { name: a.title }));
+  }, [payAppt, paid, todaysAppts, toast, t]);
 
   const add = (tile: Tile) =>
     setBasket((b) => {

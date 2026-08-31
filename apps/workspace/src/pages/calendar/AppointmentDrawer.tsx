@@ -5,17 +5,20 @@ import {
   type Appointment,
   type Employee,
 } from '@velnes/contracts';
-import { Badge, Button, I, Icon } from '@velnes/ui';
+import { Badge, I, Icon } from '@velnes/ui';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useQuery } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { z } from 'zod';
 import { get, patch, refusalText } from '@velnes/client';
 import {
   useBook,
   useCancelAppointment,
+  useEmployees,
   useLineQuote,
   useLocationCatalog,
+  useLocations,
 } from '../../api/queries.js';
 import { money } from '../../lib/money.js';
 import { useToast } from '../../lib/toast.js';
@@ -602,46 +605,286 @@ function ApptRow({
   );
 }
 
-/* ── Editing an existing appointment — unchanged behavior ─────── */
+/* ── The appointment detail panel — the prototype's apptDetailMeta ── */
 
-function EditBody({ appointment, onClose }: { appointment: Appointment; onClose: () => void }) {
+const SOURCE_KEYS: Record<string, string> = {
+  marketplace: 'source.marketplace',
+  widget: 'source.widget',
+  link: 'source.link',
+  staff: 'source.staff',
+  pos: 'source.pos',
+  phone: 'source.phone',
+  walkin: 'source.walkin',
+  google: 'source.google',
+  instagram: 'source.instagram',
+  api: 'source.api',
+};
+
+/** The prototype's apptEditable: only what is still to come moves.
+ *  Today counts until the end time. */
+function apptEditable(a: Appointment): boolean {
+  if (a.kind !== 'appointment' || a.status === 'cancelled') return false;
+  const today = localIso(new Date());
+  if (a.date > today) return true;
+  if (a.date < today) return false;
+  return toMins(a.end) > nowMins();
+}
+
+function EditBody({ appointment: a, onClose }: { appointment: Appointment; onClose: () => void }) {
   const { t } = useTranslation();
+  const toast = useToast();
+  const navigate = useNavigate();
   const cancel = useCancelAppointment();
+  const employees = useEmployees();
+  const locations = useLocations();
+  const [editing, setEditing] = useState(false);
+
+  const empName = employees.data?.employees.find((e) => e.id === a.employeeId)?.name ?? '—';
+  const locName = locations.data?.locations.find((l) => l.id === a.locationId)?.name ?? '—';
+  const editable = apptEditable(a);
+
+  if (editing) return <RescheduleBody a={a} back={() => setEditing(false)} onClose={onClose} />;
+
   return (
     <>
       <div className="panel-head plain">
         <div>
-          <h2>{t('drawer.title.edit')}</h2>
+          <h2>{a.title}</h2>
+          <p className="sub">
+            {a.start} – {a.end} · {a.serviceName ?? a.kind}
+          </p>
         </div>
-        <button className="iconbtn" aria-label={t('common.close')} onClick={onClose}>
-          <Icon d={I.x} size={22} w={2.2} />
-        </button>
+        <div className="panel-actions">
+          <span className="panel-status">{t('drawer.statusSaved')}</span>
+          <button
+            className="btn btn-primary btn-sm"
+            onClick={() => {
+              toast(t('drawer.markedArrived'));
+              onClose();
+            }}
+          >
+            {t('drawer.markArrived')}
+          </button>
+          <button className="iconbtn" aria-label={t('common.close')} onClick={onClose}>
+            <Icon d={I.x} size={20} />
+          </button>
+        </div>
       </div>
       <div className="panel-body">
-        <p style={{ fontWeight: 700, fontSize: 16 }}>{appointment.title}</p>
-        <p style={{ color: 'var(--ink-muted)', fontWeight: 500 }}>
-          {appointment.serviceName} · {appointment.date} {appointment.start}–{appointment.end}
-        </p>
-        {appointment.basis ? (
+        <div className="grid2">
           <div>
-            <Badge tone="accent">{t(`drawer.durationBasis.${appointment.basis}`)}</Badge>
+            <span className="stat-label">{t('drawer.employee')}</span>
+            <div className="bold">
+              {empName}
+              {a.anyEmp ? (
+                <span className="muted" style={{ display: 'block', fontSize: 12, fontWeight: 500 }}>
+                  {t('drawer.noPreferenceHad')}
+                </span>
+              ) : null}
+            </div>
+          </div>
+          <div>
+            <span className="stat-label">{t('drawer.status')}</span>
+            <div>
+              <span className="badge success">{a.status}</span>
+            </div>
+          </div>
+          <div>
+            <span className="stat-label">{t('drawer.price')}</span>
+            <div className="bold tnum">{money(a.price)}</div>
+          </div>
+          <div>
+            <span className="stat-label">{t('drawer.location')}</span>
+            <div className="bold">{locName}</div>
+          </div>
+          <div>
+            <span className="stat-label">{t('drawer.bookedThrough')}</span>
+            <div className="bold">{t(SOURCE_KEYS[a.source] ?? 'source.unknown')}</div>
+          </div>
+          {a.variantLabel ? (
+            <div>
+              <span className="stat-label">{t('drawer.durationChosen')}</span>
+              <div className="bold">{a.variantLabel}</div>
+            </div>
+          ) : null}
+        </div>
+        {a.modifierNames.length ? (
+          <div className="field">
+            <span>{t('drawer.options')}</span>
+            <div className="chips">
+              {a.modifierNames.map((n) => (
+                <span key={n} className="chip">
+                  {n}
+                </span>
+              ))}
+            </div>
+            <span className="hint">{t('drawer.optionsHint')}</span>
           </div>
         ) : null}
-        <p className="tnum" style={{ fontWeight: 600 }}>
-          {t('drawer.price')}: {appointment.price} ден
-        </p>
-        {appointment.status !== 'cancelled' ? (
-          <Button
-            variant="danger"
-            onClick={() => void cancel.mutateAsync(appointment.id).then(onClose)}
+        {a.source === 'marketplace' ? <div className="note">{t('drawer.marketplaceNote')}</div> : null}
+        {a.kind === 'appointment' && a.status !== 'cancelled' ? (
+          <button
+            className="btn btn-primary"
+            style={{ width: '100%' }}
+            onClick={() => {
+              onClose();
+              navigate('/till', { state: { payAppt: a.id } });
+            }}
           >
-            {t('drawer.cancelAppointment')}
-          </Button>
-        ) : (
-          <div>
+            <Icon d={I.register} size={18} /> {t('drawer.takePayment')} · {money(a.price)}
+          </button>
+        ) : null}
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {editable ? (
+            <button className="btn btn-secondary btn-sm" onClick={() => setEditing(true)}>
+              {t('drawer.editAppt')}
+            </button>
+          ) : null}
+          {a.customerId ? (
+            <button
+              className="btn btn-secondary btn-sm"
+              onClick={() => {
+                onClose();
+                navigate(`/customers/${a.customerId}`);
+              }}
+            >
+              {t('drawer.openProfile')}
+            </button>
+          ) : null}
+          {a.status !== 'cancelled' ? (
+            <button
+              className="btn btn-subtle btn-sm"
+              onClick={() =>
+                void cancel.mutateAsync(a.id).then(() => {
+                  toast(t('drawer.cancelled'));
+                  onClose();
+                })
+              }
+            >
+              {t('drawer.cancelBooking')}
+            </button>
+          ) : (
             <Badge tone="danger">{t('cal.cancelled')}</Badge>
-          </div>
-        )}
+          )}
+        </div>
+        {a.kind === 'appointment' && a.status !== 'cancelled' && !editable ? (
+          <div className="note">{t('drawer.alreadyStarted')}</div>
+        ) : null}
+      </div>
+    </>
+  );
+}
+
+/* Rescheduling — the fields the one PATCH door moves: date, time and
+ * employee. Service and price never change here; that is the catalog's
+ * job at booking time. */
+function RescheduleBody({
+  a,
+  back,
+  onClose,
+}: {
+  a: Appointment;
+  back: () => void;
+  onClose: () => void;
+}) {
+  const { t } = useTranslation();
+  const toast = useToast();
+  const qc = useQueryClient();
+  const employees = useEmployees();
+  const [date, setDate] = useState(a.date);
+  const [time, setTime] = useState(a.start);
+  const [employeeId, setEmployeeId] = useState(a.employeeId ?? '');
+  const [error, setError] = useState<string | null>(null);
+
+  const save = async () => {
+    setError(null);
+    try {
+      await patch(AppointmentSchema, `/appointments/${a.id}`, {
+        date,
+        time,
+        ...(employeeId ? { employeeId } : {}),
+      });
+      void qc.invalidateQueries({ queryKey: ['appointments'] });
+      toast(t('drawer.rescheduled'));
+      onClose();
+    } catch (e) {
+      const reason = refusalText(t, e);
+      setError(reason);
+      toast(reason);
+    }
+  };
+
+  return (
+    <>
+      <div className="panel-head plain">
+        <div>
+          <h2>{a.title}</h2>
+          <p className="sub">
+            {a.serviceName ?? a.kind} · {t('drawer.editAppt')}
+          </p>
+        </div>
+        <div className="panel-actions">
+          <button className="btn btn-primary btn-sm" onClick={() => void save()}>
+            {t('cset.saveChanges')}
+          </button>
+          <button className="iconbtn" aria-label={t('common.close')} onClick={onClose}>
+            <Icon d={I.x} size={20} />
+          </button>
+        </div>
+      </div>
+      <div className="panel-body">
+        <label className="field">
+          <span>
+            {t('drawer.date')}
+            <span className="req">*</span>
+          </span>
+          <input
+            className="input"
+            type="date"
+            value={date}
+            min={localIso(new Date())}
+            onChange={(e) => setDate(e.target.value)}
+          />
+          <span className="hint">{t('drawer.moveHint')}</span>
+        </label>
+        <label className="field">
+          <span>{t('drawer.time')}</span>
+          <select className="select tnum" value={time} onChange={(e) => setTime(e.target.value)}>
+            {TIME_OPTIONS.map((tOpt) => (
+              <option
+                key={tOpt}
+                value={tOpt}
+                disabled={date === localIso(new Date()) && toMins(tOpt) < nowMins()}
+              >
+                {tOpt}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="field">
+          <span>{t('drawer.employee')}</span>
+          <select
+            className="select"
+            style={{ width: '100%' }}
+            value={employeeId}
+            onChange={(e) => setEmployeeId(e.target.value)}
+          >
+            {(employees.data?.employees ?? []).map((em) => (
+              <option key={em.id} value={em.id}>
+                {em.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <div className="note">{t('drawer.repriceNote')}</div>
+        {error ? (
+          <p role="alert" style={{ color: 'var(--danger)', fontWeight: 600 }}>
+            {error}
+          </p>
+        ) : null}
+        <button className="btn btn-ghost btn-sm" style={{ width: 'fit-content' }} onClick={back}>
+          {t('common.cancel')}
+        </button>
       </div>
     </>
   );
