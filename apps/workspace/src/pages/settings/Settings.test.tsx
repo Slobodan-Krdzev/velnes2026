@@ -7,6 +7,7 @@ import { setAccessToken } from '@velnes/client';
 const LOC1 = '20000000-0000-4000-8000-000000000001';
 const LOC2 = '20000000-0000-4000-8000-000000000002';
 const ROLE = '30000000-0000-4000-8000-000000000004';
+const ROLE2 = '30000000-0000-4000-8000-000000000005';
 
 const me = {
   id: '40000000-0000-4000-8000-000000000001',
@@ -67,7 +68,7 @@ function mockApi(calls: { method: string; path: string; body?: unknown }[]) {
       if (path.includes('/employees') && method === 'PATCH') return ok({
         id: '40000000-0000-4000-8000-000000000002', name: 'Ana Dimitrova', roleTitle: 'Rehab coach',
         email: 'ana@velnes.mk', phone: null, access: 'staff', roleId: ROLE, bookable: false,
-        status: 'active', color: 'clay', locationIds: [LOC2], skillServiceIds: [], hours: null,
+        status: 'active', color: 'clay', locationIds: [LOC2], skillServiceIds: [], hours: null, twofaEnabled: false, lastActive: null,
       });
       if (path.includes('/employees'))
         return ok({
@@ -76,7 +77,7 @@ function mockApi(calls: { method: string; path: string; body?: unknown }[]) {
               id: '40000000-0000-4000-8000-000000000002', name: 'Ana Dimitrova',
               roleTitle: 'Rehab coach', email: 'ana@velnes.mk', phone: null, access: 'staff',
               roleId: ROLE, bookable: true, status: 'active', color: 'clay',
-              locationIds: [LOC2], skillServiceIds: [], hours: null,
+              locationIds: [LOC2], skillServiceIds: [], hours: null, twofaEnabled: false, lastActive: null,
             },
           ],
         });
@@ -88,6 +89,11 @@ function mockApi(calls: { method: string; path: string; body?: unknown }[]) {
               id: ROLE, name: 'Employee', std: true, locked: false,
               description: 'Their own day and the till.',
               perms: { 'appointments.view_own': 'own', 'pos.checkout': 'location' },
+            },
+            {
+              id: ROLE2, name: 'Front desk', std: true, locked: false,
+              description: 'The calendar and the till.',
+              perms: { 'appointments.view_location': 'location' },
             },
           ],
         });
@@ -147,17 +153,20 @@ describe('settings', () => {
     );
   });
 
-  it('toggles bookable through the employee PATCH door', async () => {
+  it('the Users table changes a role through the employee PATCH door', async () => {
     const calls: { method: string; path: string; body?: unknown }[] = [];
     mockApi(calls);
     await openSettings();
     await userEvent.click(screen.getByRole('button', { name: 'Team & access' }));
-    const toggle = await screen.findByRole('switch', { name: 'Ana Dimitrova bookable' });
-    await userEvent.click(toggle);
+    // The prototype's table: two-factor, status and last-active read out.
+    const sel = await screen.findByLabelText('Role for Ana Dimitrova');
+    expect(screen.queryByText('Invite sent')).toBeNull();
+    expect(screen.getByText('Never')).toBeDefined();
+    await userEvent.selectOptions(sel, ROLE2);
     await waitFor(() =>
       expect(
         calls.some(
-          (c) => c.method === 'PATCH' && (c.body as { bookable: boolean }).bookable === false,
+          (c) => c.method === 'PATCH' && (c.body as { roleId: string }).roleId === ROLE2,
         ),
       ).toBe(true),
     );
@@ -168,7 +177,7 @@ describe('settings', () => {
     mockApi(calls);
     await openSettings();
     await userEvent.click(screen.getByRole('button', { name: 'Roles & permissions' }));
-    await userEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+    await userEvent.click((await screen.findAllByRole('button', { name: 'Edit' }))[0]!);
     const sel = await screen.findByLabelText('appointments.view_own');
     // The scope ladder is constrained: own-agenda only offers none/own.
     expect([...sel.querySelectorAll('option')].map((o) => o.textContent)).toEqual([

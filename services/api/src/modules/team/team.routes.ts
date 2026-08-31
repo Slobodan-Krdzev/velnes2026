@@ -1,6 +1,7 @@
 import {
   CustomerListQuerySchema,
   CustomerListResponseSchema,
+  EmployeeInviteSchema,
   EmployeeListResponseSchema,
   EmployeePatchSchema,
   EmployeeSchema,
@@ -34,6 +35,17 @@ export function teamRoutes(app: FastifyInstance) {
           .execute();
         const locs = await trx.selectFrom('employeeLocations').selectAll().execute();
         const skills = await trx.selectFrom('employeeSkills').selectAll().execute();
+        // Last active = the newest sign-in or token rotation. Real
+        // session data — an invited user honestly shows never.
+        const seen = await trx
+          .selectFrom('refreshTokens')
+          .select([
+            'employeeId',
+            sql<Date>`max(greatest(created_at, coalesce(rotated_at, created_at)))`.as('last'),
+          ])
+          .groupBy('employeeId')
+          .execute();
+        const lastOf = new Map(seen.map((s) => [s.employeeId, s.last] as const));
         return {
           employees: rows.map((e) => ({
             id: e.id,
@@ -51,6 +63,8 @@ export function teamRoutes(app: FastifyInstance) {
               .filter((s) => s.employeeId === e.id)
               .map((s) => s.serviceId),
             hours: (e.hours ?? null) as Employee['hours'],
+            twofaEnabled: e.twofaEnabled,
+            lastActive: lastOf.get(e.id)?.toISOString() ?? null,
           })),
         };
       }),
@@ -130,6 +144,18 @@ export function teamRoutes(app: FastifyInstance) {
           })
           .where('id', '=', req.params.id)
           .execute();
+        // Locations: replace whole — where the role applies.
+        if (req.body.locationIds !== undefined) {
+          await trx
+            .deleteFrom('employeeLocations')
+            .where('employeeId', '=', req.params.id)
+            .execute();
+          for (const lid of req.body.locationIds)
+            await trx
+              .insertInto('employeeLocations')
+              .values({ tenantId: req.claims.ten, employeeId: req.params.id, locationId: lid })
+              .execute();
+        }
         // Skills: replace whole — empty means "does everything".
         if (req.body.skillServiceIds !== undefined) {
           await trx
@@ -190,6 +216,98 @@ export function teamRoutes(app: FastifyInstance) {
           locationIds: locs.map((l) => l.locationId),
           skillServiceIds: skills.map((s) => s.serviceId),
           hours: (e.hours ?? null) as Employee['hours'],
+          twofaEnabled: e.twofaEnabled,
+          lastActive:
+            (
+              await trx
+                .selectFrom('refreshTokens')
+                .select(
+                  sql<Date>`max(greatest(created_at, coalesce(rotated_at, created_at)))`.as('last'),
+                )
+                .where('employeeId', '=', e.id)
+                .executeTakeFirst()
+            )?.last?.toISOString() ?? null,
+        };
+      }),
+  });
+
+  r.route({
+    method: 'POST',
+    url: '/employees',
+    preHandler: [app.authenticate],
+    schema: {
+      body: EmployeeInviteSchema,
+      response: {
+        200: EmployeeSchema,
+        403: z.object({ error: z.string(), message: z.string() }),
+      },
+    },
+    handler: async (req, reply) =>
+      withTenant(req.claims.ten, async (trx) => {
+        const perms = await permsFor(trx, req.claims);
+        if (!can(perms, 'users.manage'))
+          return reply
+            .code(403)
+            .send({ error: 'FORBIDDEN', message: 'Missing permission: users.manage' });
+        const b = req.body;
+        // Invited, not bookable, no credentials: until the invite is
+        // accepted (waits for SMTP) they can sign in nowhere.
+        const row = await trx
+          .insertInto('employees')
+          .values({
+            tenantId: req.claims.ten,
+            name: b.name,
+            email: b.email,
+            roleId: b.roleId,
+            roleTitle: 'New user',
+            access: 'staff',
+            bookable: false,
+            status: 'invited',
+            twofaEnabled: b.twofa,
+            color: null,
+            phone: null,
+          })
+          .returning('id')
+          .executeTakeFirstOrThrow();
+        for (const lid of b.locationIds)
+          await trx
+            .insertInto('employeeLocations')
+            .values({ tenantId: req.claims.ten, employeeId: row.id, locationId: lid })
+            .execute();
+        const actor = await trx
+          .selectFrom('employees')
+          .select('name')
+          .where('id', '=', req.claims.sub)
+          .executeTakeFirst();
+        const role = await trx
+          .selectFrom('roles')
+          .select('name')
+          .where('id', '=', b.roleId)
+          .executeTakeFirst();
+        await logAudit(trx, req.claims.ten, {
+          actorEmployeeId: req.claims.sub,
+          actorName: actor?.name ?? '',
+          action: 'User invited',
+          object: `User · ${b.name}`,
+          before: '—',
+          after: role?.name ?? '—',
+        });
+        return {
+          id: row.id,
+          name: b.name,
+          roleTitle: 'New user',
+          email: b.email,
+          phone: null,
+          access: 'staff' as const,
+          roleId: b.roleId,
+          bookable: false,
+          status: 'invited' as const,
+          color: null,
+          locationIds: b.locationIds,
+          skillServiceIds: [],
+          hours: null,
+          twofaEnabled: b.twofa,
+          lastActive: null,
         };
       }),
   });

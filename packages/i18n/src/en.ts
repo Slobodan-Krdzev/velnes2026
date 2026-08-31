@@ -1152,6 +1152,43 @@ export const en = {
   'settings.customersSection': 'Customers',
   'settings.sales': 'Sales',
 
+  // Settings › Team & access
+  'tset.users': 'Users',
+  'tset.user': 'User',
+  'tset.role': 'Role',
+  'tset.roleFor': 'Role for {{name}}',
+  'tset.custom': '(custom)',
+  'tset.locations': 'Locations',
+  'tset.none': 'None',
+  'tset.twofa': 'Two-factor',
+  'tset.inviteSent': 'Invite sent',
+  'tset.lastActive': 'Last active',
+  'tset.never': 'Never',
+  'tset.lastOwnerNote':
+    'A business always keeps at least one active owner. The last owner cannot demote or delete themselves — ownership has to be transferred first.',
+  'tset.recentChanges': 'Recent access changes',
+  'tset.openFullLog': 'Open the full log',
+  'tset.change': 'Change',
+  'tset.from': 'From',
+  'tset.to': 'To',
+  'tset.inviteUser': 'Invite user',
+  'tset.inviteSub': 'Role and locations decide what they see',
+  'tset.sendInvite': 'Send invite',
+  'tset.fullName': 'Full name',
+  'tset.emailHint': 'The invite and the two-factor setup go here',
+  'tset.locationsHint':
+    'A user only sees the calendar, customers, stock and reports of the locations selected here.',
+  'tset.require2fa': 'Require two-factor authentication',
+  'tset.require2faHint': 'Mandatory for owners, managers and anyone with financial data',
+  'tset.inviteNote':
+    'The invite expires after 7 days. Until it is accepted the user counts as “invite sent” and can sign in nowhere. The invite email itself waits for the SMTP decision.',
+  'tset.inviteToast': 'User invited — the invite email waits for SMTP',
+  'tset.locsFor': 'Locations for {{name}}',
+  'tset.whereApplies': 'Where this role applies',
+  'tset.done': 'Done',
+  'tset.roleDecidesWhat':
+    '{{name}} is a {{role}}. The role decides what they may do; the locations below decide where.',
+
   // Weekdays (hours editors)
   'week.mon': 'Mon',
   'week.tue': 'Tue',

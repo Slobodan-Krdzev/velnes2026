@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next';
 import { patch } from '@velnes/client';
 import { useEmployees, useLocationCatalog, useLocations } from '../../api/queries.js';
 import { useOutsideClose } from '../../lib/pop.js';
+import { PanelPortal } from '../../lib/Panel.js';
 import { useToast } from '../../lib/toast.js';
 import { availSummary, Field, ToggleRow, Toggle, WeekHoursEditor } from './bits.js';
 
@@ -252,7 +253,7 @@ function EmployeePanel({
   };
 
   return (
-    <>
+    <PanelPortal>
       <div className="scrim on" onClick={onClose} />
       <aside className="panel open" role="dialog" aria-modal="true">
         <div className="panel-head plain">
@@ -347,6 +348,6 @@ function EmployeePanel({
           </button>
         </div>
       </aside>
-    </>
+    </PanelPortal>
   );
 }

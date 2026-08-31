@@ -16,8 +16,22 @@ export const EmployeeSchema = z.object({
   locationIds: z.array(z.uuid()),
   skillServiceIds: z.array(z.uuid()),
   hours: WeekHoursSchema.nullable(),
+  twofaEnabled: z.boolean(),
+  // The last sign-in or token refresh — real session data, or never.
+  lastActive: z.string().nullable(),
 });
 export type Employee = z.infer<typeof EmployeeSchema>;
+
+/** Inviting a user — role and locations decide what they see. Until
+ *  the invite is accepted (an SMTP-era feature) they can sign in
+ *  nowhere: no credentials are created. */
+export const EmployeeInviteSchema = z.object({
+  name: z.string().min(1),
+  email: z.email(),
+  roleId: z.uuid(),
+  locationIds: z.array(z.uuid()).min(1),
+  twofa: z.boolean().default(true),
+});
 
 export const EmployeeListResponseSchema = z.object({
   employees: z.array(EmployeeSchema),
@@ -55,5 +69,7 @@ export const EmployeePatchSchema = z.object({
   hours: WeekHoursSchema.optional(),
   // Which services this person performs; empty = does everything.
   skillServiceIds: z.array(z.uuid()).optional(),
+  // Where the role applies; replaces the whole assignment.
+  locationIds: z.array(z.uuid()).optional(),
 });
 export type EmployeePatch = z.infer<typeof EmployeePatchSchema>;

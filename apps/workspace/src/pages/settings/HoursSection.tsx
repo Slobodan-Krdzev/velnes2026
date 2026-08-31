@@ -16,6 +16,7 @@ import { z } from 'zod';
 import { api, get, patch, post } from '@velnes/client';
 import { useLocations } from '../../api/queries.js';
 import { DateField } from '../../lib/DateField.js';
+import { PanelPortal } from '../../lib/Panel.js';
 import { useToast } from '../../lib/toast.js';
 import { Field, ToggleRow, useBusiness, WeekHoursEditor } from './bits.js';
 
@@ -439,7 +440,7 @@ function ExceptionEditor({ loc, onClose }: { loc: Location; onClose: () => void 
   };
 
   return (
-    <>
+    <PanelPortal>
       <div className="scrim on" onClick={onClose} />
       <aside className="panel open" role="dialog" aria-modal="true">
         <div className="panel-head plain">
@@ -550,7 +551,7 @@ function ExceptionEditor({ loc, onClose }: { loc: Location; onClose: () => void 
           </button>
         </div>
       </aside>
-    </>
+    </PanelPortal>
   );
 }
 
@@ -639,7 +640,7 @@ function HolidayPanel({ loc, onClose }: { loc: Location; onClose: () => void }) 
   const nPicked = Object.values(picked).filter(Boolean).length;
 
   return (
-    <>
+    <PanelPortal>
       <div className="scrim on" onClick={onClose} />
       <aside className="panel open" role="dialog" aria-modal="true">
         <div className="panel-head plain">
@@ -732,6 +733,6 @@ function HolidayPanel({ loc, onClose }: { loc: Location; onClose: () => void }) 
           </button>
         </div>
       </aside>
-    </>
+    </PanelPortal>
   );
 }

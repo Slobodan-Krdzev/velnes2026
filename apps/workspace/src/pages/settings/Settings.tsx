@@ -6,12 +6,13 @@ import {
   RoleListResponseSchema,
   scopeChoices,
   TransitionResponseSchema,
+  type Employee,
   type Location,
   type PermKey,
   type PermMap,
   type Role,
 } from '@velnes/contracts';
-import { empColorOf, EMP_COLORS, I, Icon } from '@velnes/ui';
+import { I, Icon } from '@velnes/ui';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { z } from 'zod';
@@ -27,6 +28,7 @@ import { MarketplaceSection } from './MarketplaceSection.js';
 import { NewLocationWizard } from './NewLocation.js';
 import { RankingSection } from './RankingSection.js';
 import { SalesSection } from './SalesSection.js';
+import { PanelPortal } from '../../lib/Panel.js';
 import { useToast } from '../../lib/toast.js';
 import { refusalText } from '@velnes/client';
 import { useSession } from '@velnes/client';
@@ -135,7 +137,7 @@ export function SettingsPage() {
           ) : null}
           {tab === 'company' ? <CompanySection /> : null}
           {tab === 'locations' ? <LocationsSection /> : null}
-          {tab === 'team' ? <TeamSection /> : null}
+          {tab === 'team' ? <TeamSection openAudit={() => setTab('audit')} /> : null}
           {tab === 'roles' ? <RolesSection /> : null}
           {tab === 'employees' ? <EmployeesSection /> : null}
           {tab === 'ranking' ? <RankingSection /> : null}
@@ -342,94 +344,436 @@ function LocationRow({
   );
 }
 
-function TeamSection() {
+const inits = (n: string) =>
+  n
+    .split(' ')
+    .map((w) => w[0])
+    .slice(0, 2)
+    .join('')
+    .toUpperCase();
+
+/** The prototype's setTeam(): the Users table, the invite lade and
+ *  the per-user locations panel — every act through the real doors. */
+function TeamSection({ openAudit }: { openAudit: () => void }) {
   const { t } = useTranslation();
   const toast = useToast();
   const qc = useQueryClient();
+  const { me } = useSession();
   const employees = useEmployees();
   const locations = useLocations();
   const roles = useQuery({
     queryKey: ['roles'],
     queryFn: () => get(RoleListResponseSchema, '/roles'),
   });
+  const audit = useQuery({
+    queryKey: ['audit'],
+    queryFn: () => get(AuditListResponseSchema, '/audit?limit=100'),
+  });
+  const [inviting, setInviting] = useState(false);
+  const [locsFor, setLocsFor] = useState<string | null>(null);
 
-  const patch = async (id: string, body: Record<string, unknown>) => {
+  const patchEmp = async (id: string, body: Record<string, unknown>) => {
     await api(z.unknown(), `/employees/${id}`, { method: 'PATCH', body: JSON.stringify(body) });
     toast(t('catalog.saved'));
     void qc.invalidateQueries({ queryKey: ['employees'] });
   };
-  const locName = (id: string) =>
-    locations.data?.locations.find((l) => l.id === id)?.name ?? '';
+  const allLocs = locations.data?.locations ?? [];
+  const locName = (id: string) => allLocs.find((l) => l.id === id)?.name ?? '';
+  const accessChanges = (audit.data?.entries ?? [])
+    .filter((a) => /Role|User|access/i.test(a.action + a.object))
+    .slice(0, 5);
 
   return (
-    <div className="card">
-      <div className="card-header">
-        <h2>{t('settings.team')}</h2>
+    <div className="stacked">
+      <div className="card">
+        <div className="card-header">
+          <h2>{t('tset.users')}</h2>
+          <button className="btn btn-primary btn-add" onClick={() => setInviting(true)}>
+            {t('cal.add')} <Icon d={I.plus} size={20} w={2.5} />
+          </button>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>{t('tset.user')}</th>
+              <th>{t('tset.role')}</th>
+              <th>{t('tset.locations')}</th>
+              <th>{t('tset.twofa')}</th>
+              <th>{t('eset.status')}</th>
+              <th>{t('tset.lastActive')}</th>
+              <th />
+            </tr>
+          </thead>
+          <tbody>
+            {(employees.data?.employees ?? []).map((e) => (
+              <tr key={e.id} className={e.status === 'invited' ? 'dim' : ''}>
+                <td>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <span className="avatar" style={{ width: 36, height: 36 }}>
+                      {inits(e.name)}
+                    </span>
+                    <span style={{ display: 'flex', flexDirection: 'column' }}>
+                      <span className="bold">{e.name}</span>
+                      <span className="muted" style={{ fontSize: 12, fontWeight: 500 }}>
+                        {e.email || t('eset.noEmail')}
+                      </span>
+                    </span>
+                  </span>
+                </td>
+                <td>
+                  <select
+                    className="cell sel"
+                    value={e.roleId ?? ''}
+                    aria-label={t('tset.roleFor', { name: e.name })}
+                    onChange={(ev) => void patchEmp(e.id, { roleId: ev.target.value || null })}
+                  >
+                    {(roles.data?.roles ?? []).map((r) => (
+                      <option key={r.id} value={r.id}>
+                        {r.name}
+                        {r.std ? '' : ` ${t('tset.custom')}`}
+                      </option>
+                    ))}
+                  </select>
+                </td>
+                <td>
+                  <button
+                    className="btn btn-ghost btn-sm"
+                    style={{ padding: 0 }}
+                    onClick={() => setLocsFor(e.id)}
+                  >
+                    {e.locationIds.length === allLocs.length
+                      ? t('shell.allLocations')
+                      : e.locationIds.map(locName).join(', ') || t('tset.none')}{' '}
+                    <Icon d={I.right} size={14} />
+                  </button>
+                </td>
+                <td>
+                  {e.twofaEnabled ? (
+                    <span className="badge success">{t('hset.on')}</span>
+                  ) : (
+                    <span className="badge warning">{t('hset.off')}</span>
+                  )}
+                </td>
+                <td>
+                  {e.status === 'invited' ? (
+                    <span className="badge warning">{t('tset.inviteSent')}</span>
+                  ) : (
+                    <span className="badge success">{t('eset.active')}</span>
+                  )}
+                </td>
+                <td className="muted tnum">
+                  {e.lastActive
+                    ? e.lastActive.slice(0, 16).replace('T', ' ')
+                    : t('tset.never')}
+                </td>
+                <td className="right">
+                  <span className="rowact">
+                    <button
+                      className="btn btn-ghost btn-sm"
+                      disabled={e.id === me?.id && e.status === 'invited'}
+                      onClick={() => setLocsFor(e.id)}
+                    >
+                      {t('common.edit')}
+                    </button>
+                  </span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <div className="note" style={{ margin: '16px 20px' }}>
+          {t('tset.lastOwnerNote')}
+        </div>
       </div>
-      {(employees.data?.employees ?? []).map((e) => {
-        const c = empColorOf(e.color);
-        return (
-          <div key={e.id} className="rowcard">
-            <span className="mark" style={{ background: c[2], color: c[3] }}>
-              {e.name[0]}
-            </span>
-            <span className="grow">
-              <span className="t">
-                {e.name}{' '}
-                {e.status === 'invited' ? (
-                  <span className="badge warning">{t('settings.invited')}</span>
-                ) : null}
-              </span>
-              <span className="s">
-                {e.roleTitle} · {e.email} · {e.locationIds.map(locName).join(', ')}
-              </span>
-            </span>
-            <span className="badge">{e.access}</span>
-            <select
-              className="select"
-              value={e.roleId ?? ''}
-              aria-label={`${e.name} role`}
-              onChange={(ev) => void patch(e.id, { roleId: ev.target.value || null })}
-            >
-              {(roles.data?.roles ?? []).map((r) => (
-                <option key={r.id} value={r.id}>
-                  {r.name}
-                </option>
-              ))}
-            </select>
-            <span className="rowact">
-              <button
-                className={`toggle${e.bookable ? ' on' : ''}`}
-                role="switch"
-                aria-checked={e.bookable}
-                aria-label={`${e.name} bookable`}
-                onClick={() => void patch(e.id, { bookable: !e.bookable })}
-              >
-                <span className="knob" />
-              </button>
-            </span>
-            <span className="swatches">
-              {EMP_COLORS.slice(0, 5).map(([k, name, bg, ink]) => (
-                <button
-                  key={k}
-                  className={`swatch${e.color === k ? ' on' : ''}`}
-                  style={{
-                    background: bg,
-                    borderColor: e.color === k ? ink : 'transparent',
-                    color: ink,
-                  }}
-                  title={name}
-                  aria-label={`${e.name} ${name}`}
-                  onClick={() => void patch(e.id, { color: k })}
-                >
-                  {e.color === k ? <Icon d={I.check} size={14} w={3.5} /> : null}
-                </button>
-              ))}
-            </span>
-          </div>
-        );
-      })}
+
+      <div className="card">
+        <div className="card-header">
+          <h2>{t('tset.recentChanges')}</h2>
+          <button className="btn btn-subtle btn-sm" onClick={openAudit}>
+            {t('tset.openFullLog')}
+          </button>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>{t('settings.when')}</th>
+              <th>{t('settings.who')}</th>
+              <th>{t('tset.change')}</th>
+              <th>{t('tset.from')}</th>
+              <th>{t('tset.to')}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {accessChanges.map((a) => (
+              <tr key={a.id}>
+                <td className="muted tnum">{a.ts.slice(0, 16).replace('T', ' ')}</td>
+                <td className="bold">{a.actorName}</td>
+                <td>
+                  {a.action} · {a.object}
+                </td>
+                <td className="muted">{a.before}</td>
+                <td className="bold">{a.after}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {inviting ? (
+        <InviteUserPanel
+          roles={roles.data?.roles ?? []}
+          locations={allLocs}
+          onClose={() => setInviting(false)}
+          onSaved={() => {
+            setInviting(false);
+            toast(t('tset.inviteToast'));
+            void qc.invalidateQueries({ queryKey: ['employees'] });
+            void qc.invalidateQueries({ queryKey: ['audit'] });
+          }}
+        />
+      ) : null}
+      {locsFor ? (
+        <UserLocsPanel
+          employee={employees.data?.employees.find((e) => e.id === locsFor) ?? null}
+          roleName={
+            roles.data?.roles.find(
+              (r) => r.id === employees.data?.employees.find((e) => e.id === locsFor)?.roleId,
+            )?.name ?? '—'
+          }
+          locations={allLocs}
+          onClose={() => setLocsFor(null)}
+          onSave={(ids) => {
+            void patchEmp(locsFor, { locationIds: ids });
+            setLocsFor(null);
+          }}
+        />
+      ) : null}
     </div>
+  );
+}
+
+function InviteUserPanel({
+  roles,
+  locations,
+  onClose,
+  onSaved,
+}: {
+  roles: Role[];
+  locations: Location[];
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const { t } = useTranslation();
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [roleId, setRoleId] = useState(roles[0]?.id ?? '');
+  const [locIds, setLocIds] = useState<string[]>([]);
+  const [twofa, setTwofa] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const save = async () => {
+    setError(null);
+    try {
+      await post(z.unknown(), '/employees', {
+        name: name.trim(),
+        email: email.trim(),
+        roleId,
+        locationIds: locIds,
+        twofa,
+      });
+      onSaved();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  };
+
+  return (
+    <PanelPortal>
+      <div className="scrim on" onClick={onClose} />
+      <aside className="panel open" role="dialog" aria-modal="true">
+        <div className="panel-head plain">
+          <div>
+            <h2>{t('tset.inviteUser')}</h2>
+            <p className="sub">{t('tset.inviteSub')}</p>
+          </div>
+          <div className="panel-actions">
+            <button
+              className="btn btn-primary btn-sm"
+              disabled={!name.trim() || !email.trim() || !locIds.length}
+              onClick={() => void save()}
+            >
+              {t('tset.sendInvite')}
+            </button>
+            <button className="iconbtn" aria-label={t('common.close')} onClick={onClose}>
+              <Icon d={I.x} size={20} />
+            </button>
+          </div>
+        </div>
+        <div className="panel-body">
+          <div className="grid2">
+            <label className="field">
+              <span>
+                {t('tset.fullName')}
+                <span className="req">*</span>
+              </span>
+              <input
+                className="input"
+                placeholder="Sara Ilieva"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+              />
+            </label>
+            <label className="field">
+              <span>
+                {t('cust.email')}
+                <span className="req">*</span>
+              </span>
+              <input
+                className="input"
+                type="email"
+                placeholder="sara@velnes.mk"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+              />
+              <span className="hint">{t('tset.emailHint')}</span>
+            </label>
+            <label className="field span2">
+              <span>
+                {t('tset.role')}
+                <span className="req">*</span>
+              </span>
+              <select
+                className="select"
+                style={{ width: '100%' }}
+                value={roleId}
+                onChange={(e) => setRoleId(e.target.value)}
+              >
+                {roles.map((r) => (
+                  <option key={r.id} value={r.id}>
+                    {r.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+          <div className="field">
+            <span>
+              {t('tset.locations')}
+              <span className="req">*</span>
+            </span>
+            <span className="hint">{t('tset.locationsHint')}</span>
+            {locations.map((l) => {
+              const on = locIds.includes(l.id);
+              return (
+                <button
+                  key={l.id}
+                  className="checkrow"
+                  onClick={() =>
+                    setLocIds(on ? locIds.filter((x) => x !== l.id) : [...locIds, l.id])
+                  }
+                >
+                  <span className={`check${on ? ' on' : ''}`}>
+                    <Icon d={I.check} size={14} w={3.5} />
+                  </span>
+                  <span style={{ fontWeight: 500 }}>
+                    {l.name} <span className="muted">· {l.city}</span>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+          <div className="togglerow">
+            <span style={{ display: 'flex', flexDirection: 'column' }}>
+              <span className="l">{t('tset.require2fa')}</span>
+              <span className="h">{t('tset.require2faHint')}</span>
+            </span>
+            <button
+              className={`toggle${twofa ? ' on' : ''}`}
+              role="switch"
+              aria-checked={twofa}
+              aria-label={t('tset.require2fa')}
+              onClick={() => setTwofa(!twofa)}
+            >
+              <span className="knob" />
+            </button>
+          </div>
+          <div className="note">{t('tset.inviteNote')}</div>
+          {error ? (
+            <p role="alert" style={{ color: 'var(--danger)', fontWeight: 600 }}>
+              {error}
+            </p>
+          ) : null}
+        </div>
+      </aside>
+    </PanelPortal>
+  );
+}
+
+function UserLocsPanel({
+  employee,
+  roleName,
+  locations,
+  onClose,
+  onSave,
+}: {
+  employee: Employee | null;
+  roleName: string;
+  locations: Location[];
+  onClose: () => void;
+  onSave: (ids: string[]) => void;
+}) {
+  const { t } = useTranslation();
+  const [ids, setIds] = useState<string[]>(employee?.locationIds ?? []);
+  if (!employee) return null;
+
+  return (
+    <PanelPortal>
+      <div className="scrim on" onClick={onClose} />
+      <aside className="panel open" role="dialog" aria-modal="true">
+        <div className="panel-head plain">
+          <div>
+            <h2>{t('tset.locsFor', { name: employee.name.split(' ')[0] })}</h2>
+            <p className="sub">{t('tset.whereApplies')}</p>
+          </div>
+          <div className="panel-actions">
+            <button
+              className="btn btn-primary btn-sm"
+              disabled={!ids.length}
+              onClick={() => onSave(ids)}
+            >
+              {t('tset.done')}
+            </button>
+            <button className="iconbtn" aria-label={t('common.close')} onClick={onClose}>
+              <Icon d={I.x} size={20} />
+            </button>
+          </div>
+        </div>
+        <div className="panel-body">
+          <p className="muted" style={{ fontWeight: 500 }}>
+            {t('tset.roleDecidesWhat', { name: employee.name, role: roleName })}
+          </p>
+          <div className="field">
+            {locations.map((l) => {
+              const on = ids.includes(l.id);
+              return (
+                <button
+                  key={l.id}
+                  className="checkrow"
+                  onClick={() => setIds(on ? ids.filter((x) => x !== l.id) : [...ids, l.id])}
+                >
+                  <span className={`check${on ? ' on' : ''}`}>
+                    <Icon d={I.check} size={14} w={3.5} />
+                  </span>
+                  <span style={{ fontWeight: 500 }}>
+                    {l.name} <span className="muted">· {l.city}</span>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </aside>
+    </PanelPortal>
   );
 }
 

@@ -125,6 +125,8 @@ function mockApi(opts: { bookResponse?: () => Response } = {}) {
               locationIds: [LOC],
               skillServiceIds: [SVC],
               hours: null,
+              twofaEnabled: true,
+              lastActive: null,
             },
           ],
         });

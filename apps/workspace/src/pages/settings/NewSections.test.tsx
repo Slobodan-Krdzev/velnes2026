@@ -142,7 +142,7 @@ function mockApi(calls: { method: string; path: string; body?: unknown }[]) {
           id: EMP, name: 'Ana Dimitrova', roleTitle: 'Senior rehab coach',
           email: 'ana@velnes.mk', phone: null, access: 'staff', roleId: null, bookable: true,
           status: 'active', color: 'clay', locationIds: [LOC], skillServiceIds: [SVC],
-          hours,
+          hours, twofaEnabled: false, lastActive: null,
         });
       }
       if (path.includes('/employees'))
@@ -152,7 +152,7 @@ function mockApi(calls: { method: string; path: string; body?: unknown }[]) {
               id: EMP, name: 'Ana Dimitrova', roleTitle: 'Rehab coach', email: 'ana@velnes.mk',
               phone: null, access: 'staff', roleId: null, bookable: true, status: 'active',
               color: 'clay', locationIds: [LOC], skillServiceIds: [],
-              hours: { ...hours, '0': null },
+              hours: { ...hours, '0': null }, twofaEnabled: false, lastActive: null,
             },
           ],
         });
