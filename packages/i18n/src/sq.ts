@@ -1244,6 +1244,8 @@ export const sq: Record<TranslationKey, string> = {
   'eset.active': 'Aktiv',
   'eset.noEmail': 'Ende pa email',
   'eset.calendarColour': 'Ngjyra në kalendar',
+  'eset.colourHint': 'Çdo termin i këtij personi mban këtë ngjyrë në kalendar, që të shihet kolona e kujt është e kujt. {{name}} është zgjedhur.',
+  'eset.emailInviteHint': 'Ku shkon ftesa për aplikacionin e punonjësve',
   'eset.colourFor': 'Ngjyra në kalendar për {{name}}',
   'eset.tableFoot':
     'I rezervueshëm do të thotë që kalendari dhe faqja e rezervimeve online e ofrojnë këtë person. Dikush pa shërbime ose ditë pune nuk mund të rezervohet. Katrori pranë emrit është ngjyra e tyre në kalendar — klikojeni për ta ndryshuar.',

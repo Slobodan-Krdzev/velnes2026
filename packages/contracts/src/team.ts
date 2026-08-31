@@ -60,6 +60,9 @@ export const CustomerListResponseSchema = z.object({
 });
 
 export const EmployeePatchSchema = z.object({
+  name: z.string().min(1).optional(),
+  email: z.email().optional(),
+  phone: z.string().nullable().optional(),
   bookable: z.boolean().optional(),
   color: z.string().nullable().optional(),
   access: EmployeeAccessSchema.optional(),

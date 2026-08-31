@@ -135,6 +135,15 @@ export const WEEK_KEYS = [
 
 type Period = [string, string];
 const DAY_END = 1140; // 19:00, the prototype's booking-day end
+
+/** Working hours pick from quarter-hour steps, 06:00–22:00 — a
+ *  dropdown like every other time in the app, never the browser's
+ *  own time widget. */
+export const HOUR_OPTIONS: string[] = [];
+for (let m = 360; m <= 1320; m += 15)
+  HOUR_OPTIONS.push(
+    `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`,
+  );
 const WH_BREAK = 60;
 const WH_MINPART = 60;
 const mins = (t: string) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5));
@@ -208,17 +217,57 @@ export function WeekHoursEditor({
           copy[j]![k] = v;
           set(i, copy);
         };
+        const compact = variant === 'checkbox';
+        const timeSel = (j: number, k: 0 | 1) => (
+          <select
+            className="select tnum"
+            value={list[j]![k]}
+            style={{
+              width: timeWidth,
+              paddingLeft: compact ? 10 : 14,
+              paddingRight: compact ? 26 : 38,
+            }}
+            aria-label={t(k === 0 ? 'hset.periodStart' : 'hset.periodEnd', { day, n: j + 1 })}
+            onChange={(e) => setPeriod(j, k, e.target.value)}
+          >
+            {HOUR_OPTIONS.map((o) => (
+              <option
+                key={o}
+                value={o}
+                disabled={k === 0 ? o >= list[j]![1] : o <= list[j]![0]}
+              >
+                {o}
+              </option>
+            ))}
+          </select>
+        );
         return (
-          <div key={key} className={`hoursrow${list.length > 1 ? ' split' : ''}`}>
-            {variant === 'checkbox' ? (
-              <label style={{ display: 'flex', alignItems: 'center', gap: 16, cursor: 'pointer' }}>
+          <div
+            key={key}
+            className={`hoursrow${list.length > 1 ? ' split' : ''}`}
+            style={compact ? { alignItems: 'flex-start', padding: '12px 16px' } : undefined}
+          >
+            {compact ? (
+              <label
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 12,
+                  cursor: 'pointer',
+                  flex: 'none',
+                  width: 88,
+                  marginTop: open ? 13 : 0,
+                }}
+              >
                 <input
                   type="checkbox"
                   checked={open}
                   aria-label={day}
                   onChange={(e) => dayToggle(e.target.checked)}
                 />
-                <span className="day">{day}</span>
+                <span className="day" style={{ width: 'auto' }}>
+                  {day}
+                </span>
               </label>
             ) : (
               <>
@@ -228,26 +277,12 @@ export function WeekHoursEditor({
             )}
             {open ? (
               <>
-                <div className="dayperiods" style={variant === 'checkbox' ? { marginLeft: 16 } : undefined}>
+                <div className="dayperiods" style={{ flex: compact ? 1 : undefined, minWidth: 0 }}>
                   {list.map((pr, j) => (
-                    <div key={j} className="periodrow">
-                      <input
-                        className="input"
-                        type="time"
-                        value={pr[0]}
-                        style={{ width: timeWidth }}
-                        aria-label={t('hset.periodStart', { day, n: j + 1 })}
-                        onChange={(e) => setPeriod(j, 0, e.target.value)}
-                      />
+                    <div key={j} className="periodrow" style={{ flexWrap: 'nowrap' }}>
+                      {timeSel(j, 0)}
                       <span className="muted">–</span>
-                      <input
-                        className="input"
-                        type="time"
-                        value={pr[1]}
-                        style={{ width: timeWidth }}
-                        aria-label={t('hset.periodEnd', { day, n: j + 1 })}
-                        onChange={(e) => setPeriod(j, 1, e.target.value)}
-                      />
+                      {timeSel(j, 1)}
                       {list.length > 1 ? (
                         <button
                           className="btn btn-subtle btn-icon btn-sm"
@@ -259,8 +294,17 @@ export function WeekHoursEditor({
                       ) : null}
                     </div>
                   ))}
+                  {compact && room ? (
+                    <button
+                      className="btn btn-subtle btn-sm"
+                      style={{ width: 'fit-content' }}
+                      onClick={() => set(i, whAdd(list))}
+                    >
+                      <Icon d={I.plus} size={18} w={2.5} /> {t('hset.addPeriod')}
+                    </button>
+                  ) : null}
                 </div>
-                {room ? (
+                {!compact && room ? (
                   <button
                     className="btn btn-subtle btn-sm wh-add"
                     onClick={() => set(i, whAdd(list))}
@@ -270,8 +314,8 @@ export function WeekHoursEditor({
                 ) : null}
               </>
             ) : (
-              <span className="muted" style={{ fontWeight: 500 }}>
-                {variant === 'checkbox' ? t('eset.notWorking') : t('hset.closed')}
+              <span className="muted" style={{ fontWeight: 500, ...(compact ? { marginTop: 2 } : {}) }}>
+                {compact ? t('eset.notWorking') : t('hset.closed')}
               </span>
             )}
           </div>

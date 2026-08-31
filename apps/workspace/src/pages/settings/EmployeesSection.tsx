@@ -5,8 +5,8 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { patch } from '@velnes/client';
 import { useEmployees, useLocationCatalog, useLocations } from '../../api/queries.js';
-import { useOutsideClose } from '../../lib/pop.js';
 import { PanelPortal } from '../../lib/Panel.js';
+import { useOutsideClose } from '../../lib/pop.js';
 import { useToast } from '../../lib/toast.js';
 import { availSummary, Field, ToggleRow, Toggle, WeekHoursEditor } from './bits.js';
 
@@ -22,9 +22,11 @@ export function EmployeesSection() {
   const toast = useToast();
   const qc = useQueryClient();
   const employees = useEmployees();
-  const [dotOpen, setDotOpen] = useState<string | null>(null);
+  // The colour menu escapes the card (overflow:hidden would clip it):
+  // it renders at fixed coordinates through a body portal.
+  const [dotOpen, setDotOpen] = useState<{ id: string; x: number; y: number } | null>(null);
   const [editing, setEditing] = useState<Employee | null>(null);
-  const dotRef = useOutsideClose<HTMLSpanElement>(dotOpen !== null, () => setDotOpen(null));
+  const dotRef = useOutsideClose(dotOpen !== null, () => setDotOpen(null));
 
   const save = async (id: string, body: Record<string, unknown>) => {
     await patch(EmployeeSchema, `/employees/${id}`, body);
@@ -33,6 +35,7 @@ export function EmployeesSection() {
   };
 
   const all = employees.data?.employees ?? [];
+  const dotEmp = all.find((e) => e.id === dotOpen?.id) ?? null;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
@@ -58,44 +61,23 @@ export function EmployeesSection() {
               return (
                 <tr key={e.id} className={e.status === 'invited' ? 'dim' : ''}>
                   <td className="bold">
-                    <span className="pop empdot-pop" ref={dotOpen === e.id ? dotRef : null}>
+                    <span className="empdot-pop">
                       <button
                         className="empdot"
                         aria-haspopup="menu"
-                        aria-expanded={dotOpen === e.id}
+                        aria-expanded={dotOpen?.id === e.id}
                         aria-label={t('eset.colourFor', { name: e.name })}
                         style={{ background: c[2], boxShadow: `0 0 0 1px ${c[3]} inset` }}
-                        onClick={() => setDotOpen(dotOpen === e.id ? null : e.id)}
+                        onPointerDown={(ev) => ev.stopPropagation()}
+                        onClick={(ev) => {
+                          const r = ev.currentTarget.getBoundingClientRect();
+                          setDotOpen(
+                            dotOpen?.id === e.id
+                              ? null
+                              : { id: e.id, x: r.left, y: r.bottom + 6 },
+                          );
+                        }}
                       />
-                      {dotOpen === e.id ? (
-                        <div className="menu menu-dot" role="menu">
-                          <div className="menu-label">{t('eset.calendarColour')}</div>
-                          <div className="swatches">
-                            {EMP_COLORS.map(([k, name, bg, ink]) => (
-                              <button
-                                key={k}
-                                type="button"
-                                className={`swatch${e.color === k ? ' on' : ''}`}
-                                style={{
-                                  background: bg,
-                                  borderColor: e.color === k ? ink : 'transparent',
-                                  color: ink,
-                                }}
-                                title={name}
-                                aria-label={name}
-                                aria-pressed={e.color === k}
-                                onClick={() => {
-                                  setDotOpen(null);
-                                  void save(e.id, { color: k });
-                                }}
-                              >
-                                {e.color === k ? <Icon d={I.check} size={14} w={3.5} /> : null}
-                              </button>
-                            ))}
-                          </div>
-                          <div className="menu-foot">{c[1]}</div>
-                        </div>
-                      ) : null}
                     </span>
                     <span style={{ marginLeft: 8 }}>{e.name}</span>
                     <div className="muted" style={{ fontWeight: 500, fontSize: 12 }}>
@@ -148,6 +130,43 @@ export function EmployeesSection() {
           {t('eset.tableFoot')}
         </p>
       </div>
+
+      {dotOpen && dotEmp ? (
+        <PanelPortal>
+          <div
+            ref={dotRef}
+            className="menu menu-dot"
+            role="menu"
+            style={{ position: 'fixed', left: dotOpen.x, top: dotOpen.y, zIndex: 60 }}
+          >
+            <div className="menu-label">{t('eset.calendarColour')}</div>
+            <div className="swatches">
+              {EMP_COLORS.map(([k, name, bg, ink]) => (
+                <button
+                  key={k}
+                  type="button"
+                  className={`swatch${dotEmp.color === k ? ' on' : ''}`}
+                  style={{
+                    background: bg,
+                    borderColor: dotEmp.color === k ? ink : 'transparent',
+                    color: ink,
+                  }}
+                  title={name}
+                  aria-label={name}
+                  aria-pressed={dotEmp.color === k}
+                  onClick={() => {
+                    setDotOpen(null);
+                    void save(dotEmp.id, { color: k });
+                  }}
+                >
+                  {dotEmp.color === k ? <Icon d={I.check} size={14} w={3.5} /> : null}
+                </button>
+              ))}
+            </div>
+            <div className="menu-foot">{empColorOf(dotEmp.color)[1]}</div>
+          </div>
+        </PanelPortal>
+      ) : null}
 
       <div className="card">
         <div className="card-header">
@@ -213,6 +232,8 @@ const STD_WEEK: WeekHours = {
   '6': null,
 };
 
+/** The prototype's employeePanelBody, over the real PATCH door: who
+ *  they are, their colour, their week, their services, bookable. */
 function EmployeePanel({
   employee,
   onClose,
@@ -226,8 +247,12 @@ function EmployeePanel({
   const locations = useLocations();
   const firstLoc = locations.data?.locations[0]?.id ?? null;
   const catalog = useLocationCatalog(firstLoc);
+  const [name, setName] = useState(employee.name);
+  const [email, setEmail] = useState(employee.email);
+  const [phone, setPhone] = useState(employee.phone ?? '');
   const [roleTitle, setRoleTitle] = useState(employee.roleTitle);
   const [access, setAccess] = useState(employee.access);
+  const [color, setColor] = useState(employee.color);
   const [hours, setHours] = useState<WeekHours>(employee.hours ?? STD_WEEK);
   const [skills, setSkills] = useState<string[]>(employee.skillServiceIds);
   const [bookable, setBookable] = useState(employee.bookable);
@@ -240,8 +265,12 @@ function EmployeePanel({
     setError(null);
     try {
       await patch(EmployeeSchema, `/employees/${employee.id}`, {
+        name: name.trim(),
+        email: email.trim(),
+        phone: phone.trim() || null,
         roleTitle,
         access,
+        color,
         hours,
         skillServiceIds: skills,
         bookable,
@@ -261,12 +290,28 @@ function EmployeePanel({
             <h2>{employee.name}</h2>
             <div className="sub">{t('eset.employee')}</div>
           </div>
-          <button className="iconbtn" aria-label={t('common.close')} onClick={onClose}>
-            <Icon d={I.x} size={22} w={2.2} />
-          </button>
+          <div className="panel-actions">
+            <button
+              className="btn btn-primary btn-sm"
+              disabled={!name.trim() || !email.trim()}
+              onClick={() => void save()}
+            >
+              {t('cset.saveChanges')}
+            </button>
+            <button className="iconbtn" aria-label={t('common.close')} onClick={onClose}>
+              <Icon d={I.x} size={22} w={2.2} />
+            </button>
+          </div>
         </div>
         <div className="panel-body">
           <div className="grid2">
+            <label className="field span2">
+              <span>
+                {t('eset.name')}
+                <span className="req">*</span>
+              </span>
+              <input className="input" value={name} onChange={(e) => setName(e.target.value)} />
+            </label>
             <Field label={t('eset.jobTitle')}>
               <input className="input" value={roleTitle} onChange={(e) => setRoleTitle(e.target.value)} />
             </Field>
@@ -284,12 +329,50 @@ function EmployeePanel({
                 ))}
               </select>
             </Field>
+            <Field label={t('cust.email')} hint={t('eset.emailInviteHint')}>
+              <input
+                className="input"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+              />
+            </Field>
+            <Field label={t('cset.phone')}>
+              <input className="input" value={phone} onChange={(e) => setPhone(e.target.value)} />
+            </Field>
+          </div>
+
+          <div className="field">
+            <span>{t('eset.calendarColour')}</span>
+            <div className="swatches" style={{ marginTop: 6 }}>
+              {EMP_COLORS.map(([k, cname, bg, ink]) => (
+                <button
+                  key={k}
+                  type="button"
+                  className={`swatch${color === k ? ' on' : ''}`}
+                  style={{
+                    background: bg,
+                    borderColor: color === k ? ink : 'transparent',
+                    color: ink,
+                  }}
+                  title={cname}
+                  aria-label={cname}
+                  aria-pressed={color === k}
+                  onClick={() => setColor(k)}
+                >
+                  {color === k ? <Icon d={I.check} size={14} w={3.5} /> : null}
+                </button>
+              ))}
+            </div>
+            <span className="hint">
+              {t('eset.colourHint', { name: empColorOf(color)[1] })}
+            </span>
           </div>
 
           <div className="field">
             <span>{t('eset.availableFor')}</span>
             <div className="card" style={{ marginTop: 6 }}>
-              <WeekHoursEditor hours={hours} onChange={setHours} variant="checkbox" timeWidth={124} />
+              <WeekHoursEditor hours={hours} onChange={setHours} variant="checkbox" timeWidth={104} />
             </div>
             <span className="hint" style={{ fontSize: 12, fontWeight: 500, color: 'var(--ink-muted)' }}>
               {t('eset.availableHint')}
@@ -316,7 +399,9 @@ function EmployeePanel({
                           )
                         }
                       />
-                      <span style={{ fontWeight: 500 }}>{s.name}</span>
+                      <span style={{ fontWeight: 500 }}>
+                        {s.name} · {s.config.durationMin} min
+                      </span>
                     </label>
                   ))}
               </div>
@@ -338,14 +423,6 @@ function EmployeePanel({
               {error}
             </p>
           ) : null}
-        </div>
-        <div className="panel-foot">
-          <button className="btn btn-secondary" onClick={onClose}>
-            {t('common.cancel')}
-          </button>
-          <button className="btn btn-primary" onClick={() => void save()}>
-            {t('cset.saveChanges')}
-          </button>
         </div>
       </aside>
     </PanelPortal>

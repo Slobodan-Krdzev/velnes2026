@@ -1257,6 +1257,8 @@ export const en = {
   'eset.active': 'Active',
   'eset.noEmail': 'No email yet',
   'eset.calendarColour': 'Calendar colour',
+  'eset.colourHint': 'Every appointment of this person carries this colour in the calendar, so you can see whose column is whose. {{name}} is selected.',
+  'eset.emailInviteHint': 'Where the invite to the employee app goes',
   'eset.colourFor': 'Calendar colour for {{name}}',
   'eset.tableFoot':
     'Bookable means the calendar and the online booking page offer this person. Someone without services or working days cannot be booked. The square next to a name is their colour in the calendar — click it to change.',

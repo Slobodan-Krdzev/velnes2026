@@ -135,6 +135,9 @@ export function teamRoutes(app: FastifyInstance) {
         await trx
           .updateTable('employees')
           .set({
+            ...(req.body.name !== undefined ? { name: req.body.name } : {}),
+            ...(req.body.email !== undefined ? { email: req.body.email } : {}),
+            ...(req.body.phone !== undefined ? { phone: req.body.phone } : {}),
             ...(req.body.bookable !== undefined ? { bookable: req.body.bookable } : {}),
             ...(req.body.color !== undefined ? { color: req.body.color } : {}),
             ...(req.body.access !== undefined ? { access: req.body.access } : {}),
