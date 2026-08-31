@@ -104,6 +104,10 @@ export const mk: Record<TranslationKey, string> = {
   'drawer.repriceNote':
     'Услугата и нејзината цена остануваат како при закажување — преместување никогаш не ја менува цената.',
   'till.onTill': '{{name}} е на касата',
+  'cal.prevMonth': 'Претходен месец',
+  'cal.nextMonth': 'Следен месец',
+  'cal.pickWeekHint': 'Ја избира неделата околу тој ден',
+  'cal.dotHint': 'Деновите со точка имаат термини',
   'source.marketplace': 'Velnes пазар',
   'source.widget': 'Виџет на веб-страница',
   'source.link': 'Velnes линк за резервации',

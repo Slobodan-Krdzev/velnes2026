@@ -108,6 +108,10 @@ export const en = {
   'drawer.repriceNote':
     'The service and its price stay as booked — moving an appointment never re-prices it.',
   'till.onTill': '{{name}} is on the till',
+  'cal.prevMonth': 'Previous month',
+  'cal.nextMonth': 'Next month',
+  'cal.pickWeekHint': 'Picks the week around that day',
+  'cal.dotHint': 'Days with a dot have appointments',
   'source.marketplace': 'Velnes marketplace',
   'source.widget': 'Website widget',
   'source.link': 'Velnes booking link',

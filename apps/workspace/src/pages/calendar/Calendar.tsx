@@ -33,6 +33,18 @@ const mins = (t: string) => {
 const hhmm = (m: number) =>
   `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
 const dayNum = (iso: string) => Number(iso.slice(8));
+const dOf = (iso: string) => {
+  const [y, m, d] = iso.split('-').map(Number);
+  return new Date(y!, m! - 1, d!);
+};
+const monthShort = (iso: string, lang: string) =>
+  dOf(iso).toLocaleDateString(lang, { month: 'short' });
+const firstOfMonth = (iso: string) => `${iso.slice(0, 7)}-01`;
+const addMonths = (iso: string, n: number) => {
+  const d = dOf(firstOfMonth(iso));
+  d.setMonth(d.getMonth() + n);
+  return localIso(d);
+};
 
 const EV_TONE: Record<string, string> = {
   Assessment: 'assess',
@@ -119,8 +131,102 @@ function Event({
   );
 }
 
-export function CalendarPage() {
+/** The prototype's datePicker(): six rows of seven so the menu never
+ *  jumps, dots on days that hold appointments, closed days muted, and
+ *  the week view picks the week around the chosen day. */
+function DatePicker({
+  view,
+  date,
+  weekStart,
+  today,
+  locIds,
+  hours,
+  lang,
+  onPick,
+}: {
+  view: 'day' | 'week';
+  date: string;
+  weekStart: string;
+  today: string;
+  locIds: string[];
+  hours: Record<string, [string, string][] | null> | null;
+  lang: string;
+  onPick: (iso: string) => void;
+}) {
   const { t } = useTranslation();
+  const [first, setFirst] = useState(firstOfMonth(view === 'week' ? weekStart : date));
+  const grid = mondayOf(first);
+  const days = Array.from({ length: 42 }, (_, i) => addDays(grid, i));
+  const monthIx = dOf(first).getMonth();
+  const appts = useAppointments(locIds[0] ?? null, grid, addDays(grid, 41));
+  const appts2 = useAppointments(locIds[1] ?? null, grid, addDays(grid, 41));
+  const merged = [...(appts.data?.appointments ?? []), ...(appts2.data?.appointments ?? [])];
+  const busy = (v: string) =>
+    merged.some((a) => a.date === v && a.kind === 'appointment' && a.status !== 'cancelled');
+  const isOpenDate = (v: string) => {
+    if (!hours) return true;
+    return hours[String((dOf(v).getDay() + 6) % 7)] != null;
+  };
+  const selWeek = mondayOf(view === 'week' ? weekStart : date);
+
+  return (
+    <div className="menu menu-cal" role="dialog" aria-label={t('cal.pickDate')}>
+      <div className="calpick-head">
+        <button
+          className="btn btn-subtle btn-icon btn-sm"
+          aria-label={t('cal.prevMonth')}
+          onClick={() => setFirst(addMonths(first, -1))}
+        >
+          <Icon d={I.left} size={18} w={2.5} />
+        </button>
+        <span className="calpick-title">
+          {dOf(first).toLocaleDateString(lang, { month: 'long' })} {dOf(first).getFullYear()}
+        </span>
+        <button
+          className="btn btn-subtle btn-icon btn-sm"
+          aria-label={t('cal.nextMonth')}
+          onClick={() => setFirst(addMonths(first, 1))}
+        >
+          <Icon d={I.right} size={18} w={2.5} />
+        </button>
+      </div>
+      <div className="calpick-grid">
+        {(['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as const).map((k) => (
+          <span key={k} className="calpick-dow">
+            {t(`week.${k}`).slice(0, 1)}
+          </span>
+        ))}
+        {days.map((v) => {
+          const out = dOf(v).getMonth() !== monthIx;
+          const on = view === 'week' ? mondayOf(v) === selWeek : v === date;
+          return (
+            <button
+              key={v}
+              className={`calpick-day${out ? ' out' : ''}${on ? ' on' : ''}${v === today ? ' today' : ''}${isOpenDate(v) ? '' : ' closed'}`}
+              aria-current={v === today ? 'date' : 'false'}
+              title={v}
+              onClick={() => onPick(v)}
+            >
+              {dayNum(v)}
+              {busy(v) ? <span className="calpick-dot" /> : null}
+            </button>
+          );
+        })}
+      </div>
+      <div className="calpick-foot">
+        <span className="muted">
+          {view === 'week' ? t('cal.pickWeekHint') : t('cal.dotHint')}
+        </span>
+        <button className="btn btn-ghost btn-sm" onClick={() => onPick(today)}>
+          {t('common.today')}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+export function CalendarPage() {
+  const { t, i18n } = useTranslation();
   const { me } = useSession();
   const { scope } = useScope();
   const locations = useLocations();
@@ -128,6 +234,7 @@ export function CalendarPage() {
   const [view, setView] = useState<'day' | 'week'>('day');
   const [date, setDate] = useState(localIso(new Date()));
   const [filters, setFilters] = useState(false);
+  const [pick, setPick] = useState(false);
   const [calEmp, setCalEmp] = useState('all');
   const [drawer, setDrawer] = useState<{
     open: boolean;
@@ -273,9 +380,36 @@ export function CalendarPage() {
             >
               <Icon d={I.left} size={20} w={2.5} />
             </button>
-            <button className="input tnum calpick-btn" aria-label={t('cal.pickDate')}>
-              {view === 'week' ? `${dayNum(weekStart)} – ${dayNum(addDays(weekStart, 6))}` : date}
-            </button>
+            <div className="pop">
+              <button
+                className={`input tnum calpick-btn${pick ? ' open' : ''}`}
+                aria-haspopup="dialog"
+                aria-expanded={pick}
+                aria-label={t('cal.pickDate')}
+                onClick={() => setPick((v) => !v)}
+              >
+                {view === 'week'
+                  ? monthShort(weekStart, i18n.language) === monthShort(addDays(weekStart, 6), i18n.language)
+                    ? `${dayNum(weekStart)} – ${dayNum(addDays(weekStart, 6))} ${monthShort(weekStart, i18n.language)}`
+                    : `${dayNum(weekStart)} ${monthShort(weekStart, i18n.language)} – ${dayNum(addDays(weekStart, 6))} ${monthShort(addDays(weekStart, 6), i18n.language)}`
+                  : `${dayNum(date)} ${monthShort(date, i18n.language)}`}
+              </button>
+              {pick ? (
+                <DatePicker
+                  view={view}
+                  date={date}
+                  weekStart={weekStart}
+                  today={today}
+                  locIds={scopeLocs}
+                  hours={myLocs[0]?.hours ?? null}
+                  lang={i18n.language}
+                  onPick={(v) => {
+                    setDate(v);
+                    setPick(false);
+                  }}
+                />
+              ) : null}
+            </div>
             <button
               className="btn btn-subtle btn-icon"
               aria-label={t('cal.next')}

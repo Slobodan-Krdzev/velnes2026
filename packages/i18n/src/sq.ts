@@ -104,6 +104,10 @@ export const sq: Record<TranslationKey, string> = {
   'drawer.repriceNote':
     'Shërbimi dhe çmimi i tij mbeten siç u rezervuan — zhvendosja e një termini kurrë nuk e riçmon atë.',
   'till.onTill': '{{name}} është në arkë',
+  'cal.prevMonth': 'Muaji i mëparshëm',
+  'cal.nextMonth': 'Muaji tjetër',
+  'cal.pickWeekHint': 'Zgjedh javën rreth asaj dite',
+  'cal.dotHint': 'Ditët me pikë kanë termine',
   'source.marketplace': 'Tregu Velnes',
   'source.widget': 'Vixheti i faqes',
   'source.link': 'Lidhja e rezervimit Velnes',
