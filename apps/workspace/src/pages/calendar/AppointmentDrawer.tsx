@@ -34,6 +34,31 @@ type Row = { sid: string; eid: string; start: string; vid: string | null; mods: 
 type Quote = z.infer<typeof LineQuoteResponseSchema>;
 type Mode = 'single' | 'group' | 'blocked';
 
+/* The calendar's day, in 15-minute steps — the same DAY_START/DAY_END
+ * the grid draws. Times already behind the clock are disabled for
+ * today: you cannot book the past. */
+const DAY_START = 480;
+const DAY_END = 1140;
+const TIME_OPTIONS: string[] = [];
+for (let m = DAY_START; m < DAY_END; m += 15)
+  TIME_OPTIONS.push(
+    `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`,
+  );
+const localIso = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const nowMins = () => {
+  const d = new Date();
+  return d.getHours() * 60 + d.getMinutes();
+};
+const toMins = (t: string) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5));
+/** The first slot still bookable on this date — the next quarter hour
+ *  for today, the day's opening slot otherwise. */
+const firstBookable = (date: string) => {
+  if (date !== localIso(new Date())) return '09:00';
+  const next = TIME_OPTIONS.find((t) => toMins(t) >= nowMins());
+  return next ?? TIME_OPTIONS[TIME_OPTIONS.length - 1]!;
+};
+
 export function AppointmentDrawer({
   locationId,
   date: initialDate,
@@ -128,9 +153,14 @@ function NewAppointment({
   // reset on open; a clicked slot carries its time and column. The
   // customer select likewise starts on the first customer.
   if (rows === null && firstSid) {
-    setRows([
-      { sid: firstSid, eid: firstEid, start: initialTime ?? '09:00', vid: null, mods: [] },
-    ]);
+    // A clicked slot carries its time — unless that slot already lies
+    // behind the clock, in which case the next bookable one steps in.
+    const wanted =
+      initialTime &&
+      !(initialDate === localIso(new Date()) && toMins(initialTime) < nowMins())
+        ? initialTime
+        : firstBookable(initialDate);
+    setRows([{ sid: firstSid, eid: firstEid, start: wanted, vid: null, mods: [] }]);
   }
   // Skip blacklisted customers for the default — the gate would refuse
   // the untouched form before anyone typed a thing.
@@ -295,7 +325,17 @@ function NewAppointment({
                 value={date}
                 onChange={(e) => {
                   touch();
-                  setDate(e.target.value);
+                  const next = e.target.value;
+                  setDate(next);
+                  // Moving onto today pushes past start times forward.
+                  const floor = firstBookable(next);
+                  setRows(
+                    rowList.map((r) =>
+                      next === localIso(new Date()) && toMins(r.start) < toMins(floor)
+                        ? { ...r, start: floor }
+                        : r,
+                    ),
+                  );
                 }}
               />
               <span className="hint">{t('drawer.dateHint')}</span>
@@ -313,6 +353,7 @@ function NewAppointment({
                   employees={employees}
                   removable={rowList.length > 1}
                   onChange={(next) => setRow(i, next)}
+                  date={date}
                   onRemove={() => {
                     touch();
                     setRows(rowList.filter((_, j) => j !== i));
@@ -336,7 +377,7 @@ function NewAppointment({
                   touch();
                   setRows([
                     ...rowList,
-                    { sid: firstSid, eid: firstEid, start: '09:00', vid: null, mods: [] },
+                    { sid: firstSid, eid: firstEid, start: firstBookable(date), vid: null, mods: [] },
                   ]);
                 }}
               >
@@ -390,6 +431,7 @@ function ApptRow({
   row,
   index,
   locationId,
+  date,
   services,
   employees,
   removable,
@@ -400,6 +442,7 @@ function ApptRow({
   row: Row;
   index: number;
   locationId: string;
+  date: string;
   services: NonNullable<ReturnType<typeof useLocationCatalog>['data']>['services'];
   employees: Employee[];
   removable: boolean;
@@ -467,14 +510,23 @@ function ApptRow({
         ))}
       </select>
       <div style={{ display: 'flex', gap: 8 }}>
-        <input
-          className="input"
-          type="time"
+        <select
+          className="select tnum"
           value={row.start}
           style={{ flex: 1 }}
           aria-label={`${t('drawer.time')} ${index + 1}`}
           onChange={(e) => onChange({ ...row, start: e.target.value })}
-        />
+        >
+          {TIME_OPTIONS.map((tOpt) => (
+            <option
+              key={tOpt}
+              value={tOpt}
+              disabled={date === localIso(new Date()) && toMins(tOpt) < nowMins()}
+            >
+              {tOpt}
+            </option>
+          ))}
+        </select>
         <button
           className="btn btn-subtle btn-icon"
           disabled={!removable}

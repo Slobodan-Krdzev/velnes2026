@@ -1,6 +1,6 @@
 import type { Appointment } from '@velnes/contracts';
 import { empColorOf, I, Icon } from '@velnes/ui';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAppointments, useEmployees, useLocations } from '../../api/queries.js';
 import { useSession } from '@velnes/client';
@@ -174,8 +174,31 @@ export function CalendarPage() {
   const colorOf = (empId: string | null) =>
     empColorOf(employees.data?.employees.find((e) => e.id === empId)?.color);
 
+  // The prototype's red clock line: it re-places itself once a minute
+  // and disappears outside opening hours.
+  const [nowMin, setNowMin] = useState(() => {
+    const d = new Date();
+    return d.getHours() * 60 + d.getMinutes();
+  });
+  useEffect(() => {
+    const id = setInterval(() => {
+      const d = new Date();
+      setNowMin(d.getHours() * 60 + d.getMinutes());
+    }, 60_000);
+    return () => clearInterval(id);
+  }, []);
+  const nowTop =
+    nowMin < DAY_START || nowMin >= DAY_END ? null : Math.round(dayPct(nowMin) * 1000) / 1000;
+  const nowLine =
+    nowTop === null ? null : <div className="cal-now" style={{ top: `${nowTop}%` }} />;
+
   const gutter = (
     <div className="cal-gutter">
+      {nowTop !== null ? (
+        <span className="cal-now-label tnum" style={{ top: `${nowTop}%` }}>
+          {hhmm(nowMin)}
+        </span>
+      ) : null}
       {slots.map((m) => (
         <div key={m} className={`cal-time${m % 60 === 0 ? ' hour' : ''}`}>
           <span>{hhmm(m)}</span>
@@ -320,6 +343,7 @@ export function CalendarPage() {
                 <div key={iso} className={`cal-col${iso === today ? ' today' : ''}`}>
                   {cells(iso)}
                   {staff[0] ? eventsIn(iso, calEmp === 'all' ? (staff[0]?.id ?? '') : calEmp) : null}
+                  {iso === today ? nowLine : null}
                 </div>
               ))}
             </div>
@@ -354,6 +378,7 @@ export function CalendarPage() {
                 <div key={e.id} className={`cal-col${date === today ? ' today' : ''}`}>
                   {cells(date, e.id)}
                   {eventsIn(date, e.id)}
+                  {date === today ? nowLine : null}
                 </div>
               ))}
             </div>

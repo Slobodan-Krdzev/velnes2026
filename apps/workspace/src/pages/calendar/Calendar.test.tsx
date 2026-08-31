@@ -202,7 +202,12 @@ describe('calendar', () => {
     );
     await waitFor(() => expect(bookBtn).toHaveProperty('disabled', false));
     await userEvent.selectOptions(screen.getByLabelText('Employee 1'), 'any');
-    expect(screen.getByLabelText('Time 1')).toHaveProperty('value', '09:00');
+    // The time dropdown defaults to the next bookable quarter-hour —
+    // never a slot already behind the clock.
+    const timeSel = screen.getByLabelText('Time 1') as HTMLSelectElement;
+    expect(timeSel.value).toMatch(/^\d{2}:(00|15|30|45)$/);
+    const past = Array.from(timeSel.options).filter((o) => o.disabled);
+    for (const o of past) expect(o.value <= timeSel.value).toBe(true);
     // The foot total answers once the line quote lands (the service
     // option also says "30 min", hence the count).
     expect(screen.getByText('Total')).toBeDefined();

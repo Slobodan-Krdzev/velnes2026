@@ -38,6 +38,15 @@ async function rawFetch(path: string, init: RequestInit = {}) {
   return fetch(`${API_PREFIX}${path}`, { ...init, headers });
 }
 
+/** Fired when a request stays 401 after the refresh attempt — the
+ *  session is dead (expired, revoked, or the world was reseeded) and
+ *  the app should return to the login screen instead of surfacing
+ *  "Unauthorized" on whatever button was clicked. */
+let onAuthExpired: (() => void) | null = null;
+export const setOnAuthExpired = (fn: (() => void) | null) => {
+  onAuthExpired = fn;
+};
+
 /** One refresh at a time; concurrent 401s share it. */
 let refreshing: Promise<boolean> | null = null;
 async function tryRefresh(): Promise<boolean> {
@@ -71,6 +80,11 @@ export async function api<S extends z.ZodType>(
 ): Promise<z.infer<S>> {
   let res = await rawFetch(path, init);
   if (res.status === 401 && (await tryRefresh())) res = await rawFetch(path, init);
+  if (res.status === 401 && !path.startsWith('/auth/')) {
+    setAccessToken(null);
+    setRefreshToken(null);
+    onAuthExpired?.();
+  }
   if (!res.ok) {
     const body = (await res.json().catch(() => ({}))) as {
       error?: string;

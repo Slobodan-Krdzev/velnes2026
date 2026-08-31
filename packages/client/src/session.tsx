@@ -22,6 +22,7 @@ import {
   patch,
   post,
   setAccessToken,
+  setOnAuthExpired,
   setRefreshToken,
 } from './client.js';
 
@@ -47,6 +48,13 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     setMe(m);
     if (m) void i18nRef.current.changeLanguage(m.lang);
   }, []);
+
+  // A dead session (refresh refused) drops straight to the login
+  // screen — no button should answer "Unauthorized".
+  useEffect(() => {
+    setOnAuthExpired(() => adopt(null));
+    return () => setOnAuthExpired(null);
+  }, [adopt]);
 
   // Boot: if a refresh token survives, restore the session. Once.
   useEffect(() => {

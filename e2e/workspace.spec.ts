@@ -33,7 +33,7 @@ test('book an appointment from the calendar drawer', async ({ page }) => {
   await svc.selectOption(val ?? '');
   await page.getByLabel('Employee 1').selectOption('any');
   await page.getByLabel(/Date/).fill(nextWednesday());
-  await page.getByLabel('Time 1').fill('10:00');
+  await page.getByLabel('Time 1').selectOption('10:00');
   await page.locator('.panel').getByLabel(/Customer/).selectOption({ label: 'Katerina Stojanovska' });
   const book = page.getByRole('button', { name: 'Book appointment' });
   await expect(book).toBeEnabled();
