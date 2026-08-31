@@ -8,6 +8,7 @@ import { CalendarPage } from './pages/calendar/Calendar.js';
 import { CatalogPage } from './pages/catalog/Catalog.js';
 import { CustomersPage } from './pages/customers/Customers.js';
 import { FlightdeckPage } from './pages/flightdeck/Flightdeck.js';
+import { ReportsPage } from './pages/reports/Reports.js';
 import { MarketingPage } from './pages/marketing/Marketing.js';
 import { SettingsPage } from './pages/settings/Settings.js';
 import { SuppliersPage } from './pages/suppliers/Suppliers.js';
@@ -28,11 +29,6 @@ function Protected({ children }: { children: ReactNode }) {
   if (booting) return <div className="shell-content muted">{t('shell.loading')}</div>;
   if (!me) return <Navigate to="/login" replace />;
   return children;
-}
-
-function Placeholder({ title }: { title: string }) {
-  const { t } = useTranslation();
-  return <h1 style={{ fontSize: 20 }}>{t(title)}</h1>;
 }
 
 export function App() {
@@ -62,7 +58,7 @@ export function App() {
                 <Route path="/customers" element={<CustomersPage />} />
                 <Route path="/customers/:id" element={<CustomersPage />} />
                 <Route path="/marketing" element={<MarketingPage />} />
-                <Route path="/reports" element={<Placeholder title="nav.reports" />} />
+                <Route path="/reports" element={<ReportsPage />} />
                 <Route path="/settings" element={<SettingsPage />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Route>

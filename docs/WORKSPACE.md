@@ -51,3 +51,16 @@ builder and commission stay disabled.
 **E2E.** Four Playwright journeys run in CI against the migrated +
 seeded stack: flightdeck, calendar booking, till sale → invoice →
 audit, and the trilingual chrome flip.
+
+**Reports (2026-08-31).** One computed door — GET `/reports?from&to`
+— reads the same tables the till and calendar write and returns the
+whole document: totals with previous-period deltas, revenue per day,
+and the six panes (locations, booking sources with the marketplace
+fee, services, products with live stock, employees with utilisation
+against their own week, VAT reconciling to invoice revenue). Scope
+follows the permission: location/business-wide readers see all,
+`reports.view_own` sees exactly their own rows. The screen is the
+prototype's viewReports with a period filter and a real CSV download
+per pane. The seed carries ten deterministic weeks of history
+(appointment + paid invoice pairs, sources rotated, six no-shows)
+kept away from the customers whose exact figures the suites assert.

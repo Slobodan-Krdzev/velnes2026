@@ -708,6 +708,113 @@ export async function seedDemo(adminUrl: string) {
       [demo.business, demo.locCentar],
     );
 
+    // ── Report history: ten weeks of paid work ────────────────────
+    // Deterministic (no randomness), numbered below the live counter,
+    // and never touching the customers whose exact figures the test
+    // suites assert (c1, c3, c4). Every sale is an appointment + a
+    // paid invoice, so Reports reads the same tables the till writes.
+    const histSvc: [string, string, number, number][] = [
+      [demo.s1, 'Physiotherapy session', 45, 1800],
+      [demo.s2, 'Manual therapy, spine', 60, 2400],
+      [demo.s3, 'Follow-up session', 30, 1200],
+      [demo.s4, 'Rehab training', 60, 1500],
+      [demo.s5, 'Medical taping', 30, 900],
+      [demo.s6, 'Sports injury assessment', 50, 2200],
+      [demo.s8, 'Sports massage', 45, 1900],
+    ];
+    const histProd: [string, string, number][] = [
+      [demo.p1, 'Resistance band set', 1200],
+      [demo.p2, 'Massage oil, arnica 200 ml', 850],
+      [demo.p3, 'Kinesiology tape roll', 550],
+      [demo.p7, 'Foam roller 45 cm', 1800],
+    ];
+    // c1/c4 carry exact test figures and c5 must stay history-less
+    // (the "no label without proof" case) — these three are free.
+    const histCust: [string, string][] = [
+      [demo.c2, 'Ivana Nikolikj'],
+      [demo.c3, 'Bojan Ilievski'],
+      [demo.c6, 'Elena Todorova'],
+    ];
+    const histSources = ['staff', 'widget', 'marketplace', 'phone', 'walkin', 'link'];
+    const empName: Record<string, string> = {
+      [demo.empMaria]: 'Maria Petrovska',
+      [demo.empAna]: 'Ana Dimitrova',
+      [demo.empElena]: 'Elena Ristova',
+    };
+    const dISO = (back: number) => {
+      const d = new Date();
+      d.setDate(d.getDate() - back);
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    };
+    const wdOf = (back: number) => {
+      const d = new Date();
+      d.setDate(d.getDate() - back);
+      return d.getDay();
+    };
+    let cenSeq = 200;
+    let aerSeq = 100;
+    for (let back = 70; back >= 1; back--) {
+      if (wdOf(back) === 0) continue; // Sundays closed
+      const nSales = 2 + ((back * 7) % 3); // 2..4 a day
+      for (let k = 0; k < nSales; k++) {
+        const atCentar = (back + k) % 3 !== 0;
+        const loc = atCentar ? demo.locCentar : demo.locAerodrom;
+        const emp = atCentar
+          ? (back + k) % 2
+            ? demo.empMaria
+            : demo.empElena
+          : (back + k) % 2
+            ? demo.empAna
+            : demo.empMaria;
+        const [sid, svcName, dur, price] = histSvc[(back * 3 + k * 5) % histSvc.length]!;
+        const [cid, custName] = histCust[(back + k) % histCust.length]!;
+        const source = histSources[(back * 2 + k) % histSources.length]!;
+        const startMin = 540 + ((back + k * 4) % 16) * 30; // 09:00–16:30
+        const iso = dISO(back);
+        await q(
+          `INSERT INTO appointments (tenant_id, location_id, date, start_min, duration_min, kind, status, title,
+             service_id, employee_id, customer_id, price, source, idempotency_key)
+           VALUES ($1,$2,$3,$4,$5,'appointment','confirmed',$6,$7,$8,$9,$10,$11,$12)`,
+          [demo.business, loc, iso, startMin, dur, custName, sid, emp, cid, price, source, `hist-${back}-${k}`],
+        );
+        const withProduct = (back + k) % 3 === 0;
+        const [pid, prodName, prodPrice] = histProd[(back + k) % histProd.length]!;
+        const total = price + (withProduct ? prodPrice : 0);
+        const number = atCentar
+          ? `CEN-2026-${String(cenSeq++).padStart(4, '0')}`
+          : `AER-2026-${String(aerSeq++).padStart(4, '0')}`;
+        const inv = await q(
+          `INSERT INTO invoices (tenant_id, location_id, number, date, customer_id, customer_name, employee_id, employee_name, method, status, total)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'Paid',$10) RETURNING id`,
+          [demo.business, loc, number, iso, cid, custName, emp, empName[emp], (back + k) % 2 ? 'Card' : 'Cash', total],
+        );
+        await q(
+          `INSERT INTO invoice_lines (tenant_id, invoice_id, description, qty, unit_price, item_class, service_id, vat, sort)
+           VALUES ($1,$2,$3,1,$4,'service',$5,18,0)`,
+          [demo.business, inv.rows[0].id, svcName, price, sid],
+        );
+        if (withProduct)
+          await q(
+            `INSERT INTO invoice_lines (tenant_id, invoice_id, description, qty, unit_price, item_class, product_id, vat, sort)
+             VALUES ($1,$2,$3,1,$4,'product',$5,18,1)`,
+            [demo.business, inv.rows[0].id, prodName, prodPrice, pid],
+          );
+      }
+    }
+    // A handful of no-shows, so the stat has something honest to say.
+    for (let i = 0; i < 6; i++) {
+      const back = 3 + i * 9;
+      if (wdOf(back) === 0) continue;
+      const [sid, , dur, price] = histSvc[i % histSvc.length]!;
+      const [cid, custName] = histCust[i % histCust.length]!;
+      await q(
+        `INSERT INTO appointments (tenant_id, location_id, date, start_min, duration_min, kind, status, title,
+           service_id, employee_id, customer_id, price, source, idempotency_key)
+         VALUES ($1,$2,$3,600,$4,'appointment','no_show',$5,$6,$7,$8,$9,'widget',$10)`,
+        [demo.business, demo.locCentar, dISO(back), dur, custName, sid, demo.empMaria, cid, price, `hist-ns-${i}`],
+      );
+    }
+
     // The prototype's main widget, live on the salon site.
     await q(
       `INSERT INTO widgets (id, tenant_id, name, location_ids, categories, lang, theme, accent, radius, start_step, deposit, status, domains, publishable_key)

@@ -25,6 +25,7 @@ import { marketingRoutes } from './modules/marketing/marketing.routes.js';
 import { suppliersRoutes } from './modules/suppliers/suppliers.routes.js';
 import { portalRoutes } from './modules/suppliers/portal.routes.js';
 import { businessRoutes } from './modules/business/business.routes.js';
+import { reportsRoutes } from './modules/reports/reports.routes.js';
 import { registrationsRoutes } from './modules/registrations/registrations.routes.js';
 import { authPlugin } from './plugins/auth.js';
 import { publicRoutes } from './public/public.routes.js';
@@ -64,6 +65,7 @@ export async function buildServer() {
       suppliersRoutes(api);
       portalRoutes(api);
       businessRoutes(api);
+      reportsRoutes(api);
     },
     { prefix: API_PREFIX },
   );
