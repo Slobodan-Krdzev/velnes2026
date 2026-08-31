@@ -207,11 +207,17 @@ export function CalendarPage() {
     </div>
   );
 
+  // A slot behind the clock takes no new booking — the empty cell goes
+  // dead. Appointments layered on top stay clickable regardless: what
+  // happened is exactly what you want to look up.
+  const slotPast = (iso: string, m: number) =>
+    iso < today || (iso === today && m < nowMin);
   const cells = (iso: string, empId?: string) =>
     slots.map((m) => (
       <button
         key={m}
         className="cal-cell"
+        disabled={slotPast(iso, m)}
         aria-label={`${t('cal.newAppointment')} ${iso} ${hhmm(m)}`}
         onClick={() =>
           setDrawer({ open: true, slot: { date: iso, time: hhmm(m), ...(empId ? { empId } : {}) } })
