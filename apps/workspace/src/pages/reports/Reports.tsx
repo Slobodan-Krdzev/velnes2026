@@ -4,6 +4,7 @@ import { I, Icon } from '@velnes/ui';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { get } from '@velnes/client';
+import { DateField } from '../../lib/DateField.js';
 import { money } from '../../lib/money.js';
 import { useOutsideClose } from '../../lib/pop.js';
 
@@ -192,22 +193,20 @@ export function ReportsPage() {
           </div>
           {period === 'custom' ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <input
-                className="input tnum"
-                type="date"
+              <DateField
                 value={custom[0]}
                 max={custom[1]}
-                aria-label={t('rep.from')}
-                onChange={(e) => setCustom([e.target.value, custom[1]])}
+                label={t('rep.from')}
+                width={150}
+                onChange={(v) => setCustom([v, custom[1]])}
               />
               <span className="muted">–</span>
-              <input
-                className="input tnum"
-                type="date"
+              <DateField
                 value={custom[1]}
                 min={custom[0]}
-                aria-label={t('rep.to')}
-                onChange={(e) => setCustom([custom[0], e.target.value])}
+                label={t('rep.to')}
+                width={150}
+                onChange={(v) => setCustom([custom[0], v])}
               />
             </div>
           ) : (

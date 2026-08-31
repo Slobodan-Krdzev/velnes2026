@@ -27,6 +27,7 @@ export const sq: Record<TranslationKey, string> = {
 
   'common.save': 'Ruaj',
   'common.cancel': 'Anulo',
+  'common.clear': 'Pastro',
   'common.close': 'Mbyll',
   'common.delete': 'Fshi',
   'common.edit': 'Ndrysho',

@@ -20,6 +20,7 @@ import {
   useLocationCatalog,
   useLocations,
 } from '../../api/queries.js';
+import { DateField } from '../../lib/DateField.js';
 import { money } from '../../lib/money.js';
 import { useToast } from '../../lib/toast.js';
 
@@ -322,13 +323,12 @@ function NewAppointment({
                 {t('drawer.date')}
                 <span className="req">*</span>
               </span>
-              <input
-                className="input"
-                type="date"
+              <DateField
                 value={date}
-                onChange={(e) => {
+                min={localIso(new Date())}
+                label={t('drawer.date')}
+                onChange={(next) => {
                   touch();
-                  const next = e.target.value;
                   setDate(next);
                   // Moving onto today pushes past start times forward.
                   const floor = firstBookable(next);
@@ -853,12 +853,11 @@ function RescheduleBody({
             {t('drawer.date')}
             <span className="req">*</span>
           </span>
-          <input
-            className="input"
-            type="date"
+          <DateField
             value={date}
             min={localIso(new Date())}
-            onChange={(e) => setDate(e.target.value)}
+            label={t('drawer.date')}
+            onChange={setDate}
           />
           <span className="hint">{t('drawer.moveHint')}</span>
         </label>

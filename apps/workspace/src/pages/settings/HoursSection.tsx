@@ -15,6 +15,7 @@ import { useTranslation } from 'react-i18next';
 import { z } from 'zod';
 import { api, get, patch, post } from '@velnes/client';
 import { useLocations } from '../../api/queries.js';
+import { DateField } from '../../lib/DateField.js';
 import { useToast } from '../../lib/toast.js';
 import { Field, ToggleRow, useBusiness, WeekHoursEditor } from './bits.js';
 
@@ -464,11 +465,15 @@ function ExceptionEditor({ loc, onClose }: { loc: Location; onClose: () => void 
           </div>
           <div className="grid2">
             <Field label={range ? t('hset.startDate') : t('hset.date')} req>
-              <input className="input" type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
+              <DateField
+                value={from}
+                label={range ? t('hset.startDate') : t('hset.date')}
+                onChange={setFrom}
+              />
             </Field>
             {range ? (
               <Field label={t('hset.endDate')} req hint={t('hset.endDateHint')}>
-                <input className="input" type="date" value={to} onChange={(e) => setTo(e.target.value)} />
+                <DateField value={to} min={from} label={t('hset.endDate')} onChange={setTo} />
               </Field>
             ) : null}
           </div>

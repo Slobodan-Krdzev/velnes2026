@@ -32,7 +32,19 @@ test('book an appointment from the calendar drawer', async ({ page }) => {
   const val = await svc.locator('option', { hasText: 'Follow-up session' }).getAttribute('value');
   await svc.selectOption(val ?? '');
   await page.getByLabel('Employee 1').selectOption('any');
-  await page.getByLabel(/Date/).fill(nextWednesday());
+  // The date opens our own calendar now, never the browser's picker.
+  const target = nextWednesday();
+  await page.locator('.panel').getByLabel('Date', { exact: true }).click();
+  const dlg = page.locator('.menu-cal');
+  const wantMonth = new Date(`${target}T12:00:00`).toLocaleDateString('en', { month: 'long' });
+  for (let i = 0; i < 2; i++) {
+    if ((await dlg.locator('.calpick-title').textContent())?.includes(wantMonth)) break;
+    await dlg.getByLabel('Next month').click();
+  }
+  await dlg
+    .locator('.calpick-day:not(.out)')
+    .filter({ hasText: new RegExp(`^${Number(target.slice(8))}$`) })
+    .click();
   await page.getByLabel('Time 1').selectOption('10:00');
   await page.locator('.panel').getByLabel(/Customer/).selectOption({ label: 'Katerina Stojanovska' });
   const book = page.getByRole('button', { name: 'Book appointment' });

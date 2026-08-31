@@ -21,8 +21,14 @@ import { z } from 'zod';
 import { ApiError, get, patch, post, useSession } from '@velnes/client';
 import { useLocations } from '../../api/queries.js';
 import { money } from '../../lib/money.js';
+import { DateField } from '../../lib/DateField.js';
 import { useOutsideClose } from '../../lib/pop.js';
 import { useToast } from '../../lib/toast.js';
+
+const localIsoToday = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
 
 /** viewCustomers + viewProfile, markup-faithful. Trends/Suggestions
  *  render their honest empty states until the CI rule sets land; the
@@ -441,11 +447,12 @@ function NewCustomerPanel({
             </label>
             <label className="field">
               <span>{t('cust.dob')}</span>
-              <input
-                className="input"
-                type="date"
+              <DateField
                 value={birthday}
-                onChange={(e) => setBirthday(e.target.value)}
+                max={localIsoToday()}
+                label={t('cust.dob')}
+                clearable
+                onChange={setBirthday}
               />
             </label>
           </div>
@@ -1215,7 +1222,12 @@ function OfferPanel({
           </label>
           <label className="field">
             <span>{t('cust.validUntil')}</span>
-            <input className="input" type="date" value={until} onChange={(e) => setUntil(e.target.value)} />
+            <DateField
+              value={until}
+              min={localIsoToday()}
+              label={t('cust.validUntil')}
+              onChange={setUntil}
+            />
           </label>
           <label className="field">
             <span>{t('cust.intent')}</span>

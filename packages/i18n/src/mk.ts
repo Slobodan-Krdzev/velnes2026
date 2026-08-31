@@ -27,6 +27,7 @@ export const mk: Record<TranslationKey, string> = {
 
   'common.save': 'Зачувај',
   'common.cancel': 'Откажи',
+  'common.clear': 'Исчисти',
   'common.close': 'Затвори',
   'common.delete': 'Избриши',
   'common.edit': 'Измени',
