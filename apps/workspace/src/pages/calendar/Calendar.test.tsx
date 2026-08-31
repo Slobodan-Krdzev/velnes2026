@@ -7,6 +7,7 @@ import { setAccessToken } from '@velnes/client';
 const LOC = '20000000-0000-4000-8000-000000000001';
 const SVC = '60000000-0000-4000-8000-000000000003';
 const EMP = '40000000-0000-4000-8000-000000000001';
+const CUST = '30000000-0000-4000-8000-000000000001';
 const today = (() => {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -143,7 +144,15 @@ function mockApi(opts: { bookResponse?: () => Response } = {}) {
           modNames: [],
           missingRequired: [],
         });
-      if (path.includes('/customers')) return ok({ customers: [] });
+      if (path.includes('/customers'))
+        return ok({
+          customers: [
+            {
+              id: CUST, name: 'Katerina Stojanovska', email: null, phone: null, group: 'VIP',
+              visits: 10, spend: 40000, points: 320, blacklisted: false, noShows: 0,
+            },
+          ],
+        });
       if (path.endsWith('/appointments') && init?.method === 'POST')
         return opts.bookResponse
           ? opts.bookResponse()
@@ -183,11 +192,26 @@ describe('calendar', () => {
     mockApi();
     await openCalendar();
     await userEvent.click(screen.getByRole('button', { name: 'Add' }));
-    await userEvent.selectOptions(screen.getByLabelText(/Service/), SVC);
-    await userEvent.click(await screen.findByRole('button', { name: '09:30' }));
-    expect(await screen.findByText(/30 min/)).toBeDefined();
-    await userEvent.click(screen.getByRole('button', { name: 'Book' }));
-    await waitFor(() => expect(screen.queryByRole('button', { name: 'Book' })).toBeNull());
+    // The prototype's lade: the Book button sits top-right, disabled
+    // until something changes; the line carries its own time input.
+    const bookBtn = await screen.findByRole('button', { name: 'Book appointment' });
+    expect(bookBtn).toHaveProperty('disabled', true);
+    // The customer defaults to the first one, like the prototype; any
+    // change arms the save group.
+    await waitFor(() =>
+      expect(screen.getByLabelText(/Customer/)).toHaveProperty('value', CUST),
+    );
+    await userEvent.selectOptions(screen.getByLabelText('Employee 1'), 'any');
+    expect(screen.getByLabelText('Time 1')).toHaveProperty('value', '09:00');
+    // The foot total answers once the line quote lands (the service
+    // option also says "30 min", hence the count).
+    expect(screen.getByText('Total')).toBeDefined();
+    await waitFor(() => expect(screen.getAllByText(/30 min/).length).toBeGreaterThan(1));
+    expect(bookBtn).toHaveProperty('disabled', false);
+    await userEvent.click(bookBtn);
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: 'Book appointment' })).toBeNull(),
+    );
   });
 
   it('renders a structured refusal localized — in Macedonian', async () => {
@@ -211,9 +235,8 @@ describe('calendar', () => {
       expect(screen.getByRole('button', { name: 'Додади' })).toBeDefined(),
     );
     await userEvent.click(screen.getByRole('button', { name: 'Додади' }));
-    await userEvent.selectOptions(screen.getByLabelText(/Услуга/), SVC);
-    await userEvent.click(await screen.findByRole('button', { name: '09:30' }));
-    await userEvent.click(screen.getByRole('button', { name: 'Закажи' }));
+    await userEvent.selectOptions(await screen.findByLabelText('Вработен 1'), 'any');
+    await userEvent.click(screen.getByRole('button', { name: 'Закажи термин' }));
     const alert = await screen.findByRole('alert');
     expect(alert.textContent).toBe('Марија е веќе зафатен(а) 10:00–10:45');
   });

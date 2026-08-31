@@ -27,13 +27,19 @@ test('book an appointment from the calendar drawer', async ({ page }) => {
   await login(page);
   await page.getByLabel('Calendar', { exact: true }).click();
   await page.getByRole('button', { name: 'Add' }).click();
-  await page.getByLabel(/Service/).selectOption({ label: 'Follow-up session · 1200 ден' });
+  // The prototype's lade: pick a customer, set the line, book from the top.
+  const svc = page.getByLabel('Service 1');
+  const val = await svc.locator('option', { hasText: 'Follow-up session' }).getAttribute('value');
+  await svc.selectOption(val ?? '');
+  await page.getByLabel('Employee 1').selectOption('any');
   await page.getByLabel(/Date/).fill(nextWednesday());
-  await page.locator('.panel').getByRole('button', { name: '10:00', exact: true }).click();
-  await expect(page.getByText(/catalog time|employee/)).toBeVisible();
-  await page.getByRole('button', { name: 'Book', exact: true }).click();
+  await page.getByLabel('Time 1').fill('10:00');
+  await page.locator('.panel').getByLabel(/Customer/).selectOption({ label: 'Katerina Stojanovska' });
+  const book = page.getByRole('button', { name: 'Book appointment' });
+  await expect(book).toBeEnabled();
+  await book.click();
   // The drawer closes on success.
-  await expect(page.getByRole('button', { name: 'Book', exact: true })).toBeHidden();
+  await expect(book).toBeHidden();
 });
 
 test('sell at the till and see the invoice + audit trail', async ({ page }) => {
