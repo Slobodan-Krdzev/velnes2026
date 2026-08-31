@@ -357,31 +357,33 @@ export function TillPage() {
 
   return (
     <>
-      <div className="toolbar toolbar-row">
-        <div className="filters">
-          <div className="cat-tabs">
-            {POS_TYPES.map(([k, l]) => (
-              <button
-                key={k}
-                className={`ttab${posType === k ? ' on' : ''}`}
-                onClick={() => {
-                  setPosType(k);
-                  setPosCategory('all');
-                }}
-              >
-                {l}
-              </button>
-            ))}
+      {/* The toolbar lives INSIDE the pos grid (prototype: it spans
+          only the left columns) so the receipt runs from the very top
+          to the bottom and nothing overflows the fixed screen. */}
+      <div className={`pos${cats.length ? '' : ' pos-nocats'}`}>
+        <div className="toolbar toolbar-row">
+          <div className="filters">
+            <div className="cat-tabs">
+              {POS_TYPES.map(([k, l]) => (
+                <button
+                  key={k}
+                  className={`ttab${posType === k ? ' on' : ''}`}
+                  onClick={() => {
+                    setPosType(k);
+                    setPosCategory('all');
+                  }}
+                >
+                  {l}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="toolbar-actions">
+            <button className="btn btn-secondary" onClick={() => navigate('/till/invoices')}>
+              {t('till.invoices')}
+            </button>
           </div>
         </div>
-        <div className="toolbar-actions">
-          <button className="btn btn-secondary" onClick={() => navigate('/till/invoices')}>
-            {t('till.invoices')}
-          </button>
-        </div>
-      </div>
-
-      <div className={`pos${cats.length ? '' : ' pos-nocats'}`}>
         {cats.length ? (
           <aside className="pos-cats">
             {catTile(
