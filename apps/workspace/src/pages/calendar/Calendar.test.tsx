@@ -195,12 +195,12 @@ describe('calendar', () => {
     // The prototype's lade: the Book button sits top-right, disabled
     // until something changes; the line carries its own time input.
     const bookBtn = await screen.findByRole('button', { name: 'Book appointment' });
-    expect(bookBtn).toHaveProperty('disabled', true);
-    // The customer defaults to the first one, like the prototype; any
-    // change arms the save group.
+    // The customer defaults to the first one, like the prototype, and
+    // the fully pre-filled lade arms the Book button immediately.
     await waitFor(() =>
       expect(screen.getByLabelText(/Customer/)).toHaveProperty('value', CUST),
     );
+    await waitFor(() => expect(bookBtn).toHaveProperty('disabled', false));
     await userEvent.selectOptions(screen.getByLabelText('Employee 1'), 'any');
     expect(screen.getByLabelText('Time 1')).toHaveProperty('value', '09:00');
     // The foot total answers once the line quote lands (the service

@@ -18,6 +18,7 @@ import {
   useLocationCatalog,
 } from '../../api/queries.js';
 import { money } from '../../lib/money.js';
+import { useToast } from '../../lib/toast.js';
 
 /** The prototype's appointment drawer (PANELS.appointment): the save
  *  group sits top-right in the panel head, the body runs mode rows →
@@ -97,6 +98,7 @@ function NewAppointment({
   onClose: () => void;
 }) {
   const { t } = useTranslation();
+  const toast = useToast();
   const catalog = useLocationCatalog(locationId);
   const customers = useQuery({
     queryKey: ['customers', 'drawer'],
@@ -106,7 +108,11 @@ function NewAppointment({
 
   const services = (catalog.data?.services ?? []).filter((s) => s.config.active);
   const firstSid = services[0]?.id ?? '';
-  const firstEid = initialEmp ?? employees[0]?.id ?? 'any';
+  // Default to the first employee who works at THIS location — the
+  // alphabetical first may belong to another branch and every untouched
+  // attempt would refuse with "not at this location".
+  const firstEid =
+    initialEmp ?? employees.find((e) => e.locationIds.includes(locationId))?.id ?? 'any';
 
   const [mode, setMode] = useState<Mode>('single');
   const [customerId, setCustomerId] = useState<string>('');
@@ -126,7 +132,12 @@ function NewAppointment({
       { sid: firstSid, eid: firstEid, start: initialTime ?? '09:00', vid: null, mods: [] },
     ]);
   }
-  const firstCust = customers.data?.customers[0]?.id ?? '';
+  // Skip blacklisted customers for the default — the gate would refuse
+  // the untouched form before anyone typed a thing.
+  const firstCust =
+    customers.data?.customers.find((c) => !c.blacklisted)?.id ??
+    customers.data?.customers[0]?.id ??
+    '';
   if (!customerId && firstCust) setCustomerId(firstCust);
   const rowList = rows ?? [];
 
@@ -171,7 +182,11 @@ function NewAppointment({
         await patch(AppointmentSchema, `/appointments/${id}`, { status: 'cancelled' }).catch(
           () => undefined,
         );
-      setError(refusalText(t, e));
+      const reason = refusalText(t, e);
+      setError(reason);
+      // The prototype toasts the refusal — the body may be scrolled
+      // past the inline line, the toast is always in view.
+      toast(reason);
     }
   };
 
@@ -180,7 +195,11 @@ function NewAppointment({
     group: { title: t('drawer.modeGroup'), save: t('drawer.bookGroup') },
     blocked: { title: t('drawer.modeBlocked'), save: t('drawer.blockTime') },
   };
-  const canSave = mode === 'single' && dirty && !!customerId && rowList.length > 0;
+  // Booking is an action, not an edit: the lade opens fully pre-filled,
+  // so the button arms the moment there is something bookable. A
+  // disabled primary looks clickable in this design — a dead button
+  // here is exactly what the prototype's own principle forbids.
+  const canSave = mode === 'single' && !!customerId && rowList.length > 0;
 
   return (
     <>
