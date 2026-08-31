@@ -1270,6 +1270,13 @@ export const sq: Record<TranslationKey, string> = {
   'eset.daysCount': '{{n}} ditë',
   'eset.splitShifts': 'turne të ndara',
   'eset.notWorking': 'Nuk punon',
+  'eset.timing': 'Kohëzgjatja',
+  'eset.timingHint': 'Sa kohë i duhet vërtet {{name}} për shërbim. Velnes ndjek terminet e përfunduara dhe sugjeron ndryshim kur ka prova — kurrë nuk e ndryshon kalendarin vetë. Një kohë e miratuar vazhdon të zbatohet, dhe Velnes vazhdon të vëzhgojë.',
+  'eset.catalog': 'Katalogu',
+  'eset.inUse': 'Në përdorim',
+  'eset.seen': 'Parë',
+  'eset.appts': '{{n}} termine',
+  'eset.notEnoughYet': 'Ende jo mjaft',
 
   'rset.saved': 'Kriteret e renditjes u ruajtën',
   'rset.howItWorks': 'Si funksionon renditja',

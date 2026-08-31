@@ -76,3 +76,19 @@ export const EmployeePatchSchema = z.object({
   locationIds: z.array(z.uuid()).optional(),
 });
 export type EmployeePatch = z.infer<typeof EmployeePatchSchema>;
+
+/** The prototype's per-employee timing table: catalog vs in-use vs
+ *  what Velnes has actually seen. Empty when timing is switched off. */
+export const EmployeeTimingsSchema = z.object({
+  timingEnabled: z.boolean(),
+  rows: z.array(
+    z.object({
+      serviceId: z.uuid(),
+      name: z.string(),
+      catalogMin: z.number().int(),
+      inUseMin: z.number().int(),
+      observedN: z.number().int(),
+      observedMedianMin: z.number().int().nullable(),
+    }),
+  ),
+});

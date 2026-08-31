@@ -1,14 +1,14 @@
-import { useQueryClient } from '@tanstack/react-query';
-import { EmployeeSchema, type Employee, type WeekHours } from '@velnes/contracts';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { EmployeeSchema, EmployeeTimingsSchema, type Employee, type WeekHours } from '@velnes/contracts';
 import { EMP_COLORS, empColorOf, I, Icon } from '@velnes/ui';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { patch } from '@velnes/client';
+import { get, patch } from '@velnes/client';
 import { useEmployees, useLocationCatalog, useLocations } from '../../api/queries.js';
 import { PanelPortal } from '../../lib/Panel.js';
 import { useOutsideClose } from '../../lib/pop.js';
 import { useToast } from '../../lib/toast.js';
-import { availSummary, Field, ToggleRow, Toggle, WeekHoursEditor } from './bits.js';
+import { availSummary, Field, Toggle, WeekHoursEditor } from './bits.js';
 
 /** Settings › Schedules & services — the prototype's `employees`
  *  panel: the team table (colour dot, job title, access, availability,
@@ -256,10 +256,19 @@ function EmployeePanel({
   const [hours, setHours] = useState<WeekHours>(employee.hours ?? STD_WEEK);
   const [skills, setSkills] = useState<string[]>(employee.skillServiceIds);
   const [bookable, setBookable] = useState(employee.bookable);
+  const [dirty, setDirty] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const timings = useQuery({
+    queryKey: ['empTimings', employee.id],
+    queryFn: () => get(EmployeeTimingsSchema, `/employees/${employee.id}/timings`),
+  });
 
   const services = catalog.data?.services ?? [];
   const cats = [...new Set(services.map((s) => s.category ?? ''))];
+  const touch = <T,>(set: (v: T) => void) => (v: T) => {
+    setDirty(true);
+    set(v);
+  };
 
   const save = async () => {
     setError(null);
@@ -291,9 +300,12 @@ function EmployeePanel({
             <div className="sub">{t('eset.employee')}</div>
           </div>
           <div className="panel-actions">
+            <span className={`panel-status${dirty ? ' warn' : ''}`}>
+              {dirty ? t('drawer.statusUnsaved') : t('drawer.statusSaved')}
+            </span>
             <button
               className="btn btn-primary btn-sm"
-              disabled={!name.trim() || !email.trim()}
+              disabled={!dirty || !name.trim() || !email.trim()}
               onClick={() => void save()}
             >
               {t('cset.saveChanges')}
@@ -310,17 +322,17 @@ function EmployeePanel({
                 {t('eset.name')}
                 <span className="req">*</span>
               </span>
-              <input className="input" value={name} onChange={(e) => setName(e.target.value)} />
+              <input className="input" value={name} onChange={(e) => touch(setName)(e.target.value)} />
             </label>
             <Field label={t('eset.jobTitle')}>
-              <input className="input" value={roleTitle} onChange={(e) => setRoleTitle(e.target.value)} />
+              <input className="input" value={roleTitle} onChange={(e) => touch(setRoleTitle)(e.target.value)} />
             </Field>
             <Field label={t('eset.access')} hint={t('eset.accessHint')}>
               <select
                 className="select"
                 style={{ width: '100%' }}
                 value={access}
-                onChange={(e) => setAccess(e.target.value as Employee['access'])}
+                onChange={(e) => touch(setAccess)(e.target.value as Employee['access'])}
               >
                 {ACCESS_KEYS.map((a) => (
                   <option key={a} value={a}>
@@ -334,11 +346,11 @@ function EmployeePanel({
                 className="input"
                 type="email"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(e) => touch(setEmail)(e.target.value)}
               />
             </Field>
             <Field label={t('cset.phone')}>
-              <input className="input" value={phone} onChange={(e) => setPhone(e.target.value)} />
+              <input className="input" value={phone} onChange={(e) => touch(setPhone)(e.target.value)} />
             </Field>
           </div>
 
@@ -358,7 +370,7 @@ function EmployeePanel({
                   title={cname}
                   aria-label={cname}
                   aria-pressed={color === k}
-                  onClick={() => setColor(k)}
+                  onClick={() => touch(setColor)(k)}
                 >
                   {color === k ? <Icon d={I.check} size={14} w={3.5} /> : null}
                 </button>
@@ -372,7 +384,7 @@ function EmployeePanel({
           <div className="field">
             <span>{t('eset.availableFor')}</span>
             <div className="card" style={{ marginTop: 6 }}>
-              <WeekHoursEditor hours={hours} onChange={setHours} variant="checkbox" timeWidth={104} />
+              <WeekHoursEditor hours={hours} onChange={touch(setHours)} variant="checkbox" timeWidth={104} />
             </div>
             <span className="hint" style={{ fontSize: 12, fontWeight: 500, color: 'var(--ink-muted)' }}>
               {t('eset.availableHint')}
@@ -392,7 +404,7 @@ function EmployeePanel({
                         type="checkbox"
                         checked={skills.includes(s.id)}
                         onChange={(e) =>
-                          setSkills(
+                          touch(setSkills)(
                             e.target.checked
                               ? [...skills, s.id]
                               : skills.filter((x) => x !== s.id),
@@ -411,12 +423,52 @@ function EmployeePanel({
             </span>
           </div>
 
-          <ToggleRow
-            label={t('eset.bookable')}
-            hint={t('eset.bookableHint')}
-            on={bookable}
-            onChange={setBookable}
-          />
+          {timings.data?.timingEnabled && timings.data.rows.length ? (
+            <div className="field">
+              <span>{t('eset.timing')}</span>
+              <span className="hint">
+                {t('eset.timingHint', { name: employee.name.split(' ')[0] })}
+              </span>
+              <table style={{ border: '1px solid var(--line)', borderRadius: 'var(--r-control)' }}>
+                <thead>
+                  <tr>
+                    <th>{t('rep.service')}</th>
+                    <th className="right">{t('eset.catalog')}</th>
+                    <th className="right">{t('eset.inUse')}</th>
+                    <th className="right">{t('eset.seen')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {timings.data.rows.map((r) => (
+                    <tr key={r.serviceId}>
+                      <td>{r.name}</td>
+                      <td className="right tnum muted">{r.catalogMin} min</td>
+                      <td className={`right tnum ${r.inUseMin !== r.catalogMin ? 'bold' : 'muted'}`}>
+                        {r.inUseMin} min
+                      </td>
+                      <td className="right muted">
+                        {r.observedN
+                          ? `${r.observedMedianMin} min · ${t('eset.appts', { n: r.observedN })}`
+                          : t('eset.notEnoughYet')}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : null}
+
+          <label className="togglerow" style={{ cursor: 'pointer' }}>
+            <span style={{ display: 'flex', flexDirection: 'column' }}>
+              <span className="l">{t('eset.bookable')}</span>
+              <span className="h">{t('eset.bookableHint')}</span>
+            </span>
+            <input
+              type="checkbox"
+              checked={bookable}
+              onChange={(e) => touch(setBookable)(e.target.checked)}
+            />
+          </label>
 
           {error ? (
             <p role="alert" style={{ color: 'var(--danger)', fontWeight: 600 }}>

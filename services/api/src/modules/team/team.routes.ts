@@ -2,6 +2,7 @@ import {
   CustomerListQuerySchema,
   CustomerListResponseSchema,
   EmployeeInviteSchema,
+  EmployeeTimingsSchema,
   EmployeeListResponseSchema,
   EmployeePatchSchema,
   EmployeeSchema,
@@ -16,6 +17,7 @@ import { sql } from 'kysely';
 import { z } from 'zod';
 import { withTenant } from '../../db/index.js';
 import { logAudit } from '../audit/audit.service.js';
+import { effTreatment } from '../timing/timing.service.js';
 import { can, permsFor } from '../auth/authz.service.js';
 
 export function teamRoutes(app: FastifyInstance) {
@@ -231,6 +233,58 @@ export function teamRoutes(app: FastifyInstance) {
                 .executeTakeFirst()
             )?.last?.toISOString() ?? null,
         };
+      }),
+  });
+
+  r.route({
+    method: 'GET',
+    url: '/employees/:id/timings',
+    preHandler: [app.authenticate],
+    schema: {
+      params: z.object({ id: z.uuid() }),
+      response: { 200: EmployeeTimingsSchema },
+    },
+    handler: async (req) =>
+      withTenant(req.claims.ten, async (trx) => {
+        const biz = await trx
+          .selectFrom('businesses')
+          .select('timingEnabled')
+          .executeTakeFirstOrThrow();
+        if (!biz.timingEnabled) return { timingEnabled: false, rows: [] };
+        const skills = (
+          await trx
+            .selectFrom('employeeSkills')
+            .select('serviceId')
+            .where('employeeId', '=', req.params.id)
+            .execute()
+        ).map((s) => s.serviceId);
+        let svcQ = trx
+          .selectFrom('services')
+          .select(['id', 'name', 'durationMin'])
+          .where('status', '=', 'active')
+          .orderBy('sort');
+        if (skills.length) svcQ = svcQ.where('id', 'in', skills);
+        const svcs = await svcQ.execute();
+        const timings = await trx
+          .selectFrom('empTimings')
+          .selectAll()
+          .where('employeeId', '=', req.params.id)
+          .where('variantId', 'is', null)
+          .execute();
+        const rows = [];
+        for (const s of svcs) {
+          const t = timings.find((x) => x.serviceId === s.id);
+          const eff = await effTreatment(trx, s.id, null, null, req.params.id);
+          rows.push({
+            serviceId: s.id,
+            name: s.name,
+            catalogMin: s.durationMin,
+            inUseMin: eff.min,
+            observedN: t?.observedN ?? 0,
+            observedMedianMin: t?.observedMedianMin ?? null,
+          });
+        }
+        return { timingEnabled: true, rows };
       }),
   });
 

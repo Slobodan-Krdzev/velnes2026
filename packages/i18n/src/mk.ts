@@ -1270,6 +1270,13 @@ export const mk: Record<TranslationKey, string> = {
   'eset.daysCount': '{{n}} дена',
   'eset.splitShifts': 'поделени смени',
   'eset.notWorking': 'Не работи',
+  'eset.timing': 'Времетраење',
+  'eset.timingHint': 'Колку време {{name}} навистина троши по услуга. Velnes ги следи завршените термини и предлага промена кога има докази — никогаш не го менува календарот сам. Одобрено време продолжува да важи, а Velnes продолжува да следи.',
+  'eset.catalog': 'Каталог',
+  'eset.inUse': 'Во употреба',
+  'eset.seen': 'Видено',
+  'eset.appts': '{{n}} термини',
+  'eset.notEnoughYet': 'Сè уште недоволно',
 
   'rset.saved': 'Критериумите за рангирање се зачувани',
   'rset.howItWorks': 'Како работи рангирањето',

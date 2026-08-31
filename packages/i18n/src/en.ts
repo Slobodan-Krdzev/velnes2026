@@ -1283,6 +1283,13 @@ export const en = {
   'eset.daysCount': '{{n}} days',
   'eset.splitShifts': 'split shifts',
   'eset.notWorking': 'Not working',
+  'eset.timing': 'Timing',
+  'eset.timingHint': 'How long {{name}} actually takes per service. Velnes watches completed appointments and suggests a change when the evidence is there — it never changes the calendar on its own. An approved time keeps applying, and Velnes keeps watching.',
+  'eset.catalog': 'Catalog',
+  'eset.inUse': 'In use',
+  'eset.seen': 'Seen',
+  'eset.appts': '{{n}} appts',
+  'eset.notEnoughYet': 'Not enough yet',
 
   // Settings › Ranking
   'rset.saved': 'Ranking criteria saved',
