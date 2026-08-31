@@ -184,8 +184,10 @@ describe('calendar', () => {
     await openCalendar();
     const event = screen.getByTitle(/Katerina/);
     expect(event.className).toContain('ev-manual');
-    // A 45-minute block only carries the head row, like the prototype.
+    // A 45-minute block carries the head, the time and the customer.
     expect(within(event).getByText('Follow-up session')).toBeDefined();
+    expect(within(event).getByText('10:00 – 10:45')).toBeDefined();
+    expect(within(event).getByText('Katerina Stojanovska')).toBeDefined();
   });
 
   it('books through the drawer: service → slot → book', async () => {

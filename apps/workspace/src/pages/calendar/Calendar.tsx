@@ -63,23 +63,46 @@ const evTone = (a: Appointment, category: string | null) => {
 const slots: number[] = [];
 for (let m = DAY_START; m < DAY_END; m += SLOT) slots.push(m);
 
+const SOURCE_LABELS: Record<string, string> = {
+  marketplace: 'source.marketplace',
+  widget: 'source.widget',
+  link: 'source.link',
+  staff: 'source.staff',
+  pos: 'source.pos',
+  phone: 'source.phone',
+  walkin: 'source.walkin',
+  google: 'source.google',
+  instagram: 'source.instagram',
+  api: 'source.api',
+};
+
 function Event({
   a,
   color,
   category,
+  empFirst,
+  sourceLabel,
+  locLabel,
   onOpen,
 }: {
   a: Appointment;
   color: [string, string, string, string];
   category: string | null;
+  empFirst: string;
+  sourceLabel: string;
+  locLabel: string | null;
   onOpen: (a: Appointment) => void;
 }) {
   const top = dayPct(mins(a.start));
   const h = ((mins(a.end) - mins(a.start)) / DAY_MINUTES) * 100;
+  // What fits hangs on the block's height. The prototype gates in
+  // pixels (36px per 15-minute slot); minutes say the same thing.
+  const dur = mins(a.end) - mins(a.start);
   const paint = a.kind === 'appointment' ? color : null;
   const wrapNeeded = a.kind === 'appointment' && (a.prepMin > 0 || a.resetMin > 0);
   const van = mins(a.start) - a.prepMin;
   const tot = mins(a.end) + a.resetMin;
+  const extras = [a.variantLabel, ...a.modifierNames].filter(Boolean).join(' · ');
   return (
     <>
       {wrapNeeded ? (
@@ -112,7 +135,7 @@ function Event({
             </span>
             <span className="ev-t">{a.serviceName ?? a.title}</span>
           </span>
-          {h >= 54 ? (
+          {dur >= 23 ? (
             <span className="ev-line">
               <Icon d={I.clock} size={13} w={2} />
               <span className="tnum">
@@ -120,13 +143,28 @@ function Event({
               </span>
             </span>
           ) : null}
-          {h >= 72 && a.kind === 'appointment' ? (
+          {dur >= 30 && a.kind === 'appointment' ? (
             <span className="ev-line">
               <Icon d={I.user} size={13} w={2} />
               <span className="ev-clip">{a.title}</span>
             </span>
           ) : null}
+          {dur >= 44 && extras ? (
+            <span className="ev-line">
+              <Icon d={I.tag} size={13} w={2} />
+              <span className="ev-clip">{extras}</span>
+            </span>
+          ) : null}
         </span>
+        {dur >= 52 && a.kind === 'appointment' ? (
+          <span className="ev-foot">
+            <span className="ev-clip">
+              {empFirst}
+              {sourceLabel ? ` · ${sourceLabel}` : ''}
+            </span>
+            {locLabel ? <span className="ev-loc">{locLabel}</span> : null}
+          </span>
+        ) : null}
       </button>
     </>
   );
@@ -364,6 +402,15 @@ export function CalendarPage() {
           a={a}
           color={colorOf(a.employeeId)}
           category={a.serviceCategory ?? a.serviceName}
+          empFirst={
+            employees.data?.employees.find((e) => e.id === a.employeeId)?.name.split(' ')[0] ?? ''
+          }
+          sourceLabel={t(SOURCE_LABELS[a.source] ?? 'source.unknown')}
+          locLabel={
+            scope === 'all' && myLocs.length > 1
+              ? (myLocs.find((l) => l.id === a.locationId)?.name ?? null)
+              : null
+          }
           onOpen={open}
         />
       ));
