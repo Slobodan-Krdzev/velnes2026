@@ -11,7 +11,7 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { z } from 'zod';
-import { get, patch, refusalText } from '@velnes/client';
+import { ApiError, get, patch, refusalText } from '@velnes/client';
 import {
   useBook,
   useCancelAppointment,
@@ -755,10 +755,17 @@ function EditBody({ appointment: a, onClose }: { appointment: Appointment; onClo
             <button
               className="btn btn-subtle btn-sm"
               onClick={() =>
-                void cancel.mutateAsync(a.id).then(() => {
-                  toast(t('drawer.cancelled'));
-                  onClose();
-                })
+                void cancel
+                  .mutateAsync(a.id)
+                  .then(() => toast(t('drawer.cancelled')))
+                  .catch((e: unknown) =>
+                    toast(
+                      e instanceof ApiError && e.status === 404
+                        ? t('drawer.gone')
+                        : refusalText(t, e),
+                    ),
+                  )
+                  .finally(onClose)
               }
             >
               {t('drawer.cancelBooking')}
@@ -808,6 +815,14 @@ function RescheduleBody({
       toast(t('drawer.rescheduled'));
       onClose();
     } catch (e) {
+      // A 404 means the calendar showed a ghost — the appointment was
+      // recreated or removed underneath us. Refresh and close.
+      if (e instanceof ApiError && e.status === 404) {
+        void qc.invalidateQueries({ queryKey: ['appointments'] });
+        toast(t('drawer.gone'));
+        onClose();
+        return;
+      }
       const reason = refusalText(t, e);
       setError(reason);
       toast(reason);

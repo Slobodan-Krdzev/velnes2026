@@ -24,7 +24,7 @@ export default defineConfig({
       env: {
         API_DATABASE_URL:
           process.env.E2E_API_DATABASE_URL ??
-          'postgres://velnes_api:velnes_api@localhost:5432/velnes',
+          'postgres://velnes_api:velnes_api@localhost:5432/velnes_e2e',
         JWT_SECRET: 'velnes-e2e-secret',
         NODE_ENV: 'test',
       },

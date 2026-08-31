@@ -100,6 +100,7 @@ export const sq: Record<TranslationKey, string> = {
     'Ky tashmë ka filluar, kështu nuk mund të zhvendoset më. Anulimi ende funksionon, dhe kjo është ajo që e mban raportimin të ndershëm.',
   'drawer.moveHint': 'Zhvendosja në një ditë tjetër është në rregull — kalendari ndjek',
   'drawer.rescheduled': 'Termini u zhvendos',
+  'drawer.gone': 'Ai termin nuk ekziston më — kalendari u rifreskua',
   'drawer.repriceNote':
     'Shërbimi dhe çmimi i tij mbeten siç u rezervuan — zhvendosja e një termini kurrë nuk e riçmon atë.',
   'till.onTill': '{{name}} është në arkë',

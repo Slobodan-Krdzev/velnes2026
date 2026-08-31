@@ -104,6 +104,7 @@ export const en = {
     'This one has already started, so it can no longer be moved. Cancelling still works, and that is what keeps the reporting honest.',
   'drawer.moveHint': 'Moving it to another day is fine — the calendar follows',
   'drawer.rescheduled': 'Appointment moved',
+  'drawer.gone': 'That appointment no longer exists — the calendar has been refreshed',
   'drawer.repriceNote':
     'The service and its price stay as booked — moving an appointment never re-prices it.',
   'till.onTill': '{{name}} is on the till',
