@@ -14,13 +14,14 @@ import {
   type CustomerProfile,
 } from '@velnes/contracts';
 import { I, Icon } from '@velnes/ui';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams } from 'react-router-dom';
 import { z } from 'zod';
 import { ApiError, get, patch, post, useSession } from '@velnes/client';
 import { useLocations } from '../../api/queries.js';
 import { money } from '../../lib/money.js';
+import { useOutsideClose } from '../../lib/pop.js';
 import { useToast } from '../../lib/toast.js';
 
 /** viewCustomers + viewProfile, markup-faithful. Trends/Suggestions
@@ -66,6 +67,8 @@ function retentionBadge(t: (k: string) => string, ci?: CustomerInsights) {
   return null;
 }
 
+type CustomerSort = 'default' | 'visitsDesc' | 'visitsAsc' | 'spendDesc' | 'spendAsc';
+
 function CustomerList() {
   const { t } = useTranslation();
   const { can } = useSession();
@@ -73,6 +76,12 @@ function CustomerList() {
   const qc = useQueryClient();
   const [q, setQ] = useState('');
   const [group, setGroup] = useState('all');
+  const [sort, setSort] = useState<CustomerSort>('default');
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [sortOpen, setSortOpen] = useState(false);
+  const filtersRef = useOutsideClose(filtersOpen, () => setFiltersOpen(false));
+  const sortRef = useOutsideClose(sortOpen, () => setSortOpen(false));
+  const [adding, setAdding] = useState(false);
   const list = useCustomers(q);
   const full = can('customers.view_business');
 
@@ -91,27 +100,136 @@ function CustomerList() {
       (qTel && (c.phone ?? '').replace(/\s+/g, '').toLowerCase().includes(qTel));
     return hit && (group === 'all' || c.group === group);
   });
+  if (sort !== 'default')
+    rows.sort(
+      sort === 'visitsDesc'
+        ? (a, b) => b.visits - a.visits
+        : sort === 'visitsAsc'
+          ? (a, b) => a.visits - b.visits
+          : sort === 'spendDesc'
+            ? (a, b) => b.spend - a.spend
+            : (a, b) => a.spend - b.spend,
+    );
+
+  const sortOpts: [CustomerSort, string][] = [
+    ['default', t('cust.sortDefault')],
+    ['visitsDesc', t('cust.sortVisitsDesc')],
+    ['visitsAsc', t('cust.sortVisitsAsc')],
+    ...(full
+      ? ([
+          ['spendDesc', t('cust.sortSpendDesc')],
+          ['spendAsc', t('cust.sortSpendAsc')],
+        ] as [CustomerSort, string][])
+      : []),
+  ];
+  const curSortLbl = sortOpts.find(([v]) => v === sort)?.[1] ?? '';
 
   return (
     <>
       <div className="toolbar toolbar-row">
         <div className="filters">
-          <input
-            className="input"
-            style={{ maxWidth: 300 }}
-            placeholder={t('cust.searchPh')}
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-          />
-          <select className="select" value={group} onChange={(e) => setGroup(e.target.value)}>
-            <option value="all">{t('cust.allGroups')}</option>
-            {GROUPS.map((g) => (
-              <option key={g}>{g}</option>
-            ))}
-          </select>
+          <div className="search">
+            <Icon d={I.search} size={20} />
+            <input
+              className="input"
+              placeholder={t('cust.searchPh')}
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+            />
+          </div>
+          <div className="pop" ref={filtersRef}>
+            <button
+              className={`btn btn-secondary btn-pill${group !== 'all' ? ' on' : ''}${filtersOpen ? ' open' : ''}`}
+              aria-haspopup="menu"
+              aria-expanded={filtersOpen}
+              onClick={() => setFiltersOpen((v) => !v)}
+            >
+              {t('cal.filters')}
+              {group !== 'all' ? <span className="fbadge">1</span> : null}
+              <span className={`caret${filtersOpen ? ' up' : ''}`}>
+                <Icon d={I.down} size={18} w={2.2} />
+              </span>
+            </button>
+            {filtersOpen ? (
+              <div className="menu menu-left" role="menu">
+                {[['all', t('cust.allGroups')] as [string, string]]
+                  .concat(GROUPS.map((g) => [g, g] as [string, string]))
+                  .map(([v, label]) => (
+                    <button
+                      key={v}
+                      className={`menu-row${group === v ? ' on' : ''}`}
+                      role="menuitemradio"
+                      aria-checked={group === v}
+                      onClick={() => {
+                        setGroup(v);
+                        setFiltersOpen(false);
+                      }}
+                    >
+                      <span className="menu-tick">
+                        {group === v ? <Icon d={I.check} size={18} w={3} /> : null}
+                      </span>
+                      <span className="grow" style={{ textAlign: 'left' }}>
+                        {label}
+                      </span>
+                    </button>
+                  ))}
+              </div>
+            ) : null}
+          </div>
+          <div className="pop" ref={sortRef}>
+            <button
+              className={`btn btn-secondary btn-pill${sort !== 'default' ? ' on' : ''}${sortOpen ? ' open' : ''}`}
+              aria-haspopup="menu"
+              aria-expanded={sortOpen}
+              onClick={() => setSortOpen((v) => !v)}
+            >
+              {t('cust.sort')}
+              {sort !== 'default' ? `: ${curSortLbl}` : ''}
+              <span className={`caret${sortOpen ? ' up' : ''}`}>
+                <Icon d={I.down} size={18} w={2.2} />
+              </span>
+            </button>
+            {sortOpen ? (
+              <div className="menu menu-left" role="menu">
+                {sortOpts.map(([v, label]) => (
+                  <button
+                    key={v}
+                    className={`menu-row${sort === v ? ' on' : ''}`}
+                    role="menuitemradio"
+                    aria-checked={sort === v}
+                    onClick={() => {
+                      setSort(v);
+                      setSortOpen(false);
+                    }}
+                  >
+                    <span className="menu-tick">
+                      {sort === v ? <Icon d={I.check} size={18} w={3} /> : null}
+                    </span>
+                    <span className="grow" style={{ textAlign: 'left' }}>
+                      {label}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            ) : null}
+          </div>
         </div>
-        <div className="toolbar-actions" />
+        <div className="toolbar-actions">
+          <button className="btn btn-primary btn-add" onClick={() => setAdding(true)}>
+            {t('cal.add')} <Icon d={I.plus} size={20} w={2.5} />
+          </button>
+        </div>
       </div>
+      {adding ? (
+        <NewCustomerPanel
+          onClose={() => setAdding(false)}
+          onSaved={(id) => {
+            setAdding(false);
+            void qc.invalidateQueries({ queryKey: ['customers'] });
+            navigate(`/customers/${id}`);
+          }}
+        />
+      ) : null}
       <div className="card">
         {rows.length === 0 ? (
           <div className="empty">
@@ -206,6 +324,142 @@ function CustomerList() {
   );
 }
 
+/** The prototype's New-customer lade: who they are and how to reach
+ *  them, saved through the real POST door. */
+function NewCustomerPanel({
+  onClose,
+  onSaved,
+}: {
+  onClose: () => void;
+  onSaved: (id: string) => void;
+}) {
+  const { t } = useTranslation();
+  const toast = useToast();
+  const [first, setFirst] = useState('');
+  const [last, setLast] = useState('');
+  const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
+  const [group, setGroup] = useState('New');
+  const [birthday, setBirthday] = useState('');
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    document.body.classList.add('panel-open');
+    return () => document.body.classList.remove('panel-open');
+  }, []);
+
+  const save = async () => {
+    setError(null);
+    try {
+      const c = await post(CustomerProfileSchema, '/customers', {
+        name: `${first.trim()} ${last.trim()}`.trim(),
+        email: email.trim() || null,
+        phone: phone.trim() || null,
+        group,
+        birthday: birthday || null,
+      });
+      toast(t('cust.saved'));
+      onSaved(c.id);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  };
+
+  return (
+    <>
+      <div className="scrim on" onClick={onClose} />
+      <aside className="panel open" role="dialog" aria-modal="true">
+        <div className="panel-head plain">
+          <div>
+            <h2>{t('cust.newCustomer')}</h2>
+            <p className="sub">{t('cust.newCustomerSub')}</p>
+          </div>
+          <div className="panel-actions">
+            <button
+              className="btn btn-primary btn-sm"
+              disabled={!first.trim() || !phone.trim()}
+              onClick={() => void save()}
+            >
+              {t('cust.saveCustomer')}
+            </button>
+            <button className="iconbtn" aria-label={t('common.close')} onClick={onClose}>
+              <Icon d={I.x} size={20} />
+            </button>
+          </div>
+        </div>
+        <div className="panel-body">
+          <div className="grid2">
+            <label className="field">
+              <span>
+                {t('cust.firstName')}
+                <span className="req">*</span>
+              </span>
+              <input className="input" value={first} onChange={(e) => setFirst(e.target.value)} />
+            </label>
+            <label className="field">
+              <span>
+                {t('cust.lastName')}
+                <span className="req">*</span>
+              </span>
+              <input className="input" value={last} onChange={(e) => setLast(e.target.value)} />
+            </label>
+            <label className="field span2">
+              <span>{t('cust.email')}</span>
+              <input
+                className="input"
+                type="email"
+                placeholder="name@example.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+              />
+            </label>
+            <label className="field">
+              <span>
+                {t('cust.phone')}
+                <span className="req">*</span>
+              </span>
+              <input
+                className="input"
+                type="tel"
+                placeholder="+389 7x xxx xxx"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+              />
+            </label>
+            <label className="field">
+              <span>{t('cust.group')}</span>
+              <select
+                className="select"
+                style={{ width: '100%' }}
+                value={group}
+                onChange={(e) => setGroup(e.target.value)}
+              >
+                {GROUPS.map((g) => (
+                  <option key={g}>{g}</option>
+                ))}
+              </select>
+            </label>
+            <label className="field">
+              <span>{t('cust.dob')}</span>
+              <input
+                className="input"
+                type="date"
+                value={birthday}
+                onChange={(e) => setBirthday(e.target.value)}
+              />
+            </label>
+          </div>
+          {error ? (
+            <p role="alert" style={{ color: 'var(--danger)', fontWeight: 600 }}>
+              {error}
+            </p>
+          ) : null}
+        </div>
+      </aside>
+    </>
+  );
+}
+
 const TABS = [
   ['appointments', 'cust.tabAppointments'],
   ['sales', 'cust.tabSales'],
@@ -225,6 +479,7 @@ function Profile({ id }: { id: string }) {
   const insights = useInsights(id);
   const [tab, setTab] = useState<(typeof TABS)[number][0]>('appointments');
   const [menu, setMenu] = useState(false);
+  const menuRef = useOutsideClose(menu, () => setMenu(false));
   const [offerOpen, setOfferOpen] = useState(false);
   const full = can('customers.view_business');
   const c = profile.data;
@@ -250,7 +505,7 @@ function Profile({ id }: { id: string }) {
         </button>
         <div className="toolbar-actions">
           {can('marketing.personal_offers') ? (
-            <div className="pop">
+            <div className="pop" ref={menuRef}>
               <button
                 className={`btn btn-primary btn-add ${menu ? 'open' : ''}`}
                 aria-haspopup="menu"

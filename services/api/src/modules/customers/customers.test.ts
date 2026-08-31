@@ -99,6 +99,25 @@ describe('customers, intelligence and personal offers', () => {
     await closeDb();
   });
 
+  it('creates a customer through the audited POST door', async () => {
+    const res = await post(`${API_PREFIX}/customers`, {
+      name: 'Test Novakova',
+      phone: '+389 70 000 111',
+      group: 'New',
+    });
+    expect(res.statusCode).toBe(200);
+    const c = res.json() as { id: string; name: string; group: string; visits: number };
+    expect(c.name).toBe('Test Novakova');
+    expect(c.group).toBe('New');
+    expect(c.visits).toBe(0);
+    const audit = await admin.query(
+      `SELECT 1 FROM audit_log WHERE action='Customer added' AND object='Customer · Test Novakova'`,
+    );
+    expect(audit.rows.length).toBe(1);
+    await admin.query(`DELETE FROM customers WHERE id=$1`, [c.id]);
+    await admin.query(`DELETE FROM audit_log WHERE action='Customer added'`);
+  });
+
   it('serves the profile with the one Premium door answered', async () => {
     const kat = await get(`${API_PREFIX}/customers/${demo.c1}`);
     expect(kat.statusCode).toBe(200);

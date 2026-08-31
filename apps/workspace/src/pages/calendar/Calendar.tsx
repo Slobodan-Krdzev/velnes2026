@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAppointments, useEmployees, useLocations } from '../../api/queries.js';
 import { useSession } from '@velnes/client';
+import { useOutsideClose } from '../../lib/pop.js';
 import { useScope } from '../../shell/Shell.js';
 import { AppointmentDrawer } from './AppointmentDrawer.js';
 
@@ -235,6 +236,8 @@ export function CalendarPage() {
   const [date, setDate] = useState(localIso(new Date()));
   const [filters, setFilters] = useState(false);
   const [pick, setPick] = useState(false);
+  const filtersRef = useOutsideClose(filters, () => setFilters(false));
+  const pickRef = useOutsideClose(pick, () => setPick(false));
   const [calEmp, setCalEmp] = useState('all');
   const [drawer, setDrawer] = useState<{
     open: boolean;
@@ -380,7 +383,7 @@ export function CalendarPage() {
             >
               <Icon d={I.left} size={20} w={2.5} />
             </button>
-            <div className="pop">
+            <div className="pop" ref={pickRef}>
               <button
                 className={`input tnum calpick-btn${pick ? ' open' : ''}`}
                 aria-haspopup="dialog"
@@ -418,7 +421,7 @@ export function CalendarPage() {
               <Icon d={I.right} size={20} w={2.5} />
             </button>
           </div>
-          <div className="pop">
+          <div className="pop" ref={filtersRef}>
             <button
               className={`btn btn-secondary btn-pill${filters ? ' open' : ''}`}
               aria-haspopup="menu"

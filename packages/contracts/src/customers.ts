@@ -55,6 +55,14 @@ export const CustomerProfileSchema = z.object({
 });
 export type CustomerProfile = z.infer<typeof CustomerProfileSchema>;
 
+export const CustomerCreateSchema = z.object({
+  name: z.string().min(1),
+  email: z.string().nullable().optional(),
+  phone: z.string().nullable().optional(),
+  group: z.string().default('New'),
+  birthday: z.string().nullable().optional(),
+});
+
 export const CustomerPatchSchema = z.object({
   name: z.string().min(1).optional(),
   email: z.string().nullable().optional(),

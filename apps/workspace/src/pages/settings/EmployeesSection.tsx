@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { patch } from '@velnes/client';
 import { useEmployees, useLocationCatalog, useLocations } from '../../api/queries.js';
+import { useOutsideClose } from '../../lib/pop.js';
 import { useToast } from '../../lib/toast.js';
 import { availSummary, Field, ToggleRow, Toggle, WeekHoursEditor } from './bits.js';
 
@@ -22,6 +23,7 @@ export function EmployeesSection() {
   const employees = useEmployees();
   const [dotOpen, setDotOpen] = useState<string | null>(null);
   const [editing, setEditing] = useState<Employee | null>(null);
+  const dotRef = useOutsideClose<HTMLSpanElement>(dotOpen !== null, () => setDotOpen(null));
 
   const save = async (id: string, body: Record<string, unknown>) => {
     await patch(EmployeeSchema, `/employees/${id}`, body);
@@ -55,7 +57,7 @@ export function EmployeesSection() {
               return (
                 <tr key={e.id} className={e.status === 'invited' ? 'dim' : ''}>
                   <td className="bold">
-                    <span className="pop empdot-pop">
+                    <span className="pop empdot-pop" ref={dotOpen === e.id ? dotRef : null}>
                       <button
                         className="empdot"
                         aria-haspopup="menu"

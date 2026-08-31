@@ -4,6 +4,7 @@ import {
   CustomerInvoicesSchema,
   CustomerLoyaltySchema,
   CustomerInsightsSchema,
+  CustomerCreateSchema,
   CustomerPatchSchema,
   CustomerProfileSchema,
   PersonalOfferCreateSchema,
@@ -40,6 +41,49 @@ function sendErr(reply: FastifyReply, e: unknown) {
 
 export function customersRoutes(app: FastifyInstance) {
   const r = app.withTypeProvider<ZodTypeProvider>();
+
+  r.route({
+    method: 'POST',
+    url: '/customers',
+    preHandler: [app.authenticate],
+    schema: {
+      body: CustomerCreateSchema,
+      response: { 200: CustomerProfileSchema, 403: Err },
+    },
+    handler: async (req, reply) =>
+      withTenant(req.claims.ten, async (trx) => {
+        const perms = await permsFor(trx, req.claims);
+        if (!can(perms, 'customers.edit'))
+          return reply
+            .code(403)
+            .send({ error: 'FORBIDDEN', message: 'Missing permission: customers.edit' });
+        const b = req.body;
+        const row = await trx
+          .insertInto('customers')
+          .values({
+            tenantId: req.claims.ten,
+            name: b.name,
+            email: b.email ?? null,
+            phone: b.phone ?? null,
+            custGroup: b.group,
+            birthday: b.birthday ? new Date(b.birthday) : null,
+          })
+          .returning('id')
+          .executeTakeFirstOrThrow();
+        const actor = await trx
+          .selectFrom('employees')
+          .select('name')
+          .where('id', '=', req.claims.sub)
+          .executeTakeFirst();
+        await logAudit(trx, req.claims.ten, {
+          actorEmployeeId: req.claims.sub,
+          actorName: actor?.name ?? '',
+          action: 'Customer added',
+          object: `Customer · ${b.name}`,
+        });
+        return customerProfile(trx, row.id);
+      }),
+  });
 
   r.route({
     method: 'GET',

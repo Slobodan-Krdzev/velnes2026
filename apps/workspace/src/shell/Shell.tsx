@@ -5,6 +5,7 @@ import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useLocations } from '../api/queries.js';
+import { useOutsideClose } from '../lib/pop.js';
 import { useSession } from '@velnes/client';
 
 /** Location scope — the prototype's loc-switch: chosen once in the
@@ -55,6 +56,8 @@ export function Shell() {
   const [scope, setScope] = useState('all');
   const [scopeMenu, setScopeMenu] = useState(false);
   const [envMenu, setEnvMenu] = useState(false);
+  const scopeRef = useOutsideClose(scopeMenu, () => setScopeMenu(false));
+  const envRef = useOutsideClose(envMenu, () => setEnvMenu(false));
   const scopeValue = useMemo(() => ({ scope, setScope }), [scope]);
 
   // The prototype's per-route body modes: the register and the calendar
@@ -126,7 +129,7 @@ export function Shell() {
                   {myLocs[0]?.name ?? ''}
                 </span>
               ) : (
-                <div className="pop">
+                <div className="pop" ref={scopeRef}>
                   <button
                     className={`locsw${allSelected ? '' : ' multi'}`}
                     aria-haspopup="menu"
@@ -189,7 +192,7 @@ export function Shell() {
             <button className="iconbtn" aria-label={t('common.search')}>
               <Icon d={I.search} size={24} w={2} />
             </button>
-            <div className="pop">
+            <div className="pop" ref={envRef}>
               <button
                 className="avatar"
                 aria-haspopup="menu"
