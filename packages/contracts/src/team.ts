@@ -22,15 +22,23 @@ export const EmployeeSchema = z.object({
 });
 export type Employee = z.infer<typeof EmployeeSchema>;
 
-/** Inviting a user — role and locations decide what they see. Until
- *  the invite is accepted (an SMTP-era feature) they can sign in
- *  nowhere: no credentials are created. */
+/** Creating a team member — through the invite lade (role +
+ *  locations) or the employee drawer (title, colour, week, skills).
+ *  Until the invite is accepted (an SMTP-era feature) they can sign
+ *  in nowhere: no credentials are created. */
 export const EmployeeInviteSchema = z.object({
   name: z.string().min(1),
   email: z.email(),
-  roleId: z.uuid(),
-  locationIds: z.array(z.uuid()).min(1),
+  roleId: z.uuid().nullable().optional(),
+  locationIds: z.array(z.uuid()).min(1).optional(),
   twofa: z.boolean().default(true),
+  roleTitle: z.string().optional(),
+  access: EmployeeAccessSchema.optional(),
+  phone: z.string().nullable().optional(),
+  color: z.string().nullable().optional(),
+  hours: WeekHoursSchema.optional(),
+  skillServiceIds: z.array(z.uuid()).optional(),
+  bookable: z.boolean().default(false),
 });
 
 export const EmployeeListResponseSchema = z.object({
@@ -89,6 +97,10 @@ export const EmployeeTimingsSchema = z.object({
       inUseMin: z.number().int(),
       observedN: z.number().int(),
       observedMedianMin: z.number().int().nullable(),
+      // A live pace suggestion, when Velnes has one for this pair.
+      suggestion: z
+        .object({ timingId: z.uuid(), recommendedMin: z.number().int() })
+        .nullable(),
     }),
   ),
 });

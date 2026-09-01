@@ -1265,7 +1265,7 @@ export const mk: Record<TranslationKey, string> = {
   'eset.availableHint':
     'Надвор од овие часови календарот одбива резервација за оваа личност. Еден ден може да има повеќе од еден период — утро и вечер со слободно попладне.',
   'eset.servicesProvides': 'Услуги што ги дава оваа личност',
-  'eset.skillsHint': 'Ништо штиклирано значи дека оваа личност прави сè.',
+  'eset.skillsHint': 'Вештините ги отвораат календарот, страницата за резервации и моторот за времетраење. Резервабилна личност треба барем една.',
   'eset.noDays': 'Нема поставени денови',
   'eset.daysCount': '{{n}} дена',
   'eset.splitShifts': 'поделени смени',
@@ -1277,6 +1277,14 @@ export const mk: Record<TranslationKey, string> = {
   'eset.seen': 'Видено',
   'eset.appts': '{{n}} термини',
   'eset.notEnoughYet': 'Сè уште недоволно',
+  'eset.newEmployee': 'Нов вработен',
+  'eset.newEmployeeSub': 'Пристап, достапност и услуги',
+  'eset.saveEmployee': 'Зачувај вработен',
+  'eset.addedToast': 'Вработениот е додаден — е-поштата со поканата чека на SMTP',
+  'eset.timingInsight': 'Velnes увид за времетраење',
+  'eset.timingInsightBody':
+    'На {{who}} обично му/ѝ требаат околу {{min}} минути за {{service}}. Календарот моментално користи {{current}} минути.',
+  'eset.leaveIt': 'Остави го',
 
   'rset.saved': 'Критериумите за рангирање се зачувани',
   'rset.howItWorks': 'Како работи рангирањето',

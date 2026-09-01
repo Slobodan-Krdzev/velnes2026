@@ -1278,7 +1278,7 @@ export const en = {
   'eset.availableHint':
     'Outside these hours the calendar refuses a booking for this person. A day can hold more than one period — mornings and evenings with the afternoon off.',
   'eset.servicesProvides': 'Services this person provides',
-  'eset.skillsHint': 'Nothing ticked means this person does everything.',
+  'eset.skillsHint': 'Skills gate the calendar, the booking page and the timing engine. A bookable person needs at least one.',
   'eset.noDays': 'No days set',
   'eset.daysCount': '{{n}} days',
   'eset.splitShifts': 'split shifts',
@@ -1290,6 +1290,14 @@ export const en = {
   'eset.seen': 'Seen',
   'eset.appts': '{{n}} appts',
   'eset.notEnoughYet': 'Not enough yet',
+  'eset.newEmployee': 'New employee',
+  'eset.newEmployeeSub': 'Access, availability and services',
+  'eset.saveEmployee': 'Save employee',
+  'eset.addedToast': 'Employee added — the invite email waits for SMTP',
+  'eset.timingInsight': 'Velnes timing insight',
+  'eset.timingInsightBody':
+    '{{who}} typically needs about {{min}} minutes for {{service}}. The calendar currently uses {{current}} minutes.',
+  'eset.leaveIt': 'Leave it',
 
   // Settings › Ranking
   'rset.saved': 'Ranking criteria saved',

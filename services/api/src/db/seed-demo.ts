@@ -643,10 +643,10 @@ export async function seedDemo(adminUrl: string) {
     );
     await q(
       `INSERT INTO discount_codes (tenant_id, code, type, value, used, usage_limit, starts, ends) VALUES
-       ($1,'SUMMER26','Percentage',15,48,200,'2026-07-01','2026-08-31'),
+       ($1,'SUMMER26','Percentage',15,48,200,CURRENT_DATE - 30,CURRENT_DATE + 30),
        ($1,'WELCOME10','Fixed amount',10,132,500,'2026-01-01','2026-12-31'),
-       ($1,'AUTUMN20','Percentage',20,0,150,'2026-09-15','2026-10-15'),
-       ($1,'SPRING26','Percentage',10,187,200,'2026-03-01','2026-05-31')`,
+       ($1,'AUTUMN20','Percentage',20,0,150,CURRENT_DATE + 14,CURRENT_DATE + 44),
+       ($1,'SPRING26','Percentage',10,187,200,CURRENT_DATE - 120,CURRENT_DATE - 60)`,
       [demo.business],
     );
     await q(
@@ -901,8 +901,8 @@ export async function seedDemo(adminUrl: string) {
     // Supplier promotions (prototype supplierOffers).
     await q(
       `INSERT INTO supplier_promotions (supplier_id, brand, title, kind, product_ids, starts, ends, min_order, usage_limit, terms, audience, value, per) VALUES
-       ($1,'Thera-Band','Buy 10 resistance sets, receive 2 free','bxgy',$2,'2026-08-01','2026-08-31',0,400,'Applies per order line. Free units are invoiced at 0 ден and count for stock.','Connected salons only',2,10),
-       ($1,'Thera-Band','Colour launch bundle − 15%','pct',$3,'2026-08-05','2026-08-31',15000,0,'15% off tape and recovery aids from 15.000 ден per order.','Salons with more than 20 colour treatments a month',15,0),
+       ($1,'Thera-Band','Buy 10 resistance sets, receive 2 free','bxgy',$2,CURRENT_DATE - 14,CURRENT_DATE + 14,0,400,'Applies per order line. Free units are invoiced at 0 ден and count for stock.','Connected salons only',2,10),
+       ($1,'Thera-Band','Colour launch bundle − 15%','pct',$3,CURRENT_DATE - 14,CURRENT_DATE + 14,15000,0,'15% off tape and recovery aids from 15.000 ден per order.','Salons with more than 20 colour treatments a month',15,0),
        ($4,'Nordic','Free tester with every 6 masks','gift',$5,'2026-07-01','2026-08-15',0,120,'One 15 ml tester per 6 units, while stock lasts.','All connected salons',1,6)`,
       [demo.sup1, `{${spid(1)}}`, `{${spid(2)},${spid(3)}}`, demo.sup2, `{${spid(5)}}`],
     );

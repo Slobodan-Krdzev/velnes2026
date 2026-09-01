@@ -158,6 +158,32 @@ describe('the business card, the settings document and the new patch doors', () 
     expect(audit.rows.length).toBeGreaterThan(0);
   });
 
+  it('the save door refuses bad weeks, unbookable states and losing the last owner', async () => {
+    // An inverted period names its weekday.
+    const inverted = await patch(`${API_PREFIX}/employees/${demo.empAna}`, {
+      hours: { '0': null, '1': [['18:00', '09:00']], '2': null, '3': null, '4': null, '5': null, '6': null },
+    });
+    expect(inverted.statusCode).toBe(422);
+    expect(inverted.json().message).toBe('Tue: 18:00–09:00 ends before it starts');
+    // Overlapping periods name both.
+    const overlap = await patch(`${API_PREFIX}/employees/${demo.empAna}`, {
+      hours: { '0': null, '1': [['09:00', '13:00'], ['12:00', '17:00']], '2': null, '3': null, '4': null, '5': null, '6': null },
+    });
+    expect(overlap.statusCode).toBe(422);
+    expect(overlap.json().message).toBe('Tue: 09:00–13:00 and 12:00–17:00 overlap');
+    // Bookable with no skills is a refused state, not a warning.
+    const noSkills = await patch(`${API_PREFIX}/employees/${demo.empAna}`, {
+      bookable: true,
+      skillServiceIds: [],
+    });
+    expect(noSkills.statusCode).toBe(422);
+    expect(noSkills.json().message).toBe('Pick at least one service, or switch off bookable');
+    // The last active owner cannot demote themselves.
+    const demote = await patch(`${API_PREFIX}/employees/${demo.empMaria}`, { access: 'staff' });
+    expect(demote.statusCode).toBe(409);
+    expect(demote.json().message).toBe('Make someone else owner first — a salon needs one');
+  });
+
   it('persists an employee week, job title and skills through the team door', async () => {
     const res = await patch(`${API_PREFIX}/employees/${demo.empAna}`, {
       roleTitle: 'Senior rehab coach',

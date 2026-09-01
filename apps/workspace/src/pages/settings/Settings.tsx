@@ -373,8 +373,12 @@ function TeamSection({ openAudit }: { openAudit: () => void }) {
   const [locsFor, setLocsFor] = useState<string | null>(null);
 
   const patchEmp = async (id: string, body: Record<string, unknown>) => {
-    await api(z.unknown(), `/employees/${id}`, { method: 'PATCH', body: JSON.stringify(body) });
-    toast(t('catalog.saved'));
+    try {
+      await api(z.unknown(), `/employees/${id}`, { method: 'PATCH', body: JSON.stringify(body) });
+      toast(t('catalog.saved'));
+    } catch (e) {
+      toast(e instanceof Error ? e.message : String(e));
+    }
     void qc.invalidateQueries({ queryKey: ['employees'] });
   };
   const allLocs = locations.data?.locations ?? [];

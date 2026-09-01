@@ -20,6 +20,49 @@ import { logAudit } from '../audit/audit.service.js';
 import { effTreatment } from '../timing/timing.service.js';
 import { can, permsFor } from '../auth/authz.service.js';
 
+const WEEK = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+const mins = (t: string) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5));
+
+/** The prototype's whProblem + whSort: every period runs forward and
+ *  none overlap. Returns the sorted week, or the refusal naming the
+ *  weekday. Bookable people need at least one skill and one working
+ *  day — the door refuses the state instead of warning about it. */
+function checkEmployeeState(
+  hours: Record<string, [string, string][] | null> | null,
+  skills: string[],
+  bookable: boolean,
+): { hours: Record<string, [string, string][] | null> | null; error?: string } {
+  let sorted: Record<string, [string, string][] | null> | null = null;
+  if (hours) {
+    sorted = {};
+    for (let i = 0; i < 7; i++) {
+      const list = hours[String(i)] ?? null;
+      if (!list || !list.length) {
+        sorted[String(i)] = null;
+        continue;
+      }
+      for (const [a, b] of list) {
+        if (!a || !b) return { hours, error: `${WEEK[i]}: Fill in both times of every period` };
+        if (mins(b) <= mins(a)) return { hours, error: `${WEEK[i]}: ${a}–${b} ends before it starts` };
+      }
+      const st = [...list].sort((x, y) => mins(x[0]) - mins(y[0]));
+      for (let j = 1; j < st.length; j++)
+        if (mins(st[j]![0]) < mins(st[j - 1]![1]))
+          return {
+            hours,
+            error: `${WEEK[i]}: ${st[j - 1]![0]}–${st[j - 1]![1]} and ${st[j]![0]}–${st[j]![1]} overlap`,
+          };
+      sorted[String(i)] = st;
+    }
+  }
+  if (bookable && !skills.length)
+    return { hours: sorted ?? hours, error: 'Pick at least one service, or switch off bookable' };
+  const week = sorted ?? hours;
+  if (bookable && (!week || !Object.values(week).some(Boolean)))
+    return { hours: week, error: 'Set at least one working day, or switch off bookable' };
+  return { hours: sorted ?? hours };
+}
+
 export function teamRoutes(app: FastifyInstance) {
   const r = app.withTypeProvider<ZodTypeProvider>();
 
@@ -118,6 +161,8 @@ export function teamRoutes(app: FastifyInstance) {
         200: EmployeeSchema,
         403: z.object({ error: z.string(), message: z.string() }),
         404: z.object({ error: z.string(), message: z.string() }),
+        409: z.object({ error: z.string(), message: z.string() }),
+        422: z.object({ error: z.string(), message: z.string() }),
       },
     },
     handler: async (req, reply) =>
@@ -134,6 +179,44 @@ export function teamRoutes(app: FastifyInstance) {
           .executeTakeFirst();
         if (!before)
           return reply.code(404).send({ error: 'NOT_FOUND', message: 'Unknown employee' });
+        // The last-owner safeguard: without an owner nobody can reach
+        // company settings, so the door refuses the state.
+        if (
+          req.body.access !== undefined &&
+          req.body.access !== 'owner' &&
+          before.access === 'owner'
+        ) {
+          const owners = await trx
+            .selectFrom('employees')
+            .select(sql<number>`count(*)::int`.as('n'))
+            .where('access', '=', 'owner')
+            .where('status', '=', 'active')
+            .executeTakeFirstOrThrow();
+          if (owners.n <= 1)
+            return reply.code(409).send({
+              error: 'LAST_OWNER',
+              message: 'Make someone else owner first — a salon needs one',
+            });
+        }
+        // The save door refuses bad weeks and unbookable states.
+        const nextSkills =
+          req.body.skillServiceIds ??
+          (
+            await trx
+              .selectFrom('employeeSkills')
+              .select('serviceId')
+              .where('employeeId', '=', req.params.id)
+              .execute()
+          ).map((s) => s.serviceId);
+        const nextHours =
+          req.body.hours !== undefined
+            ? req.body.hours
+            : ((before.hours ?? null) as Record<string, [string, string][] | null> | null);
+        const nextBookable = req.body.bookable ?? before.bookable;
+        const checked = checkEmployeeState(nextHours, nextSkills, nextBookable);
+        if (checked.error)
+          return reply.code(422).send({ error: 'REFUSED_STATE', message: checked.error });
+        if (req.body.hours !== undefined && checked.hours) req.body.hours = checked.hours;
         await trx
           .updateTable('employees')
           .set({
@@ -282,6 +365,10 @@ export function teamRoutes(app: FastifyInstance) {
             inUseMin: eff.min,
             observedN: t?.observedN ?? 0,
             observedMedianMin: t?.observedMedianMin ?? null,
+            suggestion:
+              t && t.status === 'suggested' && t.recommendedMin && t.recommendedMin !== eff.min
+                ? { timingId: t.id, recommendedMin: t.recommendedMin }
+                : null,
           });
         }
         return { timingEnabled: true, rows };
@@ -297,6 +384,7 @@ export function teamRoutes(app: FastifyInstance) {
       response: {
         200: EmployeeSchema,
         403: z.object({ error: z.string(), message: z.string() }),
+        422: z.object({ error: z.string(), message: z.string() }),
       },
     },
     handler: async (req, reply) =>
@@ -307,40 +395,62 @@ export function teamRoutes(app: FastifyInstance) {
             .code(403)
             .send({ error: 'FORBIDDEN', message: 'Missing permission: users.manage' });
         const b = req.body;
-        // Invited, not bookable, no credentials: until the invite is
-        // accepted (waits for SMTP) they can sign in nowhere.
+        // Invited and without credentials: until the invite is
+        // accepted (waits for SMTP) they can sign in nowhere. The
+        // drawer's fuller shape passes hours, skills and colour.
+        const checked = checkEmployeeState(b.hours ?? null, b.skillServiceIds ?? [], b.bookable);
+        if (checked.error)
+          return reply.code(422).send({ error: 'REFUSED_STATE', message: checked.error });
+        // No colour picked: the first one nobody carries yet.
+        let color = b.color ?? null;
+        if (!color) {
+          const taken = (
+            await trx.selectFrom('employees').select('color').execute()
+          ).map((e) => e.color);
+          color =
+            ['olive', 'clay', 'rose', 'sage', 'lilac', 'sky', 'sand', 'stone'].find(
+              (c) => !taken.includes(c),
+            ) ?? 'stone';
+        }
+        const locationIds =
+          b.locationIds ??
+          (await trx.selectFrom('locations').select('id').execute()).map((l) => l.id);
         const row = await trx
           .insertInto('employees')
           .values({
             tenantId: req.claims.ten,
             name: b.name,
             email: b.email,
-            roleId: b.roleId,
-            roleTitle: 'New user',
-            access: 'staff',
-            bookable: false,
+            roleId: b.roleId ?? null,
+            roleTitle: b.roleTitle ?? 'New user',
+            access: b.access ?? 'staff',
+            bookable: b.bookable,
             status: 'invited',
             twofaEnabled: b.twofa,
-            color: null,
-            phone: null,
+            color,
+            phone: b.phone ?? null,
+            ...(checked.hours ? { hours: JSON.stringify(checked.hours) } : {}),
           })
           .returning('id')
           .executeTakeFirstOrThrow();
-        for (const lid of b.locationIds)
+        for (const lid of locationIds)
           await trx
             .insertInto('employeeLocations')
             .values({ tenantId: req.claims.ten, employeeId: row.id, locationId: lid })
+            .execute();
+        for (const sid of b.skillServiceIds ?? [])
+          await trx
+            .insertInto('employeeSkills')
+            .values({ tenantId: req.claims.ten, employeeId: row.id, serviceId: sid })
             .execute();
         const actor = await trx
           .selectFrom('employees')
           .select('name')
           .where('id', '=', req.claims.sub)
           .executeTakeFirst();
-        const role = await trx
-          .selectFrom('roles')
-          .select('name')
-          .where('id', '=', b.roleId)
-          .executeTakeFirst();
+        const role = b.roleId
+          ? await trx.selectFrom('roles').select('name').where('id', '=', b.roleId).executeTakeFirst()
+          : undefined;
         await logAudit(trx, req.claims.ten, {
           actorEmployeeId: req.claims.sub,
           actorName: actor?.name ?? '',
@@ -352,17 +462,17 @@ export function teamRoutes(app: FastifyInstance) {
         return {
           id: row.id,
           name: b.name,
-          roleTitle: 'New user',
+          roleTitle: b.roleTitle ?? 'New user',
           email: b.email,
-          phone: null,
-          access: 'staff' as const,
-          roleId: b.roleId,
-          bookable: false,
+          phone: b.phone ?? null,
+          access: b.access ?? ('staff' as const),
+          roleId: b.roleId ?? null,
+          bookable: b.bookable,
           status: 'invited' as const,
-          color: null,
-          locationIds: b.locationIds,
-          skillServiceIds: [],
-          hours: null,
+          color,
+          locationIds,
+          skillServiceIds: b.skillServiceIds ?? [],
+          hours: (checked.hours ?? null) as Employee['hours'],
           twofaEnabled: b.twofa,
           lastActive: null,
         };

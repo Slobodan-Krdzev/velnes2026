@@ -1265,7 +1265,7 @@ export const sq: Record<TranslationKey, string> = {
   'eset.availableHint':
     'Jashtë këtyre orëve kalendari refuzon një rezervim për këtë person. Një ditë mund të mbajë më shumë se një periudhë — mëngjes dhe mbrëmje me pasditen të lirë.',
   'eset.servicesProvides': 'Shërbimet që ofron ky person',
-  'eset.skillsHint': 'Asgjë e shënuar do të thotë që ky person bën gjithçka.',
+  'eset.skillsHint': 'Aftësitë hapin kalendarin, faqen e rezervimeve dhe motorin e kohëzgjatjes. Një person i rezervueshëm ka nevojë për të paktën një.',
   'eset.noDays': 'Pa ditë të caktuara',
   'eset.daysCount': '{{n}} ditë',
   'eset.splitShifts': 'turne të ndara',
@@ -1277,6 +1277,14 @@ export const sq: Record<TranslationKey, string> = {
   'eset.seen': 'Parë',
   'eset.appts': '{{n}} termine',
   'eset.notEnoughYet': 'Ende jo mjaft',
+  'eset.newEmployee': 'Punonjës i ri',
+  'eset.newEmployeeSub': 'Qasja, disponueshmëria dhe shërbimet',
+  'eset.saveEmployee': 'Ruaj punonjësin',
+  'eset.addedToast': 'Punonjësi u shtua — emaili i ftesës pret SMTP',
+  'eset.timingInsight': 'Vështrim kohëzgjatjeje nga Velnes',
+  'eset.timingInsightBody':
+    '{{who}} zakonisht i duhen rreth {{min}} minuta për {{service}}. Kalendari aktualisht përdor {{current}} minuta.',
+  'eset.leaveIt': 'Lëre',
 
   'rset.saved': 'Kriteret e renditjes u ruajtën',
   'rset.howItWorks': 'Si funksionon renditja',

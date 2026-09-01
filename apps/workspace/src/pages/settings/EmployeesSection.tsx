@@ -1,9 +1,10 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { z } from 'zod';
 import { EmployeeSchema, EmployeeTimingsSchema, type Employee, type WeekHours } from '@velnes/contracts';
 import { EMP_COLORS, empColorOf, I, Icon } from '@velnes/ui';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { get, patch } from '@velnes/client';
+import { get, patch, post } from '@velnes/client';
 import { useEmployees, useLocationCatalog, useLocations } from '../../api/queries.js';
 import { PanelPortal } from '../../lib/Panel.js';
 import { useOutsideClose } from '../../lib/pop.js';
@@ -25,12 +26,18 @@ export function EmployeesSection() {
   // The colour menu escapes the card (overflow:hidden would clip it):
   // it renders at fixed coordinates through a body portal.
   const [dotOpen, setDotOpen] = useState<{ id: string; x: number; y: number } | null>(null);
-  const [editing, setEditing] = useState<Employee | null>(null);
+  const [editing, setEditing] = useState<Employee | 'new' | null>(null);
   const dotRef = useOutsideClose(dotOpen !== null, () => setDotOpen(null));
 
   const save = async (id: string, body: Record<string, unknown>) => {
-    await patch(EmployeeSchema, `/employees/${id}`, body);
-    toast(t('catalog.saved'));
+    try {
+      await patch(EmployeeSchema, `/employees/${id}`, body);
+      toast(t('catalog.saved'));
+    } catch (e) {
+      // The door refuses states (last owner, bookable without skills):
+      // the reason is the message.
+      toast(e instanceof Error ? e.message : String(e));
+    }
     void qc.invalidateQueries({ queryKey: ['employees'] });
   };
 
@@ -42,6 +49,9 @@ export function EmployeesSection() {
       <div className="card">
         <div className="card-header">
           <h2>{t('eset.team')}</h2>
+          <button className="btn btn-primary btn-add" onClick={() => setEditing('new')}>
+            {t('cal.add')} <Icon d={I.plus} size={20} w={2.5} />
+          </button>
         </div>
         <table>
           <thead>
@@ -191,11 +201,13 @@ export function EmployeesSection() {
 
       {editing ? (
         <EmployeePanel
-          employee={editing}
+          employee={editing === 'new' ? null : editing}
+          taken={all.map((e) => e.color)}
           onClose={() => setEditing(null)}
           onSaved={() => {
+            const created = editing === 'new';
             setEditing(null);
-            toast(t('eset.employeeUpdated'));
+            toast(created ? t('eset.addedToast') : t('eset.employeeUpdated'));
             void qc.invalidateQueries({ queryKey: ['employees'] });
           }}
         />
@@ -236,31 +248,39 @@ const STD_WEEK: WeekHours = {
  *  they are, their colour, their week, their services, bookable. */
 function EmployeePanel({
   employee,
+  taken,
   onClose,
   onSaved,
 }: {
-  employee: Employee;
+  employee: Employee | null;
+  taken: (string | null)[];
   onClose: () => void;
   onSaved: () => void;
 }) {
   const { t } = useTranslation();
+  const toast = useToast();
+  const qc = useQueryClient();
   const locations = useLocations();
   const firstLoc = locations.data?.locations[0]?.id ?? null;
   const catalog = useLocationCatalog(firstLoc);
-  const [name, setName] = useState(employee.name);
-  const [email, setEmail] = useState(employee.email);
-  const [phone, setPhone] = useState(employee.phone ?? '');
-  const [roleTitle, setRoleTitle] = useState(employee.roleTitle);
-  const [access, setAccess] = useState(employee.access);
-  const [color, setColor] = useState(employee.color);
-  const [hours, setHours] = useState<WeekHours>(employee.hours ?? STD_WEEK);
-  const [skills, setSkills] = useState<string[]>(employee.skillServiceIds);
-  const [bookable, setBookable] = useState(employee.bookable);
+  // A new employee starts on the first colour nobody carries yet.
+  const nextColor =
+    EMP_COLORS.find(([k]) => !taken.includes(k))?.[0] ?? 'stone';
+  const [name, setName] = useState(employee?.name ?? '');
+  const [email, setEmail] = useState(employee?.email ?? '');
+  const [phone, setPhone] = useState(employee?.phone ?? '');
+  const [roleTitle, setRoleTitle] = useState(employee?.roleTitle ?? '');
+  const [access, setAccess] = useState<Employee['access']>(employee?.access ?? 'staff');
+  const [color, setColor] = useState(employee?.color ?? nextColor);
+  const [hours, setHours] = useState<WeekHours>(employee?.hours ?? STD_WEEK);
+  const [skills, setSkills] = useState<string[]>(employee?.skillServiceIds ?? []);
+  const [bookable, setBookable] = useState(employee?.bookable ?? false);
   const [dirty, setDirty] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const timings = useQuery({
-    queryKey: ['empTimings', employee.id],
-    queryFn: () => get(EmployeeTimingsSchema, `/employees/${employee.id}/timings`),
+    queryKey: ['empTimings', employee?.id],
+    queryFn: () => get(EmployeeTimingsSchema, `/employees/${employee?.id}/timings`),
+    enabled: !!employee,
   });
 
   const services = catalog.data?.services ?? [];
@@ -272,21 +292,26 @@ function EmployeePanel({
 
   const save = async () => {
     setError(null);
+    const body = {
+      name: name.trim(),
+      email: email.trim(),
+      phone: phone.trim() || null,
+      roleTitle,
+      access,
+      color,
+      hours,
+      skillServiceIds: skills,
+      bookable,
+    };
     try {
-      await patch(EmployeeSchema, `/employees/${employee.id}`, {
-        name: name.trim(),
-        email: email.trim(),
-        phone: phone.trim() || null,
-        roleTitle,
-        access,
-        color,
-        hours,
-        skillServiceIds: skills,
-        bookable,
-      });
+      if (employee) await patch(EmployeeSchema, `/employees/${employee.id}`, body);
+      else await post(EmployeeSchema, '/employees', body);
       onSaved();
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      // The save door refuses, it never warns: surface the reason.
+      const msg = e instanceof Error ? e.message : String(e);
+      setError(msg);
+      toast(msg);
     }
   };
 
@@ -296,8 +321,8 @@ function EmployeePanel({
       <aside className="panel open" role="dialog" aria-modal="true">
         <div className="panel-head plain">
           <div>
-            <h2>{employee.name}</h2>
-            <div className="sub">{t('eset.employee')}</div>
+            <h2>{employee ? employee.name : t('eset.newEmployee')}</h2>
+            <div className="sub">{employee ? t('eset.employee') : t('eset.newEmployeeSub')}</div>
           </div>
           <div className="panel-actions">
             <span className={`panel-status${dirty ? ' warn' : ''}`}>
@@ -308,7 +333,7 @@ function EmployeePanel({
               disabled={!dirty || !name.trim() || !email.trim()}
               onClick={() => void save()}
             >
-              {t('cset.saveChanges')}
+              {employee ? t('cset.saveChanges') : t('eset.saveEmployee')}
             </button>
             <button className="iconbtn" aria-label={t('common.close')} onClick={onClose}>
               <Icon d={I.x} size={22} w={2.2} />
@@ -427,7 +452,7 @@ function EmployeePanel({
             <div className="field">
               <span>{t('eset.timing')}</span>
               <span className="hint">
-                {t('eset.timingHint', { name: employee.name.split(' ')[0] })}
+                {t('eset.timingHint', { name: (employee?.name ?? name).split(' ')[0] })}
               </span>
               <table style={{ border: '1px solid var(--line)', borderRadius: 'var(--r-control)' }}>
                 <thead>
@@ -455,6 +480,51 @@ function EmployeePanel({
                   ))}
                 </tbody>
               </table>
+              {timings.data.rows
+                .filter((r) => r.suggestion)
+                .map((r) => (
+                  <div key={r.serviceId} className="mo-card warm" style={{ marginTop: 10 }}>
+                    <div className="bold" style={{ fontSize: 15 }}>
+                      {t('eset.timingInsight')}
+                    </div>
+                    <p style={{ fontWeight: 500, margin: '6px 0 0' }}>
+                      {t('eset.timingInsightBody', {
+                        who: (employee?.name ?? name).split(' ')[0],
+                        min: r.suggestion!.recommendedMin,
+                        service: r.name,
+                        current: r.inUseMin,
+                      })}
+                    </p>
+                    <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+                      <button
+                        className="btn btn-primary btn-sm"
+                        onClick={() =>
+                          void post(z.object({ ok: z.literal(true) }), `/timings/${r.suggestion!.timingId}/approve`, {}).then(
+                            () => {
+                              toast(t('fd.timingApproved'));
+                              void qc.invalidateQueries({ queryKey: ['empTimings'] });
+                            },
+                          )
+                        }
+                      >
+                        {t('fd.approve')}
+                      </button>
+                      <button
+                        className="btn btn-subtle btn-sm"
+                        onClick={() =>
+                          void post(z.object({ ok: z.literal(true) }), `/timings/${r.suggestion!.timingId}/dismiss`, {}).then(
+                            () => {
+                              toast(t('fd.timingDismissed'));
+                              void qc.invalidateQueries({ queryKey: ['empTimings'] });
+                            },
+                          )
+                        }
+                      >
+                        {t('eset.leaveIt')}
+                      </button>
+                    </div>
+                  </div>
+                ))}
             </div>
           ) : null}
 
