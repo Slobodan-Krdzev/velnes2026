@@ -1,5 +1,5 @@
-import type { Location } from '@velnes/contracts';
-import { I, Icon } from '@velnes/ui';
+import { PRODUCT_IMG_MAX_CHARS, PRODUCT_IMG_MAX_EDGE_PX, type Location } from '@velnes/contracts';
+import { fileToResizedDataURL, I, Icon, NumInput } from '@velnes/ui';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { z } from 'zod';
@@ -30,6 +30,7 @@ export function ProductPanel({
   const [sku, setSku] = useState(product?.sku ?? '');
   const [price, setPrice] = useState(product?.config.price ?? 0);
   const [active, setActive] = useState(product?.config.active ?? true);
+  const [img, setImg] = useState<string | null>(product?.img ?? null);
   const [adjustQty, setAdjustQty] = useState('');
   const [transferQty, setTransferQty] = useState('');
   const [fromLoc, setFromLoc] = useState(locations[0]?.id ?? '');
@@ -46,7 +47,7 @@ export function ProductPanel({
     setBusy(true);
     setError(null);
     try {
-      const body = { name, category: category || null, sku: sku || null, price, active };
+      const body = { name, category: category || null, sku: sku || null, price, active, img };
       if (editing && product)
         await api(OkSchema, `/products/${product.id}`, {
           method: 'PUT',
@@ -107,18 +108,23 @@ export function ProductPanel({
               <input className="input" value={name} onChange={(e) => setName(e.target.value)} />
             </label>
             <label className="field">
-              <span>{t('catalog.category')}</span>
-              <input
-                className="input"
-                list="prod-cats"
+              <span>
+                {t('catalog.category')}
+                <span className="req">*</span>
+              </span>
+              <select
+                className="select"
+                style={{ width: '100%' }}
                 value={category ?? ''}
                 onChange={(e) => setCategory(e.target.value)}
-              />
-              <datalist id="prod-cats">
+              >
                 {categories.map((c) => (
-                  <option key={c} value={c} />
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
                 ))}
-              </datalist>
+              </select>
+              <span className="hint">{t('catalog.velnesCategoryHint')}</span>
             </label>
             <label className="field">
               <span>SKU</span>
@@ -126,14 +132,44 @@ export function ProductPanel({
             </label>
             <label className="field">
               <span>{t('catalog.price')}</span>
-              <input
-                className="input tnum"
-                type="number"
-                value={price}
-                disabled={product?.own}
-                onChange={(e) => setPrice(Number(e.target.value))}
-              />
+              <NumInput value={price} disabled={product?.own} onValue={setPrice} />
             </label>
+            <div className="field span2">
+              <span>{t('catalog.photo')}</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                {img ? (
+                  <img className="pthumb" src={img} alt="" style={{ width: 56, height: 56 }} />
+                ) : (
+                  <span className="pthumb ph" style={{ width: 56, height: 56 }}>
+                    {(name[0] ?? '?').toUpperCase()}
+                  </span>
+                )}
+                <label className="btn btn-subtle btn-sm" style={{ cursor: 'pointer' }}>
+                  {t('cset.addPhoto')}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    style={{ display: 'none' }}
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      e.target.value = '';
+                      if (!f) return;
+                      void fileToResizedDataURL(f, PRODUCT_IMG_MAX_EDGE_PX).then((url) => {
+                        if (!url || url.length > PRODUCT_IMG_MAX_CHARS)
+                          setError(t('cset.photoRefused'));
+                        else setImg(url);
+                      });
+                    }}
+                  />
+                </label>
+                {img ? (
+                  <button className="btn btn-ghost btn-sm" onClick={() => setImg(null)}>
+                    {t('rset.remove')}
+                  </button>
+                ) : null}
+              </div>
+              <span className="hint">{t('catalog.photoHint')}</span>
+            </div>
           </div>
           {!product?.own ? (
             <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 600 }}>

@@ -1,6 +1,8 @@
 import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode } from 'react';
 
 export { EMP_COLORS, empColorOf, I, Icon, VelnesMark } from './icons.js';
+export { PhoneInput } from './phone.js';
+export { fileToResizedDataURL } from './image.js';
 
 /** Primitives emitting the prototype's exact class names — all
  *  styling comes from prototype.css (lifted verbatim). */
@@ -101,5 +103,35 @@ export function AppShell({ title, children }: { title: string; children?: ReactN
         {children}
       </main>
     </div>
+  );
+}
+
+/** A number input that behaves when typed into: a zero value renders
+ *  as an empty field (placeholder shows the 0), and focusing selects
+ *  the current value so typing replaces instead of appending. The
+ *  state stays a plain number; '' reads back as 0. */
+export function NumInput({
+  value,
+  onValue,
+  className = 'input tnum',
+  placeholder = '0',
+  ...rest
+}: Omit<InputHTMLAttributes<HTMLInputElement>, 'value' | 'onChange' | 'type'> & {
+  value: number;
+  onValue: (n: number) => void;
+}) {
+  return (
+    <input
+      {...rest}
+      className={className}
+      type="number"
+      placeholder={placeholder}
+      value={value === 0 ? '' : value}
+      onFocus={(e) => {
+        e.currentTarget.select();
+        rest.onFocus?.(e);
+      }}
+      onChange={(e) => onValue(Number(e.target.value) || 0)}
+    />
   );
 }

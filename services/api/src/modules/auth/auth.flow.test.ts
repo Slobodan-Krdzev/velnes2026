@@ -1,4 +1,10 @@
-import { API_PREFIX, LoginResponseSchema, MeResponseSchema, RefreshResponseSchema } from '@velnes/contracts';
+import {
+  API_PREFIX,
+  LoginResponseSchema,
+  MeResponseSchema,
+  PreviewResponseSchema,
+  RefreshResponseSchema,
+} from '@velnes/contracts';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { closeDb } from '../../db/index.js';
 import { buildServer } from '../../server.js';
@@ -79,5 +85,69 @@ describe('auth flow', () => {
   it('rejects /me without a token', async () => {
     const res = await app.inject({ method: 'GET', url: `${API_PREFIX}/auth/me` });
     expect(res.statusCode).toBe(401);
+  });
+
+  it('preview access: a user manager becomes the target for real, audited; staff and self are refused', async () => {
+    const maria = LoginResponseSchema.parse((await login('maria@velnes.mk', 'velnes-demo')).json());
+    const auth = { authorization: `Bearer ${maria.accessToken}` };
+    const emps = (await app.inject({ method: 'GET', url: `${API_PREFIX}/employees`, headers: auth }))
+      .json() as { employees: { id: string; name: string }[] };
+    const ana = emps.employees.find((e) => e.name === 'Ana Dimitrova')!;
+
+    // Previewing yourself is refused.
+    const self = await app.inject({
+      method: 'POST', url: `${API_PREFIX}/auth/preview`, headers: auth,
+      payload: { employeeId: maria.employee.id },
+    });
+    expect(self.statusCode).toBe(400);
+
+    // The owner previews Ana: the token really IS Ana's session.
+    const pv = await app.inject({
+      method: 'POST', url: `${API_PREFIX}/auth/preview`, headers: auth,
+      payload: { employeeId: ana.id },
+    });
+    expect(pv.statusCode).toBe(200);
+    const body = PreviewResponseSchema.parse(pv.json());
+    expect(body.employee.id).toBe(ana.id);
+    const asAna = MeResponseSchema.parse(
+      (await app.inject({
+        method: 'GET', url: `${API_PREFIX}/auth/me`,
+        headers: { authorization: `Bearer ${body.accessToken}` },
+      })).json(),
+    );
+    expect(asAna.id).toBe(ana.id);
+    expect(asAna.perms['users.manage'] ?? 'none').toBe('none');
+    expect(asAna.roleName).toBe('Employee');
+
+    // The borrowed session cannot preview onward.
+    const onward = await app.inject({
+      method: 'POST', url: `${API_PREFIX}/auth/preview`,
+      headers: { authorization: `Bearer ${body.accessToken}` },
+      payload: { employeeId: maria.employee.id },
+    });
+    expect(onward.statusCode).toBe(403);
+
+    // The start is on the record.
+    const audit = (await app.inject({
+      method: 'GET', url: `${API_PREFIX}/audit?limit=20`, headers: auth,
+    })).json() as { entries: { action: string; object: string }[] };
+    expect(
+      audit.entries.some(
+        (a) => a.action === 'Preview access' && a.object.includes('Ana Dimitrova'),
+      ),
+    ).toBe(true);
+
+    // A renewal issues a token without a second audit entry.
+    const renew = await app.inject({
+      method: 'POST', url: `${API_PREFIX}/auth/preview`, headers: auth,
+      payload: { employeeId: ana.id, renew: true },
+    });
+    expect(renew.statusCode).toBe(200);
+    const audit2 = (await app.inject({
+      method: 'GET', url: `${API_PREFIX}/audit?limit=20`, headers: auth,
+    })).json() as { entries: { action: string }[] };
+    expect(audit2.entries.filter((a) => a.action === 'Preview access').length).toBe(
+      audit.entries.filter((a) => a.action === 'Preview access').length,
+    );
   });
 });

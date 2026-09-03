@@ -47,7 +47,7 @@ export class BookingRefused extends Error {
 }
 export class BookingError extends Error {
   constructor(
-    public code: 'NOT_FOUND' | 'GONE',
+    public code: 'NOT_FOUND' | 'GONE' | 'FORBIDDEN',
     message: string,
   ) {
     super(message);
@@ -439,7 +439,18 @@ async function toContract(trx: Trx, id: string): Promise<Appointment> {
     .select(['s.name as serviceName', 'sc.name as serviceCategory'])
     .where('a.id', '=', id)
     .executeTakeFirstOrThrow();
+  // Paid is not a stored flag but the invoice truth read back: a line
+  // on a non-refunded invoice referencing this appointment.
+  const paidLine = await trx
+    .selectFrom('invoiceLines as l')
+    .innerJoin('invoices as i', 'i.id', 'l.invoiceId')
+    .select('l.id')
+    .where('l.appointmentId', '=', id)
+    .where('i.status', '!=', 'Refunded')
+    .limit(1)
+    .executeTakeFirst();
   return {
+    paid: !!paidLine,
     id: a.id,
     locationId: a.locationId,
     date: localIso(a.date),
@@ -509,20 +520,25 @@ export async function confirmBooking(
     empId = slot.emp;
   } else empId = req.employeeId;
 
-  // Customer: by id, else matched by phone/email, else created.
+  // Customer: by id, else matched by phone/email, else created —
+  // a staff booking may carry only a typed name, and that walk-in
+  // becomes a registered customer in the same act.
   let custId = req.customerId ?? null;
   let custName = req.name ?? null;
-  if (!custId && (req.phone || req.email)) {
-    const found = await trx
-      .selectFrom('customers')
-      .select(['id', 'name'])
-      .where((eb) =>
-        eb.or([
-          ...(req.phone ? [eb('phone', '=', req.phone)] : []),
-          ...(req.email ? [eb('email', '=', req.email)] : []),
-        ]),
-      )
-      .executeTakeFirst();
+  if (!custId && (req.phone || req.email || req.name)) {
+    const found =
+      req.phone || req.email
+        ? await trx
+            .selectFrom('customers')
+            .select(['id', 'name'])
+            .where((eb) =>
+              eb.or([
+                ...(req.phone ? [eb('phone', '=', req.phone)] : []),
+                ...(req.email ? [eb('email', '=', req.email)] : []),
+              ]),
+            )
+            .executeTakeFirst()
+        : undefined;
     if (found) {
       custId = found.id;
       custName = found.name;

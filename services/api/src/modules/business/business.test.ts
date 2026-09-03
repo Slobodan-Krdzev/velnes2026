@@ -1,4 +1,9 @@
-import { API_PREFIX, BusinessProfileSchema, BusinessSettingsSchema } from '@velnes/contracts';
+import {
+  API_PREFIX,
+  BusinessProfileSchema,
+  BusinessSettingsSchema,
+  GALLERY_IMG_MAX_CHARS,
+} from '@velnes/contracts';
 import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { closeDb } from '../../db/index.js';
@@ -100,6 +105,24 @@ describe('the business card, the settings document and the new patch doors', () 
     });
     expect(res.statusCode).toBe(200);
     expect(res.json().description).toBe('Updated description.');
+  });
+
+  it('refuses a gallery photo over the stored size cap; a legal one passes', async () => {
+    const photo = (img: string) => ({ id: 'gx', name: 'Studio', img, tone: null });
+    const tooBig = await patch(`${API_PREFIX}/business`, {
+      gallery: [photo('data:image/jpeg;base64,' + 'A'.repeat(GALLERY_IMG_MAX_CHARS))],
+    });
+    expect(tooBig.statusCode).toBe(400);
+    // The same door takes a photo inside the cap — and puts the
+    // seeded gallery back so the other suites read the same world.
+    const before = BusinessProfileSchema.parse((await get(`${API_PREFIX}/business`)).json());
+    const ok = await patch(`${API_PREFIX}/business`, {
+      gallery: [...before.gallery, photo('data:image/jpeg;base64,AAAA')],
+    });
+    expect(ok.statusCode).toBe(200);
+    expect(ok.json().gallery).toHaveLength(before.gallery.length + 1);
+    const restore = await patch(`${API_PREFIX}/business`, { gallery: before.gallery });
+    expect(restore.statusCode).toBe(200);
   });
 
   it('serves the settings document with defaults and merges section patches', async () => {

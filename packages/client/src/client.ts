@@ -13,6 +13,7 @@ let accessToken: string | null = null;
 export const setAccessToken = (t: string | null) => {
   accessToken = t;
 };
+export const getAccessToken = () => accessToken;
 export const getRefreshToken = () => localStorage.getItem(REFRESH_KEY);
 export const setRefreshToken = (t: string | null) => {
   if (t) localStorage.setItem(REFRESH_KEY, t);
@@ -47,6 +48,14 @@ export const setOnAuthExpired = (fn: (() => void) | null) => {
   onAuthExpired = fn;
 };
 
+/** Fired after a successful refresh replaced the access token. A
+ *  preview session listens: its borrowed token just fell back to the
+ *  owner's, so it must re-issue the preview token or step out. */
+let onTokenRefreshed: (() => void) | null = null;
+export const setOnTokenRefreshed = (fn: (() => void) | null) => {
+  onTokenRefreshed = fn;
+};
+
 /** One refresh at a time; concurrent 401s share it. */
 let refreshing: Promise<boolean> | null = null;
 async function tryRefresh(): Promise<boolean> {
@@ -66,6 +75,7 @@ async function tryRefresh(): Promise<boolean> {
     const body = RefreshResponseSchema.parse(await res.json());
     setAccessToken(body.accessToken);
     setRefreshToken(body.refreshToken);
+    onTokenRefreshed?.();
     return true;
   })().finally(() => {
     refreshing = null;

@@ -1,3 +1,4 @@
+import { useQueryClient } from '@tanstack/react-query';
 import { SaleResponseSchema, ValidateCodeResponseSchema, type SaleLine } from '@velnes/contracts';
 import { I, Icon } from '@velnes/ui';
 import { useEffect, useMemo, useState } from 'react';
@@ -73,8 +74,9 @@ const noExtras: Extras = {
 export function TillPage() {
   const { t } = useTranslation();
   const toast = useToast();
+  const qc = useQueryClient();
   const navigate = useNavigate();
-  const { me } = useSession();
+  const { me, can } = useSession();
   const { scope } = useScope();
   const locations = useLocations();
 
@@ -114,8 +116,9 @@ export function TillPage() {
   const products = (catalog.data?.products ?? []).filter(
     (p) => !p.own && p.config.active && p.config.pos,
   );
+  // A paid appointment leaves the till: it is never collected twice.
   const todaysAppts = (appts.data?.appointments ?? []).filter(
-    (a) => a.kind === 'appointment' && a.status !== 'cancelled',
+    (a) => a.kind === 'appointment' && a.status !== 'cancelled' && !a.paid,
   );
   const hourOf = (start: string) => `${start.slice(0, 2)}:00`;
 
@@ -136,6 +139,7 @@ export function TillPage() {
     meta: string;
     price: number;
     letter: string;
+    img?: string | null | undefined;
   }
   const inCat = (c: string | null) => posCategory === 'all' || c === posCategory;
   let tiles: Tile[] = [];
@@ -160,6 +164,7 @@ export function TillPage() {
         meta: `${p.config.stock} in stock at ${hereName}`,
         price: p.config.price,
         letter: p.name[0] ?? '?',
+        img: p.img,
       }));
   if (posType === 'appointments')
     tiles = todaysAppts
@@ -304,6 +309,9 @@ export function TillPage() {
       setExtras(noExtras);
       setModal(null);
       setSaleKey(uuid());
+      // The sold appointment is paid now — the tiles must say so.
+      void qc.invalidateQueries({ queryKey: ['appointments'] });
+      void qc.invalidateQueries({ queryKey: ['catalog'] });
       toast(
         `${money(res.total)} ${t('till.paidBy')} ${method.toLowerCase()} · ${res.invoice.number}`,
       );
@@ -417,7 +425,11 @@ export function TillPage() {
                     onClick={() => add(tile)}
                   >
                     <span className="ptile-img">
-                      <span className="ptile-letter">{tile.letter.toUpperCase()}</span>
+                      {tile.img ? (
+                        <img src={tile.img} alt="" />
+                      ) : (
+                        <span className="ptile-letter">{tile.letter.toUpperCase()}</span>
+                      )}
                       <span className="ptile-p">{money(tile.price)}</span>
                       {q ? (
                         <span className="ptile-q" aria-label={`${q} on the receipt`}>
@@ -466,7 +478,7 @@ export function TillPage() {
                           <span className="tnum">−{money(l.disc)}</span>
                           <Icon d={I.x} size={13} />
                         </button>
-                      ) : (
+                      ) : can('pos.discount') ? (
                         <button
                           className="line-disc"
                           style={{ opacity: 0.6 }}
@@ -478,7 +490,7 @@ export function TillPage() {
                         >
                           <Icon d={I.tag} size={13} />
                         </button>
-                      )}
+                      ) : null}
                     </div>
                     <div className="qty">
                       {l.qty > 1 ? (
@@ -588,7 +600,7 @@ export function TillPage() {
 
       {modal === 'payment' ? (
         <div className="overlay" onClick={() => setModal(null)}>
-          <div className="modal" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
+          <div className="modal" role="dialog" aria-modal="true" style={{ maxWidth: 720 }} onClick={(e) => e.stopPropagation()}>
             <div className="modal-head">
               <h2>{t('till.takePayment')}</h2>
               <p>{money(total)} {t('till.due')}</p>
@@ -624,7 +636,7 @@ export function TillPage() {
 
       {modal === 'actions' ? (
         <div className="overlay" onClick={() => setModal(null)}>
-          <div className="modal" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
+          <div className="modal" role="dialog" aria-modal="true" style={{ maxWidth: 720 }} onClick={(e) => e.stopPropagation()}>
             <div className="modal-head">
               <h2>{t('till.saleActions')}</h2>
             </div>
@@ -639,15 +651,17 @@ export function TillPage() {
                     onChange={(e) => setInTip(e.target.value)}
                   />
                 </label>
-                <label className="field">
-                  <span>{t('till.discount')}</span>
-                  <input
-                    className="input tnum"
-                    inputMode="numeric"
-                    value={inDisc}
-                    onChange={(e) => setInDisc(e.target.value)}
-                  />
-                </label>
+                {can('pos.discount') ? (
+                  <label className="field">
+                    <span>{t('till.discount')}</span>
+                    <input
+                      className="input tnum"
+                      inputMode="numeric"
+                      value={inDisc}
+                      onChange={(e) => setInDisc(e.target.value)}
+                    />
+                  </label>
+                ) : null}
                 <label className="field">
                   <span>{t('till.serviceCharge')}</span>
                   <input

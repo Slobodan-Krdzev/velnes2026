@@ -2,6 +2,12 @@ import {
   HqApproveResponseSchema,
   HqAuditListSchema,
   HqBusinessListSchema,
+  HqCategoryCreateSchema,
+  HqCategoryDeclineSchema,
+  HqCategoryListSchema,
+  HqCategoryPatchSchema,
+  HqCategoryRequestListSchema,
+  PlatformNoticeListSchema,
   HqLocationDecisionSchema,
   HqLocationQueueSchema,
   HqLocationReviewSchema,
@@ -419,6 +425,279 @@ export function hqRoutes(app: FastifyInstance) {
             tenantName: e.tenantName,
           })),
         };
+      }),
+  });
+
+  // ── The Velnes taxonomy: HQ defines the category shelves every
+  //    salon picks from. Create and rename; no delete — a shelf a
+  //    salon may already stand items on never silently vanishes. ──
+
+  r.route({
+    method: 'GET',
+    url: '/hq/categories',
+    preHandler: [app.authenticateHq],
+    schema: { response: { 200: HqCategoryListSchema } },
+    handler: async () =>
+      withHq(async (trx) => {
+        const svc = await trx.selectFrom('serviceCategories').selectAll().orderBy('sort').orderBy('name').execute();
+        const prod = await trx.selectFrom('productCategories').selectAll().orderBy('sort').orderBy('name').execute();
+        return {
+          categories: [
+            ...svc.map((c) => ({ id: c.id, name: c.name, type: 'services' as const, sort: c.sort })),
+            ...prod.map((c) => ({ id: c.id, name: c.name, type: 'products' as const, sort: c.sort })),
+          ],
+        };
+      }),
+  });
+
+  r.route({
+    method: 'POST',
+    url: '/hq/categories',
+    preHandler: [app.authenticateHq],
+    schema: {
+      body: HqCategoryCreateSchema,
+      response: { 200: z.object({ id: z.uuid() }), 409: Err },
+    },
+    handler: async (req, reply) =>
+      withHq(async (trx) => {
+        const table =
+          req.body.type === 'services' ? ('serviceCategories' as const) : ('productCategories' as const);
+        const dupe = await trx
+          .selectFrom(table)
+          .select('id')
+          .where('name', '=', req.body.name)
+          .executeTakeFirst();
+        if (dupe)
+          return reply.code(409).send({ error: 'DUPLICATE', message: 'That category already exists' });
+        const max = await trx
+          .selectFrom(table)
+          .select((eb) => eb.fn.max('sort').as('m'))
+          .executeTakeFirst();
+        const row = await trx
+          .insertInto(table)
+          .values({ name: req.body.name, sort: (max?.m ?? 0) + 1 })
+          .returning('id')
+          .executeTakeFirstOrThrow();
+        return { id: row.id };
+      }),
+  });
+
+  for (const [url, table] of [
+    ['/hq/categories/services/:id', 'serviceCategories'],
+    ['/hq/categories/products/:id', 'productCategories'],
+  ] as const) {
+    r.route({
+      method: 'PATCH',
+      url,
+      preHandler: [app.authenticateHq],
+      schema: {
+        params: z.object({ id: z.uuid() }),
+        body: HqCategoryPatchSchema,
+        response: { 200: z.object({ ok: z.literal(true) }), 404: Err, 409: Err },
+      },
+      handler: async (req, reply) =>
+        withHq(async (trx) => {
+          const row = await trx
+            .selectFrom(table)
+            .select('id')
+            .where('id', '=', req.params.id)
+            .executeTakeFirst();
+          if (!row)
+            return reply.code(404).send({ error: 'NOT_FOUND', message: 'Unknown category' });
+          const dupe = await trx
+            .selectFrom(table)
+            .select('id')
+            .where('name', '=', req.body.name)
+            .where('id', '!=', req.params.id)
+            .executeTakeFirst();
+          if (dupe)
+            return reply.code(409).send({ error: 'DUPLICATE', message: 'That category already exists' });
+          // A rename follows every salon's items automatically — the
+          // id is the truth, the name is the label.
+          await trx.updateTable(table).set({ name: req.body.name }).where('id', '=', req.params.id).execute();
+          return { ok: true as const };
+        }),
+    });
+
+    r.route({
+      method: 'DELETE',
+      url,
+      preHandler: [app.authenticateHq],
+      schema: {
+        params: z.object({ id: z.uuid() }),
+        response: { 200: z.object({ ok: z.literal(true) }), 404: Err, 409: Err },
+      },
+      handler: async (req, reply) => {
+        const row = await withHq((trx) =>
+          trx.selectFrom(table).select('id').where('id', '=', req.params.id).executeTakeFirst(),
+        );
+        if (!row)
+          return reply.code(404).send({ error: 'NOT_FOUND', message: 'Unknown category' });
+        try {
+          // Its own transaction: the FK is the referee, and a refused
+          // delete must abort only itself. A shelf any salon still
+          // stands items on never goes — no cross-tenant read needed.
+          await withHq((trx) => trx.deleteFrom(table).where('id', '=', req.params.id).execute());
+        } catch {
+          return reply.code(409).send({
+            error: 'IN_USE',
+            message: 'Salons still have items on this shelf — it cannot be removed',
+          });
+        }
+        return { ok: true as const };
+      },
+    });
+  }
+
+  // HQ reads the same notices it writes — the bell in its topbar.
+  r.route({
+    method: 'GET',
+    url: '/hq/notices',
+    preHandler: [app.authenticateHq],
+    schema: { response: { 200: PlatformNoticeListSchema } },
+    handler: async () =>
+      withHq(async (trx) => {
+        const rows = await trx
+          .selectFrom('platformNotices')
+          .selectAll()
+          .where('audience', '=', 'hq')
+          .orderBy('createdAt', 'desc')
+          .limit(20)
+          .execute();
+        return {
+          notices: rows.map((n) => ({
+            id: n.id,
+            kind: n.kind,
+            title: n.title,
+            body: n.body,
+            createdAt: n.createdAt.toISOString(),
+          })),
+        };
+      }),
+  });
+
+  // ── The request intake: salons ask, HQ decides. Approval creates
+  //    the shelf and tells every salon through a platform notice. ──
+
+  r.route({
+    method: 'GET',
+    url: '/hq/categories/requests',
+    preHandler: [app.authenticateHq],
+    schema: { response: { 200: HqCategoryRequestListSchema } },
+    handler: async () =>
+      withHq(async (trx) => {
+        const rows = await trx
+          .selectFrom('categoryRequests as cr')
+          .innerJoin('businesses as b', 'b.id', 'cr.tenantId')
+          .selectAll('cr')
+          .select('b.name as tenantName')
+          .orderBy('cr.createdAt', 'desc')
+          .limit(100)
+          .execute();
+        return {
+          requests: rows.map((r2) => ({
+            id: r2.id,
+            tenantName: r2.tenantName,
+            name: r2.name,
+            type: r2.kind as 'services' | 'products',
+            note: r2.note,
+            status: r2.status as 'pending' | 'approved' | 'declined',
+            hqReason: r2.hqReason,
+            createdAt: r2.createdAt.toISOString(),
+          })),
+        };
+      }),
+  });
+
+  r.route({
+    method: 'POST',
+    url: '/hq/categories/requests/:id/approve',
+    preHandler: [app.authenticateHq],
+    schema: {
+      params: z.object({ id: z.uuid() }),
+      response: { 200: z.object({ ok: z.literal(true) }), 404: Err, 409: Err },
+    },
+    handler: async (req, reply) =>
+      withHq(async (trx) => {
+        const cr = await trx
+          .selectFrom('categoryRequests')
+          .selectAll()
+          .where('id', '=', req.params.id)
+          .executeTakeFirst();
+        if (!cr) return reply.code(404).send({ error: 'NOT_FOUND', message: 'Unknown request' });
+        if (cr.status !== 'pending')
+          return reply.code(409).send({ error: 'DECIDED', message: 'This request is already decided' });
+        const table = cr.kind === 'services' ? ('serviceCategories' as const) : ('productCategories' as const);
+        // Idempotent against a race: the shelf may exist by now.
+        const existing = await trx
+          .selectFrom(table)
+          .select('id')
+          .where('name', '=', cr.name)
+          .executeTakeFirst();
+        if (!existing) {
+          const max = await trx
+            .selectFrom(table)
+            .select((eb) => eb.fn.max('sort').as('m'))
+            .executeTakeFirst();
+          await trx.insertInto(table).values({ name: cr.name, sort: (max?.m ?? 0) + 1 }).execute();
+        }
+        await trx
+          .updateTable('categoryRequests')
+          .set({ status: 'approved', decidedAt: new Date() })
+          .where('id', '=', cr.id)
+          .execute();
+        // Every salon hears about the new shelf.
+        await trx
+          .insertInto('platformNotices')
+          .values({
+            kind: 'category',
+            title: `New Velnes category: ${cr.name}`,
+            body:
+              cr.kind === 'services'
+                ? 'A new service category is available to every salon.'
+                : 'A new product category is available to every salon.',
+          })
+          .execute();
+        return { ok: true as const };
+      }),
+  });
+
+  r.route({
+    method: 'POST',
+    url: '/hq/categories/requests/:id/decline',
+    preHandler: [app.authenticateHq],
+    schema: {
+      params: z.object({ id: z.uuid() }),
+      body: HqCategoryDeclineSchema,
+      response: { 200: z.object({ ok: z.literal(true) }), 404: Err, 409: Err },
+    },
+    handler: async (req, reply) =>
+      withHq(async (trx) => {
+        const cr = await trx
+          .selectFrom('categoryRequests')
+          .select(['id', 'status', 'name', 'tenantId'])
+          .where('id', '=', req.params.id)
+          .executeTakeFirst();
+        if (!cr) return reply.code(404).send({ error: 'NOT_FOUND', message: 'Unknown request' });
+        if (cr.status !== 'pending')
+          return reply.code(409).send({ error: 'DECIDED', message: 'This request is already decided' });
+        await trx
+          .updateTable('categoryRequests')
+          .set({ status: 'declined', hqReason: req.body.reason, decidedAt: new Date() })
+          .where('id', '=', cr.id)
+          .execute();
+        // The answer travels back to whoever asked — with the reason.
+        await trx
+          .insertInto('platformNotices')
+          .values({
+            audience: 'salons',
+            tenantId: cr.tenantId,
+            kind: 'category_declined',
+            title: `Category request declined: ${cr.name}`,
+            body: req.body.reason,
+          })
+          .execute();
+        return { ok: true as const };
       }),
   });
 }

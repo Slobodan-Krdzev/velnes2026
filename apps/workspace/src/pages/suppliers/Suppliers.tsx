@@ -8,7 +8,7 @@ import {
   type PurchaseOrder,
   type Supplier,
 } from '@velnes/contracts';
-import { I, Icon } from '@velnes/ui';
+import { I, Icon, NumInput } from '@velnes/ui';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { z } from 'zod';
@@ -567,14 +567,13 @@ function OrderDraft({
                   <td className="right tnum">{p.stock}</td>
                   <td className="right tnum">{p.moq}</td>
                   <td className="right">
-                    <input
+                    <NumInput
                       className="input qty-in"
-                      type="number"
                       min={0}
                       aria-label={`Qty ${p.name}`}
                       value={qty[p.id] ?? 0}
                       disabled={p.stock === 0}
-                      onChange={(e) => setQty((q) => ({ ...q, [p.id]: Number(e.target.value) }))}
+                      onValue={(n) => setQty((q) => ({ ...q, [p.id]: n }))}
                     />
                   </td>
                 </tr>
@@ -665,27 +664,21 @@ function Receive({ order, done }: { order: PurchaseOrder; done: () => void }) {
                   </td>
                   <td className="right tnum">{l.qty + l.free}</td>
                   <td className="right">
-                    <input
+                    <NumInput
                       className="input qty-in"
-                      type="number"
                       min={0}
                       aria-label={`Received ${l.name}`}
                       value={c.received}
-                      onChange={(e) =>
-                        setCounts((x) => ({ ...x, [l.id]: { ...c, received: Number(e.target.value) } }))
-                      }
+                      onValue={(n) => setCounts((x) => ({ ...x, [l.id]: { ...c, received: n } }))}
                     />
                   </td>
                   <td className="right">
-                    <input
+                    <NumInput
                       className="input qty-in"
-                      type="number"
                       min={0}
                       aria-label={`Damaged ${l.name}`}
                       value={c.damaged}
-                      onChange={(e) =>
-                        setCounts((x) => ({ ...x, [l.id]: { ...c, damaged: Number(e.target.value) } }))
-                      }
+                      onValue={(n) => setCounts((x) => ({ ...x, [l.id]: { ...c, damaged: n } }))}
                     />
                   </td>
                   <td

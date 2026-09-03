@@ -16,6 +16,7 @@ import type { FastifyInstance, FastifyReply } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { withTenant } from '../../db/index.js';
+import { can, permsFor } from '../auth/authz.service.js';
 import {
   appointmentEvent,
   availableSlots,
@@ -39,7 +40,9 @@ function sendBookingError(reply: FastifyReply, e: unknown) {
       params: e.params,
     });
   if (e instanceof BookingError)
-    return reply.code(404).send({ error: e.code, message: e.message });
+    return reply
+      .code(e.code === 'FORBIDDEN' ? 403 : 404)
+      .send({ error: e.code, message: e.message });
   throw e;
 }
 
@@ -91,13 +94,16 @@ export function bookingRoutes(app: FastifyInstance) {
     preHandler: [app.authenticate],
     schema: {
       body: BookRequestSchema,
-      response: { 200: BookResponseSchema, 404: ErrorSchema, 409: BookingRefusalSchema },
+      response: { 200: BookResponseSchema, 403: ErrorSchema, 404: ErrorSchema, 409: BookingRefusalSchema },
     },
     handler: async (req, reply) => {
       try {
-        const appointment = await withTenant(req.claims.ten, (trx) =>
-          confirmBooking(trx, req.claims, req.body),
-        );
+        const appointment = await withTenant(req.claims.ten, async (trx) => {
+          const perms = await permsFor(trx, req.claims);
+          if (!can(perms, 'appointments.create'))
+            throw new BookingError('FORBIDDEN', 'Missing permission: appointments.create');
+          return confirmBooking(trx, req.claims, req.body);
+        });
         return { appointment };
       } catch (e) {
         return sendBookingError(reply, e);
@@ -111,13 +117,23 @@ export function bookingRoutes(app: FastifyInstance) {
     preHandler: [app.authenticate],
     schema: {
       querystring: AppointmentListQuerySchema,
-      response: { 200: AppointmentListResponseSchema },
+      response: { 200: AppointmentListResponseSchema, 403: ErrorSchema },
     },
-    handler: async (req) => ({
-      appointments: await withTenant(req.claims.ten, (trx) =>
-        listAppointments(trx, req.query),
-      ),
-    }),
+    handler: async (req, reply) =>
+      withTenant(req.claims.ten, async (trx) => {
+        // The prototype's view ladder: the location calendar needs
+        // view_location; view_own alone shows exactly their own day.
+        const perms = await permsFor(trx, req.claims);
+        const wide = can(perms, 'appointments.view_location');
+        if (!wide && !can(perms, 'appointments.view_own'))
+          return reply
+            .code(403)
+            .send({ error: 'FORBIDDEN', message: 'Missing permission: appointments.view_own' });
+        const rows = await listAppointments(trx, req.query);
+        return {
+          appointments: wide ? rows : rows.filter((a) => a.employeeId === req.claims.sub),
+        };
+      }),
   });
 
   r.route({
@@ -127,13 +143,19 @@ export function bookingRoutes(app: FastifyInstance) {
     schema: {
       params: IdParams,
       body: AppointmentPatchSchema,
-      response: { 200: AppointmentSchema, 404: ErrorSchema, 409: BookingRefusalSchema },
+      response: { 200: AppointmentSchema, 403: ErrorSchema, 404: ErrorSchema, 409: BookingRefusalSchema },
     },
     handler: async (req, reply) => {
       try {
-        return await withTenant(req.claims.ten, (trx) =>
-          patchAppointment(trx, req.claims, req.params.id, req.body),
-        );
+        return await withTenant(req.claims.ten, async (trx) => {
+          // Cancelling is its own right; every other change is an edit.
+          const perms = await permsFor(trx, req.claims);
+          const key =
+            req.body.status === 'cancelled' ? 'appointments.cancel' : 'appointments.edit';
+          if (!can(perms, key))
+            throw new BookingError('FORBIDDEN', `Missing permission: ${key}`);
+          return patchAppointment(trx, req.claims, req.params.id, req.body);
+        });
       } catch (e) {
         return sendBookingError(reply, e);
       }
@@ -152,6 +174,9 @@ export function bookingRoutes(app: FastifyInstance) {
     handler: async (req, reply) => {
       try {
         await withTenant(req.claims.ten, async (trx) => {
+          const perms = await permsFor(trx, req.claims);
+          if (!can(perms, 'appointments.edit'))
+            throw new BookingError('FORBIDDEN', 'Missing permission: appointments.edit');
           const actor = await trx
             .selectFrom('employees')
             .select('name')

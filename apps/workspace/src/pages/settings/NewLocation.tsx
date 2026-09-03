@@ -8,6 +8,7 @@ import {
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ApiError, get, post } from '@velnes/client';
+import { PhoneInput } from '@velnes/ui';
 import { useLocations } from '../../api/queries.js';
 import { useToast } from '../../lib/toast.js';
 
@@ -43,7 +44,7 @@ type Draft = {
 };
 
 export function NewLocationWizard({ done }: { done: () => void }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const toast = useToast();
   const qc = useQueryClient();
   const locations = useLocations();
@@ -210,7 +211,17 @@ export function NewLocationWizard({ done }: { done: () => void }) {
           <>
             <div className="grid2" style={{ gap: 16, maxWidth: 760 }}>
               {fld(t('nloc.locName'), 'name', 'e.g. Debar Maalo')}
-              {fld(t('reg.phone'), 'phone', '+389 …')}
+              <div className="field">
+                <span>{t('reg.phone')}</span>
+                <PhoneInput
+                  value={n.loc.phone}
+                  onChange={(v) => setLoc('phone', v)}
+                  lang={i18n.language}
+                  ariaLabel={t('reg.phone')}
+                  searchLabel={t('phone.search')}
+                  countryLabel={t('phone.country')}
+                />
+              </div>
               {fld(t('nloc.address'), 'address')}
               {fld(t('reg.city'), 'city')}
               {fld(t('reg.zip'), 'zip')}

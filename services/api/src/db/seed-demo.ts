@@ -338,12 +338,17 @@ export async function seedDemo(adminUrl: string) {
     );
 
     // ── Catalog: the prototype's services verbatim ────────────────
+    // Categories are the Velnes taxonomy — platform rows, no tenant.
+    // The truncate above cleared them, so the seed restores the same
+    // list the migration ships.
     const svcCats = ['Assessment', 'Manual therapy', 'Rehab', 'Recovery'];
+    const hqSvcCats = [...svcCats, 'Massage', 'Haircuts', 'Skin care', 'Nails', 'Wellness'];
     const svcCatId: Record<string, string> = {};
-    for (const [i, name] of svcCats.entries()) {
+    for (const [i, name] of hqSvcCats.entries()) {
       const r = await q(
-        `INSERT INTO service_categories (tenant_id, name, sort) VALUES ($1,$2,$3) RETURNING id`,
-        [demo.business, name, i],
+        `INSERT INTO service_categories (name, sort) VALUES ($1,$2)
+         ON CONFLICT (name) DO UPDATE SET sort=EXCLUDED.sort RETURNING id`,
+        [name, i + 1],
       );
       svcCatId[name] = r.rows[0].id;
     }
@@ -455,11 +460,13 @@ export async function seedDemo(adminUrl: string) {
 
     // ── Products & stock ─────────────────────────────────────────
     const prodCats = ['Home exercise', 'Recovery aids', 'Supports', 'Own use'];
+    const hqProdCats = [...prodCats, 'Hair care', 'Skin care'];
     const prodCatId: Record<string, string> = {};
-    for (const [i, name] of prodCats.entries()) {
+    for (const [i, name] of hqProdCats.entries()) {
       const r = await q(
-        `INSERT INTO product_categories (tenant_id, name, sort) VALUES ($1,$2,$3) RETURNING id`,
-        [demo.business, name, i],
+        `INSERT INTO product_categories (name, sort) VALUES ($1,$2)
+         ON CONFLICT (name) DO UPDATE SET sort=EXCLUDED.sort RETURNING id`,
+        [name, i + 1],
       );
       prodCatId[name] = r.rows[0].id;
     }
@@ -520,6 +527,9 @@ export async function seedDemo(adminUrl: string) {
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
         [id, demo.business, name, email, phone, grp, since, visits, spend, points, prepaid, bl, ns, note],
       );
+    // Standing customers count as verified — like the migration's
+    // grandfathering of addresses in use before verification existed.
+    await q(`UPDATE customers SET email_verified_at = now() WHERE email IS NOT NULL`);
 
     // Velnes Premium is a PLATFORM membership, mirrored read-only:
     // two active members and one expired so the lifecycle shows
@@ -594,7 +604,10 @@ export async function seedDemo(adminUrl: string) {
       // [date, locId, startMin, durMin, serviceId, empId, custId, title, price]
       [isoAt(2), demo.locCentar, 540, 60, demo.s4, demo.empMaria, demo.c1, 'Katerina Stojanovska', 1500],
       [isoAt(2), demo.locCentar, 660, 45, demo.s1, demo.empMaria, demo.c2, 'Ivana Nikolikj', 1800],
-      [isoAt(3), demo.locCentar, 600, 50, demo.s6, demo.empElena, demo.c5, 'Stefan Georgiev', 2200],
+      // Next week, so it stays upcoming whatever weekday the suite
+      // runs on — c5 is the "no label without proof" case and must
+      // never accumulate a done visit.
+      [isoAt(10), demo.locCentar, 600, 50, demo.s6, demo.empElena, demo.c5, 'Stefan Georgiev', 2200],
     ];
     for (const [date, locId, start, dur, sid, emp, cust, title, price] of appts) {
       const r = await q(

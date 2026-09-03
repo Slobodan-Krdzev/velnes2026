@@ -4,13 +4,25 @@ import {
   LoginResponseSchema,
   LogoutRequestSchema,
   MeResponseSchema,
+  PreviewRequestSchema,
+  PreviewResponseSchema,
   RefreshRequestSchema,
   RefreshResponseSchema,
 } from '@velnes/contracts';
 import type { FastifyInstance } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
-import { AuthError, claimsFor, login, logout, me, rotateRefreshToken, setLang } from './auth.service.js';
+import {
+  AuthError,
+  PreviewError,
+  claimsFor,
+  login,
+  logout,
+  me,
+  rotateRefreshToken,
+  setLang,
+  startPreview,
+} from './auth.service.js';
 import { env } from '../../env.js';
 
 const ErrorSchema = z.object({ error: z.string() });
@@ -79,6 +91,40 @@ export function authRoutes(app: FastifyInstance) {
     preHandler: [app.authenticate],
     schema: { response: { 200: MeResponseSchema } },
     handler: async (req) => me(req.claims),
+  });
+
+  r.route({
+    method: 'POST',
+    url: '/auth/preview',
+    preHandler: [app.authenticate],
+    schema: {
+      body: PreviewRequestSchema,
+      response: {
+        200: PreviewResponseSchema,
+        400: ErrorSchema,
+        403: ErrorSchema,
+        404: ErrorSchema,
+      },
+    },
+    handler: async (req, reply) => {
+      try {
+        const employee = await startPreview(
+          req.claims,
+          req.body.employeeId,
+          req.body.renew ?? false,
+        );
+        const accessToken = await reply.jwtSign(claimsFor(employee), {
+          expiresIn: env.accessTtl,
+        });
+        return { accessToken, employee };
+      } catch (e) {
+        if (e instanceof PreviewError) {
+          const status = { SELF: 400, FORBIDDEN: 403, NOT_FOUND: 404 } as const;
+          return reply.code(status[e.code]).send({ error: e.code });
+        }
+        throw e;
+      }
+    },
   });
 
   r.route({

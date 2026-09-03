@@ -1,4 +1,6 @@
 import {
+  CopySetupRequestSchema,
+  CopySetupResponseSchema,
   LegalEntityListSchema,
   LocationPatchSchema,
   LocationCreateSchema,
@@ -16,6 +18,7 @@ import { withTenant } from '../../db/index.js';
 import { logAudit } from '../audit/audit.service.js';
 import { can, permsFor } from '../auth/authz.service.js';
 import {
+  copySetupInto,
   createLocation,
   listLocations,
   LocationError,
@@ -119,23 +122,46 @@ export function locationsRoutes(app: FastifyInstance) {
             ...(b.hours !== undefined ? { hours: JSON.stringify(b.hours) } : {}),
             ...(b.cancelHours !== undefined ? { cancelHours: b.cancelHours } : {}),
             ...(b.invPrefix !== undefined ? { invPrefix: b.invPrefix } : {}),
+            ...(b.name !== undefined ? { name: b.name } : {}),
+            ...(b.address !== undefined ? { address: b.address } : {}),
+            ...(b.city !== undefined ? { city: b.city } : {}),
+            ...(b.phone !== undefined ? { phone: b.phone } : {}),
+            ...(b.tz !== undefined ? { tz: b.tz } : {}),
+            ...(b.rooms !== undefined ? { rooms: b.rooms } : {}),
+            ...(b.online !== undefined ? { online: b.online } : {}),
           })
           .where('id', '=', req.params.id)
           .execute();
+        const actor = await trx
+          .selectFrom('employees')
+          .select('name')
+          .where('id', '=', req.claims.sub)
+          .executeTakeFirst();
         // Changing the week changes real availability — that is an
         // audited act, not a cosmetic edit.
         if (b.hours !== undefined) {
-          const actor = await trx
-            .selectFrom('employees')
-            .select('name')
-            .where('id', '=', req.claims.sub)
-            .executeTakeFirst();
           await logAudit(trx, req.claims.ten, {
             actorEmployeeId: req.claims.sub,
             actorName: actor?.name ?? '',
             action: 'Working hours changed',
             object: `Location · ${before.name}`,
             locationName: before.name,
+          });
+        }
+        // The card edit is the prototype's 'Location changed' entry.
+        const cardTouched =
+          b.name !== undefined || b.address !== undefined || b.city !== undefined ||
+          b.phone !== undefined || b.tz !== undefined || b.rooms !== undefined ||
+          b.online !== undefined;
+        if (cardTouched) {
+          await logAudit(trx, req.claims.ten, {
+            actorEmployeeId: req.claims.sub,
+            actorName: actor?.name ?? '',
+            action: 'Location changed',
+            object: `Location · ${b.name ?? before.name}`,
+            before: `${before.name} · ${before.address ?? ''}`,
+            after: `${b.name ?? before.name} · ${(b.address !== undefined ? b.address : before.address) ?? ''}`,
+            locationName: b.name ?? before.name,
           });
         }
         const row = await trx
@@ -172,6 +198,32 @@ export function locationsRoutes(app: FastifyInstance) {
     handler: async (req, reply) => {
       try {
         return await withTenant(req.claims.ten, (trx) => locReadiness(trx, req.params.id));
+      } catch (e) {
+        if (e instanceof LocationError)
+          return reply.code(statusFor[e.code]).send({ error: e.code, message: e.message });
+        throw e;
+      }
+    },
+  });
+
+  r.route({
+    method: 'POST',
+    url: '/locations/:id/copy-setup',
+    preHandler: [app.authenticate],
+    schema: {
+      params: IdParams,
+      body: CopySetupRequestSchema,
+      response: { 200: CopySetupResponseSchema, 403: ErrorSchema, 404: ErrorSchema, 409: ErrorSchema },
+    },
+    handler: async (req, reply) => {
+      try {
+        await withTenant(req.claims.ten, async (trx) => {
+          const perms = await permsFor(trx, req.claims);
+          if (!can(perms, 'locations.manage'))
+            throw new LocationError('OWNER_ONLY', 'Missing permission: locations.manage');
+          await copySetupInto(trx, req.claims, req.params.id, req.body);
+        });
+        return { ok: true as const };
       } catch (e) {
         if (e instanceof LocationError)
           return reply.code(statusFor[e.code]).send({ error: e.code, message: e.message });

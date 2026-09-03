@@ -9,7 +9,7 @@ import type { Trx } from '../../db/index.js';
 
 export class CatalogError extends Error {
   constructor(
-    public code: 'NOT_FOUND' | 'BAD_MODIFIER',
+    public code: 'NOT_FOUND' | 'BAD_MODIFIER' | 'BAD_CATEGORY',
     message: string,
   ) {
     super(message);
@@ -444,6 +444,7 @@ export async function locationCatalog(
       id: p.id,
       name: p.name,
       category: p.category,
+      img: p.img,
       sku: p.sku,
       vat: p.vat,
       own: p.own,

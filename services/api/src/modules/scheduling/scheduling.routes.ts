@@ -8,6 +8,7 @@ import type { FastifyInstance, FastifyReply } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { withTenant } from '../../db/index.js';
+import { can, permsFor } from '../auth/authz.service.js';
 import {
   applyHoliday,
   createException,
@@ -72,13 +73,20 @@ export function schedulingRoutes(app: FastifyInstance) {
     schema: {
       params: IdParams,
       body: ExceptionWriteSchema,
-      response: { 200: ExceptionSchema, 404: ErrorSchema, 409: ErrorSchema, 422: ErrorSchema },
+      response: { 200: ExceptionSchema, 403: ErrorSchema, 404: ErrorSchema, 409: ErrorSchema, 422: ErrorSchema },
     },
     handler: async (req, reply) => {
       try {
-        return await withTenant(req.claims.ten, (trx) =>
-          createException(trx, req.params.id, req.body),
-        );
+        return await withTenant(req.claims.ten, async (trx) => {
+          // A closure changes real availability — locations.manage,
+          // like the rest of the opening-hours section.
+          const perms = await permsFor(trx, req.claims);
+          if (!can(perms, 'locations.manage'))
+            return reply
+              .code(403)
+              .send({ error: 'FORBIDDEN', message: 'Missing permission: locations.manage' });
+          return createException(trx, req.params.id, req.body);
+        });
       } catch (e) {
         return sendScheduleError(reply, e);
       }
@@ -91,13 +99,19 @@ export function schedulingRoutes(app: FastifyInstance) {
     preHandler: [app.authenticate],
     schema: {
       params: z.object({ id: z.uuid(), excId: z.uuid() }),
-      response: { 200: z.object({ ok: z.literal(true) }), 404: ErrorSchema },
+      response: { 200: z.object({ ok: z.literal(true) }), 403: ErrorSchema, 404: ErrorSchema },
     },
     handler: async (req, reply) => {
       try {
-        await withTenant(req.claims.ten, (trx) =>
-          deleteException(trx, req.params.id, req.params.excId),
-        );
+        await withTenant(req.claims.ten, async (trx) => {
+          const perms = await permsFor(trx, req.claims);
+          if (!can(perms, 'locations.manage'))
+            return reply
+              .code(403)
+              .send({ error: 'FORBIDDEN', message: 'Missing permission: locations.manage' });
+          return deleteException(trx, req.params.id, req.params.excId);
+        });
+        if (reply.sent) return reply;
         return { ok: true as const };
       } catch (e) {
         return sendScheduleError(reply, e);
@@ -128,13 +142,18 @@ export function schedulingRoutes(app: FastifyInstance) {
     preHandler: [app.authenticate],
     schema: {
       params: z.object({ id: z.uuid(), holidayId: z.string() }),
-      response: { 200: ExceptionSchema, 404: ErrorSchema, 409: ErrorSchema, 422: ErrorSchema },
+      response: { 200: ExceptionSchema, 403: ErrorSchema, 404: ErrorSchema, 409: ErrorSchema, 422: ErrorSchema },
     },
     handler: async (req, reply) => {
       try {
-        return await withTenant(req.claims.ten, (trx) =>
-          applyHoliday(trx, req.params.id, req.params.holidayId),
-        );
+        return await withTenant(req.claims.ten, async (trx) => {
+          const perms = await permsFor(trx, req.claims);
+          if (!can(perms, 'locations.manage'))
+            return reply
+              .code(403)
+              .send({ error: 'FORBIDDEN', message: 'Missing permission: locations.manage' });
+          return applyHoliday(trx, req.params.id, req.params.holidayId);
+        });
       } catch (e) {
         return sendScheduleError(reply, e);
       }

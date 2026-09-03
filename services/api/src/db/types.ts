@@ -145,6 +145,18 @@ export interface Businesses {
   vat: string | null;
 }
 
+export interface CategoryRequests {
+  createdAt: Generated<Timestamp>;
+  decidedAt: Timestamp | null;
+  hqReason: Generated<string>;
+  id: Generated<string>;
+  kind: string;
+  name: string;
+  note: Generated<string>;
+  status: Generated<string>;
+  tenantId: string;
+}
+
 export interface CheckoutItems {
   amount: number;
   checkoutId: string;
@@ -186,6 +198,7 @@ export interface Customers {
   createdAt: Generated<Timestamp>;
   custGroup: Generated<string>;
   email: string | null;
+  emailVerifiedAt: Timestamp | null;
   id: Generated<string>;
   name: string;
   noShows: Generated<number>;
@@ -558,6 +571,16 @@ export interface PersonalOffers {
   variantId: string | null;
 }
 
+export interface PlatformNotices {
+  audience: Generated<string>;
+  body: Generated<string>;
+  createdAt: Generated<Timestamp>;
+  id: Generated<string>;
+  kind: string;
+  tenantId: string | null;
+  title: string;
+}
+
 export interface PremiumOffers {
   candidates: Json;
   createdAt: Generated<Timestamp>;
@@ -583,7 +606,6 @@ export interface ProductCategories {
   name: string;
   parentId: string | null;
   sort: Generated<number>;
-  tenantId: string;
 }
 
 export interface Products {
@@ -592,6 +614,7 @@ export interface Products {
   cost: number | null;
   createdAt: Generated<Timestamp>;
   id: Generated<string>;
+  img: string | null;
   name: string;
   own: Generated<boolean>;
   price: Generated<number>;
@@ -696,7 +719,6 @@ export interface ServiceCategories {
   name: string;
   parentId: string | null;
   sort: Generated<number>;
-  tenantId: string;
 }
 
 export interface ServiceModifierGroups {
@@ -886,6 +908,7 @@ export interface DB {
   appointments: Appointments;
   auditLog: AuditLog;
   businesses: Businesses;
+  categoryRequests: CategoryRequests;
   checkoutItems: CheckoutItems;
   checkouts: Checkouts;
   customerActivity: CustomerActivity;
@@ -918,6 +941,7 @@ export interface DB {
   merchantTransactions: MerchantTransactions;
   paymentAccounts: PaymentAccounts;
   personalOffers: PersonalOffers;
+  platformNotices: PlatformNotices;
   premiumOffers: PremiumOffers;
   productCategories: ProductCategories;
   products: Products;

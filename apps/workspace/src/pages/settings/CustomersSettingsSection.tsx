@@ -1,6 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { BusinessSettingsSchema, type BusinessSettings } from '@velnes/contracts';
-import { I, Icon } from '@velnes/ui';
+import { I, Icon, NumInput } from '@velnes/ui';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { patch } from '@velnes/client';
@@ -81,12 +81,11 @@ export function CustomersSettingsSection() {
             </Field>
             <Field label={t('cuset.discount')}>
               <div className="hstack">
-                <input
+                <NumInput
                   className="input"
-                  type="number"
                   value={discount}
                   style={{ width: 120 }}
-                  onChange={(e) => setDiscount(Number(e.target.value))}
+                  onValue={setDiscount}
                 />
                 <button
                   className="btn btn-primary btn-sm"

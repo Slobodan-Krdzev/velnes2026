@@ -194,11 +194,16 @@ export function WeekHoursEditor({
   onChange,
   variant = 'toggle',
   timeWidth = 128,
+  dense = false,
 }: {
   hours: WeekHours;
   onChange: (next: WeekHours) => void;
   variant?: 'toggle' | 'checkbox';
   timeWidth?: number;
+  /** The prototype's `pad` mode for narrow containers (the location
+   *  panel): tighter paddings, and the row may wrap so the add-period
+   *  button drops to its own line instead of overlapping. */
+  dense?: boolean;
 }) {
   const { t } = useTranslation();
   const set = (day: number, list: Period[] | null) =>
@@ -218,14 +223,15 @@ export function WeekHoursEditor({
           set(i, copy);
         };
         const compact = variant === 'checkbox';
+        const tight = compact || dense;
         const timeSel = (j: number, k: 0 | 1) => (
           <select
             className="select tnum"
             value={list[j]![k]}
             style={{
               width: timeWidth,
-              paddingLeft: compact ? 10 : 14,
-              paddingRight: compact ? 26 : 38,
+              paddingLeft: tight ? 10 : 14,
+              paddingRight: tight ? 26 : 38,
             }}
             aria-label={t(k === 0 ? 'hset.periodStart' : 'hset.periodEnd', { day, n: j + 1 })}
             onChange={(e) => setPeriod(j, k, e.target.value)}
@@ -245,7 +251,13 @@ export function WeekHoursEditor({
           <div
             key={key}
             className={`hoursrow${list.length > 1 ? ' split' : ''}`}
-            style={compact ? { alignItems: 'flex-start', padding: '12px 16px' } : undefined}
+            style={
+              compact
+                ? { alignItems: 'flex-start', padding: '12px 16px' }
+                : dense
+                  ? { padding: '10px 14px', flexWrap: 'wrap' }
+                  : undefined
+            }
           >
             {compact ? (
               <label
@@ -271,7 +283,9 @@ export function WeekHoursEditor({
               </label>
             ) : (
               <>
-                <span className="day">{day}</span>
+                <span className="day" style={dense ? { width: 48 } : undefined}>
+                  {day}
+                </span>
                 <Toggle on={open} label={day} onChange={dayToggle} />
               </>
             )}
@@ -305,11 +319,16 @@ export function WeekHoursEditor({
                   ) : null}
                 </div>
                 {!compact && room ? (
+                  // Dense keeps the whole day on one line: the add
+                  // button collapses to its icon, named for readers.
                   <button
-                    className="btn btn-subtle btn-sm wh-add"
+                    className={`btn btn-subtle ${dense ? 'btn-icon ' : ''}btn-sm wh-add`}
+                    aria-label={t('hset.addPeriod')}
+                    title={dense ? t('hset.addPeriod') : undefined}
                     onClick={() => set(i, whAdd(list))}
                   >
-                    <Icon d={I.plus} size={18} w={2.5} /> {t('hset.addPeriod')}
+                    <Icon d={I.plus} size={18} w={2.5} />
+                    {dense ? null : <> {t('hset.addPeriod')}</>}
                   </button>
                 ) : null}
               </>

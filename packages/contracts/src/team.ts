@@ -65,6 +65,8 @@ export const CustomerListQuerySchema = z.object({
 });
 export const CustomerListResponseSchema = z.object({
   customers: z.array(CustomerSchema),
+  // The true tenant-wide count — the page is capped, the number not.
+  total: z.number().int().default(0),
 });
 
 export const EmployeePatchSchema = z.object({

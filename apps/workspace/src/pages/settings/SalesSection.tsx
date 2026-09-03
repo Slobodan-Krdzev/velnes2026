@@ -47,6 +47,7 @@ export function SalesSection() {
           <input
             className="input"
             type="number"
+            onFocus={(e) => e.currentTarget.select()}
             defaultValue={s.defaultVat}
             style={{ width: 160 }}
             onBlur={(e) => {

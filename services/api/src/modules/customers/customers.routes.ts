@@ -42,6 +42,40 @@ function sendErr(reply: FastifyReply, e: unknown) {
 export function customersRoutes(app: FastifyInstance) {
   const r = app.withTypeProvider<ZodTypeProvider>();
 
+  /** The prototype's customer view ladder for one profile: wide
+   *  readers open anyone; view_assigned alone opens only a customer
+   *  this employee has actually served. False = already refused. */
+  const viewGate = async (
+    trx: Parameters<typeof permsFor>[0],
+    claims: Parameters<typeof permsFor>[1],
+    customerId: string,
+    reply: FastifyReply,
+  ) => {
+    const perms = await permsFor(trx, claims);
+    const wide = can(perms, 'customers.view_location') || can(perms, 'customers.view_business');
+    if (wide) return true;
+    if (!can(perms, 'customers.view_assigned')) {
+      await reply
+        .code(403)
+        .send({ error: 'FORBIDDEN', message: 'Missing permission: customers.view_assigned' });
+      return false;
+    }
+    const served = await trx
+      .selectFrom('appointments')
+      .select('id')
+      .where('customerId', '=', customerId)
+      .where('employeeId', '=', claims.sub)
+      .limit(1)
+      .executeTakeFirst();
+    if (!served) {
+      await reply
+        .code(403)
+        .send({ error: 'FORBIDDEN', message: 'This customer is not assigned to you' });
+      return false;
+    }
+    return true;
+  };
+
   r.route({
     method: 'POST',
     url: '/customers',
@@ -89,9 +123,10 @@ export function customersRoutes(app: FastifyInstance) {
     method: 'GET',
     url: '/customers/:id',
     preHandler: [app.authenticate],
-    schema: { params: IdParams, response: { 200: CustomerProfileSchema, 404: Err } },
+    schema: { params: IdParams, response: { 200: CustomerProfileSchema, 403: Err, 404: Err } },
     handler: async (req, reply) =>
       withTenant(req.claims.ten, async (trx) => {
+        if (!(await viewGate(trx, req.claims, req.params.id, reply))) return reply;
         try {
           return await customerProfile(trx, req.params.id);
         } catch (e) {
@@ -119,11 +154,15 @@ export function customersRoutes(app: FastifyInstance) {
         const b = req.body;
         try {
           const before = await customerProfile(trx, req.params.id);
+          const emailChanged = b.email !== undefined && b.email !== before.email;
           await trx
             .updateTable('customers')
             .set({
               ...(b.name !== undefined ? { name: b.name } : {}),
               ...(b.email !== undefined ? { email: b.email } : {}),
+              // A changed address must be confirmed again — the old
+              // verification never carries over to a new inbox.
+              ...(emailChanged ? { emailVerifiedAt: null } : {}),
               ...(b.phone !== undefined ? { phone: b.phone } : {}),
               ...(b.note !== undefined ? { note: b.note } : {}),
               ...(b.tags !== undefined ? { tags: b.tags } : {}),
@@ -137,6 +176,19 @@ export function customersRoutes(app: FastifyInstance) {
             .execute();
           if (b.note !== undefined && b.note !== before.note)
             await activityLog(trx, req.claims.ten, req.params.id, req.claims.sub, 'note_added');
+          // Contact changes go on the customer's record.
+          if (emailChanged)
+            await activityLog(trx, req.claims.ten, req.params.id, req.claims.sub, 'contact_changed', '', '', {
+              field: 'email',
+              from: before.email ?? '—',
+              to: b.email ?? '—',
+            });
+          if (b.phone !== undefined && b.phone !== before.phone)
+            await activityLog(trx, req.claims.ten, req.params.id, req.claims.sub, 'contact_changed', '', '', {
+              field: 'phone',
+              from: before.phone ?? '—',
+              to: b.phone ?? '—',
+            });
           if (b.blacklisted !== undefined && b.blacklisted !== before.blacklisted) {
             const actor = await trx
               .selectFrom('employees')
@@ -161,9 +213,10 @@ export function customersRoutes(app: FastifyInstance) {
     method: 'GET',
     url: '/customers/:id/insights',
     preHandler: [app.authenticate],
-    schema: { params: IdParams, response: { 200: CustomerInsightsSchema, 404: Err } },
+    schema: { params: IdParams, response: { 200: CustomerInsightsSchema, 403: Err, 404: Err } },
     handler: async (req, reply) =>
       withTenant(req.claims.ten, async (trx) => {
+        if (!(await viewGate(trx, req.claims, req.params.id, reply))) return reply;
         try {
           return await customerInsights(trx, req.params.id);
         } catch (e) {
@@ -176,9 +229,10 @@ export function customersRoutes(app: FastifyInstance) {
     method: 'GET',
     url: '/customers/:id/activity',
     preHandler: [app.authenticate],
-    schema: { params: IdParams, response: { 200: ActivityListSchema } },
-    handler: async (req) =>
+    schema: { params: IdParams, response: { 200: ActivityListSchema, 403: Err } },
+    handler: async (req, reply) =>
       withTenant(req.claims.ten, async (trx) => {
+        if (!(await viewGate(trx, req.claims, req.params.id, reply))) return reply;
         const rows = await trx
           .selectFrom('customerActivity as a')
           .leftJoin('employees as e', 'e.id', 'a.actorEmployeeId')
@@ -206,9 +260,10 @@ export function customersRoutes(app: FastifyInstance) {
     method: 'GET',
     url: '/customers/:id/appointments',
     preHandler: [app.authenticate],
-    schema: { params: IdParams, response: { 200: CustomerApptsSchema } },
-    handler: async (req) =>
+    schema: { params: IdParams, response: { 200: CustomerApptsSchema, 403: Err } },
+    handler: async (req, reply) =>
       withTenant(req.claims.ten, async (trx) => {
+        if (!(await viewGate(trx, req.claims, req.params.id, reply))) return reply;
         const hhmm = (m: number) =>
           `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
         const rows = await trx
@@ -252,9 +307,10 @@ export function customersRoutes(app: FastifyInstance) {
     method: 'GET',
     url: '/customers/:id/invoices',
     preHandler: [app.authenticate],
-    schema: { params: IdParams, response: { 200: CustomerInvoicesSchema } },
-    handler: async (req) =>
+    schema: { params: IdParams, response: { 200: CustomerInvoicesSchema, 403: Err } },
+    handler: async (req, reply) =>
       withTenant(req.claims.ten, async (trx) => {
+        if (!(await viewGate(trx, req.claims, req.params.id, reply))) return reply;
         const rows = await trx
           .selectFrom('invoices')
           .selectAll()
@@ -291,9 +347,10 @@ export function customersRoutes(app: FastifyInstance) {
     method: 'GET',
     url: '/customers/:id/loyalty',
     preHandler: [app.authenticate],
-    schema: { params: IdParams, response: { 200: CustomerLoyaltySchema } },
-    handler: async (req) =>
+    schema: { params: IdParams, response: { 200: CustomerLoyaltySchema, 403: Err } },
+    handler: async (req, reply) =>
       withTenant(req.claims.ten, async (trx) => {
+        if (!(await viewGate(trx, req.claims, req.params.id, reply))) return reply;
         const rows = await trx
           .selectFrom('loyaltyLedger')
           .selectAll()
@@ -323,11 +380,12 @@ export function customersRoutes(app: FastifyInstance) {
     method: 'GET',
     url: '/customers/:id/offers',
     preHandler: [app.authenticate],
-    schema: { params: IdParams, response: { 200: PersonalOfferListSchema } },
-    handler: async (req) =>
-      withTenant(req.claims.ten, async (trx) => ({
-        offers: await personalOffersFor(trx, req.params.id),
-      })),
+    schema: { params: IdParams, response: { 200: PersonalOfferListSchema, 403: Err } },
+    handler: async (req, reply) =>
+      withTenant(req.claims.ten, async (trx) => {
+        if (!(await viewGate(trx, req.claims, req.params.id, reply))) return reply;
+        return { offers: await personalOffersFor(trx, req.params.id) };
+      }),
   });
 
   r.route({

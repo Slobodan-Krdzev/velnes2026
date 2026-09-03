@@ -42,9 +42,10 @@ export function marketingRoutes(app: FastifyInstance) {
     method: 'GET',
     url: '/discount-codes',
     preHandler: [app.authenticate],
-    schema: { response: { 200: DiscountCodeListSchema } },
-    handler: async (req) =>
+    schema: { response: { 200: DiscountCodeListSchema, 403: Err } },
+    handler: async (req, reply) =>
       withTenant(req.claims.ten, async (trx) => {
+        if (!(await gate(trx, req.claims, reply))) return reply;
         const rows = await trx.selectFrom('discountCodes').selectAll().orderBy('starts').execute();
         const today = localIso(new Date());
         return {
@@ -74,9 +75,12 @@ export function marketingRoutes(app: FastifyInstance) {
     method: 'GET',
     url: '/personal-offers',
     preHandler: [app.authenticate],
-    schema: { response: { 200: PersonalOfferListSchema } },
-    handler: async (req) =>
-      withTenant(req.claims.ten, async (trx) => ({ offers: await personalOffersAll(trx) })),
+    schema: { response: { 200: PersonalOfferListSchema, 403: Err } },
+    handler: async (req, reply) =>
+      withTenant(req.claims.ten, async (trx) => {
+        if (!(await gate(trx, req.claims, reply))) return reply;
+        return { offers: await personalOffersAll(trx) };
+      }),
   });
 
   const gate = async (
@@ -101,10 +105,11 @@ export function marketingRoutes(app: FastifyInstance) {
     preHandler: [app.authenticate],
     schema: {
       querystring: z.object({ locationId: z.uuid(), date: z.iso.date() }),
-      response: { 200: CapacityResponseSchema },
+      response: { 200: CapacityResponseSchema, 403: Err },
     },
-    handler: async (req) =>
+    handler: async (req, reply) =>
       withTenant(req.claims.ten, async (trx) => {
+        if (!(await gate(trx, req.claims, reply))) return reply;
         const slots = await openCapacity(trx, req.query.locationId, req.query.date);
         return { slots, value: slots.reduce((n, c) => n + c.price, 0) };
       }),
@@ -114,9 +119,10 @@ export function marketingRoutes(app: FastifyInstance) {
     method: 'GET',
     url: '/offers',
     preHandler: [app.authenticate],
-    schema: { response: { 200: OfferListSchema } },
-    handler: async (req) =>
+    schema: { response: { 200: OfferListSchema, 403: Err } },
+    handler: async (req, reply) =>
       withTenant(req.claims.ten, async (trx) => {
+        if (!(await gate(trx, req.claims, reply))) return reply;
         const rows = await trx
           .selectFrom('lastMinuteOffers')
           .selectAll()

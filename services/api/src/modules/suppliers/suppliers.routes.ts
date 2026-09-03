@@ -53,9 +53,15 @@ export function suppliersRoutes(app: FastifyInstance) {
     method: 'GET',
     url: '/suppliers',
     preHandler: [app.authenticate],
-    schema: { response: { 200: SupplierListSchema } },
-    handler: async (req) =>
+    schema: {
+      response: {
+        200: SupplierListSchema,
+        403: z.object({ error: z.string(), message: z.string() }),
+      },
+    },
+    handler: async (req, reply) =>
       withTenant(req.claims.ten, async (trx) => {
+        if (!(await gate(trx, req.claims, reply))) return reply;
         const rows = await trx.selectFrom('suppliers').selectAll().orderBy('name').execute();
         const conns = await trx.selectFrom('supplierConnections').selectAll().execute();
         const counts = await trx
@@ -142,10 +148,11 @@ export function suppliersRoutes(app: FastifyInstance) {
     preHandler: [app.authenticate],
     schema: {
       params: z.object({ id: z.uuid() }),
-      response: { 200: SupplierProductListSchema },
+      response: { 200: SupplierProductListSchema, 403: Err },
     },
-    handler: async (req) =>
+    handler: async (req, reply) =>
       withTenant(req.claims.ten, async (trx) => {
+        if (!(await gate(trx, req.claims, reply))) return reply;
         const rows = await trx
           .selectFrom('supplierProducts')
           .selectAll()
@@ -189,9 +196,10 @@ export function suppliersRoutes(app: FastifyInstance) {
     method: 'GET',
     url: '/purchase-orders',
     preHandler: [app.authenticate],
-    schema: { response: { 200: PurchaseOrderListSchema } },
-    handler: async (req) =>
+    schema: { response: { 200: PurchaseOrderListSchema, 403: Err } },
+    handler: async (req, reply) =>
       withTenant(req.claims.ten, async (trx) => {
+        if (!(await gate(trx, req.claims, reply))) return reply;
         const rows = await trx
           .selectFrom('purchaseOrders')
           .select('id')
@@ -278,9 +286,10 @@ export function suppliersRoutes(app: FastifyInstance) {
     method: 'GET',
     url: '/supplier-promotions',
     preHandler: [app.authenticate],
-    schema: { response: { 200: SupplierPromotionListSchema } },
-    handler: async (req) =>
+    schema: { response: { 200: SupplierPromotionListSchema, 403: Err } },
+    handler: async (req, reply) =>
       withTenant(req.claims.ten, async (trx) => {
+        if (!(await gate(trx, req.claims, reply))) return reply;
         const rows = await trx
           .selectFrom('supplierPromotions as p')
           .innerJoin('suppliers as s', 's.id', 'p.supplierId')

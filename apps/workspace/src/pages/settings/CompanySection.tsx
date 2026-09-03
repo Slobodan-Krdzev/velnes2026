@@ -1,8 +1,15 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { BusinessProfileSchema, type BusinessProfile } from '@velnes/contracts';
+import {
+  BusinessProfileSchema,
+  GALLERY_IMG_MAX_CHARS,
+  GALLERY_MAX_EDGE_PX,
+  GALLERY_MAX_PHOTOS,
+  type BusinessProfile,
+} from '@velnes/contracts';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { patch } from '@velnes/client';
+import { fileToResizedDataURL, PhoneInput } from '@velnes/ui';
 import { useToast } from '../../lib/toast.js';
 import { Field, useBusiness } from './bits.js';
 
@@ -11,7 +18,7 @@ import { Field, useBusiness } from './bits.js';
  *  public gallery. Photos are stored as data URLs — the file is the
  *  storage. */
 export function CompanySection() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const toast = useToast();
   const qc = useQueryClient();
   const business = useBusiness();
@@ -79,9 +86,17 @@ export function CompanySection() {
           <Field label={t('cset.taxNumber')} hint={t('cset.taxNumberHint')}>
             <input className="input" value={b.vat ?? '—'} disabled />
           </Field>
-          <Field label={t('cset.phone')}>
-            <input className="input" value={form.phone} onChange={(e) => setF('phone', e.target.value)} />
-          </Field>
+          <div className="field">
+            <span>{t('cset.phone')}</span>
+            <PhoneInput
+              value={form.phone}
+              onChange={(v) => setF('phone', v)}
+              lang={i18n.language}
+              ariaLabel={t('cset.phone')}
+              searchLabel={t('phone.search')}
+              countryLabel={t('phone.country')}
+            />
+          </div>
           <Field label={t('cset.publicDescription')} span>
             <textarea
               className="input"
@@ -147,18 +162,21 @@ function GalleryCard({ b }: { b: BusinessProfile }) {
     }
   };
 
-  const addFile = (file: File) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const img = typeof reader.result === 'string' ? reader.result : null;
-      if (!img) return;
-      void write([
-        ...b.gallery,
-        { id: `g${Date.now()}`, name: file.name.replace(/\.[^.]+$/, ''), img, tone: null },
-      ]);
-    };
-    reader.readAsDataURL(file);
+  // Any photo shrinks to the gallery's stored size before the wire;
+  // the contract cap is the backstop, not the everyday experience.
+  const addFile = async (file: File) => {
+    setError(null);
+    const img = await fileToResizedDataURL(file, GALLERY_MAX_EDGE_PX);
+    if (!img || img.length > GALLERY_IMG_MAX_CHARS) {
+      setError(t('cset.photoRefused'));
+      return;
+    }
+    await write([
+      ...b.gallery,
+      { id: `g${Date.now()}`, name: file.name.replace(/\.[^.]+$/, ''), img, tone: null },
+    ]);
   };
+  const full = b.gallery.length >= GALLERY_MAX_PHOTOS;
 
   return (
     <div className="card" style={{ marginTop: 24 }}>
@@ -205,31 +223,33 @@ function GalleryCard({ b }: { b: BusinessProfile }) {
             </button>
           </div>
         ))}
-        <label
-          className="hstack"
-          style={{
-            border: '1px dashed var(--line)',
-            borderRadius: 12,
-            aspectRatio: '4/3',
-            alignItems: 'center',
-            justifyContent: 'center',
-            cursor: 'pointer',
-            fontWeight: 600,
-            color: 'var(--muted)',
-          }}
-        >
-          + {t('cset.addPhoto')}
-          <input
-            type="file"
-            accept="image/*"
-            style={{ display: 'none' }}
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              if (f) addFile(f);
-              e.target.value = '';
+        {full ? null : (
+          <label
+            className="hstack"
+            style={{
+              border: '1px dashed var(--line)',
+              borderRadius: 12,
+              aspectRatio: '4/3',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              fontWeight: 600,
+              color: 'var(--muted)',
             }}
-          />
-        </label>
+          >
+            + {t('cset.addPhoto')}
+            <input
+              type="file"
+              accept="image/*"
+              style={{ display: 'none' }}
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) void addFile(f);
+                e.target.value = '';
+              }}
+            />
+          </label>
+        )}
       </div>
       {error ? (
         <p role="alert" style={{ padding: '0 20px 16px', color: 'var(--danger)', fontWeight: 600 }}>
@@ -237,7 +257,8 @@ function GalleryCard({ b }: { b: BusinessProfile }) {
         </p>
       ) : null}
       <div className="note" style={{ margin: '0 20px 20px' }}>
-        {t('cset.galleryNote')}
+        {t('cset.galleryNote')}{' '}
+        {t('cset.gallerySizeNote', { n: GALLERY_MAX_PHOTOS, px: GALLERY_MAX_EDGE_PX })}
       </div>
     </div>
   );

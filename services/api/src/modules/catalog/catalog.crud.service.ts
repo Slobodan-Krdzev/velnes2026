@@ -11,6 +11,8 @@ import { CatalogError } from './catalog.service.js';
 export interface ServiceWrite {
   name: string;
   category?: string | null | undefined;
+  /** null = every worker; array = exactly these; omitted = untouched. */
+  performerIds?: string[] | null | undefined;
   durationMin: number;
   price: number;
   vat?: number | undefined;
@@ -33,9 +35,11 @@ export interface ServiceWrite {
     | undefined;
 }
 
+/** Categories are the Velnes taxonomy — HQ defines them, a salon
+ *  only picks. An unknown name is refused, never auto-created. */
 async function categoryId(
   trx: Trx,
-  tenantId: string,
+  _tenantId: string,
   table: 'serviceCategories' | 'productCategories',
   name: string | null | undefined,
 ): Promise<string | null> {
@@ -45,13 +49,9 @@ async function categoryId(
     .select('id')
     .where('name', '=', name)
     .executeTakeFirst();
-  if (existing) return existing.id;
-  const row = await trx
-    .insertInto(table)
-    .values({ tenantId, name })
-    .returning('id')
-    .executeTakeFirstOrThrow();
-  return row.id;
+  if (!existing)
+    throw new CatalogError('BAD_CATEGORY', 'Pick a Velnes category — salons cannot create their own');
+  return existing.id;
 }
 
 async function actorName(trx: Trx, claims: AccessClaims) {
@@ -84,6 +84,7 @@ export async function createService(trx: Trx, claims: AccessClaims, w: ServiceWr
     .returning('id')
     .executeTakeFirstOrThrow();
   await reconcileNested(trx, tenantId, s.id, w);
+  await applyPerformers(trx, tenantId, s.id, w.performerIds);
   await logAudit(trx, tenantId, {
     actorEmployeeId: claims.sub,
     actorName: await actorName(trx, claims),
@@ -125,6 +126,7 @@ export async function updateService(
     .where('id', '=', serviceId)
     .execute();
   await reconcileNested(trx, tenantId, serviceId, w);
+  await applyPerformers(trx, tenantId, serviceId, w.performerIds);
   if (before.price !== w.price)
     await logAudit(trx, tenantId, {
       actorEmployeeId: claims.sub,
@@ -134,6 +136,68 @@ export async function updateService(
       before: `${before.price} ден`,
       after: `${w.price} ден`,
     });
+}
+
+/**
+ * Who performs this service, written onto the employee_skills truth
+ * the booking gate already reads. The prototype rule stands: an
+ * employee with NO skill rows does everything. So —
+ *   null (every worker): employees with explicit lists get this
+ *     service added; empty-list employees already do it.
+ *   array (exactly these): listed employees with explicit lists get
+ *     the row; listed empty-list employees already do it; unlisted
+ *     explicit lists lose the row; and an unlisted empty-list
+ *     employee has their implicit "everything" made explicit minus
+ *     this service — the only honest way to exclude them.
+ *   undefined: assignments untouched.
+ */
+async function applyPerformers(
+  trx: Trx,
+  tenantId: string,
+  serviceId: string,
+  performerIds: string[] | null | undefined,
+) {
+  if (performerIds === undefined) return;
+  const employees = await trx.selectFrom('employees').select('id').execute();
+  const skillRows = await trx.selectFrom('employeeSkills').select(['employeeId', 'serviceId']).execute();
+  const skillsOf = (empId: string) => skillRows.filter((r) => r.employeeId === empId);
+  const add = async (empId: string) =>
+    trx
+      .insertInto('employeeSkills')
+      .values({ tenantId, employeeId: empId, serviceId })
+      .execute();
+
+  if (performerIds === null) {
+    for (const e of employees) {
+      const mine = skillsOf(e.id);
+      if (mine.length && !mine.some((r) => r.serviceId === serviceId)) await add(e.id);
+    }
+    return;
+  }
+
+  const wanted = new Set(performerIds);
+  const allServices = await trx.selectFrom('services').select('id').execute();
+  for (const e of employees) {
+    const mine = skillsOf(e.id);
+    const has = mine.some((r) => r.serviceId === serviceId);
+    if (wanted.has(e.id)) {
+      if (mine.length && !has) await add(e.id);
+    } else if (mine.length) {
+      if (has)
+        await trx
+          .deleteFrom('employeeSkills')
+          .where('employeeId', '=', e.id)
+          .where('serviceId', '=', serviceId)
+          .execute();
+    } else {
+      for (const sv of allServices)
+        if (sv.id !== serviceId)
+          await trx
+            .insertInto('employeeSkills')
+            .values({ tenantId, employeeId: e.id, serviceId: sv.id })
+            .execute();
+    }
+  }
 }
 
 /** Reconcile variants/modifiers by id: update kept, insert new,
@@ -321,6 +385,7 @@ export async function patchVariantOverride(
 export interface ProductWrite {
   name: string;
   category?: string | null | undefined;
+  img?: string | null | undefined;
   sku?: string | null | undefined;
   price?: number | undefined;
   cost?: number | null | undefined;
@@ -339,6 +404,7 @@ export async function createProduct(trx: Trx, claims: AccessClaims, w: ProductWr
       tenantId,
       name: w.name,
       categoryId: catId,
+      img: w.img ?? null,
       sku: w.sku ?? null,
       price: w.price ?? 0,
       cost: w.cost ?? null,
@@ -370,6 +436,8 @@ export async function updateProduct(
     .set({
       name: w.name,
       categoryId: catId,
+      // Untouched when omitted — the inline row edits never carry it.
+      img: w.img === undefined ? before.img : w.img,
       sku: w.sku === undefined ? before.sku : w.sku,
       price: w.price ?? before.price,
       cost: w.cost === undefined ? before.cost : w.cost,

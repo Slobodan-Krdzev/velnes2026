@@ -1,10 +1,11 @@
 import type { Location } from '@velnes/contracts';
-import { I, Icon } from '@velnes/ui';
+import { I, Icon, NumInput } from '@velnes/ui';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { z } from 'zod';
 import { api, post } from '@velnes/client';
-import type { ResolvedService } from './Catalog.js';
+import { useEmployees } from '../../api/queries.js';
+import { CategoryRequestModal, type ResolvedService } from './Catalog.js';
 
 const OkSchema = z.object({ ok: z.literal(true) });
 const IdSchema = z.object({ id: z.string() });
@@ -55,6 +56,19 @@ export function ServicePanel({
   const [pos, setPos] = useState(service?.pos ?? true);
   const [prepMin, setPrepMin] = useState<number | null>(service?.prepMin ?? null);
   const [resetMin, setResetMin] = useState<number | null>(service?.resetMin ?? null);
+  // Who performs this service — read from the same skills truth the
+  // booking gate enforces: no skill rows means "does everything".
+  const employees = useEmployees();
+  const staff = (employees.data?.employees ?? []).filter((e) => e.status === 'active');
+  const performsNow = (e: (typeof staff)[number]) =>
+    !service || e.skillServiceIds.length === 0 || e.skillServiceIds.includes(service.id);
+  const [everyWorker, setEveryWorker] = useState<boolean | null>(null);
+  const [performers, setPerformers] = useState<string[] | null>(null);
+  // Resolved once the employees arrive: edit starts from the truth,
+  // a new service starts on "every worker".
+  const allDo = staff.length > 0 && staff.every(performsNow);
+  const everyOn = everyWorker ?? (!editing || allDo);
+  const picked = performers ?? staff.filter(performsNow).map((e) => e.id);
   const [variants, setVariants] = useState<VariantRow[]>(
     (service?.variants ?? []).map((v) => ({
       id: v.id,
@@ -80,6 +94,8 @@ export function ServicePanel({
   );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [requestingCat, setRequestingCat] = useState(false);
+  const [reqSent, setReqSent] = useState(false);
 
   useEffect(() => {
     document.body.classList.add('panel-open');
@@ -101,6 +117,7 @@ export function ServicePanel({
         online,
         prepMin,
         resetMin,
+        performerIds: everyOn ? null : picked,
         variants,
         modifiers: groups,
       };
@@ -146,37 +163,43 @@ export function ServicePanel({
               <input className="input" value={name} onChange={(e) => setName(e.target.value)} />
             </label>
             <label className="field">
-              <span>{t('catalog.category')}</span>
-              <input
-                className="input"
-                list="svc-cats"
+              <span>
+                {t('catalog.category')}
+                <span className="req">*</span>
+              </span>
+              {/* The Velnes taxonomy: a salon picks the shelf, it
+                  never invents one. */}
+              <select
+                className="select"
+                style={{ width: '100%' }}
                 value={category ?? ''}
                 onChange={(e) => setCategory(e.target.value)}
-              />
-              <datalist id="svc-cats">
+              >
                 {categories.map((c) => (
-                  <option key={c} value={c} />
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
                 ))}
-              </datalist>
+              </select>
+              <span className="hint">
+                {t('catalog.velnesCategoryHint')}{' '}
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  style={{ padding: '0 4px', height: 'auto' }}
+                  onClick={() => setRequestingCat(true)}
+                >
+                  {reqSent ? t('catalog.requestSentShort') : t('catalog.requestCategory')}
+                </button>
+              </span>
             </label>
             <label className="field">
               <span>{t('catalog.price')}</span>
-              <input
-                className="input tnum"
-                type="number"
-                value={price}
-                onChange={(e) => setPrice(Number(e.target.value))}
-              />
+              <NumInput value={price} onValue={setPrice} />
             </label>
             <label className="field">
               <span>{t('catalog.duration')}</span>
-              <input
-                className="input tnum"
-                type="number"
-                step={5}
-                value={duration}
-                onChange={(e) => setDuration(Number(e.target.value))}
-              />
+              <NumInput step={5} value={duration} onValue={setDuration} />
             </label>
             <label className="field">
               <span>{t('catalog.prep')}</span>
@@ -185,6 +208,7 @@ export function ServicePanel({
                 type="number"
                 value={prepMin ?? ''}
                 placeholder="0"
+                onFocus={(e) => e.currentTarget.select()}
                 onChange={(e) => setPrepMin(e.target.value === '' ? null : Number(e.target.value))}
               />
             </label>
@@ -195,6 +219,7 @@ export function ServicePanel({
                 type="number"
                 value={resetMin ?? ''}
                 placeholder="10"
+                onFocus={(e) => e.currentTarget.select()}
                 onChange={(e) =>
                   setResetMin(e.target.value === '' ? null : Number(e.target.value))
                 }
@@ -202,12 +227,7 @@ export function ServicePanel({
             </label>
             <label className="field">
               <span>VAT %</span>
-              <input
-                className="input tnum"
-                type="number"
-                value={vat}
-                onChange={(e) => setVat(Number(e.target.value))}
-              />
+              <NumInput value={vat} onValue={setVat} />
             </label>
             <label className="field">
               <span>{t('till.status')}</span>
@@ -233,6 +253,48 @@ export function ServicePanel({
           </div>
 
           <div className="field">
+            <span>{t('catalog.performers')}</span>
+            <span className="hint">{t('catalog.performersHint')}</span>
+            <button
+              className="checkrow"
+              type="button"
+              onClick={() => {
+                setEveryWorker(!everyOn);
+                if (everyOn && performers === null)
+                  setPerformers(staff.filter(performsNow).map((e) => e.id));
+              }}
+            >
+              <span className={`check${everyOn ? ' on' : ''}`}>
+                <Icon d={I.check} size={14} w={3.5} />
+              </span>
+              <span style={{ fontWeight: 600 }}>{t('catalog.everyWorker')}</span>
+            </button>
+            {everyOn
+              ? null
+              : staff.map((e) => {
+                  const on = picked.includes(e.id);
+                  return (
+                    <button
+                      key={e.id}
+                      className="checkrow"
+                      type="button"
+                      style={{ marginLeft: 24 }}
+                      onClick={() =>
+                        setPerformers(on ? picked.filter((x) => x !== e.id) : [...picked, e.id])
+                      }
+                    >
+                      <span className={`check${on ? ' on' : ''}`}>
+                        <Icon d={I.check} size={14} w={3.5} />
+                      </span>
+                      <span style={{ fontWeight: 500 }}>
+                        {e.name} <span className="muted">· {e.roleTitle}</span>
+                      </span>
+                    </button>
+                  );
+                })}
+          </div>
+
+          <div className="field">
             <span>{t('catalog.variants')}</span>
             <span className="hint">{t('catalog.variantsHint')}</span>
             {variants.map((v, i) => (
@@ -246,29 +308,21 @@ export function ServicePanel({
                     setVariants((a) => a.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)))
                   }
                 />
-                <input
-                  className="input tnum"
+                <NumInput
                   style={{ width: 80 }}
-                  type="number"
                   step={5}
                   value={v.durationMin}
                   aria-label="minutes"
-                  onChange={(e) =>
-                    setVariants((a) =>
-                      a.map((x, j) => (j === i ? { ...x, durationMin: Number(e.target.value) } : x)),
-                    )
+                  onValue={(n) =>
+                    setVariants((a) => a.map((x, j) => (j === i ? { ...x, durationMin: n } : x)))
                   }
                 />
-                <input
-                  className="input tnum"
+                <NumInput
                   style={{ width: 100 }}
-                  type="number"
                   value={v.price}
                   aria-label="price"
-                  onChange={(e) =>
-                    setVariants((a) =>
-                      a.map((x, j) => (j === i ? { ...x, price: Number(e.target.value) } : x)),
-                    )
+                  onValue={(n) =>
+                    setVariants((a) => a.map((x, j) => (j === i ? { ...x, price: n } : x)))
                   }
                 />
                 <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12 }}>
@@ -386,43 +440,29 @@ export function ServicePanel({
                         )
                       }
                     />
-                    <input
-                      className="input tnum"
+                    <NumInput
                       style={{ width: 90 }}
-                      type="number"
                       value={o.price}
                       aria-label="option price"
-                      onChange={(e) =>
+                      onValue={(n) =>
                         setGroups((a) =>
                           a.map((x, j) =>
                             j === gi
-                              ? {
-                                  ...x,
-                                  options: x.options.map((y, k) =>
-                                    k === oi ? { ...y, price: Number(e.target.value) } : y,
-                                  ),
-                                }
+                              ? { ...x, options: x.options.map((y, k) => (k === oi ? { ...y, price: n } : y)) }
                               : x,
                           ),
                         )
                       }
                     />
-                    <input
-                      className="input tnum"
+                    <NumInput
                       style={{ width: 70 }}
-                      type="number"
                       value={o.durationMin}
                       aria-label="option minutes"
-                      onChange={(e) =>
+                      onValue={(n) =>
                         setGroups((a) =>
                           a.map((x, j) =>
                             j === gi
-                              ? {
-                                  ...x,
-                                  options: x.options.map((y, k) =>
-                                    k === oi ? { ...y, durationMin: Number(e.target.value) } : y,
-                                  ),
-                                }
+                              ? { ...x, options: x.options.map((y, k) => (k === oi ? { ...y, durationMin: n } : y)) }
                               : x,
                           ),
                         )
@@ -523,6 +563,16 @@ export function ServicePanel({
           </button>
         </div>
       </aside>
+      {requestingCat ? (
+        <CategoryRequestModal
+          initialType="services"
+          onClose={() => setRequestingCat(false)}
+          onSent={() => {
+            setRequestingCat(false);
+            setReqSent(true);
+          }}
+        />
+      ) : null}
     </>
   );
 }

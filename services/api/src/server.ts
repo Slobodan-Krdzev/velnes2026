@@ -33,6 +33,10 @@ import { publicRoutes } from './public/public.routes.js';
 export async function buildServer() {
   const app = Fastify({
     logger: process.env.NODE_ENV !== 'test',
+    // The gallery PATCH replaces all photos at once: up to 12 data
+    // URLs of ≤600k chars each (GALLERY_* in @velnes/contracts), so
+    // the default 1 MiB body would refuse a full, legal gallery.
+    bodyLimit: 10 * 1024 * 1024,
   }).withTypeProvider<ZodTypeProvider>();
 
   app.setValidatorCompiler(validatorCompiler);

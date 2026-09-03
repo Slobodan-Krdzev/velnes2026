@@ -5,13 +5,13 @@ import {
   type Appointment,
   type Employee,
 } from '@velnes/contracts';
-import { Badge, I, Icon } from '@velnes/ui';
+import { Badge, I, Icon, PhoneInput } from '@velnes/ui';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { z } from 'zod';
-import { ApiError, get, patch, refusalText } from '@velnes/client';
+import { ApiError, get, patch, refusalText, useSession } from '@velnes/client';
 import {
   useBook,
   useCancelAppointment,
@@ -21,6 +21,7 @@ import {
   useLocations,
 } from '../../api/queries.js';
 import { DateField } from '../../lib/DateField.js';
+import { useOutsideClose } from '../../lib/pop.js';
 import { money } from '../../lib/money.js';
 import { useToast } from '../../lib/toast.js';
 
@@ -126,9 +127,18 @@ function NewAppointment({
   employees: Employee[];
   onClose: () => void;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const toast = useToast();
-  const catalog = useLocationCatalog(locationId);
+  const qc = useQueryClient();
+  // The location is a choice: preset from the calendar header's
+  // scope, switchable in the drawer. Everything below follows it.
+  const allLocations = useLocations();
+  const { me } = useSession();
+  const myLocs = (allLocations.data?.locations ?? []).filter(
+    (l) => !me?.locationIds.length || me.locationIds.includes(l.id),
+  );
+  const [locId, setLocId] = useState(locationId);
+  const catalog = useLocationCatalog(locId);
   const customers = useQuery({
     queryKey: ['customers', 'drawer'],
     queryFn: () => get(CustomerListResponseSchema, '/customers?limit=100'),
@@ -140,11 +150,25 @@ function NewAppointment({
   // Default to the first employee who works at THIS location — the
   // alphabetical first may belong to another branch and every untouched
   // attempt would refuse with "not at this location".
+  // The clicked column's employee only holds while they actually work
+  // at the chosen location.
   const firstEid =
-    initialEmp ?? employees.find((e) => e.locationIds.includes(locationId))?.id ?? 'any';
+    (initialEmp &&
+    employees.some((e) => e.id === initialEmp && e.locationIds.includes(locId))
+      ? initialEmp
+      : null) ??
+    employees.find((e) => e.locationIds.includes(locId))?.id ??
+    'any';
 
   const [mode, setMode] = useState<Mode>('single');
+  // The customer is a type-ahead: picking sets the id; free text is a
+  // new customer, registered by the booking door in the same act.
   const [customerId, setCustomerId] = useState<string>('');
+  const [custText, setCustText] = useState('');
+  const [custPhone, setCustPhone] = useState('');
+  const [custEmail, setCustEmail] = useState('');
+  const [custOpen, setCustOpen] = useState(false);
+  const custRef = useOutsideClose(custOpen, () => setCustOpen(false));
   const [date, setDate] = useState(initialDate);
   const [rows, setRows] = useState<Row[] | null>(null);
   const [quotes, setQuotes] = useState<Record<number, Quote>>({});
@@ -166,13 +190,24 @@ function NewAppointment({
         : firstBookable(initialDate);
     setRows([{ sid: firstSid, eid: firstEid, start: wanted, vid: null, mods: [] }]);
   }
-  // Skip blacklisted customers for the default — the gate would refuse
-  // the untouched form before anyone typed a thing.
-  const firstCust =
-    customers.data?.customers.find((c) => !c.blacklisted)?.id ??
-    customers.data?.customers[0]?.id ??
-    '';
-  if (!customerId && firstCust) setCustomerId(firstCust);
+  const allCust = customers.data?.customers ?? [];
+  // Recommendations while typing; an exact name silently reuses the
+  // existing profile instead of minting a duplicate.
+  const q = custText.trim().toLowerCase();
+  const suggestions = q
+    ? allCust
+        .filter(
+          (c) =>
+            c.name.toLowerCase().includes(q) ||
+            (c.phone ?? '').replace(/\s+/g, '').includes(q.replace(/\s+/g, '')),
+        )
+        .slice(0, 8)
+    : [];
+  const exactMatch = allCust.find((c) => c.name.trim().toLowerCase() === q);
+  const isNewCustomer = !customerId && !!q && !exactMatch;
+  // The door's contract wants a real email — refuse it here, kindly,
+  // instead of letting the schema answer with a bare 400.
+  const emailOk = !isNewCustomer || !custEmail.trim() || /^\S+@\S+\.\S+$/.test(custEmail.trim());
   const rowList = rows ?? [];
 
   const touch = () => setDirty(true);
@@ -196,19 +231,29 @@ function NewAppointment({
       for (const r of rowList) {
         const res = await book.mutateAsync({
           key: uuid(),
-          locationId,
+          locationId: locId,
           serviceId: r.sid,
           date,
           time: r.start,
           employeeId: r.eid as 'any',
           variantId: r.vid,
           modifierOptionIds: r.mods,
-          ...(customerId ? { customerId } : {}),
+          ...(customerId || exactMatch
+            ? { customerId: customerId || exactMatch!.id }
+            : custText.trim()
+              ? {
+                  name: custText.trim(),
+                  ...(custPhone ? { phone: custPhone } : {}),
+                  ...(custEmail.trim() ? { email: custEmail.trim() } : {}),
+                }
+              : {}),
           source: 'staff',
           deposit: 0,
         });
         created.push(res.appointment.id);
       }
+      // A typed walk-in is a registered customer now.
+      if (isNewCustomer) void qc.invalidateQueries({ queryKey: ['customers'] });
       onClose();
     } catch (e) {
       // The prototype rolls the whole set back when one line refuses.
@@ -233,7 +278,8 @@ function NewAppointment({
   // so the button arms the moment there is something bookable. A
   // disabled primary looks clickable in this design — a dead button
   // here is exactly what the prototype's own principle forbids.
-  const canSave = mode === 'single' && !!customerId && rowList.length > 0;
+  const canSave =
+    mode === 'single' && (!!customerId || !!custText.trim()) && emailOk && rowList.length > 0;
 
   return (
     <>
@@ -298,25 +344,112 @@ function NewAppointment({
           <>
             <label className="field">
               <span>
-                {t('drawer.customer')}
+                {t('drawer.location')}
                 <span className="req">*</span>
               </span>
               <select
                 className="select"
                 style={{ width: '100%' }}
-                value={customerId}
+                value={locId}
+                aria-label={t('drawer.location')}
                 onChange={(e) => {
                   touch();
-                  setCustomerId(e.target.value);
+                  setLocId(e.target.value);
+                  // Another location means another catalog and other
+                  // people — the rows restart on its defaults.
+                  setRows(null);
+                  setQuotes({});
                 }}
               >
-                {(customers.data?.customers ?? []).map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
+                {myLocs.map((l) => (
+                  <option key={l.id} value={l.id}>
+                    {l.name}
+                    {l.city ? ` · ${l.city}` : ''}
                   </option>
                 ))}
               </select>
+              <span className="hint">{t('drawer.locationHint')}</span>
             </label>
+
+            <div className="field">
+              <span>
+                {t('drawer.customer')}
+                <span className="req">*</span>
+              </span>
+              <div className="pop" ref={custRef}>
+                <input
+                  className="input"
+                  style={{ width: '100%' }}
+                  value={customerId ? (allCust.find((c) => c.id === customerId)?.name ?? custText) : custText}
+                  placeholder={t('drawer.customerPh')}
+                  aria-label={t('drawer.customer')}
+                  onFocus={() => setCustOpen(true)}
+                  onChange={(e) => {
+                    touch();
+                    setCustomerId('');
+                    setCustText(e.target.value);
+                    setCustOpen(true);
+                  }}
+                />
+                {custOpen && suggestions.length && !customerId ? (
+                  <div className="menu menu-left menu-wide" role="listbox" style={{ top: 'calc(100% + 6px)' }}>
+                    {suggestions.map((c) => (
+                      <button
+                        key={c.id}
+                        type="button"
+                        role="option"
+                        aria-selected={false}
+                        className="menu-row"
+                        onClick={() => {
+                          touch();
+                          setCustomerId(c.id);
+                          setCustText(c.name);
+                          setCustOpen(false);
+                        }}
+                      >
+                        <span className="grow">
+                          <span className="mi-t">{c.name}</span>
+                          <span className="mi-s">{c.phone ?? c.email ?? ''}</span>
+                        </span>
+                        {c.blacklisted ? <span className="badge danger">!</span> : null}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+              {isNewCustomer ? (
+                <>
+                  <span className="hint">{t('drawer.newCustomerHint', { name: custText.trim() })}</span>
+                  <PhoneInput
+                    value={custPhone}
+                    onChange={(v) => {
+                      touch();
+                      setCustPhone(v);
+                    }}
+                    lang={i18n.language}
+                    ariaLabel={t('cset.phone')}
+                    searchLabel={t('phone.search')}
+                    countryLabel={t('phone.country')}
+                  />
+                  <input
+                    className="input"
+                    type="email"
+                    placeholder={t('drawer.newCustomerEmail')}
+                    aria-label={t('cust.email')}
+                    value={custEmail}
+                    onChange={(e) => {
+                      touch();
+                      setCustEmail(e.target.value);
+                    }}
+                  />
+                  {emailOk ? null : (
+                    <span className="hint" style={{ color: 'var(--danger)', fontWeight: 600 }}>
+                      {t('drawer.emailInvalid')}
+                    </span>
+                  )}
+                </>
+              ) : null}
+            </div>
 
             <label className="field">
               <span>
@@ -351,7 +484,7 @@ function NewAppointment({
                   key={i}
                   row={r}
                   index={i}
-                  locationId={locationId}
+                  locationId={locId}
                   services={services}
                   employees={employees}
                   removable={rowList.length > 1}
@@ -506,11 +639,15 @@ function ApptRow({
         onChange={(e) => onChange({ ...row, eid: e.target.value })}
       >
         <option value="any">{t('drawer.anyEmployee')}</option>
-        {employees.map((em) => (
-          <option key={em.id} value={em.id}>
-            {em.name}
-          </option>
-        ))}
+        {/* Only people who work at the chosen location — anyone else
+            would just bounce off the booking gate. */}
+        {employees
+          .filter((em) => em.locationIds.includes(locationId))
+          .map((em) => (
+            <option key={em.id} value={em.id}>
+              {em.name}
+            </option>
+          ))}
       </select>
       <div style={{ display: 'flex', gap: 8 }}>
         <select

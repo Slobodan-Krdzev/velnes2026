@@ -2,6 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ActivityListSchema,
   CustomerApptsSchema,
+  CustomerExportResponseSchema,
   CustomerInsightsSchema,
   CustomerInvoicesSchema,
   CustomerListResponseSchema,
@@ -13,7 +14,7 @@ import {
   type CustomerInsights,
   type CustomerProfile,
 } from '@velnes/contracts';
-import { I, Icon } from '@velnes/ui';
+import { I, Icon, PhoneInput } from '@velnes/ui';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -78,6 +79,7 @@ type CustomerSort = 'default' | 'visitsDesc' | 'visitsAsc' | 'spendDesc' | 'spen
 function CustomerList() {
   const { t } = useTranslation();
   const { can } = useSession();
+  const toast = useToast();
   const navigate = useNavigate();
   const qc = useQueryClient();
   const [q, setQ] = useState('');
@@ -94,6 +96,22 @@ function CustomerList() {
   const save = async (id: string, body: Record<string, unknown>) => {
     await patch(CustomerProfileSchema, `/customers/${id}`, body);
     void qc.invalidateQueries({ queryKey: ['customers'] });
+  };
+
+  // The export door hands back the CSV; the browser saves the file.
+  const exportCsv = async () => {
+    try {
+      const res = await get(CustomerExportResponseSchema, '/customers/export');
+      const url = URL.createObjectURL(new Blob([res.csv], { type: 'text/csv' }));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'customers.csv';
+      a.click();
+      URL.revokeObjectURL(url);
+      toast(t('cust.exported', { n: res.count }));
+    } catch (e) {
+      toast(e instanceof Error ? e.message : String(e));
+    }
   };
 
   const qTel = q.trim().replace(/\s+/g, '').toLowerCase();
@@ -221,6 +239,11 @@ function CustomerList() {
           </div>
         </div>
         <div className="toolbar-actions">
+          {can('customers.export') ? (
+            <button className="btn btn-secondary" onClick={() => void exportCsv()}>
+              {t('cust.export')}
+            </button>
+          ) : null}
           <button className="btn btn-primary btn-add" onClick={() => setAdding(true)}>
             {t('cal.add')} <Icon d={I.plus} size={20} w={2.5} />
           </button>
@@ -339,7 +362,7 @@ function NewCustomerPanel({
   onClose: () => void;
   onSaved: (id: string) => void;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const toast = useToast();
   const [first, setFirst] = useState('');
   const [last, setLast] = useState('');
@@ -419,19 +442,21 @@ function NewCustomerPanel({
                 onChange={(e) => setEmail(e.target.value)}
               />
             </label>
-            <label className="field">
+            <div className="field">
               <span>
                 {t('cust.phone')}
                 <span className="req">*</span>
               </span>
-              <input
-                className="input"
-                type="tel"
-                placeholder="+389 7x xxx xxx"
+              <PhoneInput
                 value={phone}
-                onChange={(e) => setPhone(e.target.value)}
+                onChange={setPhone}
+                placeholder="7x xxx xxx"
+                lang={i18n.language}
+                ariaLabel={t('cust.phone')}
+                searchLabel={t('phone.search')}
+                countryLabel={t('phone.country')}
               />
-            </label>
+            </div>
             <label className="field">
               <span>{t('cust.group')}</span>
               <select
@@ -488,9 +513,37 @@ function Profile({ id }: { id: string }) {
   const [menu, setMenu] = useState(false);
   const menuRef = useOutsideClose(menu, () => setMenu(false));
   const [offerOpen, setOfferOpen] = useState(false);
+  // Click-to-edit contact rows; saving notifies, and a changed email
+  // drops back to "confirmation pending" until verified again.
+  const [editContact, setEditContact] = useState<'email' | 'phone' | null>(null);
+  const [contactDraft, setContactDraft] = useState('');
   const full = can('customers.view_business');
   const c = profile.data;
   const st = insights.data;
+
+  const saveContact = async (field: 'email' | 'phone') => {
+    if (!c) return;
+    const value = contactDraft.trim() || null;
+    if (value === (field === 'email' ? c.email : c.phone)) {
+      setEditContact(null);
+      return;
+    }
+    if (field === 'email' && value && !/^\S+@\S+\.\S+$/.test(value)) {
+      toast(t('drawer.emailInvalid'));
+      return;
+    }
+    try {
+      await patch(CustomerProfileSchema, `/customers/${c.id}`, { [field]: value });
+      setEditContact(null);
+      toast(t('cust.contactUpdated'));
+      if (field === 'email' && value) toast(t('cust.emailReverify'));
+      void qc.invalidateQueries({ queryKey: ['customer', c.id] });
+      void qc.invalidateQueries({ queryKey: ['customers'] });
+      void qc.invalidateQueries({ queryKey: ['activity', c.id] });
+    } catch (e) {
+      toast(e instanceof Error ? e.message : String(e));
+    }
+  };
 
   if (profile.isError)
     return (
@@ -582,14 +635,90 @@ function Profile({ id }: { id: string }) {
               {retentionBadge(t, st)}
             </div>
             <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 8, textAlign: 'left', marginTop: 8 }}>
-              <a className="contact" href={`mailto:${c.email ?? ''}`}>
-                <Icon d={I.mail} size={16} />
-                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.email ?? '—'}</span>
-              </a>
-              <a className="contact" href={`tel:${c.phone ?? ''}`}>
-                <Icon d={I.phone} size={16} />
-                <span className="tnum">{c.phone ?? '—'}</span>
-              </a>
+              {editContact === 'email' ? (
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <input
+                    className="input"
+                    type="email"
+                    style={{ flex: 1, minWidth: 0 }}
+                    value={contactDraft}
+                    aria-label={t('cust.email')}
+                    autoFocus
+                    onChange={(e) => setContactDraft(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') void saveContact('email');
+                      if (e.key === 'Escape') setEditContact(null);
+                    }}
+                  />
+                  <button className="btn btn-primary btn-sm" onClick={() => void saveContact('email')}>
+                    {t('common.save')}
+                  </button>
+                </div>
+              ) : (
+                <span className="contact" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Icon d={I.mail} size={16} />
+                  <a
+                    href={`mailto:${c.email ?? ''}`}
+                    style={{ overflow: 'hidden', textOverflow: 'ellipsis', flex: 1, color: 'inherit' }}
+                  >
+                    {c.email ?? '—'}
+                  </a>
+                  {c.email && !c.emailVerified ? (
+                    <span className="badge warning" title={t('cust.emailUnverifiedHint')}>
+                      {t('cust.emailUnverified')}
+                    </span>
+                  ) : null}
+                  {can('customers.edit') ? (
+                    <button
+                      className="btn btn-ghost btn-sm"
+                      aria-label={t('cust.editEmail')}
+                      style={{ padding: '2px 8px' }}
+                      onClick={() => {
+                        setContactDraft(c.email ?? '');
+                        setEditContact('email');
+                      }}
+                    >
+                      <Icon d={I.pencil} size={14} />
+                    </button>
+                  ) : null}
+                </span>
+              )}
+              {editContact === 'phone' ? (
+                <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <PhoneInput
+                      value={contactDraft}
+                      onChange={setContactDraft}
+                      ariaLabel={t('cust.phone')}
+                      searchLabel={t('phone.search')}
+                      countryLabel={t('phone.country')}
+                    />
+                  </div>
+                  <button className="btn btn-primary btn-sm" onClick={() => void saveContact('phone')}>
+                    {t('common.save')}
+                  </button>
+                </div>
+              ) : (
+                <span className="contact" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Icon d={I.phone} size={16} />
+                  <a href={`tel:${c.phone ?? ''}`} className="tnum" style={{ flex: 1, color: 'inherit' }}>
+                    {c.phone ?? '—'}
+                  </a>
+                  {can('customers.edit') ? (
+                    <button
+                      className="btn btn-ghost btn-sm"
+                      aria-label={t('cust.editPhone')}
+                      style={{ padding: '2px 8px' }}
+                      onClick={() => {
+                        setContactDraft(c.phone ?? '');
+                        setEditContact('phone');
+                      }}
+                    >
+                      <Icon d={I.pencil} size={14} />
+                    </button>
+                  ) : null}
+                </span>
+              )}
             </div>
           </div>
           {c.note ? (

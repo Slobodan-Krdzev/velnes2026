@@ -38,6 +38,7 @@ export async function customerProfile(trx: Trx, id: string): Promise<CustomerPro
     id: c.id,
     name: c.name,
     email: c.email,
+    emailVerified: !!c.emailVerifiedAt,
     phone: c.phone,
     group: c.custGroup,
     since: c.since ? localIso(c.since) : null,

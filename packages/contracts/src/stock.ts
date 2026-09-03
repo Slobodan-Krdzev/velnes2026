@@ -57,6 +57,31 @@ export const StockLevelSchema = z.object({
   stock: z.number().int(),
   lowStock: z.number().int(),
 });
+
+/** The ledger read — inventory.view's door. Every stock change is a
+ *  movement; this lists them, newest first. */
+export const StockMovementQuerySchema = z.object({
+  productId: z.uuid().optional(),
+  locationId: z.uuid().optional(),
+  limit: z.coerce.number().int().min(1).max(200).default(50),
+});
+export const StockMovementRowSchema = z.object({
+  id: z.uuid(),
+  at: z.string(), // ISO timestamp
+  kind: StockMovementKindSchema,
+  qty: z.number().int(),
+  productId: z.uuid(),
+  productName: z.string(),
+  locationId: z.uuid(),
+  locationName: z.string(),
+  ref: z.string().nullable(),
+  note: z.string().nullable(),
+  actorName: z.string().nullable(),
+});
+export const StockMovementListSchema = z.object({
+  movements: z.array(StockMovementRowSchema),
+});
+export type StockMovementRow = z.infer<typeof StockMovementRowSchema>;
 export const StockMoveResponseSchema = z.object({
   levels: z.array(StockLevelSchema), // affected locations, after the move
 });

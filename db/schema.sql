@@ -402,6 +402,27 @@ ALTER TABLE ONLY public.businesses FORCE ROW LEVEL SECURITY;
 
 
 --
+-- Name: category_requests; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.category_requests (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    tenant_id uuid NOT NULL,
+    name text NOT NULL,
+    kind text NOT NULL,
+    note text DEFAULT ''::text NOT NULL,
+    status text DEFAULT 'pending'::text NOT NULL,
+    hq_reason text DEFAULT ''::text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    decided_at timestamp with time zone,
+    CONSTRAINT category_requests_kind_check CHECK ((kind = ANY (ARRAY['services'::text, 'products'::text]))),
+    CONSTRAINT category_requests_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'approved'::text, 'declined'::text])))
+);
+
+ALTER TABLE ONLY public.category_requests FORCE ROW LEVEL SECURITY;
+
+
+--
 -- Name: checkout_items; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -479,7 +500,8 @@ CREATE TABLE public.customers (
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     birthday date,
     tags text[] DEFAULT '{}'::text[] NOT NULL,
-    premium jsonb
+    premium jsonb,
+    email_verified_at timestamp with time zone
 );
 
 ALTER TABLE ONLY public.customers FORCE ROW LEVEL SECURITY;
@@ -1048,6 +1070,24 @@ ALTER TABLE ONLY public.personal_offers FORCE ROW LEVEL SECURITY;
 
 
 --
+-- Name: platform_notices; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.platform_notices (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    kind text NOT NULL,
+    title text NOT NULL,
+    body text DEFAULT ''::text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    audience text DEFAULT 'salons'::text NOT NULL,
+    tenant_id uuid,
+    CONSTRAINT platform_notices_audience_check CHECK ((audience = ANY (ARRAY['salons'::text, 'hq'::text])))
+);
+
+ALTER TABLE ONLY public.platform_notices FORCE ROW LEVEL SECURITY;
+
+
+--
 -- Name: premium_offers; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1081,7 +1121,6 @@ ALTER TABLE ONLY public.premium_offers FORCE ROW LEVEL SECURITY;
 
 CREATE TABLE public.product_categories (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
-    tenant_id uuid NOT NULL,
     name text NOT NULL,
     parent_id uuid,
     sort integer DEFAULT 0 NOT NULL
@@ -1110,7 +1149,8 @@ CREATE TABLE public.products (
     size_unit text,
     seller_legal_entity_id uuid,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
-    supplier_product_id uuid
+    supplier_product_id uuid,
+    img text
 );
 
 ALTER TABLE ONLY public.products FORCE ROW LEVEL SECURITY;
@@ -1256,7 +1296,6 @@ CREATE TABLE public.schema_migrations (
 
 CREATE TABLE public.service_categories (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
-    tenant_id uuid NOT NULL,
     name text NOT NULL,
     parent_id uuid,
     sort integer DEFAULT 0 NOT NULL
@@ -1588,6 +1627,14 @@ ALTER TABLE ONLY public.businesses
 
 
 --
+-- Name: category_requests category_requests_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.category_requests
+    ADD CONSTRAINT category_requests_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: checkout_items checkout_items_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1900,6 +1947,14 @@ ALTER TABLE ONLY public.personal_offers
 
 
 --
+-- Name: platform_notices platform_notices_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.platform_notices
+    ADD CONSTRAINT platform_notices_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: premium_offers premium_offers_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1908,19 +1963,19 @@ ALTER TABLE ONLY public.premium_offers
 
 
 --
+-- Name: product_categories product_categories_name_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.product_categories
+    ADD CONSTRAINT product_categories_name_key UNIQUE (name);
+
+
+--
 -- Name: product_categories product_categories_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.product_categories
     ADD CONSTRAINT product_categories_pkey PRIMARY KEY (id);
-
-
---
--- Name: product_categories product_categories_tenant_id_name_key; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.product_categories
-    ADD CONSTRAINT product_categories_tenant_id_name_key UNIQUE (tenant_id, name);
 
 
 --
@@ -2004,19 +2059,19 @@ ALTER TABLE ONLY public.schema_migrations
 
 
 --
+-- Name: service_categories service_categories_name_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.service_categories
+    ADD CONSTRAINT service_categories_name_key UNIQUE (name);
+
+
+--
 -- Name: service_categories service_categories_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.service_categories
     ADD CONSTRAINT service_categories_pkey PRIMARY KEY (id);
-
-
---
--- Name: service_categories service_categories_tenant_id_name_key; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.service_categories
-    ADD CONSTRAINT service_categories_tenant_id_name_key UNIQUE (tenant_id, name);
 
 
 --
@@ -2187,6 +2242,13 @@ CREATE INDEX appointments_widget_idx ON public.appointments USING btree (widget_
 --
 
 CREATE INDEX audit_log_tenant ON public.audit_log USING btree (tenant_id, ts DESC);
+
+
+--
+-- Name: category_requests_tenant; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX category_requests_tenant ON public.category_requests USING btree (tenant_id, created_at);
 
 
 --
@@ -2386,13 +2448,6 @@ CREATE INDEX personal_offers_cust ON public.personal_offers USING btree (custome
 
 
 --
--- Name: product_categories_tenant; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX product_categories_tenant ON public.product_categories USING btree (tenant_id, sort);
-
-
---
 -- Name: products_tenant; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2439,13 +2494,6 @@ CREATE INDEX registrations_queue ON public.registrations USING btree (status, ts
 --
 
 CREATE INDEX schedule_exceptions_tenant ON public.schedule_exceptions USING btree (tenant_id, location_id, start_date);
-
-
---
--- Name: service_categories_tenant; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX service_categories_tenant ON public.service_categories USING btree (tenant_id, sort);
 
 
 --
@@ -2591,6 +2639,14 @@ ALTER TABLE ONLY public.audit_log
 
 ALTER TABLE ONLY public.businesses
     ADD CONSTRAINT businesses_owner_fk FOREIGN KEY (owner_employee_id) REFERENCES public.employees(id);
+
+
+--
+-- Name: category_requests category_requests_tenant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.category_requests
+    ADD CONSTRAINT category_requests_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.businesses(id);
 
 
 --
@@ -3234,6 +3290,14 @@ ALTER TABLE ONLY public.personal_offers
 
 
 --
+-- Name: platform_notices platform_notices_tenant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.platform_notices
+    ADD CONSTRAINT platform_notices_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.businesses(id);
+
+
+--
 -- Name: premium_offers premium_offers_location_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3271,14 +3335,6 @@ ALTER TABLE ONLY public.premium_offers
 
 ALTER TABLE ONLY public.product_categories
     ADD CONSTRAINT product_categories_parent_id_fkey FOREIGN KEY (parent_id) REFERENCES public.product_categories(id);
-
-
---
--- Name: product_categories product_categories_tenant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.product_categories
-    ADD CONSTRAINT product_categories_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.businesses(id);
 
 
 --
@@ -3423,14 +3479,6 @@ ALTER TABLE ONLY public.schedule_exceptions
 
 ALTER TABLE ONLY public.service_categories
     ADD CONSTRAINT service_categories_parent_id_fkey FOREIGN KEY (parent_id) REFERENCES public.service_categories(id);
-
-
---
--- Name: service_categories service_categories_tenant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.service_categories
-    ADD CONSTRAINT service_categories_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.businesses(id);
 
 
 --
@@ -3686,6 +3734,12 @@ CREATE POLICY auth_login_lookup ON public.user_credentials FOR SELECT USING ((cu
 ALTER TABLE public.businesses ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: category_requests; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.category_requests ENABLE ROW LEVEL SECURITY;
+
+--
 -- Name: checkout_items; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -3762,6 +3816,13 @@ ALTER TABLE public.holiday_calendar_years ENABLE ROW LEVEL SECURITY;
 --
 
 ALTER TABLE public.holidays ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: category_requests hq_all; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY hq_all ON public.category_requests USING ((current_setting('app.hq'::text, true) = '1'::text)) WITH CHECK ((current_setting('app.hq'::text, true) = '1'::text));
+
 
 --
 -- Name: hq_users hq_all; Type: POLICY; Schema: public; Owner: -
@@ -3845,6 +3906,27 @@ CREATE POLICY hq_read ON public.payment_accounts FOR SELECT USING ((current_sett
 --
 
 ALTER TABLE public.hq_users ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: platform_notices hq_write; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY hq_write ON public.platform_notices USING ((current_setting('app.hq'::text, true) = '1'::text)) WITH CHECK ((current_setting('app.hq'::text, true) = '1'::text));
+
+
+--
+-- Name: product_categories hq_write; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY hq_write ON public.product_categories USING ((current_setting('app.hq'::text, true) = '1'::text)) WITH CHECK ((current_setting('app.hq'::text, true) = '1'::text));
+
+
+--
+-- Name: service_categories hq_write; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY hq_write ON public.service_categories USING ((current_setting('app.hq'::text, true) = '1'::text)) WITH CHECK ((current_setting('app.hq'::text, true) = '1'::text));
+
 
 --
 -- Name: integration_events; Type: ROW SECURITY; Schema: public; Owner: -
@@ -3955,6 +4037,12 @@ ALTER TABLE public.payment_accounts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.personal_offers ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: platform_notices; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.platform_notices ENABLE ROW LEVEL SECURITY;
+
+--
 -- Name: supplier_products platform_read; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -4038,6 +4126,27 @@ CREATE POLICY read_all ON public.holiday_calendar_years FOR SELECT USING (true);
 --
 
 CREATE POLICY read_all ON public.holidays FOR SELECT USING (true);
+
+
+--
+-- Name: product_categories read_all; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY read_all ON public.product_categories FOR SELECT USING (true);
+
+
+--
+-- Name: service_categories read_all; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY read_all ON public.service_categories FOR SELECT USING (true);
+
+
+--
+-- Name: platform_notices read_scoped; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY read_scoped ON public.platform_notices FOR SELECT USING (((tenant_id IS NULL) OR (tenant_id = app.current_tenant()) OR (current_setting('app.hq'::text, true) = '1'::text)));
 
 
 --
@@ -4462,13 +4571,6 @@ CREATE POLICY tenant_isolation ON public.premium_offers USING ((tenant_id = app.
 
 
 --
--- Name: product_categories tenant_isolation; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY tenant_isolation ON public.product_categories USING ((tenant_id = app.current_tenant())) WITH CHECK ((tenant_id = app.current_tenant()));
-
-
---
 -- Name: products tenant_isolation; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -4501,13 +4603,6 @@ CREATE POLICY tenant_isolation ON public.roles USING ((tenant_id = app.current_t
 --
 
 CREATE POLICY tenant_isolation ON public.schedule_exceptions USING ((tenant_id = app.current_tenant())) WITH CHECK ((tenant_id = app.current_tenant()));
-
-
---
--- Name: service_categories tenant_isolation; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY tenant_isolation ON public.service_categories USING ((tenant_id = app.current_tenant())) WITH CHECK ((tenant_id = app.current_tenant()));
 
 
 --
@@ -4574,6 +4669,13 @@ CREATE POLICY tenant_isolation ON public.widgets USING ((tenant_id = app.current
 
 
 --
+-- Name: category_requests tenant_own; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY tenant_own ON public.category_requests USING ((tenant_id = app.current_tenant())) WITH CHECK ((tenant_id = app.current_tenant()));
+
+
+--
 -- Name: audit_log tenant_read; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -4606,6 +4708,13 @@ CREATE POLICY tenant_read ON public.loyalty_ledger FOR SELECT USING ((tenant_id 
 --
 
 CREATE POLICY tenant_read ON public.stock_movements FOR SELECT USING ((tenant_id = app.current_tenant()));
+
+
+--
+-- Name: platform_notices tenant_ring_hq; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY tenant_ring_hq ON public.platform_notices FOR INSERT WITH CHECK ((audience = 'hq'::text));
 
 
 --
@@ -4657,4 +4766,10 @@ INSERT INTO public.schema_migrations (version) VALUES
     ('20260826130016'),
     ('20260826150017'),
     ('20260826170018'),
-    ('20260826200019');
+    ('20260826200019'),
+    ('20260903120020'),
+    ('20260903160021'),
+    ('20260903170022'),
+    ('20260903190023'),
+    ('20260903200024'),
+    ('20260903210025');

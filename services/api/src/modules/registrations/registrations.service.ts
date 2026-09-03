@@ -295,16 +295,17 @@ export async function approveRegistration(id: string, reviewer: string) {
       .values({ tenantId: businessId, employeeId: ownerId, locationId })
       .execute();
 
-    // The picked starter services, one category row per template cat.
+    // The picked starter services, on the Velnes taxonomy: the
+    // template categories are platform rows, never re-created.
     const picked = REG_SERVICE_TEMPLATES.filter((t) => draft.services.includes(t.key));
     const catIds = new Map<string, string>();
     for (const cat of [...new Set(picked.map((t) => t.category))]) {
-      const cid = randomUUID();
-      catIds.set(cat, cid);
-      await trx
-        .insertInto('serviceCategories')
-        .values({ id: cid, tenantId: businessId, name: cat, sort: catIds.size })
-        .execute();
+      const row = await trx
+        .selectFrom('serviceCategories')
+        .select('id')
+        .where('name', '=', cat)
+        .executeTakeFirstOrThrow();
+      catIds.set(cat, row.id);
     }
     for (const [i, t] of picked.entries())
       await trx

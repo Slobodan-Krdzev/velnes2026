@@ -4,24 +4,27 @@ import {
   HqApproveResponseSchema,
   HqAuditListSchema,
   HqBusinessListSchema,
+  HqCategoryListSchema,
+  HqCategoryRequestListSchema,
   HqLocationQueueSchema,
   HqLocationReviewSchema,
   RegistrationStatusSchema,
   HqRegistrationListSchema,
 } from '@velnes/contracts';
 import type { Lang } from '@velnes/i18n';
-import { VelnesMark } from '@velnes/ui';
-import { useCallback, useEffect, useState } from 'react';
+import { I, Icon, VelnesMark } from '@velnes/ui';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { z } from 'zod';
-import { HqApiError, hqGet, hqPost } from './api.js';
+import { PlatformNoticeListSchema } from '@velnes/contracts';
+import { HqApiError, hqDelete, hqGet, hqPatch, hqPost } from './api.js';
 
 /** The prototype's viewHQ: the customers pane is the intake table —
  *  new locations, new registrations, then every business on the
  *  platform. Suppliers and HQ team wait for their phases, honestly. */
 
 type HqUser = z.infer<typeof HqMeResponseSchema>;
-type Tab = 'customers' | 'suppliers' | 'team' | 'audit';
+type Tab = 'customers' | 'categories' | 'suppliers' | 'team' | 'search' | 'audit';
 const DecisionResp = z.object({ id: z.uuid(), lifecycle: z.string() });
 const RegDecisionResp = z.object({ id: z.uuid(), status: RegistrationStatusSchema });
 
@@ -37,68 +40,531 @@ export function Hq({
   const { t, i18n } = useTranslation();
   const [tab, setTab] = useState<Tab>('customers');
   const [toast, setToast] = useState<string | null>(null);
+  const [envMenu, setEnvMenu] = useState(false);
+  const envRef = useRef<HTMLDivElement | null>(null);
+  const [notifOpen, setNotifOpen] = useState(false);
+  const notifRef = useRef<HTMLDivElement | null>(null);
+  const [notices, setNotices] = useState<z.infer<typeof PlatformNoticeListSchema>['notices']>([]);
+  useEffect(() => {
+    const loadNotices = () =>
+      void hqGet(PlatformNoticeListSchema, '/hq/notices')
+        .then((r2) => setNotices(r2.notices))
+        .catch(() => undefined);
+    loadNotices();
+    const iv = setInterval(loadNotices, 120_000);
+    return () => clearInterval(iv);
+  }, []);
+  const latestNotice = notices[0]?.createdAt ?? '';
+  const seenNotice = (() => {
+    try {
+      return localStorage.getItem('velnes.hq.noticesSeen') ?? '';
+    } catch {
+      return '';
+    }
+  })();
+  const unseenNotice = !!latestNotice && latestNotice > seenNotice;
+  useEffect(() => {
+    if (!notifOpen) return;
+    const onPointer = (e: PointerEvent) => {
+      if (notifRef.current && !notifRef.current.contains(e.target as Node)) setNotifOpen(false);
+    };
+    document.addEventListener('pointerdown', onPointer);
+    return () => document.removeEventListener('pointerdown', onPointer);
+  }, [notifOpen]);
   const say = (msg: string) => {
     setToast(msg);
     setTimeout(() => setToast(null), 3500);
   };
 
-  const tabs: [Tab, string][] = [
-    ['customers', t('hq.tabCustomers')],
-    ['suppliers', t('hq.tabSuppliers')],
-    ['team', t('hq.tabTeam')],
-    ['audit', t('hq.tabAudit')],
+  // The prototype's env-hq mode: same chrome, the title says where
+  // you are.
+  useEffect(() => {
+    document.body.classList.add('env-hq');
+    return () => document.body.classList.remove('env-hq');
+  }, []);
+  useEffect(() => {
+    if (!envMenu) return;
+    const onPointer = (e: PointerEvent) => {
+      if (envRef.current && !envRef.current.contains(e.target as Node)) setEnvMenu(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setEnvMenu(false);
+    };
+    document.addEventListener('pointerdown', onPointer);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('pointerdown', onPointer);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [envMenu]);
+
+  // The prototype's HQ_NAV, verbatim — plus the Categories shelfkeeper.
+  const nav: { tab: Tab; label: string; icon: string; size: number }[] = [
+    { tab: 'customers', label: t('hq.tabCustomers'), icon: I.users, size: 28 },
+    { tab: 'categories', label: t('hq.tabCategories'), icon: I.tag, size: 26 },
+    { tab: 'suppliers', label: t('hq.tabSuppliers'), icon: I.products, size: 28 },
+    { tab: 'team', label: t('hq.tabTeam'), icon: I.user, size: 26 },
+    { tab: 'search', label: t('hq.tabSearch'), icon: I.pulse, size: 26 },
+    { tab: 'audit', label: t('hq.tabAudit'), icon: I.note, size: 26 },
   ];
+  const inits = (n: string) =>
+    n
+      .split(' ')
+      .map((p2) => p2[0])
+      .join('')
+      .slice(0, 2);
+  const workspaceUrl = import.meta.env.VITE_WORKSPACE_URL ?? 'http://localhost:5173';
 
   return (
-    <div className="app" style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
-      <header className="topbar" style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '0 20px' }}>
-        <span style={{ color: 'var(--accent-deep)', display: 'flex', alignItems: 'center', gap: 10 }}>
-          <VelnesMark size={26} />
-          <strong>Revelapps HQ</strong>
-        </span>
-        <div className="cat-tabs" style={{ marginLeft: 12 }}>
-          {tabs.map(([k, l]) => (
-            <button key={k} className={`ttab ${tab === k ? 'on' : ''}`} onClick={() => setTab(k)}>
-              {l}
-            </button>
-          ))}
+    <>
+      <aside className="sidebar">
+        <div className="sidebar-group">
+          <div className="applogo" title="Revelapps HQ">
+            <VelnesMark size={34} />
+          </div>
+          <nav id="nav-main" className="sidebar-group">
+            {nav.map((n) => (
+              <button
+                key={n.tab}
+                className={`tile${tab === n.tab ? ' active' : ''}`}
+                title={n.label}
+                aria-label={n.label}
+                onClick={() => setTab(n.tab)}
+              >
+                <Icon d={n.icon} size={n.size} w={1.9} />
+              </button>
+            ))}
+          </nav>
         </div>
-        <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10 }}>
-          <select
-            className="select"
-            aria-label="Language"
-            value={i18n.language}
-            onChange={(e) => setLang(e.target.value as Lang)}
+        <nav id="nav-foot" className="sidebar-group">
+          <button
+            className="tile"
+            title={t('hq.backToSalon')}
+            aria-label={t('hq.backToSalon')}
+            onClick={() => window.location.assign(workspaceUrl)}
           >
-            <option value="en">EN</option>
-            <option value="mk">МК</option>
-            <option value="sq">SQ</option>
-          </select>
-          <span className="badge">
-            {t('hq.signedInAs')} {user.name} · {user.role}
-          </span>
-          <button className="btn btn-subtle btn-sm" onClick={signOut}>
-            {t('hq.signOut')}
+            <Icon d={I.arrowleft} size={24} w={1.9} />
           </button>
-        </span>
-      </header>
-      <main style={{ flex: 1, padding: 24, maxWidth: 1280, width: '100%', margin: '0 auto' }}>
-        {tab === 'customers' ? <Customers say={say} /> : null}
-        {tab === 'suppliers' ? (
-          <div className="empty">
-            <h3>{t('hq.comingSoon')}</h3>
-            <p>{t('hq.suppliersSoon')}</p>
+        </nav>
+      </aside>
+
+      <div className="shell">
+        <header className="topbar">
+          <div className="topbar-left">
+            <h1 id="page-title">Revelapps HQ</h1>
           </div>
-        ) : null}
-        {tab === 'team' ? (
-          <div className="empty">
-            <h3>{t('hq.comingSoon')}</h3>
-            <p>{t('hq.teamSoon')}</p>
+          <div className="topbar-mid" id="topbar-mid" />
+          <div className="topbar-right">
+            <div className="pop" ref={notifRef}>
+              <button
+                className="iconbtn"
+                style={{ position: 'relative' }}
+                aria-label={t('shell.notices')}
+                aria-haspopup="menu"
+                aria-expanded={notifOpen}
+                onClick={() => {
+                  setNotifOpen((v) => !v);
+                  if (latestNotice) {
+                    try {
+                      localStorage.setItem('velnes.hq.noticesSeen', latestNotice);
+                    } catch {
+                      /* private mode — the dot just stays */
+                    }
+                  }
+                }}
+              >
+                <Icon d={I.bell} size={24} w={2} />
+                {unseenNotice ? <span className="dot" /> : null}
+              </button>
+              {notifOpen ? (
+                <div className="menu menu-wide menu-scroll" role="menu">
+                  <div className="menu-label">{t('shell.notices')}</div>
+                  {notices.length === 0 ? (
+                    <div className="menu-label" style={{ fontWeight: 500 }}>
+                      {t('shell.noNotices')}
+                    </div>
+                  ) : (
+                    notices.map((n) => (
+                      <button
+                        key={n.id}
+                        className="menu-row"
+                        onClick={() => {
+                          setNotifOpen(false);
+                          // A notice knows its screen: category talk
+                          // lands on the Categories tab.
+                          if (n.kind.startsWith('category')) setTab('categories');
+                        }}
+                      >
+                        <span className="grow" style={{ textAlign: 'left' }}>
+                          <span className="mi-t" style={{ fontWeight: 700 }}>
+                            {n.title}
+                          </span>
+                          <span className="mi-s" style={{ display: 'block' }}>
+                            {n.body} · {n.createdAt.slice(0, 10)}
+                          </span>
+                        </span>
+                      </button>
+                    ))
+                  )}
+                </div>
+              ) : null}
+            </div>
+            <div className="pop" ref={envRef}>
+              <button
+                className="avatar"
+                aria-haspopup="menu"
+                aria-expanded={envMenu}
+                title={user.name}
+                onClick={() => setEnvMenu((v) => !v)}
+              >
+                {inits(user.name)}
+              </button>
+              {envMenu ? (
+                <div className="menu menu-wide menu-scroll" role="menu">
+                  <div className="menu-label">{t('shell.signedIn')}</div>
+                  <div style={{ padding: '4px 12px 10px', display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <span className="avatar">{inits(user.name)}</span>
+                    <span>
+                      <span className="mi-t" style={{ fontWeight: 700 }}>
+                        {user.name}
+                      </span>
+                      <span className="mi-s">Revelapps HQ · {user.role}</span>
+                    </span>
+                  </div>
+                  <div className="menu-sep" />
+                  <div className="menu-label">{t('shell.language')}</div>
+                  {(['en', 'mk', 'sq'] as const).map((l) => (
+                    <button
+                      key={l}
+                      className="menu-row"
+                      aria-label={t(`lang.${l}`)}
+                      onClick={() => {
+                        setLang(l);
+                        setEnvMenu(false);
+                      }}
+                    >
+                      <span className={`check${i18n.language === l ? ' on' : ''}`}>
+                        <Icon d={I.check} size={14} w={3.5} />
+                      </span>
+                      <span className="grow">
+                        <span className="mi-t">{t(`lang.${l}`)}</span>
+                      </span>
+                    </button>
+                  ))}
+                  <div className="menu-sep" />
+                  <button className="menu-row" onClick={signOut}>
+                    <span className="check">
+                      <Icon d={I.arrowleft} size={14} w={2.5} />
+                    </span>
+                    <span className="grow">
+                      <span className="mi-t">{t('hq.signOut')}</span>
+                    </span>
+                  </button>
+                </div>
+              ) : null}
+            </div>
           </div>
-        ) : null}
-        {tab === 'audit' ? <PlatformLog /> : null}
-      </main>
+        </header>
+        <main id="view">
+          {tab === 'customers' ? <Customers say={say} /> : null}
+          {tab === 'categories' ? <Categories say={say} /> : null}
+          {tab === 'suppliers' ? (
+            <div className="empty">
+              <h3>{t('hq.comingSoon')}</h3>
+              <p>{t('hq.suppliersSoon')}</p>
+            </div>
+          ) : null}
+          {tab === 'team' ? (
+            <div className="empty">
+              <h3>{t('hq.comingSoon')}</h3>
+              <p>{t('hq.teamSoon')}</p>
+            </div>
+          ) : null}
+          {tab === 'search' ? (
+            <div className="empty">
+              <h3>{t('hq.comingSoon')}</h3>
+              <p>{t('hq.searchSoon')}</p>
+            </div>
+          ) : null}
+          {tab === 'audit' ? <PlatformLog /> : null}
+        </main>
+      </div>
       {toast ? <div className="toast show">{toast}</div> : null}
+    </>
+  );
+}
+
+/** The Velnes taxonomy: the platform category shelves every salon
+ *  picks from. Create and rename; renames follow every salon's items
+ *  automatically because items reference the id, not the name. */
+function Categories({ say }: { say: (m: string) => void }) {
+  const { t } = useTranslation();
+  const [rows, setRows] = useState<z.infer<typeof HqCategoryListSchema>['categories']>([]);
+  const [name, setName] = useState('');
+  const [type, setType] = useState<'services' | 'products'>('services');
+  const [renaming, setRenaming] = useState<{ id: string; type: string; name: string } | null>(null);
+  const [requests, setRequests] = useState<z.infer<typeof HqCategoryRequestListSchema>['requests']>([]);
+  const [declining, setDeclining] = useState<{ id: string; reason: string } | null>(null);
+  const [adding, setAdding] = useState(false);
+
+  const load = useCallback(
+    () =>
+      void Promise.all([
+        hqGet(HqCategoryListSchema, '/hq/categories').then((r) => setRows(r.categories)),
+        hqGet(HqCategoryRequestListSchema, '/hq/categories/requests').then((r) =>
+          setRequests(r.requests),
+        ),
+      ]),
+    [],
+  );
+  useEffect(load, [load]);
+  const pending = requests.filter((r) => r.status === 'pending');
+
+  const decide = async (id: string, action: 'approve' | 'decline', reason?: string) => {
+    try {
+      await hqPost(
+        z.object({ ok: z.literal(true) }),
+        `/hq/categories/requests/${id}/${action}`,
+        action === 'decline' ? { reason } : undefined,
+      );
+      say(action === 'approve' ? t('hq.requestApproved') : t('hq.requestDeclined'));
+      setDeclining(null);
+      load();
+    } catch (e) {
+      say(e instanceof HqApiError ? e.message : String(e));
+    }
+  };
+  const removeCategory = async (r: { id: string; type: string }) => {
+    try {
+      await hqDelete(z.object({ ok: z.literal(true) }), `/hq/categories/${r.type}/${r.id}`);
+      say(t('hq.categoryRemoved'));
+      load();
+    } catch (e) {
+      say(e instanceof HqApiError ? e.message : String(e));
+    }
+  };
+
+  const add = async () => {
+    try {
+      await hqPost(z.object({ id: z.string() }), '/hq/categories', { name: name.trim(), type });
+      setName('');
+      setAdding(false);
+      say(t('hq.categoryAdded'));
+      load();
+    } catch (e) {
+      say(e instanceof HqApiError ? e.message : String(e));
+    }
+  };
+  const rename = async () => {
+    if (!renaming) return;
+    try {
+      await hqPatch(
+        z.object({ ok: z.literal(true) }),
+        `/hq/categories/${renaming.type}/${renaming.id}`,
+        { name: renaming.name.trim() },
+      );
+      setRenaming(null);
+      say(t('hq.categoryRenamed'));
+      load();
+    } catch (e) {
+      say(e instanceof HqApiError ? e.message : String(e));
+    }
+  };
+
+  const pane = (kind: 'services' | 'products') => (
+    <div className="card">
+      <div className="card-header">
+        <h2>{kind === 'services' ? t('hq.svcCategories') : t('hq.prodCategories')}</h2>
+      </div>
+      <table>
+        <tbody>
+          {rows
+            .filter((r) => r.type === kind)
+            .map((r) => (
+              <tr key={r.id}>
+                <td className="bold">
+                  {renaming?.id === r.id ? (
+                    <input
+                      className="input"
+                      value={renaming.name}
+                      aria-label={t('hq.renameCategory')}
+                      onChange={(e) => setRenaming({ ...renaming, name: e.target.value })}
+                    />
+                  ) : (
+                    r.name
+                  )}
+                </td>
+                <td className="right">
+                  {renaming?.id === r.id ? (
+                    <>
+                      <button className="btn btn-primary btn-sm" onClick={() => void rename()}>
+                        {t('hq.save')}
+                      </button>{' '}
+                      <button className="btn btn-subtle btn-sm" onClick={() => setRenaming(null)}>
+                        {t('hq.cancel')}
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        className="btn btn-ghost btn-sm"
+                        onClick={() => setRenaming({ id: r.id, type: r.type, name: r.name })}
+                      >
+                        {t('hq.rename')}
+                      </button>{' '}
+                      <button
+                        className="btn btn-subtle btn-sm"
+                        onClick={() => void removeCategory(r)}
+                      >
+                        {t('hq.remove')}
+                      </button>
+                    </>
+                  )}
+                </td>
+              </tr>
+            ))}
+        </tbody>
+      </table>
+    </div>
+  );
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+      {pending.length ? (
+        <div className="card">
+          <div className="card-header">
+            <h2>
+              {t('hq.categoryRequests')} <span className="badge warning">{pending.length}</span>
+            </h2>
+            <span className="muted" style={{ fontWeight: 500 }}>
+              {t('hq.categoryRequestsSub')}
+            </span>
+          </div>
+          <table>
+            <tbody>
+              {pending.map((r) => (
+                <tr key={r.id}>
+                  <td className="bold">{r.name}</td>
+                  <td className="muted">
+                    {r.type === 'services' ? t('hq.forServices') : t('hq.forProducts')}
+                  </td>
+                  <td className="muted">{r.tenantName}</td>
+                  <td className="muted" style={{ maxWidth: 280 }}>
+                    {r.note || '—'}
+                  </td>
+                  <td className="right" style={{ whiteSpace: 'nowrap' }}>
+                    {declining?.id === r.id ? (
+                      <span style={{ display: 'inline-flex', gap: 6 }}>
+                        <input
+                          className="input"
+                          style={{ height: 34, width: 200 }}
+                          placeholder={t('hq.declineReasonPh')}
+                          value={declining.reason}
+                          aria-label={t('hq.declineReasonPh')}
+                          onChange={(e) => setDeclining({ id: r.id, reason: e.target.value })}
+                        />
+                        <button
+                          className="btn btn-primary btn-sm"
+                          disabled={!declining.reason.trim()}
+                          onClick={() => void decide(r.id, 'decline', declining.reason.trim())}
+                        >
+                          {t('hq.decline')}
+                        </button>
+                        <button className="btn btn-subtle btn-sm" onClick={() => setDeclining(null)}>
+                          {t('hq.cancel')}
+                        </button>
+                      </span>
+                    ) : (
+                      <>
+                        <button
+                          className="btn btn-primary btn-sm"
+                          onClick={() => void decide(r.id, 'approve')}
+                        >
+                          {t('hq.approve')}
+                        </button>{' '}
+                        <button
+                          className="btn btn-subtle btn-sm"
+                          onClick={() => setDeclining({ id: r.id, reason: '' })}
+                        >
+                          {t('hq.decline')}
+                        </button>
+                      </>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : null}
+      <div className="card">
+        <div className="card-header">
+          <h2>{t('hq.tabCategories')}</h2>
+          <button className="btn btn-primary btn-add" onClick={() => setAdding(true)}>
+            {t('hq.addCategory')} <Icon d={I.plus} size={18} w={2.5} />
+          </button>
+        </div>
+        <div className="note" style={{ margin: '16px 20px' }}>
+          {t('hq.categoriesSub')}. {t('hq.categoriesNote')}
+        </div>
+      </div>
+      <div className="grid2" style={{ gap: 24, alignItems: 'start' }}>
+        {pane('services')}
+        {pane('products')}
+      </div>
+      {adding ? (
+        <div className="overlay" onClick={() => setAdding(false)}>
+          <div
+            className="modal"
+            role="dialog"
+            aria-modal="true"
+            style={{ maxWidth: 420 }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="modal-head">
+              <h2>{t('hq.addCategory')}</h2>
+            </div>
+            <div className="modal-body" style={{ display: 'grid', gap: 14 }}>
+              <label className="field">
+                <span>{t('hq.categoryName')}</span>
+                <input
+                  className="input"
+                  placeholder={t('hq.categoryNamePh')}
+                  value={name}
+                  autoFocus
+                  onChange={(e) => setName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && name.trim()) void add();
+                  }}
+                />
+              </label>
+              <label className="field">
+                <span>{t('hq.itemType')}</span>
+                <select
+                  className="select"
+                  style={{ width: '100%' }}
+                  value={type}
+                  onChange={(e) => setType(e.target.value as 'services' | 'products')}
+                >
+                  <option value="services">{t('hq.forServices')}</option>
+                  <option value="products">{t('hq.forProducts')}</option>
+                </select>
+              </label>
+            </div>
+            <div className="modal-foot">
+              <button className="btn btn-secondary" onClick={() => setAdding(false)}>
+                {t('hq.cancel')}
+              </button>
+              <button className="btn btn-primary" disabled={!name.trim()} onClick={() => void add()}>
+                {t('hq.addCategory')}
+              </button>
+            </div>
+            <button className="modal-close" aria-label={t('hq.cancel')} onClick={() => setAdding(false)}>
+              <Icon d={I.x} size={20} />
+            </button>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

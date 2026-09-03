@@ -1,4 +1,5 @@
 import {
+  CustomerExportResponseSchema,
   CustomerListQuerySchema,
   CustomerListResponseSchema,
   EmployeeInviteSchema,
@@ -121,19 +122,55 @@ export function teamRoutes(app: FastifyInstance) {
     preHandler: [app.authenticate],
     schema: {
       querystring: CustomerListQuerySchema,
-      response: { 200: CustomerListResponseSchema },
+      response: {
+        200: CustomerListResponseSchema,
+        403: z.object({ error: z.string(), message: z.string() }),
+      },
     },
-    handler: async (req) =>
+    handler: async (req, reply) =>
       withTenant(req.claims.ten, async (trx) => {
+        // The prototype's customer ladder: business/location readers
+        // see the file; view_assigned alone sees the customers they
+        // have actually served. No permission, no list.
+        const perms = await permsFor(trx, req.claims);
+        const wide =
+          can(perms, 'customers.view_location') || can(perms, 'customers.view_business');
+        if (!wide && !can(perms, 'customers.view_assigned'))
+          return reply
+            .code(403)
+            .send({ error: 'FORBIDDEN', message: 'Missing permission: customers.view_assigned' });
         let q = trx
           .selectFrom('customers')
           .selectAll()
           .orderBy('name')
           .limit(req.query.limit);
+        if (!wide)
+          q = q.where('id', 'in', (eb) =>
+            eb
+              .selectFrom('appointments')
+              .select('customerId')
+              .where('employeeId', '=', req.claims.sub)
+              .where('customerId', 'is not', null)
+              .$castTo<{ customerId: string }>(),
+          );
         if (req.query.query)
           q = q.where(sql<boolean>`name ILIKE ${'%' + req.query.query + '%'}`);
         const rows = await q.execute();
+        let tq = trx
+          .selectFrom('customers')
+          .select(({ fn }) => fn.countAll<string>().as('n'));
+        if (!wide)
+          tq = tq.where('id', 'in', (eb) =>
+            eb
+              .selectFrom('appointments')
+              .select('customerId')
+              .where('employeeId', '=', req.claims.sub)
+              .where('customerId', 'is not', null)
+              .$castTo<{ customerId: string }>(),
+          );
+        const total = await tq.executeTakeFirstOrThrow();
         return {
+          total: Number(total.n),
           customers: rows.map((c) => ({
             id: c.id,
             name: c.name,
@@ -147,6 +184,54 @@ export function teamRoutes(app: FastifyInstance) {
             noShows: c.noShows,
           })),
         };
+      }),
+  });
+
+  r.route({
+    method: 'GET',
+    url: '/customers/export',
+    preHandler: [app.authenticate],
+    schema: {
+      response: {
+        200: CustomerExportResponseSchema,
+        403: z.object({ error: z.string(), message: z.string() }),
+      },
+    },
+    handler: async (req, reply) =>
+      withTenant(req.claims.ten, async (trx) => {
+        // Taking the whole file out of the building is its own right,
+        // and it always goes on the record.
+        const perms = await permsFor(trx, req.claims);
+        if (!can(perms, 'customers.export'))
+          return reply
+            .code(403)
+            .send({ error: 'FORBIDDEN', message: 'Missing permission: customers.export' });
+        const rows = await trx.selectFrom('customers').selectAll().orderBy('name').execute();
+        const esc = (v: string | number | null) => {
+          const s = v == null ? '' : String(v);
+          return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+        };
+        const csv = [
+          'name,email,phone,group,visits,spend,points,no_shows',
+          ...rows.map((c) =>
+            [c.name, c.email, c.phone, c.custGroup, c.visits, c.spend, c.points, c.noShows]
+              .map(esc)
+              .join(','),
+          ),
+        ].join('\n');
+        const actor = await trx
+          .selectFrom('employees')
+          .select('name')
+          .where('id', '=', req.claims.sub)
+          .executeTakeFirst();
+        await logAudit(trx, req.claims.ten, {
+          actorEmployeeId: req.claims.sub,
+          actorName: actor?.name ?? '',
+          action: 'Customer data exported',
+          object: `Customers · ${rows.length}`,
+          after: `${rows.length} customers`,
+        });
+        return { csv, count: rows.length };
       }),
   });
 
@@ -530,7 +615,78 @@ export function teamRoutes(app: FastifyInstance) {
           })
           .returning('id')
           .executeTakeFirstOrThrow();
+        const actor = await trx
+          .selectFrom('employees')
+          .select('name')
+          .where('id', '=', req.claims.sub)
+          .executeTakeFirst();
+        await logAudit(trx, req.claims.ten, {
+          actorEmployeeId: req.claims.sub,
+          actorName: actor?.name ?? '',
+          action: 'Role created',
+          object: `Role · ${req.body.name}`,
+          after: req.body.name,
+        });
         return { id: row.id };
+      }),
+  });
+
+  r.route({
+    method: 'DELETE',
+    url: '/roles/:id',
+    preHandler: [app.authenticate],
+    schema: {
+      params: z.object({ id: z.uuid() }),
+      response: {
+        200: z.object({ ok: z.literal(true) }),
+        403: z.object({ error: z.string(), message: z.string() }),
+        404: z.object({ error: z.string(), message: z.string() }),
+        409: z.object({ error: z.string(), message: z.string() }),
+      },
+    },
+    handler: async (req, reply) =>
+      withTenant(req.claims.ten, async (trx) => {
+        const perms = await permsFor(trx, req.claims);
+        if (!can(perms, 'roles.manage'))
+          return reply
+            .code(403)
+            .send({ error: 'FORBIDDEN', message: 'Missing permission: roles.manage' });
+        const role = await trx
+          .selectFrom('roles')
+          .selectAll()
+          .where('id', '=', req.params.id)
+          .executeTakeFirst();
+        if (!role) return reply.code(404).send({ error: 'NOT_FOUND', message: 'Unknown role' });
+        if (role.std || role.locked)
+          return reply
+            .code(409)
+            .send({ error: 'STANDARD', message: 'A standard role cannot be removed' });
+        const holders = await trx
+          .selectFrom('employees')
+          .select(({ fn }) => fn.countAll<string>().as('n'))
+          .where('roleId', '=', req.params.id)
+          .executeTakeFirstOrThrow();
+        const n = Number(holders.n);
+        if (n)
+          return reply.code(409).send({
+            error: 'IN_USE',
+            message: `${n} ${n === 1 ? 'person is' : 'people are'} still on this role — move them first`,
+          });
+        await trx.deleteFrom('roles').where('id', '=', req.params.id).execute();
+        const actor = await trx
+          .selectFrom('employees')
+          .select('name')
+          .where('id', '=', req.claims.sub)
+          .executeTakeFirst();
+        await logAudit(trx, req.claims.ten, {
+          actorEmployeeId: req.claims.sub,
+          actorName: actor?.name ?? '',
+          action: 'Role removed',
+          object: `Role · ${role.name}`,
+          before: role.name,
+          after: '—',
+        });
+        return { ok: true as const };
       }),
   });
 

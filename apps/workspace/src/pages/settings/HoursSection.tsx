@@ -9,7 +9,7 @@ import {
   type ScheduleException,
   type WeekHours,
 } from '@velnes/contracts';
-import { I, Icon } from '@velnes/ui';
+import { I, Icon, NumInput } from '@velnes/ui';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { z } from 'zod';
@@ -254,13 +254,7 @@ function RegularTab({ loc }: { loc: Location }) {
             onChange={() => undefined}
           />
           <Field label={t('hset.cancelWindow')} hint={t('hset.cancelWindowHint')}>
-            <input
-              className="input"
-              type="number"
-              value={cancel}
-              style={{ width: 160 }}
-              onChange={(e) => setCancel(Number(e.target.value))}
-            />
+            <NumInput className="input" value={cancel} style={{ width: 160 }} onValue={setCancel} />
           </Field>
         </div>
       </div>

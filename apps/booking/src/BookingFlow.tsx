@@ -7,7 +7,7 @@ import {
   type PublicWidget,
 } from '@velnes/contracts';
 import type { Lang } from '@velnes/i18n';
-import { I, Icon, VelnesMark } from '@velnes/ui';
+import { I, Icon, PhoneInput, VelnesMark } from '@velnes/ui';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { z } from 'zod';
@@ -616,18 +616,21 @@ export function BookingFlow({
                     onChange={(e) => setName(e.target.value)}
                   />
                 </label>
-                <label className="field">
+                <div className="field">
                   <span>
                     {t('book.phone')}
                     <span className="req">*</span>
                   </span>
-                  <input
-                    className="input"
+                  <PhoneInput
                     value={phone}
-                    placeholder="+389 70 000 000"
-                    onChange={(e) => setPhone(e.target.value)}
+                    onChange={setPhone}
+                    placeholder="70 000 000"
+                    lang={i18n.language}
+                    ariaLabel={t('book.phone')}
+                    searchLabel={t('phone.search')}
+                    countryLabel={t('phone.country')}
                   />
-                </label>
+                </div>
                 <label className="field span2">
                   <span>{t('book.email')}</span>
                   <input

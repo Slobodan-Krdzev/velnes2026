@@ -7,11 +7,24 @@ import { WeekHoursSchema } from './locations.js';
  * document with a schema per section — one door, PATCH by section.
  */
 
+/** The gallery's hard numbers — one truth for the door, the client
+ *  resize and the note under the upload tile. */
+export const GALLERY_MAX_PHOTOS = 12;
+// Data-URL characters (base64 inflates ~4/3): ≈0.45 MB of image.
+export const GALLERY_IMG_MAX_CHARS = 600_000;
+export const GALLERY_MAX_EDGE_PX = 1600;
+
 export const GalleryPhotoSchema = z.object({
   id: z.string(),
   name: z.string(),
   img: z.string().nullable(), // data URL — the file is the storage
   tone: z.string().nullable().optional(),
+});
+
+/** What the PATCH accepts: the read side stays permissive so an
+ *  older, larger photo still renders; the write side refuses. */
+export const GalleryPhotoWriteSchema = GalleryPhotoSchema.extend({
+  img: z.string().max(GALLERY_IMG_MAX_CHARS, 'IMG_TOO_LARGE').nullable(),
 });
 
 export const BusinessProfileSchema = z.object({
@@ -48,7 +61,7 @@ export const BusinessPatchSchema = z.object({
   city: z.string().nullable().optional(),
   phone: z.string().nullable().optional(),
   description: z.string().optional(),
-  gallery: z.array(GalleryPhotoSchema).max(12).optional(),
+  gallery: z.array(GalleryPhotoWriteSchema).max(GALLERY_MAX_PHOTOS).optional(),
   timingEnabled: z.boolean().optional(),
 });
 
@@ -125,10 +138,35 @@ export type BusinessSettings = z.infer<typeof BusinessSettingsSchema>;
 export const BusinessSettingsPatchSchema = BusinessSettingsSchema.partial();
 
 /** The weekly template + booking-policy fields the Opening-hours
- *  section edits. Hours use the same shape scheduleFor reads:
- *  weekday index "0"(Mon)…"6"(Sun) → [["09:00","19:00"],…] | null. */
+ *  section edits, plus the location card the settings panel edits.
+ *  Hours use the same shape scheduleFor reads: weekday index
+ *  "0"(Mon)…"6"(Sun) → [["09:00","19:00"],…] | null. */
 export const LocationPatchSchema = z.object({
   hours: WeekHoursSchema.optional(),
   cancelHours: z.number().int().min(0).max(168).optional(),
   invPrefix: z.string().min(1).max(20).optional(),
+  name: z.string().min(1).optional(),
+  address: z.string().nullable().optional(),
+  city: z.string().nullable().optional(),
+  phone: z.string().nullable().optional(),
+  tz: z.string().min(1).optional(),
+  rooms: z.number().int().min(1).max(50).optional(),
+  online: z.boolean().optional(),
 });
+
+/** Copy setup between EXISTING locations — the prototype's
+ *  copyConfig panel. Stock, appointments and customers never copy;
+ *  the target's chosen parts are overwritten. */
+export const CopySetupRequestSchema = z.object({
+  toLocationId: z.uuid(),
+  parts: z.object({
+    services: z.boolean().default(true), // with price and duration
+    products: z.boolean().default(true), // with price and minimum stock
+    hours: z.boolean().default(true),
+    payments: z.boolean().default(true),
+    policy: z.boolean().default(true), // cancellation window
+    widget: z.boolean().default(true), // online bookability
+  }),
+});
+export type CopySetupRequest = z.infer<typeof CopySetupRequestSchema>;
+export const CopySetupResponseSchema = z.object({ ok: z.literal(true) });

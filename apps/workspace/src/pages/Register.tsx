@@ -9,6 +9,7 @@ import { API_PREFIX } from '@velnes/contracts';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
+import { PhoneInput } from '@velnes/ui';
 import { z } from 'zod';
 
 /** The prototype's viewRegisterSalon: eight steps, one draft, the
@@ -60,7 +61,7 @@ const stored = (): Stored | null => {
 const EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 
 export function Register() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const [r, setR] = useState<Draft>(newDraft());
   const [step, setStep] = useState(1);
@@ -312,7 +313,17 @@ export function Register() {
           {step === 2 ? (
             <div className="grid2">
               {F(t('reg.salonName'), r.salon.name, (v) => setR((d) => ({ ...d, salon: { ...d.salon, name: v } })))}
-              {F(t('reg.phone'), r.salon.phone, (v) => setR((d) => ({ ...d, salon: { ...d.salon, phone: v } })))}
+              <div className="field">
+                <span>{t('reg.phone')}</span>
+                <PhoneInput
+                  value={r.salon.phone}
+                  onChange={(v) => setR((d) => ({ ...d, salon: { ...d.salon, phone: v } }))}
+                  lang={i18n.language}
+                  ariaLabel={t('reg.phone')}
+                  searchLabel={t('phone.search')}
+                  countryLabel={t('phone.country')}
+                />
+              </div>
               <div className="field">
                 <label>{t('reg.type')}</label>
                 <select

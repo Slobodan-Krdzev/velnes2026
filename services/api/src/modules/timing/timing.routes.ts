@@ -3,6 +3,7 @@ import type { FastifyInstance } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { withTenant } from '../../db/index.js';
+import { can, permsFor } from '../auth/authz.service.js';
 import {
   acceptTiming,
   dismissTiming,
@@ -21,9 +22,18 @@ export function timingRoutes(app: FastifyInstance) {
     method: 'POST',
     url: '/timings/recompute',
     preHandler: [app.authenticate],
-    schema: { response: { 200: RecomputeResponseSchema } },
-    handler: async (req) =>
-      withTenant(req.claims.ten, (trx) => recomputeAll(trx, req.claims.ten)),
+    schema: {
+      response: { 200: RecomputeResponseSchema, 403: ErrorSchema },
+    },
+    handler: async (req, reply) =>
+      withTenant(req.claims.ten, async (trx) => {
+        const perms = await permsFor(trx, req.claims);
+        if (!can(perms, 'catalog.edit'))
+          return reply
+            .code(403)
+            .send({ error: 'FORBIDDEN', message: 'Missing permission: catalog.edit' });
+        return recomputeAll(trx, req.claims.ten);
+      }),
   });
 
   r.route({
@@ -43,15 +53,22 @@ export function timingRoutes(app: FastifyInstance) {
       preHandler: [app.authenticate],
       schema: {
         params: IdParams,
-        response: { 200: z.object({ ok: z.literal(true) }), 404: ErrorSchema, 422: ErrorSchema },
+        response: { 200: z.object({ ok: z.literal(true) }), 403: ErrorSchema, 404: ErrorSchema, 422: ErrorSchema },
       },
       handler: async (req, reply) => {
         try {
-          await withTenant(req.claims.ten, (trx) =>
-            action === 'approve'
+          // Approving changes a real duration — that is a catalog act.
+          await withTenant(req.claims.ten, async (trx) => {
+            const perms = await permsFor(trx, req.claims);
+            if (!can(perms, 'catalog.edit'))
+              return reply
+                .code(403)
+                .send({ error: 'FORBIDDEN', message: 'Missing permission: catalog.edit' });
+            return action === 'approve'
               ? acceptTiming(trx, req.claims, req.params.id)
-              : dismissTiming(trx, req.params.id),
-          );
+              : dismissTiming(trx, req.params.id);
+          });
+          if (reply.sent) return reply;
           return { ok: true as const };
         } catch (e) {
           if (e instanceof TimingError) {

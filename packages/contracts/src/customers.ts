@@ -38,6 +38,9 @@ export const CustomerProfileSchema = z.object({
   id: z.uuid(),
   name: z.string(),
   email: z.string().nullable(),
+  // False after an email change: the new address must be confirmed
+  // again before it counts (pending state; SMTP undecided).
+  emailVerified: z.boolean().default(false),
   phone: z.string().nullable(),
   group: z.string(),
   since: z.string().nullable(),
@@ -241,4 +244,11 @@ export const PersonalOfferCreateSchema = z.object({
   specialPrice: MoneySchema,
   validUntil: z.iso.date(),
   intent: z.string().default(''),
+});
+
+/** The export door — customers.export's right. The CSV rides in the
+ *  body so the one client (auth, refresh, parsing) stays the path. */
+export const CustomerExportResponseSchema = z.object({
+  csv: z.string(),
+  count: z.number().int(),
 });

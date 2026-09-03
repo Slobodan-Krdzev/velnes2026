@@ -138,7 +138,9 @@ describe('the booking page', () => {
     await screen.findByText('Your details');
     expect(screen.getByText(/This time is held for you/)).toBeDefined();
     await user.type(screen.getByPlaceholderText('Marija Stojanovska'), 'Web Visitor');
-    await user.type(screen.getByPlaceholderText('+389 70 000 000'), '+389 70 999 111');
+    // The phone field is now the flag+prefix input: typing the
+    // national part composes the same "+389 ..." string.
+    await user.type(screen.getByPlaceholderText('70 000 000'), '70 999 111');
     await user.click(screen.getByText(/cancellation policy/));
     await user.click(screen.getByRole('button', { name: 'Continue' }));
 

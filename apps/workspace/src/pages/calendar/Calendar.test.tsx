@@ -199,11 +199,16 @@ describe('calendar', () => {
     // The prototype's lade: the Book button sits top-right, disabled
     // until something changes; the line carries its own time input.
     const bookBtn = await screen.findByRole('button', { name: 'Book appointment' });
-    // The customer defaults to the first one, like the prototype, and
-    // the fully pre-filled lade arms the Book button immediately.
+    // The drawer asks where — preset from the calendar's location.
     await waitFor(() =>
-      expect(screen.getByLabelText(/Customer/)).toHaveProperty('value', CUST),
+      expect(screen.getByLabelText('Location')).toHaveProperty('value', LOC),
     );
+    // The customer is a type-ahead: suggestions from the file, and a
+    // typed name is a new customer the booking registers.
+    const custIn = screen.getByLabelText('Customer');
+    await userEvent.type(custIn, 'Kate');
+    await userEvent.click(await screen.findByRole('option', { name: /Katerina/ }));
+    expect(custIn).toHaveProperty('value', 'Katerina Stojanovska');
     await waitFor(() => expect(bookBtn).toHaveProperty('disabled', false));
     await userEvent.selectOptions(screen.getByLabelText('Employee 1'), 'any');
     // The time dropdown defaults to the next bookable quarter-hour —
@@ -245,6 +250,8 @@ describe('calendar', () => {
     );
     await userEvent.click(screen.getByRole('button', { name: 'Додади' }));
     await userEvent.selectOptions(await screen.findByLabelText('Вработен 1'), 'any');
+    // A typed walk-in arms the Book button — the refusal still lands.
+    await userEvent.type(screen.getByLabelText('Клиент'), 'Петар Новак');
     await userEvent.click(screen.getByRole('button', { name: 'Закажи термин' }));
     const alert = await screen.findByRole('alert');
     expect(alert.textContent).toBe('Марија е веќе зафатен(а) 10:00–10:45');

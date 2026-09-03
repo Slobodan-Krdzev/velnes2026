@@ -124,6 +124,9 @@ export const AppointmentSchema = z.object({
   resetMin: z.number().int(),
   basis: z.enum(['catalog', 'employee-approved', 'employee-pace']).nullable(),
   source: z.string(),
+  // True once a live invoice line references this appointment — the
+  // till stops offering it, the drawer can say so.
+  paid: z.boolean().default(false),
 });
 export type Appointment = z.infer<typeof AppointmentSchema>;
 

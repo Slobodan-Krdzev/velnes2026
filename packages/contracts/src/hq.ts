@@ -101,3 +101,40 @@ export const HqBusinessListSchema = z.object({ businesses: z.array(HqBusinessRow
 export const HqAuditListSchema = z.object({
   entries: z.array(AuditEntrySchema.extend({ tenantName: z.string() })),
 });
+
+/** The Velnes taxonomy, HQ-side: the platform's category shelves
+ *  every salon picks from. */
+export const HqCategoryRowSchema = z.object({
+  id: z.uuid(),
+  name: z.string(),
+  type: z.enum(['services', 'products']),
+  sort: z.number().int(),
+});
+export const HqCategoryListSchema = z.object({
+  categories: z.array(HqCategoryRowSchema),
+});
+export const HqCategoryCreateSchema = z.object({
+  name: z.string().min(1).max(60),
+  type: z.enum(['services', 'products']),
+});
+export const HqCategoryPatchSchema = z.object({
+  name: z.string().min(1).max(60),
+});
+
+/** The category-request intake, HQ-side. */
+export const HqCategoryRequestSchema = z.object({
+  id: z.uuid(),
+  tenantName: z.string(),
+  name: z.string(),
+  type: z.enum(['services', 'products']),
+  note: z.string(),
+  status: z.enum(['pending', 'approved', 'declined']),
+  hqReason: z.string(),
+  createdAt: z.string(),
+});
+export const HqCategoryRequestListSchema = z.object({
+  requests: z.array(HqCategoryRequestSchema),
+});
+export const HqCategoryDeclineSchema = z.object({
+  reason: z.string().min(1).max(300),
+});

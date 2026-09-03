@@ -51,6 +51,7 @@ describe('scheduling & booking doors', () => {
       [future],
     );
     await admin.query(`DELETE FROM appointments WHERE date >= $1`, [future]);
+    await admin.query(`DELETE FROM customers WHERE name='Petar Novak (walk-in test)'`);
     await admin.query(`DELETE FROM holds`);
     await admin.query(`DELETE FROM schedule_exceptions`);
     await admin.end();
@@ -223,6 +224,35 @@ describe('scheduling & booking doors', () => {
       source: 'staff',
     });
     expect(retry.statusCode).toBe(200);
+  });
+
+  it('a typed walk-in becomes a registered customer in the same act', async () => {
+    const book = await post(`${API_PREFIX}/appointments`, {
+      key: randomUUID(),
+      locationId: demo.locCentar,
+      serviceId: demo.s1,
+      date: future,
+      time: '15:00',
+      employeeId: demo.empMaria,
+      name: 'Petar Novak (walk-in test)',
+      phone: '+389 70 000 111',
+      email: 'petar.novak@example.mk',
+      source: 'staff',
+    });
+    expect(book.statusCode).toBe(200);
+    const appt = book.json().appointment as { customerId: string | null; title: string };
+    expect(appt.customerId).not.toBeNull();
+    expect(appt.title).toBe('Petar Novak (walk-in test)');
+    const row = await admin.query(
+      `SELECT name, cust_group, email, phone FROM customers WHERE id=$1`,
+      [appt.customerId],
+    );
+    expect(row.rows[0]).toMatchObject({
+      name: 'Petar Novak (walk-in test)',
+      cust_group: 'New',
+      email: 'petar.novak@example.mk',
+      phone: '+389 70 000 111',
+    });
   });
 
   it('holds block others but not their own key, and confirming consumes the hold', async () => {

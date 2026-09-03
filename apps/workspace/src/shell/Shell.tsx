@@ -1,3 +1,6 @@
+import { useQuery } from '@tanstack/react-query';
+import { PlatformNoticeListSchema } from '@velnes/contracts';
+import { get } from '@velnes/client';
 import { LANGS, type Lang } from '@velnes/i18n';
 import type { PermKey } from '@velnes/contracts';
 import { Badge, I, Icon, VelnesMark } from '@velnes/ui';
@@ -6,6 +9,7 @@ import { useTranslation } from 'react-i18next';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useLocations } from '../api/queries.js';
 import { useOutsideClose } from '../lib/pop.js';
+import { useToast } from '../lib/toast.js';
 import { useSession } from '@velnes/client';
 
 /** Location scope — the prototype's loc-switch: chosen once in the
@@ -49,13 +53,32 @@ const inits = (name: string) =>
 
 export function Shell() {
   const { t, i18n } = useTranslation();
-  const { me, logout, setLang, can } = useSession();
+  const { me, logout, setLang, can, preview, exitPreview } = useSession();
+  const toast = useToast();
   const navigate = useNavigate();
   const routerLoc = useLocation();
   const locations = useLocations();
   const [scope, setScope] = useState('all');
   const [scopeMenu, setScopeMenu] = useState(false);
   const [envMenu, setEnvMenu] = useState(false);
+  const [notifOpen, setNotifOpen] = useState(false);
+  const notifRef = useOutsideClose(notifOpen, () => setNotifOpen(false));
+  // Platform notices — HQ speaks, the bell listens. Seen-state is a
+  // per-browser convenience, not business truth.
+  const notices = useQuery({
+    queryKey: ['notices'],
+    queryFn: () => get(PlatformNoticeListSchema, '/notices'),
+    refetchInterval: 120_000,
+  });
+  const latest = notices.data?.notices[0]?.createdAt ?? '';
+  const seen = (() => {
+    try {
+      return localStorage.getItem('velnes.noticesSeen') ?? '';
+    } catch {
+      return '';
+    }
+  })();
+  const unseen = !!latest && latest > seen;
   const scopeRef = useOutsideClose(scopeMenu, () => setScopeMenu(false));
   const envRef = useOutsideClose(envMenu, () => setEnvMenu(false));
   const scopeValue = useMemo(() => ({ scope, setScope }), [scope]);
@@ -70,6 +93,14 @@ export function Shell() {
       document.body.classList.remove('till-mode', 'cal-mode');
     };
   }, [routerLoc.pathname]);
+  // The prototype's preview-mode: the topbar tints, the page keeps
+  // room for the bar pinned to the bottom.
+  useEffect(() => {
+    document.body.classList.toggle('preview-mode', !!preview);
+    return () => {
+      document.body.classList.remove('preview-mode');
+    };
+  }, [preview]);
   if (!me) return null;
 
   const myLocs = (locations.data?.locations ?? []).filter(
@@ -192,6 +223,60 @@ export function Shell() {
             <button className="iconbtn" aria-label={t('common.search')}>
               <Icon d={I.search} size={24} w={2} />
             </button>
+            <div className="pop" ref={notifRef}>
+              <button
+                className="iconbtn"
+                style={{ position: 'relative' }}
+                aria-label={t('shell.notices')}
+                aria-haspopup="menu"
+                aria-expanded={notifOpen}
+                onClick={() => {
+                  setNotifOpen((v) => !v);
+                  if (latest) {
+                    try {
+                      localStorage.setItem('velnes.noticesSeen', latest);
+                    } catch {
+                      /* private mode — the dot just stays */
+                    }
+                  }
+                }}
+              >
+                <Icon d={I.bell} size={24} w={2} />
+                {unseen ? <span className="dot" /> : null}
+              </button>
+              {notifOpen ? (
+                <div className="menu menu-wide menu-scroll" role="menu">
+                  <div className="menu-label">{t('shell.notices')}</div>
+                  {(notices.data?.notices ?? []).length === 0 ? (
+                    <div className="menu-label" style={{ fontWeight: 500 }}>
+                      {t('shell.noNotices')}
+                    </div>
+                  ) : (
+                    (notices.data?.notices ?? []).map((n) => (
+                      <button
+                        key={n.id}
+                        className="menu-row"
+                        onClick={() => {
+                          setNotifOpen(false);
+                          // Category news opens the shelf it speaks of.
+                          if (n.kind.startsWith('category'))
+                            navigate('/catalog', { state: { tab: 'categories' } });
+                        }}
+                      >
+                        <span className="grow" style={{ textAlign: 'left' }}>
+                          <span className="mi-t" style={{ fontWeight: 700 }}>
+                            {n.title}
+                          </span>
+                          <span className="mi-s" style={{ display: 'block' }}>
+                            {n.body} · {n.createdAt.slice(0, 10)}
+                          </span>
+                        </span>
+                      </button>
+                    ))
+                  )}
+                </div>
+              ) : null}
+            </div>
             <div className="pop" ref={envRef}>
               <button
                 className="avatar"
@@ -266,6 +351,38 @@ export function Shell() {
           </ScopeContext.Provider>
         </main>
       </div>
+
+      {preview ? (
+        <div className="supportbar previewbar" id="previewbar">
+          <Icon d={I.user} size={20} />
+          <span>
+            {t('preview.previewingAs')} <span className="who">{me.name}</span> —{' '}
+            {me.roleName ?? t(`eset.access_${me.access}`)}
+          </span>
+          <span className="sep">|</span>
+          <span>
+            {me.locationIds.length === (locations.data?.locations.length ?? 0)
+              ? t('shell.allLocations')
+              : me.locationIds
+                  .map((id) => locations.data?.locations.find((l) => l.id === id)?.name ?? '')
+                  .filter(Boolean)
+                  .join(', ')}
+          </span>
+          <span className="grow" />
+          <span>{t('preview.exactly')}</span>
+          <button
+            className="btn btn-secondary"
+            onClick={() => {
+              void exitPreview().then(() => {
+                navigate('/settings', { state: { tab: 'team' } });
+                toast(t('preview.back'));
+              });
+            }}
+          >
+            {t('preview.exit')}
+          </button>
+        </div>
+      ) : null}
     </>
   );
 }

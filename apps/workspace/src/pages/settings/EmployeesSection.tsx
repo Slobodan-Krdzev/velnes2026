@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { z } from 'zod';
 import { EmployeeSchema, EmployeeTimingsSchema, type Employee, type WeekHours } from '@velnes/contracts';
-import { EMP_COLORS, empColorOf, I, Icon } from '@velnes/ui';
+import { EMP_COLORS, empColorOf, I, Icon, PhoneInput } from '@velnes/ui';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { get, patch, post } from '@velnes/client';
@@ -245,8 +245,9 @@ const STD_WEEK: WeekHours = {
 };
 
 /** The prototype's employeePanelBody, over the real PATCH door: who
- *  they are, their colour, their week, their services, bookable. */
-function EmployeePanel({
+ *  they are, their colour, their week, their services, bookable.
+ *  Team & access opens the same panel — the prototype's employeeEdit. */
+export function EmployeePanel({
   employee,
   taken,
   onClose,
@@ -257,7 +258,7 @@ function EmployeePanel({
   onClose: () => void;
   onSaved: () => void;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const toast = useToast();
   const qc = useQueryClient();
   const locations = useLocations();
@@ -374,9 +375,17 @@ function EmployeePanel({
                 onChange={(e) => touch(setEmail)(e.target.value)}
               />
             </Field>
-            <Field label={t('cset.phone')}>
-              <input className="input" value={phone} onChange={(e) => touch(setPhone)(e.target.value)} />
-            </Field>
+            <div className="field">
+              <span>{t('cset.phone')}</span>
+              <PhoneInput
+                value={phone}
+                onChange={touch(setPhone)}
+                lang={i18n.language}
+                ariaLabel={t('cset.phone')}
+                searchLabel={t('phone.search')}
+                countryLabel={t('phone.country')}
+              />
+            </div>
           </div>
 
           <div className="field">

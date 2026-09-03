@@ -119,3 +119,19 @@ export const InvoiceListQuerySchema = z.object({
 export const InvoiceListResponseSchema = z.object({ invoices: z.array(InvoiceSchema) });
 
 export const RefundRequestSchema = z.object({ reason: z.string().min(1) });
+
+/** Closing the cash drawer — cash_drawer.close's door. The server
+ *  computes the day's expected cash from the invoices; the counted
+ *  amount and the difference go on the record. */
+export const DrawerCloseRequestSchema = z.object({
+  locationId: z.uuid(),
+  countedCash: MoneySchema.nonnegative(),
+});
+export const DrawerCloseResponseSchema = z.object({
+  date: z.string(),
+  expectedCash: MoneySchema,
+  countedCash: MoneySchema,
+  difference: MoneySchema, // counted − expected
+  cashSales: z.number().int(),
+});
+export type DrawerCloseResponse = z.infer<typeof DrawerCloseResponseSchema>;

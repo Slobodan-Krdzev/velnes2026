@@ -1,12 +1,18 @@
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  CategoryListResponseSchema,
+  CategoryRequestListSchema,
+  StockMovementListSchema,
+} from '@velnes/contracts';
 import { I, Icon } from '@velnes/ui';
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { post, api } from '@velnes/client';
+import { get, post, api } from '@velnes/client';
 import { useLocationCatalog, useLocations } from '../../api/queries.js';
 import { money } from '../../lib/money.js';
 import { useToast } from '../../lib/toast.js';
 import { useSession } from '@velnes/client';
+import { useLocation as useRouterLocation } from 'react-router-dom';
 import { useScope } from '../../shell/Shell.js';
 import { ProductPanel } from './ProductPanel.js';
 import { ServicePanel } from './ServicePanel.js';
@@ -39,10 +45,14 @@ export function CatalogPage() {
   const { t } = useTranslation();
   const toast = useToast();
   const qc = useQueryClient();
-  const { me } = useSession();
+  const { me, can } = useSession();
+  const [ledgerFor, setLedgerFor] = useState<{ id: string; name: string } | null>(null);
+  const [requesting, setRequesting] = useState(false);
   const { scope } = useScope();
   const locations = useLocations();
-  const [tab, setTab] = useState('services');
+  // A notice click lands straight on the tab it speaks of.
+  const askedTab = (useRouterLocation().state as { tab?: string } | null)?.tab;
+  const [tab, setTab] = useState(askedTab ?? 'services');
   const [panel, setPanel] = useState<
     | { kind: 'service'; id: string | null }
     | { kind: 'product'; id: string | null }
@@ -63,10 +73,29 @@ export function CatalogPage() {
 
   const services = catalog.data?.services ?? [];
   const products = catalog.data?.products ?? [];
-  const svcCats = [...new Set(services.map((s) => s.category ?? ''))].filter(Boolean);
-  const prodCats = [...new Set(products.map((p) => p.category ?? ''))].filter(Boolean);
+  // The category list is its own door, so a category created empty
+  // exists before its first item and shows up in the pickers.
+  const cats = useQuery({
+    queryKey: ['categories'],
+    queryFn: () => get(CategoryListResponseSchema, '/categories'),
+  });
+  const catRequests = useQuery({
+    queryKey: ['categoryRequests'],
+    queryFn: () => get(CategoryRequestListSchema, '/category-requests'),
+  });
+  const catNames = (type: 'services' | 'products') =>
+    (cats.data?.categories ?? []).filter((c) => c.type === type).map((c) => c.name);
+  const svcCats = [
+    ...new Set([...services.map((s) => s.category ?? ''), ...catNames('services')]),
+  ].filter(Boolean);
+  const prodCats = [
+    ...new Set([...products.map((p) => p.category ?? ''), ...catNames('products')]),
+  ].filter(Boolean);
 
-  const refresh = () => void qc.invalidateQueries({ queryKey: ['catalog'] });
+  const refresh = () => {
+    void qc.invalidateQueries({ queryKey: ['catalog'] });
+    void qc.invalidateQueries({ queryKey: ['categories'] });
+  };
 
   const patchOverride = async (serviceId: string, patch: Record<string, unknown>) => {
     if (!viewLoc) return;
@@ -117,6 +146,7 @@ export function CatalogPage() {
         <input
           className={`cell num${f === 'price' ? ' bold' : ''}`}
           type="number"
+          onFocus={(e) => e.currentTarget.select()}
           step={f === 'price' ? 1 : 5}
           defaultValue={s.config[f]}
           aria-label={`${s.name} ${f === 'price' ? 'price' : 'duration'}`}
@@ -289,7 +319,11 @@ export function CatalogPage() {
                   <tr key={p.id} className={p.config.active ? '' : 'dim'}>
                     <td>
                       <span className="cellmain">
-                        <span className="pthumb ph">{(p.name[0] ?? '?').toUpperCase()}</span>
+                        {p.img ? (
+                          <img className="pthumb" src={p.img} alt="" />
+                        ) : (
+                          <span className="pthumb ph">{(p.name[0] ?? '?').toUpperCase()}</span>
+                        )}
                         <span className="cellbody">
                           <span className="cellhead">
                             <span className="bold">{p.name}</span>{' '}
@@ -308,6 +342,7 @@ export function CatalogPage() {
                           <input
                             className="cell num"
                             type="number"
+                            onFocus={(e) => e.currentTarget.select()}
                             defaultValue={p.config.stock}
                             aria-label={`${p.name} stock`}
                             onBlur={(e) =>
@@ -355,6 +390,14 @@ export function CatalogPage() {
                       )}
                     </td>
                     <td className="right">
+                      {can('inventory.view') ? (
+                        <button
+                          className="btn btn-subtle btn-sm"
+                          onClick={() => setLedgerFor({ id: p.id, name: p.name })}
+                        >
+                          {t('catalog.ledger')}
+                        </button>
+                      ) : null}{' '}
                       <button
                         className="btn btn-ghost btn-sm"
                         onClick={() => setPanel({ kind: 'product', id: p.id })}
@@ -383,31 +426,56 @@ export function CatalogPage() {
           </tr>
         </thead>
         <tbody>
-          {[
-            ...svcCats.map((c) => ({
-              name: c,
-              type: t('catalog.services'),
-              n: services.filter((s) => s.category === c).length,
-            })),
-            ...prodCats.map((c) => ({
-              name: c,
-              type: t('catalog.products'),
-              n: products.filter((p) => p.category === c).length,
-            })),
-          ].map((r) => (
-            <tr key={r.type + r.name}>
+          {(cats.data?.categories ?? []).map((r) => (
+            <tr key={r.id}>
               <td className="bold">{r.name}</td>
-              <td className="muted">{r.type}</td>
-              <td className="right tnum">{r.n}</td>
+              <td className="muted">
+                {r.type === 'services' ? t('catalog.services') : t('catalog.products')}
+              </td>
+              <td className="right tnum">{r.items}</td>
             </tr>
           ))}
         </tbody>
       </table>
       <p className="muted" style={{ padding: '14px 16px', fontWeight: 500, fontSize: 12 }}>
-        {t('catalog.oneLevel')}
+        {t('catalog.setByVelnes')} {t('catalog.oneLevel')}
       </p>
     </div>
   );
+
+  const requestsPane = (catRequests.data?.requests.length ?? 0) ? (
+    <div className="card" style={{ marginTop: 24 }}>
+      <div className="card-header">
+        <h2>{t('catalog.yourRequests')}</h2>
+      </div>
+      <table>
+        <tbody>
+          {(catRequests.data?.requests ?? []).map((r) => (
+            <tr key={r.id}>
+              <td className="bold">{r.name}</td>
+              <td className="muted">
+                {r.type === 'services' ? t('catalog.services') : t('catalog.products')}
+              </td>
+              <td className="muted" style={{ maxWidth: 260 }}>
+                {r.note || '—'}
+              </td>
+              <td className="right">
+                {r.status === 'pending' ? (
+                  <span className="badge warning">{t('catalog.reqPending')}</span>
+                ) : r.status === 'approved' ? (
+                  <span className="badge success">{t('catalog.reqApproved')}</span>
+                ) : (
+                  <span className="badge danger" title={r.hqReason}>
+                    {t('catalog.reqDeclined')}
+                  </span>
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  ) : null;
 
   const combosPane = (
     <div className="card">
@@ -447,6 +515,10 @@ export function CatalogPage() {
             >
               {t('cal.add')} <Icon d={I.plus} size={20} w={2.5} />
             </button>
+          ) : tab === 'categories' ? (
+            <button className="btn btn-secondary" onClick={() => setRequesting(true)}>
+              {t('catalog.requestCategory')}
+            </button>
           ) : null}
         </div>
       </div>
@@ -456,7 +528,12 @@ export function CatalogPage() {
         : tab === 'products'
           ? productsPane
           : tab === 'categories'
-            ? categoriesPane
+            ? (
+                <>
+                  {categoriesPane}
+                  {requestsPane}
+                </>
+              )
             : combosPane}
 
       {panel?.kind === 'service' && viewLoc ? (
@@ -485,6 +562,191 @@ export function CatalogPage() {
           onClose={() => setPanel(null)}
         />
       ) : null}
+      {ledgerFor ? (
+        <StockLedgerModal product={ledgerFor} onClose={() => setLedgerFor(null)} />
+      ) : null}
+      {requesting ? (
+        <CategoryRequestModal
+          initialType="services"
+          onClose={() => setRequesting(false)}
+          onSent={() => {
+            setRequesting(false);
+            toast(t('catalog.requestSent'));
+            void qc.invalidateQueries({ queryKey: ['categoryRequests'] });
+          }}
+        />
+      ) : null}
     </>
+  );
+}
+
+/** inventory.view's screen: the movement history behind a stock
+ *  number — every adjustment, sale, delivery and transfer, on the
+ *  record with who and why. */
+function StockLedgerModal({
+  product,
+  onClose,
+}: {
+  product: { id: string; name: string };
+  onClose: () => void;
+}) {
+  const { t } = useTranslation();
+  const ledger = useQuery({
+    queryKey: ['stockLedger', product.id],
+    queryFn: () => get(StockMovementListSchema, `/stock/movements?productId=${product.id}&limit=50`),
+  });
+  return (
+    <div className="overlay" onClick={onClose}>
+      <div
+        className="modal"
+        role="dialog"
+        aria-modal="true"
+        style={{ maxWidth: 640 }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="modal-head">
+          <h2>{t('catalog.ledgerTitle', { name: product.name })}</h2>
+        </div>
+        <div className="modal-body" style={{ maxHeight: 420, overflowY: 'auto' }}>
+          {ledger.data && ledger.data.movements.length === 0 ? (
+            <p className="muted" style={{ fontWeight: 500 }}>
+              {t('catalog.ledgerEmpty')}
+            </p>
+          ) : (
+            <table>
+              <thead>
+                <tr>
+                  <th>{t('settings.when')}</th>
+                  <th>{t('catalog.ledgerKind')}</th>
+                  <th className="right">{t('catalog.ledgerQty')}</th>
+                  <th>{t('catalog.ledgerWhere')}</th>
+                  <th>{t('catalog.ledgerWho')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(ledger.data?.movements ?? []).map((m) => (
+                  <tr key={m.id}>
+                    <td className="muted tnum">{m.at.slice(0, 16).replace('T', ' ')}</td>
+                    <td>
+                      {m.kind}
+                      {m.note ? (
+                        <span className="muted" style={{ display: 'block', fontSize: 12 }}>
+                          {m.note}
+                        </span>
+                      ) : null}
+                    </td>
+                    <td className={`right tnum ${m.qty < 0 ? 'down' : 'bold'}`}>
+                      {m.qty > 0 ? `+${m.qty}` : m.qty}
+                    </td>
+                    <td className="muted">{m.locationName}</td>
+                    <td className="muted">{m.actorName ?? '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+        <button className="modal-close" aria-label={t('common.close')} onClick={onClose}>
+          <Icon d={I.x} size={20} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** Ask Velnes HQ for a new shelf — from the Categories tab and the
+ *  service panel. The request has a lifecycle the salon can watch. */
+export function CategoryRequestModal({
+  initialType,
+  onClose,
+  onSent,
+}: {
+  initialType: 'services' | 'products';
+  onClose: () => void;
+  onSent: () => void;
+}) {
+  const { t } = useTranslation();
+  const [name, setName] = useState('');
+  const [type, setType] = useState<'services' | 'products'>(initialType);
+  const [note, setNote] = useState('');
+  const [error, setError] = useState<string | null>(null);
+
+  const send = async () => {
+    setError(null);
+    try {
+      await post(z.object({ id: z.string() }), '/category-requests', {
+        name: name.trim(),
+        type,
+        note: note.trim(),
+      });
+      onSent();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  };
+
+  return (
+    <div className="overlay" onClick={onClose}>
+      <div
+        className="modal"
+        role="dialog"
+        aria-modal="true"
+        style={{ maxWidth: 460 }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="modal-head">
+          <h2>{t('catalog.requestCategory')}</h2>
+        </div>
+        <div className="modal-body" style={{ display: 'grid', gap: 14 }}>
+          <p className="muted" style={{ fontWeight: 500, margin: 0 }}>
+            {t('catalog.requestIntro')}
+          </p>
+          <label className="field">
+            <span>
+              {t('catalog.name')}
+              <span className="req">*</span>
+            </span>
+            <input className="input" value={name} onChange={(e) => setName(e.target.value)} />
+          </label>
+          <label className="field">
+            <span>{t('catalog.itemType')}</span>
+            <select
+              className="select"
+              style={{ width: '100%' }}
+              value={type}
+              onChange={(e) => setType(e.target.value as 'services' | 'products')}
+            >
+              <option value="services">{t('catalog.services')}</option>
+              <option value="products">{t('catalog.products')}</option>
+            </select>
+          </label>
+          <label className="field">
+            <span>{t('catalog.requestWhy')}</span>
+            <input
+              className="input"
+              placeholder={t('catalog.requestWhyPh')}
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+            />
+          </label>
+          {error ? (
+            <p role="alert" style={{ color: 'var(--danger)', fontWeight: 600, margin: 0 }}>
+              {error}
+            </p>
+          ) : null}
+        </div>
+        <div className="modal-foot">
+          <button className="btn btn-secondary" onClick={onClose}>
+            {t('common.cancel')}
+          </button>
+          <button className="btn btn-primary" disabled={!name.trim()} onClick={() => void send()}>
+            {t('catalog.sendRequest')}
+          </button>
+        </div>
+        <button className="modal-close" aria-label={t('common.close')} onClick={onClose}>
+          <Icon d={I.x} size={20} />
+        </button>
+      </div>
+    </div>
   );
 }

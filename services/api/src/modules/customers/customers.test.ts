@@ -69,6 +69,11 @@ describe('customers, intelligence and personal offers', () => {
     }
   });
   afterAll(async () => {
+    await admin.query(
+      `UPDATE customers SET email='elena.t@example.com', phone='+389 72 664 301', email_verified_at=now() WHERE id=$1`,
+      [demo.c6],
+    );
+    await admin.query(`DELETE FROM customer_activity WHERE type='contact_changed'`);
     for (const id of histIds)
       await admin.query(`DELETE FROM appointments WHERE id=$1`, [id]);
     await admin.query(
@@ -255,5 +260,40 @@ describe('customers, intelligence and personal offers', () => {
     // Only a live offer can be redeemed.
     const redeem = await post(`${API_PREFIX}/personal-offers/${id}/redeem`);
     expect(redeem.statusCode).toBe(409);
+  });
+
+  it('an email change drops verification and goes on the record; phone edits log too', async () => {
+    // Seeded addresses count as verified (grandfathered).
+    let prof = (await get(`${API_PREFIX}/customers/${demo.c6}`)).json() as {
+      email: string | null; emailVerified: boolean;
+    };
+    expect(prof.emailVerified).toBe(true);
+
+    const patched = await app.inject({
+      method: 'PATCH',
+      url: `${API_PREFIX}/customers/${demo.c6}`,
+      headers: { authorization: `Bearer ${ownerToken}` },
+      payload: { email: 'elena.new@example.com' },
+    });
+    expect(patched.statusCode).toBe(200);
+    prof = patched.json();
+    expect(prof.email).toBe('elena.new@example.com');
+    // The new address must be confirmed again before it counts.
+    expect(prof.emailVerified).toBe(false);
+
+    const phonePatch = await app.inject({
+      method: 'PATCH',
+      url: `${API_PREFIX}/customers/${demo.c6}`,
+      headers: { authorization: `Bearer ${ownerToken}` },
+      payload: { phone: '+389 72 999 000' },
+    });
+    expect(phonePatch.statusCode).toBe(200);
+
+    const activity = (await get(`${API_PREFIX}/customers/${demo.c6}/activity`)).json() as {
+      entries: { type: string; meta: { field?: string; to?: string } }[];
+    };
+    const contact = activity.entries.filter((a) => a.type === 'contact_changed');
+    expect(contact.some((a) => a.meta.field === 'email' && a.meta.to === 'elena.new@example.com')).toBe(true);
+    expect(contact.some((a) => a.meta.field === 'phone' && a.meta.to === '+389 72 999 000')).toBe(true);
   });
 });

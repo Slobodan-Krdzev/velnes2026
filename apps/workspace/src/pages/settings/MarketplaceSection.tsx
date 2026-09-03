@@ -3,6 +3,7 @@ import { BusinessSettingsSchema, type BusinessSettings } from '@velnes/contracts
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { patch } from '@velnes/client';
+import { NumInput } from '@velnes/ui';
 import { useToast } from '../../lib/toast.js';
 import { Field, ToggleRow, useBusiness, useBusinessSettings } from './bits.js';
 
@@ -192,12 +193,11 @@ export function MarketplaceSection() {
           />
           <div className="grid2">
             <Field label={t('mset.deposit')} hint={t('mset.depositHint')}>
-              <input
+              <NumInput
                 className="input"
-                type="number"
                 value={mp.depositPct}
                 style={{ width: 160 }}
-                onChange={(e) => setMp({ ...mp, depositPct: Number(e.target.value) })}
+                onValue={(n) => setMp({ ...mp, depositPct: n })}
                 onBlur={() => void save(mp)}
               />
             </Field>

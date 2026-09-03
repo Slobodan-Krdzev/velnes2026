@@ -6,7 +6,7 @@ import { db, withTenant } from '../../db/index.js';
 import type { EmployeeAccess, EmployeeStatus } from '../../db/types.js';
 import { env } from '../../env.js';
 import { logAudit } from '../audit/audit.service.js';
-import { permsFor } from './authz.service.js';
+import { can, permsFor } from './authz.service.js';
 
 export class AuthError extends Error {
   constructor(public code: 'INVALID_CREDENTIALS' | 'NOT_ACTIVE' | 'INVALID_TOKEN') {
@@ -95,6 +95,13 @@ async function sessionEmployee(
       rol: e.roleId,
       locs: [],
     });
+    const role = e.roleId
+      ? await trx
+          .selectFrom('roles')
+          .select('name')
+          .where('id', '=', e.roleId)
+          .executeTakeFirst()
+      : undefined;
     return {
       id: e.id,
       name: e.name,
@@ -105,6 +112,7 @@ async function sessionEmployee(
       tenantId,
       locationIds: locs.map((l) => l.locationId),
       perms,
+      roleName: role?.name ?? null,
     };
   });
 }
@@ -175,6 +183,44 @@ export async function logout(token: string) {
 
 export async function me(claims: AccessClaims) {
   return sessionEmployee(claims.ten, claims.sub);
+}
+
+export class PreviewError extends Error {
+  constructor(public code: 'FORBIDDEN' | 'NOT_FOUND' | 'SELF') {
+    super(code);
+  }
+}
+
+/** The prototype's startPreview(): a user manager becomes the target
+ *  user for real — the caller gets a genuine access token, so roles,
+ *  scopes and data all follow on the server. The start is audited;
+ *  a mid-preview token renewal is not a second event. */
+export async function startPreview(claims: AccessClaims, targetId: string, renew: boolean) {
+  if (targetId === claims.sub) throw new PreviewError('SELF');
+  await withTenant(claims.ten, async (trx) => {
+    const perms = await permsFor(trx, claims);
+    if (!can(perms, 'users.manage')) throw new PreviewError('FORBIDDEN');
+    const target = await trx
+      .selectFrom('employees')
+      .select('name')
+      .where('id', '=', targetId)
+      .executeTakeFirst();
+    if (!target) throw new PreviewError('NOT_FOUND');
+    if (renew) return;
+    const actor = await trx
+      .selectFrom('employees')
+      .select('name')
+      .where('id', '=', claims.sub)
+      .executeTakeFirstOrThrow();
+    await logAudit(trx, claims.ten, {
+      actorEmployeeId: claims.sub,
+      actorName: actor.name,
+      action: 'Preview access',
+      object: `User · ${target.name}`,
+      after: 'Previewed as this user',
+    });
+  });
+  return sessionEmployee(claims.ten, targetId);
 }
 
 export async function setLang(claims: AccessClaims, lang: 'en' | 'mk' | 'sq') {

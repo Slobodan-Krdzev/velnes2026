@@ -100,3 +100,40 @@ service.
   register → HQ activate → owner signs into their own world;
   owner submits a copy location with a new entity → HQ approves the
   compound → owner activates behind the readiness gate.
+
+## HQ chrome (2026-09-03)
+
+The HQ app wears the prototype's own shell now, pixel for pixel: the
+fixed icon sidebar (HQ_NAV — Customers, Categories, Suppliers, HQ
+team, Search lab, Platform log; Categories is ours, the shelfkeeper
+for the Velnes taxonomy and its request intake), the foot tile "Back
+to the salon workspace" (VITE_WORKSPACE_URL, :5173 in dev), the
+topbar with the fixed "Revelapps HQ" title, and the avatar menu
+top-right (signed-in block, language rows, sign out) — `body.env-hq`
+set like the prototype does. Suppliers, HQ team and Search lab stay
+honest empty states (Search waits for §5).
+
+The Categories tab's add-form became a top-right accent Add button
+opening a small modal (name + item type, Enter books it); the note
+copy now tells the truth about guarded delete. The HQ topbar carries
+the same notices bell as the workspace (GET `/hq/notices`, unseen dot
+via a per-browser seen timestamp), so HQ sees the platform notices it
+writes.
+
+Notices carry an audience now (migration 20260903200024: 'salons' |
+'hq'; a tenant may insert only audience='hq' rows — it can ring HQ's
+bell and nothing else). A salon's category request writes an
+audience='hq' notice ("Category request: X · from <salon>") so HQ's
+bell rings the moment the ask lands; approval keeps writing the
+salons-audience notice. Both feeds filter by audience, and notice
+rows are buttons: category notices land on the Categories tab (HQ)
+or Catalog → Categories (workspace).
+
+A decline answers the asker: migration 20260903210025 gives notices a
+target tenant (null = broadcast; reads RLS-scoped so a salon sees
+broadcasts and its own mail, never another salon's; HQ sees all).
+Declining a category request — reason mandatory at the door — writes
+an audience='salons' notice targeted at the requesting tenant, title
+"Category request declined: X", body = the reason; the salon's bell
+carries it and clicking lands on Catalog → Categories where the
+request row shows the same reason.

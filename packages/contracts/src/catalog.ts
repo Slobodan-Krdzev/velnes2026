@@ -74,10 +74,16 @@ export const ResolvedServiceSchema = ServiceSchema.omit({
   modifiers: z.array(ModifierGroupSchema),
 });
 
+/** The product photo's hard numbers — small on purpose: it sits on
+ *  44px catalog rows and the till tiles. */
+export const PRODUCT_IMG_MAX_CHARS = 200_000; // data-URL chars ≈ 150 KB
+export const PRODUCT_IMG_MAX_EDGE_PX = 512;
+
 export const ResolvedProductSchema = z.object({
   id: z.uuid(),
   name: z.string(),
   category: z.string().nullable(),
+  img: z.string().nullable().default(null),
   sku: z.string().nullable(),
   vat: z.number().int(),
   own: z.boolean(),
@@ -125,6 +131,9 @@ export const ServiceWriteSchema = z.object({
   online: z.boolean().optional(),
   prepMin: z.number().int().min(0).nullable().optional(),
   resetMin: z.number().int().min(0).nullable().optional(),
+  // Who performs this service. null = every worker; an array names
+  // exactly the performers; omitted = leave assignments untouched.
+  performerIds: z.array(z.uuid()).nullable().optional(),
   variants: z
     .array(
       z.object({
@@ -160,6 +169,7 @@ export type ServiceWrite = z.infer<typeof ServiceWriteSchema>;
 export const ProductWriteSchema = z.object({
   name: z.string().min(1),
   category: z.string().nullable().optional(),
+  img: z.string().max(PRODUCT_IMG_MAX_CHARS, 'IMG_TOO_LARGE').nullable().optional(),
   sku: z.string().nullable().optional(),
   price: MoneySchema.nonnegative().optional(),
   cost: MoneySchema.nonnegative().nullable().optional(),
@@ -193,3 +203,49 @@ export const LineQuoteResponseSchema = z.object({
   missingRequired: z.array(z.string()),
 });
 export type LineQuoteResponse = z.infer<typeof LineQuoteResponseSchema>;
+
+/** Categories as their own door — the prototype's "New category"
+ *  panel. One level: Catalog → item type → category → item. */
+export const CategoryTypeSchema = z.enum(['services', 'products']);
+export const CategoryRowSchema = z.object({
+  id: z.uuid(),
+  name: z.string(),
+  type: CategoryTypeSchema,
+  items: z.number().int(),
+});
+export const CategoryListResponseSchema = z.object({
+  categories: z.array(CategoryRowSchema),
+});
+export type CategoryRow = z.infer<typeof CategoryRowSchema>;
+
+/** Category requests — a salon asks HQ for a new shelf. */
+export const CategoryRequestCreateSchema = z.object({
+  name: z.string().min(1).max(60),
+  type: CategoryTypeSchema,
+  note: z.string().max(300).default(''),
+});
+export const CategoryRequestSchema = z.object({
+  id: z.uuid(),
+  name: z.string(),
+  type: CategoryTypeSchema,
+  note: z.string(),
+  status: z.enum(['pending', 'approved', 'declined']),
+  hqReason: z.string(),
+  createdAt: z.string(),
+  decidedAt: z.string().nullable(),
+});
+export const CategoryRequestListSchema = z.object({
+  requests: z.array(CategoryRequestSchema),
+});
+
+/** Platform notices — HQ speaks, every salon reads. */
+export const PlatformNoticeSchema = z.object({
+  id: z.uuid(),
+  kind: z.string(),
+  title: z.string(),
+  body: z.string(),
+  createdAt: z.string(),
+});
+export const PlatformNoticeListSchema = z.object({
+  notices: z.array(PlatformNoticeSchema),
+});

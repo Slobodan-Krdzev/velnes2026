@@ -1,6 +1,7 @@
 import type {
   AccessClaims,
   CopyChecklist,
+  CopySetupRequest,
   Location,
   LocationCreate,
   LocationLifecycle,
@@ -137,6 +138,76 @@ export async function copyLocationSetup(
     if (Object.keys(patch).length)
       await trx.updateTable('locations').set(patch).where('id', '=', dstId).execute();
   }
+}
+
+/**
+ * The prototype's copyConfig panel, over an EXISTING target: the
+ * chosen parts are overwritten with the source's setup. Stock,
+ * appointments and customers never travel — stock in particular is a
+ * transaction, so the target's counts survive a catalog re-copy.
+ */
+export async function copySetupInto(
+  trx: Trx,
+  claims: AccessClaims,
+  srcId: string,
+  req: CopySetupRequest,
+) {
+  const dstId = req.toLocationId;
+  if (dstId === srcId) throw new LocationError('ILLEGAL_TRANSITION', 'Cannot copy a location onto itself');
+  const src = await trx.selectFrom('locations').selectAll().where('id', '=', srcId).executeTakeFirst();
+  const dst = await trx.selectFrom('locations').selectAll().where('id', '=', dstId).executeTakeFirst();
+  if (!src || !dst) throw new LocationError('NOT_FOUND', 'Unknown location');
+  const p = req.parts;
+
+  if (p.services) {
+    await trx.deleteFrom('locationCatalogVariants').where('locationId', '=', dstId).execute();
+    await trx.deleteFrom('locationCatalogServices').where('locationId', '=', dstId).execute();
+    await copyLocationSetup(trx, claims.ten, srcId, dstId, {
+      services: true, prices: true, timing: true,
+      products: false, hours: false, policies: false, payments: false,
+    });
+  }
+  if (p.products) {
+    const kept = await trx
+      .selectFrom('locationCatalogProducts')
+      .select(['productId', 'stock'])
+      .where('locationId', '=', dstId)
+      .execute();
+    await trx.deleteFrom('locationCatalogProducts').where('locationId', '=', dstId).execute();
+    await copyLocationSetup(trx, claims.ten, srcId, dstId, {
+      services: false, prices: true, timing: false,
+      products: true, hours: false, policies: false, payments: false,
+    });
+    for (const k of kept)
+      await trx
+        .updateTable('locationCatalogProducts')
+        .set({ stock: k.stock })
+        .where('locationId', '=', dstId)
+        .where('productId', '=', k.productId)
+        .execute();
+  }
+  const patch: Record<string, unknown> = {};
+  if (p.hours) patch.hours = JSON.stringify(src.hours);
+  if (p.policy) patch.cancelHours = src.cancelHours;
+  if (p.payments) patch.payments = JSON.stringify(src.payments);
+  if (p.widget) patch.online = src.online;
+  if (Object.keys(patch).length)
+    await trx.updateTable('locations').set(patch).where('id', '=', dstId).execute();
+
+  const actor = await trx
+    .selectFrom('employees')
+    .select('name')
+    .where('id', '=', claims.sub)
+    .executeTakeFirst();
+  await logAudit(trx, claims.ten, {
+    actorEmployeeId: claims.sub,
+    actorName: actor?.name ?? '',
+    action: 'Setup copied',
+    object: `Location · ${dst.name}`,
+    before: 'Own setup',
+    after: `Copied from ${src.name}`,
+    locationName: dst.name,
+  });
 }
 
 const STD_HOURS = {

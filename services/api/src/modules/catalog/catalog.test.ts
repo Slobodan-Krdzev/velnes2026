@@ -15,6 +15,8 @@ const ADMIN_URL = (
 const app = await buildServer();
 const admin = new pg.Client({ connectionString: ADMIN_URL });
 let mariaToken = '';
+let createdServiceId = '';
+let createdProductId = '';
 
 // Prototype variant/option ids used below (see seed-demo).
 const v45 = '61000000-0000-4000-8000-000000000801';
@@ -36,6 +38,26 @@ describe('catalog doors (contract tests vs prototype)', () => {
   });
   afterAll(async () => {
     // Undo the overrides this suite writes.
+    if (createdServiceId) {
+      await admin.query(`DELETE FROM employee_skills WHERE service_id=$1`, [createdServiceId]);
+      await admin.query(`DELETE FROM location_catalog_services WHERE service_id=$1`, [createdServiceId]);
+      await admin.query(`DELETE FROM services WHERE id=$1`, [createdServiceId]);
+    }
+    // Nikola and Bojan carried no skill rows (do-everything) — the
+    // performer test materialised them; put the emptiness back.
+    await admin.query(`DELETE FROM employee_skills WHERE employee_id IN ($1,$2)`, [
+      demo.empNikola,
+      demo.empBojan,
+    ]);
+    if (createdProductId) {
+      await admin.query(`DELETE FROM location_catalog_products WHERE product_id=$1`, [createdProductId]);
+      await admin.query(`DELETE FROM products WHERE id=$1`, [createdProductId]);
+    }
+    await admin.query(`DELETE FROM service_categories WHERE name='Prenatal (test)'`);
+    await admin.query(`DELETE FROM service_categories WHERE name='Prenatal care (req test)'`);
+    await admin.query(`DELETE FROM category_requests WHERE name IN ('Prenatal care (req test)','Crystal healing (req test)')`);
+    await admin.query(`DELETE FROM platform_notices WHERE title LIKE '%Crystal healing (req test)%'`);
+    await admin.query(`DELETE FROM platform_notices WHERE title LIKE '%Prenatal care (req test)%'`);
     await admin.query(`DELETE FROM location_catalog_variants WHERE variant_id=$1`, [v45]);
     await admin.query(
       `UPDATE location_catalog_services SET price=1800, active=true WHERE service_id=$1 AND location_id=$2`,
@@ -200,5 +222,306 @@ describe('catalog doors (contract tests vs prototype)', () => {
       `SELECT before, after FROM audit_log WHERE action='Price changed' ORDER BY ts DESC LIMIT 1`,
     );
     expect(audit.rows[0]).toMatchObject({ before: '2000 ден', after: '2100 ден' });
+  });
+
+  it('the Velnes taxonomy: HQ creates, salons pick — never invent', async () => {
+    // A salon naming an unknown category is refused, not obliged.
+    const rogue = await app.inject({
+      method: 'POST',
+      url: `${API_PREFIX}/services`,
+      headers: { authorization: `Bearer ${mariaToken}` },
+      payload: { name: 'Knee massage', category: 'My Own Shelf', durationMin: 30, price: 1500 },
+    });
+    expect(rogue.statusCode).toBe(422);
+    expect((rogue.json() as { message: string }).message).toContain('Velnes category');
+
+    // The salon POST door is gone entirely.
+    const gone = await app.inject({
+      method: 'POST',
+      url: `${API_PREFIX}/categories`,
+      headers: { authorization: `Bearer ${mariaToken}` },
+      payload: { name: 'Prenatal (test)', type: 'services' },
+    });
+    expect(gone.statusCode).toBe(404);
+
+    // HQ creates the shelf; duplicates refused.
+    const hq = await app.inject({
+      method: 'POST',
+      url: `${API_PREFIX}/hq/auth/login`,
+      payload: { email: 'ivana@revelapps.com', password: 'velnes-demo' },
+    });
+    const hqToken = (hq.json() as { accessToken: string }).accessToken;
+    const created = await app.inject({
+      method: 'POST',
+      url: `${API_PREFIX}/hq/categories`,
+      headers: { authorization: `Bearer ${hqToken}` },
+      payload: { name: 'Prenatal (test)', type: 'services' },
+    });
+    expect(created.statusCode).toBe(200);
+    const dupe = await app.inject({
+      method: 'POST',
+      url: `${API_PREFIX}/hq/categories`,
+      headers: { authorization: `Bearer ${hqToken}` },
+      payload: { name: 'Prenatal (test)', type: 'services' },
+    });
+    expect(dupe.statusCode).toBe(409);
+
+    // The salon sees the new shelf at once and can stand a service on it.
+    const list = await app.inject({
+      method: 'GET',
+      url: `${API_PREFIX}/categories`,
+      headers: { authorization: `Bearer ${mariaToken}` },
+    });
+    const rows = (list.json() as { categories: { name: string; type: string; items: number }[] }).categories;
+    expect(rows.find((c) => c.name === 'Prenatal (test)')).toMatchObject({ type: 'services', items: 0 });
+    expect(rows.find((c) => c.name === 'Massage')).toBeDefined();
+    const svc = await app.inject({
+      method: 'POST',
+      url: `${API_PREFIX}/services`,
+      headers: { authorization: `Bearer ${mariaToken}` },
+      payload: {
+        name: 'Knee massage', category: 'Massage', durationMin: 30, price: 1500,
+        // Only Ana performs it.
+        performerIds: [demo.empAna],
+      },
+    });
+    expect(svc.statusCode).toBe(200);
+    createdServiceId = (svc.json() as { id: string }).id;
+  });
+
+  it('performers write onto the skills truth the booking gate reads', async () => {
+    const emps = async () =>
+      ((await app.inject({
+        method: 'GET',
+        url: `${API_PREFIX}/employees`,
+        headers: { authorization: `Bearer ${mariaToken}` },
+      })).json() as { employees: { id: string; skillServiceIds: string[] }[] }).employees;
+
+    let all = await emps();
+    const of = (id: string) => all.find((e) => e.id === id)!.skillServiceIds;
+    // Ana (explicit list) gained the service; Maria and Elena did not.
+    expect(of(demo.empAna)).toContain(createdServiceId);
+    expect(of(demo.empMaria)).not.toContain(createdServiceId);
+    // Bojan did everything implicitly — excluding him made his list
+    // explicit: every service except this one.
+    expect(of(demo.empBojan).length).toBeGreaterThan(0);
+    expect(of(demo.empBojan)).not.toContain(createdServiceId);
+
+    // Every worker: the explicit lists all gain the service.
+    const put = await app.inject({
+      method: 'PUT',
+      url: `${API_PREFIX}/services/${createdServiceId}`,
+      headers: { authorization: `Bearer ${mariaToken}` },
+      payload: { name: 'Knee massage', category: 'Massage', durationMin: 30, price: 1500, performerIds: null },
+    });
+    expect(put.statusCode).toBe(200);
+    all = await emps();
+    for (const emp of [demo.empMaria, demo.empAna, demo.empElena, demo.empBojan])
+      expect(of(emp), emp).toContain(createdServiceId);
+  });
+
+  it('a product carries its small photo; an oversized one is refused', async () => {
+    const img = 'data:image/jpeg;base64,' + 'A'.repeat(1000);
+    const created = await app.inject({
+      method: 'POST',
+      url: `${API_PREFIX}/products`,
+      headers: { authorization: `Bearer ${mariaToken}` },
+      payload: { name: 'Photo test balm', category: 'Recovery aids', price: 700, img },
+    });
+    expect(created.statusCode).toBe(200);
+    createdProductId = (created.json() as { id: string }).id;
+    const cat = LocationCatalogResponseSchema.parse(
+      (await app.inject({
+        method: 'GET',
+        url: `${API_PREFIX}/locations/${demo.locCentar}/catalog`,
+        headers: { authorization: `Bearer ${mariaToken}` },
+      })).json(),
+    );
+    expect(cat.products.find((p) => p.id === createdProductId)?.img).toBe(img);
+
+    const tooBig = await app.inject({
+      method: 'POST',
+      url: `${API_PREFIX}/products`,
+      headers: { authorization: `Bearer ${mariaToken}` },
+      payload: { name: 'Too big', price: 1, img: 'data:image/jpeg;base64,' + 'A'.repeat(200_001) },
+    });
+    expect(tooBig.statusCode).toBe(400);
+  });
+
+  it('the request loop: salon asks, HQ approves, the shelf lands and every salon is told', async () => {
+    // The salon asks. An existing shelf is refused kindly.
+    const dupe = await app.inject({
+      method: 'POST',
+      url: `${API_PREFIX}/category-requests`,
+      headers: { authorization: `Bearer ${mariaToken}` },
+      payload: { name: 'Massage', type: 'services', note: '' },
+    });
+    expect(dupe.statusCode).toBe(409);
+    const sent = await app.inject({
+      method: 'POST',
+      url: `${API_PREFIX}/category-requests`,
+      headers: { authorization: `Bearer ${mariaToken}` },
+      payload: { name: 'Prenatal care (req test)', type: 'services', note: 'We do prenatal work' },
+    });
+    expect(sent.statusCode).toBe(200);
+    // A second identical ask waits on the first.
+    const again = await app.inject({
+      method: 'POST',
+      url: `${API_PREFIX}/category-requests`,
+      headers: { authorization: `Bearer ${mariaToken}` },
+      payload: { name: 'Prenatal care (req test)', type: 'services', note: '' },
+    });
+    expect(again.statusCode).toBe(409);
+
+    // The ask rings HQ's bell — and only HQ's.
+    const preHq = await app.inject({
+      method: 'POST',
+      url: `${API_PREFIX}/hq/auth/login`,
+      payload: { email: 'ivana@revelapps.com', password: 'velnes-demo' },
+    });
+    const preHqToken = (preHq.json() as { accessToken: string }).accessToken;
+    const hqBell = (await app.inject({
+      method: 'GET',
+      url: `${API_PREFIX}/hq/notices`,
+      headers: { authorization: `Bearer ${preHqToken}` },
+    })).json() as { notices: { kind: string; title: string }[] };
+    expect(
+      hqBell.notices.some(
+        (n) => n.kind === 'category_request' && n.title.includes('Prenatal care (req test)'),
+      ),
+    ).toBe(true);
+    const salonBell = (await app.inject({
+      method: 'GET',
+      url: `${API_PREFIX}/notices`,
+      headers: { authorization: `Bearer ${mariaToken}` },
+    })).json() as { notices: { kind: string }[] };
+    expect(salonBell.notices.some((n) => n.kind === 'category_request')).toBe(false);
+
+    // HQ sees the queue with the salon named.
+    const hq = await app.inject({
+      method: 'POST',
+      url: `${API_PREFIX}/hq/auth/login`,
+      payload: { email: 'ivana@revelapps.com', password: 'velnes-demo' },
+    });
+    const hqToken = (hq.json() as { accessToken: string }).accessToken;
+    const queue = (await app.inject({
+      method: 'GET',
+      url: `${API_PREFIX}/hq/categories/requests`,
+      headers: { authorization: `Bearer ${hqToken}` },
+    })).json() as { requests: { id: string; name: string; tenantName: string; status: string }[] };
+    const mine = queue.requests.find((r2) => r2.name === 'Prenatal care (req test)')!;
+    expect(mine.tenantName).toBe('Velnes Fizio Centar');
+    expect(mine.status).toBe('pending');
+
+    // Approve: the shelf exists, the request flips, the notice lands.
+    const ok = await app.inject({
+      method: 'POST',
+      url: `${API_PREFIX}/hq/categories/requests/${mine.id}/approve`,
+      headers: { authorization: `Bearer ${hqToken}` },
+    });
+    expect(ok.statusCode).toBe(200);
+    const cats = (await app.inject({
+      method: 'GET',
+      url: `${API_PREFIX}/categories`,
+      headers: { authorization: `Bearer ${mariaToken}` },
+    })).json() as { categories: { name: string }[] };
+    expect(cats.categories.some((c) => c.name === 'Prenatal care (req test)')).toBe(true);
+    const own = (await app.inject({
+      method: 'GET',
+      url: `${API_PREFIX}/category-requests`,
+      headers: { authorization: `Bearer ${mariaToken}` },
+    })).json() as { requests: { name: string; status: string }[] };
+    expect(own.requests.find((r2) => r2.name === 'Prenatal care (req test)')?.status).toBe('approved');
+    const notices = (await app.inject({
+      method: 'GET',
+      url: `${API_PREFIX}/notices`,
+      headers: { authorization: `Bearer ${mariaToken}` },
+    })).json() as { notices: { title: string }[] };
+    expect(notices.notices.some((n) => n.title.includes('Prenatal care (req test)'))).toBe(true);
+    // Deciding twice is refused.
+    expect(
+      (await app.inject({
+        method: 'POST',
+        url: `${API_PREFIX}/hq/categories/requests/${mine.id}/approve`,
+        headers: { authorization: `Bearer ${hqToken}` },
+      })).statusCode,
+    ).toBe(409);
+
+    // Decline: the reason is mandatory at the door, and the answer
+    // travels back to the salon that asked — as its own notice.
+    const ask2 = await app.inject({
+      method: 'POST',
+      url: `${API_PREFIX}/category-requests`,
+      headers: { authorization: `Bearer ${mariaToken}` },
+      payload: { name: 'Crystal healing (req test)', type: 'services', note: '' },
+    });
+    expect(ask2.statusCode).toBe(200);
+    const queue2 = (await app.inject({
+      method: 'GET',
+      url: `${API_PREFIX}/hq/categories/requests`,
+      headers: { authorization: `Bearer ${hqToken}` },
+    })).json() as { requests: { id: string; name: string; status: string }[] };
+    const req2 = queue2.requests.find(
+      (r2) => r2.name === 'Crystal healing (req test)' && r2.status === 'pending',
+    )!;
+    const noReason = await app.inject({
+      method: 'POST',
+      url: `${API_PREFIX}/hq/categories/requests/${req2.id}/decline`,
+      headers: { authorization: `Bearer ${hqToken}` },
+      payload: { reason: '' },
+    });
+    expect(noReason.statusCode).toBe(400);
+    const declined = await app.inject({
+      method: 'POST',
+      url: `${API_PREFIX}/hq/categories/requests/${req2.id}/decline`,
+      headers: { authorization: `Bearer ${hqToken}` },
+      payload: { reason: 'Out of the wellness scope' },
+    });
+    expect(declined.statusCode).toBe(200);
+    const own2 = (await app.inject({
+      method: 'GET',
+      url: `${API_PREFIX}/category-requests`,
+      headers: { authorization: `Bearer ${mariaToken}` },
+    })).json() as { requests: { name: string; status: string; hqReason: string }[] };
+    expect(own2.requests.find((r2) => r2.name === 'Crystal healing (req test)')).toMatchObject({
+      status: 'declined',
+      hqReason: 'Out of the wellness scope',
+    });
+    const bell2 = (await app.inject({
+      method: 'GET',
+      url: `${API_PREFIX}/notices`,
+      headers: { authorization: `Bearer ${mariaToken}` },
+    })).json() as { notices: { kind: string; title: string; body: string }[] };
+    expect(
+      bell2.notices.some(
+        (n) =>
+          n.kind === 'category_declined' &&
+          n.title.includes('Crystal healing (req test)') &&
+          n.body === 'Out of the wellness scope',
+      ),
+    ).toBe(true);
+
+    // Delete: an unused shelf goes; one in use is refused by the FK.
+    const catList = (await app.inject({
+      method: 'GET',
+      url: `${API_PREFIX}/hq/categories`,
+      headers: { authorization: `Bearer ${hqToken}` },
+    })).json() as { categories: { id: string; name: string; type: string }[] };
+    const fresh = catList.categories.find((c) => c.name === 'Prenatal care (req test)')!;
+    const inUse = catList.categories.find((c) => c.name === 'Manual therapy')!;
+    expect(
+      (await app.inject({
+        method: 'DELETE',
+        url: `${API_PREFIX}/hq/categories/services/${inUse.id}`,
+        headers: { authorization: `Bearer ${hqToken}` },
+      })).statusCode,
+    ).toBe(409);
+    expect(
+      (await app.inject({
+        method: 'DELETE',
+        url: `${API_PREFIX}/hq/categories/services/${fresh.id}`,
+        headers: { authorization: `Bearer ${hqToken}` },
+      })).statusCode,
+    ).toBe(200);
   });
 });

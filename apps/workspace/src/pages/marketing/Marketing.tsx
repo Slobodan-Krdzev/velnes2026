@@ -11,7 +11,7 @@ import {
   type CapacitySlot,
   type MemberRecSchema,
 } from '@velnes/contracts';
-import { I, Icon } from '@velnes/ui';
+import { I, Icon, NumInput } from '@velnes/ui';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { z } from 'zod';
@@ -423,14 +423,7 @@ function OfferDrawer({
             </label>
             <label className="field">
               <span>{t('mkt.discount')}</span>
-              <input
-                className="input"
-                type="number"
-                min={0}
-                max={100}
-                value={vipPct}
-                onChange={(e) => setVipPct(Number(e.target.value))}
-              />
+              <NumInput className="input" min={0} max={100} value={vipPct} onValue={setVipPct} />
             </label>
             <label className="field">
               <span>{t('mkt.from')}</span>
@@ -470,14 +463,7 @@ function OfferDrawer({
               <div className="grid2">
                 <label className="field">
                   <span>{t('mkt.discount')}</span>
-                  <input
-                    className="input"
-                    type="number"
-                    min={0}
-                    max={100}
-                    value={publicPct}
-                    onChange={(e) => setPublicPct(Number(e.target.value))}
-                  />
+                  <NumInput className="input" min={0} max={100} value={publicPct} onValue={setPublicPct} />
                 </label>
                 <label className="field">
                   <span>{t('mkt.from')}</span>

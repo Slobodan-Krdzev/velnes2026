@@ -47,3 +47,7 @@ async function call<S extends z.ZodType>(
 export const hqGet = <S extends z.ZodType>(schema: S, path: string) => call(schema, path);
 export const hqPost = <S extends z.ZodType>(schema: S, path: string, body?: unknown) =>
   call(schema, path, { method: 'POST', ...(body ? { body: JSON.stringify(body) } : {}) });
+export const hqPatch = <S extends z.ZodType>(schema: S, path: string, body: unknown) =>
+  call(schema, path, { method: 'PATCH', body: JSON.stringify(body) });
+export const hqDelete = <S extends z.ZodType>(schema: S, path: string) =>
+  call(schema, path, { method: 'DELETE' });

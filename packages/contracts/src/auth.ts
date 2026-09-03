@@ -47,10 +47,29 @@ export const MeResponseSchema = SessionEmployeeSchema.extend({
   tenantId: z.uuid(),
   lang: LangSchema,
   perms: PermMapSchema,
+  // The role's display name — the preview bar shows it without
+  // needing a roles listing the previewed user may not be allowed.
+  roleName: z.string().nullable().default(null),
 });
 export type MeResponse = z.infer<typeof MeResponseSchema>;
 
 export const MePatchSchema = z.object({ lang: LangSchema });
+
+/** Preview access — the prototype's startPreview(): a user manager
+ *  becomes another user for real. The server issues a genuine access
+ *  token for the target; roles, scopes and data all follow. */
+export const PreviewRequestSchema = z.object({
+  employeeId: z.uuid(),
+  // A silent token renewal mid-preview; the start is what gets audited.
+  renew: z.boolean().optional(),
+});
+export type PreviewRequest = z.infer<typeof PreviewRequestSchema>;
+
+export const PreviewResponseSchema = z.object({
+  accessToken: z.string(),
+  employee: MeResponseSchema,
+});
+export type PreviewResponse = z.infer<typeof PreviewResponseSchema>;
 
 /** Claims carried in the access JWT. */
 export const AccessClaimsSchema = z.object({

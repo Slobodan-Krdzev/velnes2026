@@ -83,10 +83,12 @@ describe('registrations and the HQ intake table', () => {
     if (newBusinessId) {
       const b = newBusinessId;
       await admin.query(`UPDATE businesses SET owner_employee_id=NULL WHERE id=$1`, [b]);
+      // service_categories are the global Velnes taxonomy now — a
+      // tenant teardown never touches them.
       for (const t of [
         'audit_log', 'refresh_tokens', 'user_credentials', 'employee_skills',
         'employee_locations', 'legal_entity_locations', 'legal_entities',
-        'location_lifecycle_log', 'locations', 'services', 'service_categories',
+        'location_lifecycle_log', 'locations', 'services',
         'employees', 'roles',
       ])
         await admin.query(`DELETE FROM ${t} WHERE tenant_id=$1`, [b]);
