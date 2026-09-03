@@ -18,6 +18,7 @@ import { sql } from 'kysely';
 import { z } from 'zod';
 import { withTenant } from '../../db/index.js';
 import { logAudit } from '../audit/audit.service.js';
+import { queueMail } from '../mail/mail.service.js';
 import { effTreatment } from '../timing/timing.service.js';
 import { can, permsFor } from '../auth/authz.service.js';
 
@@ -543,6 +544,16 @@ export function teamRoutes(app: FastifyInstance) {
           object: `User · ${b.name}`,
           before: '—',
           after: role?.name ?? '—',
+        });
+        // The invite mail — through the outbox, mock until a
+        // provider is decided.
+        await queueMail(trx, {
+          tenantId: req.claims.ten,
+          to: b.email,
+          subject: 'You are invited to Velnes',
+          body: `${actor?.name ?? 'Your salon'} invited you as ${role?.name ?? 'a team member'}. The invite is valid for 7 days.`,
+          kind: 'employee_invite',
+          refId: row.id,
         });
         return {
           id: row.id,

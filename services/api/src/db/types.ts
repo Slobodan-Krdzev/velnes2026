@@ -510,6 +510,19 @@ export interface LoyaltyLedger {
   tenantId: string;
 }
 
+export interface MailOutbox {
+  body: Generated<string>;
+  createdAt: Generated<Timestamp>;
+  id: Generated<string>;
+  kind: string;
+  refId: string | null;
+  sentAt: Timestamp | null;
+  status: Generated<string>;
+  subject: string;
+  tenantId: string | null;
+  toEmail: string;
+}
+
 export interface MemberRecs {
   candidates: Json;
   createdAt: Generated<Timestamp>;
@@ -937,6 +950,7 @@ export interface DB {
   locations: Locations;
   loyaltyConfig: LoyaltyConfig;
   loyaltyLedger: LoyaltyLedger;
+  mailOutbox: MailOutbox;
   memberRecs: MemberRecs;
   merchantTransactions: MerchantTransactions;
   paymentAccounts: PaymentAccounts;

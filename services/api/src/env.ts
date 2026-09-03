@@ -15,6 +15,9 @@ export const env = {
     'postgres://velnes_api:velnes_api@localhost:5432/velnes',
   ),
   jwtSecret: required('JWT_SECRET', 'velnes-dev-secret-not-for-production'),
+  /** 'mock' until the provider is decided (likely Resend): mails land
+   *  in the outbox stamped mock_sent, nothing leaves the building. */
+  mailTransport: process.env.MAIL_TRANSPORT ?? 'mock',
   accessTtl: '15m',
   refreshTtlDays: 30,
 };

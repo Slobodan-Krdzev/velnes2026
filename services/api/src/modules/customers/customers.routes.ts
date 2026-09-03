@@ -18,6 +18,7 @@ import { z } from 'zod';
 import { withTenant } from '../../db/index.js';
 import { can, permsFor } from '../auth/authz.service.js';
 import { logAudit } from '../audit/audit.service.js';
+import { queueMail } from '../mail/mail.service.js';
 import {
   activityLog,
   createPersonalOffer,
@@ -182,6 +183,17 @@ export function customersRoutes(app: FastifyInstance) {
               field: 'email',
               from: before.email ?? '—',
               to: b.email ?? '—',
+            });
+          // The new address gets its confirmation mail — outbox,
+          // mock transport until the provider lands.
+          if (emailChanged && b.email)
+            await queueMail(trx, {
+              tenantId: req.claims.ten,
+              to: b.email,
+              subject: 'Confirm your email address',
+              body: `Please confirm ${b.email} so ${before.name} keeps receiving booking confirmations and reminders.`,
+              kind: 'email_verify',
+              refId: req.params.id,
             });
           if (b.phone !== undefined && b.phone !== before.phone)
             await activityLog(trx, req.claims.ten, req.params.id, req.claims.sub, 'contact_changed', '', '', {

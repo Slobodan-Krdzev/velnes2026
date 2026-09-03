@@ -138,3 +138,59 @@ export const HqCategoryRequestListSchema = z.object({
 export const HqCategoryDeclineSchema = z.object({
   reason: z.string().min(1).max(300),
 });
+
+/** HQ team management — the platform's own people. */
+export const HqTeamMemberSchema = z.object({
+  id: z.uuid(),
+  name: z.string(),
+  email: z.string(),
+  role: z.enum(['hq_super', 'hq_onboard', 'hq_support']),
+  status: z.enum(['active', 'invited']),
+  createdAt: z.string(),
+});
+export const HqTeamListSchema = z.object({ members: z.array(HqTeamMemberSchema) });
+export const HqTeamInviteSchema = z.object({
+  name: z.string().min(1),
+  email: z.email(),
+  role: z.enum(['hq_super', 'hq_onboard', 'hq_support']),
+});
+export const HqTeamRolePatchSchema = z.object({
+  role: z.enum(['hq_super', 'hq_onboard', 'hq_support']),
+});
+
+/** Supplier Intelligence — the operator's view over the chain. */
+export const HqSupplierRowSchema = z.object({
+  id: z.uuid(),
+  name: z.string(),
+  type: z.string(),
+  territory: z.string(),
+  verified: z.boolean(),
+  products: z.number().int(),
+  connectedSalons: z.number().int(),
+  pendingSalons: z.number().int(),
+  orders: z.number().int(),
+  orderValue: z.number().int(),
+});
+export const HqSupplierListSchema = z.object({ suppliers: z.array(HqSupplierRowSchema) });
+export const HqSupplierCreateSchema = z.object({
+  name: z.string().min(1).max(80),
+  type: z.string().default('Distributor'),
+  territory: z.string().default('North Macedonia'),
+  contact: z.string().default(''),
+});
+export const HqSupplierPatchSchema = z.object({
+  verified: z.boolean().optional(),
+  territory: z.string().optional(),
+  contact: z.string().optional(),
+});
+
+/** The mail outbox, HQ-visible: what the platform said to whom. */
+export const HqOutboxRowSchema = z.object({
+  id: z.uuid(),
+  to: z.string(),
+  subject: z.string(),
+  kind: z.string(),
+  status: z.string(),
+  createdAt: z.string(),
+});
+export const HqOutboxListSchema = z.object({ mails: z.array(HqOutboxRowSchema) });

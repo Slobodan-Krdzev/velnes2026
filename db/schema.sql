@@ -690,7 +690,7 @@ CREATE TABLE public.hq_users (
     status text DEFAULT 'active'::text NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     CONSTRAINT hq_users_role_check CHECK ((role = ANY (ARRAY['hq_super'::text, 'hq_onboard'::text, 'hq_support'::text, 'hq_tech'::text, 'hq_audit'::text]))),
-    CONSTRAINT hq_users_status_check CHECK ((status = ANY (ARRAY['active'::text, 'disabled'::text])))
+    CONSTRAINT hq_users_status_check CHECK ((status = ANY (ARRAY['active'::text, 'invited'::text, 'disabled'::text])))
 );
 
 ALTER TABLE ONLY public.hq_users FORCE ROW LEVEL SECURITY;
@@ -975,6 +975,27 @@ CREATE TABLE public.loyalty_ledger (
 );
 
 ALTER TABLE ONLY public.loyalty_ledger FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: mail_outbox; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.mail_outbox (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    tenant_id uuid,
+    to_email text NOT NULL,
+    subject text NOT NULL,
+    body text DEFAULT ''::text NOT NULL,
+    kind text NOT NULL,
+    ref_id text,
+    status text DEFAULT 'queued'::text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    sent_at timestamp with time zone,
+    CONSTRAINT mail_outbox_status_check CHECK ((status = ANY (ARRAY['queued'::text, 'mock_sent'::text, 'sent'::text, 'failed'::text])))
+);
+
+ALTER TABLE ONLY public.mail_outbox FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -1907,6 +1928,14 @@ ALTER TABLE ONLY public.loyalty_ledger
 
 
 --
+-- Name: mail_outbox mail_outbox_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.mail_outbox
+    ADD CONSTRAINT mail_outbox_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: member_recs member_recs_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2424,6 +2453,13 @@ CREATE INDEX locations_tenant ON public.locations USING btree (tenant_id, lifecy
 --
 
 CREATE INDEX loyalty_ledger_tenant ON public.loyalty_ledger USING btree (tenant_id, customer_id, at);
+
+
+--
+-- Name: mail_outbox_tenant; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX mail_outbox_tenant ON public.mail_outbox USING btree (tenant_id, created_at);
 
 
 --
@@ -3178,6 +3214,14 @@ ALTER TABLE ONLY public.loyalty_ledger
 
 
 --
+-- Name: mail_outbox mail_outbox_tenant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.mail_outbox
+    ADD CONSTRAINT mail_outbox_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.businesses(id);
+
+
+--
 -- Name: member_recs member_recs_location_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3832,6 +3876,13 @@ CREATE POLICY hq_all ON public.hq_users USING ((current_setting('app.hq'::text, 
 
 
 --
+-- Name: mail_outbox hq_all; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY hq_all ON public.mail_outbox USING ((current_setting('app.hq'::text, true) = '1'::text)) WITH CHECK ((current_setting('app.hq'::text, true) = '1'::text));
+
+
+--
 -- Name: registrations hq_all; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -3902,6 +3953,27 @@ CREATE POLICY hq_read ON public.payment_accounts FOR SELECT USING ((current_sett
 
 
 --
+-- Name: purchase_order_lines hq_read; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY hq_read ON public.purchase_order_lines FOR SELECT USING ((current_setting('app.hq'::text, true) = '1'::text));
+
+
+--
+-- Name: purchase_orders hq_read; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY hq_read ON public.purchase_orders FOR SELECT USING ((current_setting('app.hq'::text, true) = '1'::text));
+
+
+--
+-- Name: supplier_connections hq_read; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY hq_read ON public.supplier_connections FOR SELECT USING ((current_setting('app.hq'::text, true) = '1'::text));
+
+
+--
 -- Name: hq_users; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -3926,6 +3998,13 @@ CREATE POLICY hq_write ON public.product_categories USING ((current_setting('app
 --
 
 CREATE POLICY hq_write ON public.service_categories USING ((current_setting('app.hq'::text, true) = '1'::text)) WITH CHECK ((current_setting('app.hq'::text, true) = '1'::text));
+
+
+--
+-- Name: suppliers hq_write; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY hq_write ON public.suppliers USING ((current_setting('app.hq'::text, true) = '1'::text)) WITH CHECK ((current_setting('app.hq'::text, true) = '1'::text));
 
 
 --
@@ -4011,6 +4090,12 @@ ALTER TABLE public.loyalty_config ENABLE ROW LEVEL SECURITY;
 --
 
 ALTER TABLE public.loyalty_ledger ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: mail_outbox; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.mail_outbox ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: member_recs; Type: ROW SECURITY; Schema: public; Owner: -
@@ -4676,6 +4761,13 @@ CREATE POLICY tenant_own ON public.category_requests USING ((tenant_id = app.cur
 
 
 --
+-- Name: mail_outbox tenant_own; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY tenant_own ON public.mail_outbox USING ((tenant_id = app.current_tenant())) WITH CHECK ((tenant_id = app.current_tenant()));
+
+
+--
 -- Name: audit_log tenant_read; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -4772,4 +4864,6 @@ INSERT INTO public.schema_migrations (version) VALUES
     ('20260903170022'),
     ('20260903190023'),
     ('20260903200024'),
-    ('20260903210025');
+    ('20260903210025'),
+    ('20260903220026'),
+    ('20260903230027');

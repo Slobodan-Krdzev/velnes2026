@@ -7,6 +7,13 @@ import {
   HqCategoryListSchema,
   HqCategoryPatchSchema,
   HqCategoryRequestListSchema,
+  HqOutboxListSchema,
+  HqSupplierCreateSchema,
+  HqSupplierListSchema,
+  HqSupplierPatchSchema,
+  HqTeamInviteSchema,
+  HqTeamListSchema,
+  HqTeamRolePatchSchema,
   PlatformNoticeListSchema,
   HqLocationDecisionSchema,
   HqLocationQueueSchema,
@@ -20,6 +27,7 @@ import {
 } from '@velnes/contracts';
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
+import { sql as sql2 } from 'kysely';
 import { z } from 'zod';
 import { withHq, withTenant } from '../../db/index.js';
 import { AuthError } from '../auth/auth.service.js';
@@ -30,6 +38,7 @@ import {
   reviewRegistration,
 } from '../registrations/registrations.service.js';
 import { canReview, hqLogin, hqUserById } from '../hq/hq.service.js';
+import { queueMail } from '../mail/mail.service.js';
 
 const Err = z.object({ error: z.string(), message: z.string() });
 
@@ -699,5 +708,301 @@ export function hqRoutes(app: FastifyInstance) {
           .execute();
         return { ok: true as const };
       }),
+  });
+
+  // ── HQ team: the platform's own people. Only hq_super manages;
+  //    invites travel through the outbox (mock until the provider). ──
+
+  const superGate = (reply: FastifyReply, rol: string) => {
+    if (rol !== 'hq_super') {
+      void reply
+        .code(403)
+        .send({ error: 'FORBIDDEN', message: 'Only an HQ super manages the team' });
+      return false;
+    }
+    return true;
+  };
+
+  r.route({
+    method: 'GET',
+    url: '/hq/team',
+    preHandler: [app.authenticateHq],
+    schema: { response: { 200: HqTeamListSchema } },
+    handler: async () =>
+      withHq(async (trx) => {
+        const rows = await trx.selectFrom('hqUsers').selectAll().orderBy('createdAt').execute();
+        return {
+          members: rows.map((u) => ({
+            id: u.id,
+            name: u.name,
+            email: u.email,
+            role: u.role as 'hq_super' | 'hq_onboard' | 'hq_support',
+            status: u.status as 'active' | 'invited',
+            createdAt: u.createdAt.toISOString(),
+          })),
+        };
+      }),
+  });
+
+  r.route({
+    method: 'POST',
+    url: '/hq/team',
+    preHandler: [app.authenticateHq],
+    schema: {
+      body: HqTeamInviteSchema,
+      response: { 200: z.object({ id: z.uuid() }), 403: Err, 409: Err },
+    },
+    handler: async (req, reply) => {
+      if (!superGate(reply, req.hqClaims.rol)) return reply;
+      return withHq(async (trx) => {
+        const dupe = await trx
+          .selectFrom('hqUsers')
+          .select('id')
+          .where(sql2<boolean>`lower(email) = lower(${req.body.email})`)
+          .executeTakeFirst();
+        if (dupe)
+          return reply.code(409).send({ error: 'DUPLICATE', message: 'That email is already on the team' });
+        // Invited and without a usable password: the login door
+        // refuses NOT_ACTIVE until the invite flow completes.
+        const row = await trx
+          .insertInto('hqUsers')
+          .values({
+            name: req.body.name,
+            email: req.body.email,
+            role: req.body.role,
+            status: 'invited',
+            passwordHash:
+              '$argon2id$v=19$m=65536,t=3,p=4$AAAAAAAAAAAAAAAAAAAAAA$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+          })
+          .returning('id')
+          .executeTakeFirstOrThrow();
+        await queueMail(trx, {
+          to: req.body.email,
+          subject: 'You are invited to Revelapps HQ',
+          body: `${req.hqClaims.name} invited you as ${req.body.role}. Two-factor is required at first sign-in.`,
+          kind: 'hq_invite',
+          refId: row.id,
+        });
+        return { id: row.id };
+      });
+    },
+  });
+
+  r.route({
+    method: 'PATCH',
+    url: '/hq/team/:id',
+    preHandler: [app.authenticateHq],
+    schema: {
+      params: z.object({ id: z.uuid() }),
+      body: HqTeamRolePatchSchema,
+      response: { 200: z.object({ ok: z.literal(true) }), 403: Err, 404: Err, 409: Err },
+    },
+    handler: async (req, reply) => {
+      if (!superGate(reply, req.hqClaims.rol)) return reply;
+      return withHq(async (trx) => {
+        const u = await trx
+          .selectFrom('hqUsers')
+          .select(['id', 'role'])
+          .where('id', '=', req.params.id)
+          .executeTakeFirst();
+        if (!u) return reply.code(404).send({ error: 'NOT_FOUND', message: 'Unknown HQ user' });
+        // The platform always keeps a keyholder.
+        if (u.role === 'hq_super' && req.body.role !== 'hq_super') {
+          const supers = await trx
+            .selectFrom('hqUsers')
+            .select(({ fn }) => fn.countAll<string>().as('n'))
+            .where('role', '=', 'hq_super')
+            .where('status', '=', 'active')
+            .executeTakeFirstOrThrow();
+          if (Number(supers.n) <= 1)
+            return reply
+              .code(409)
+              .send({ error: 'LAST_SUPER', message: 'The last HQ super keeps the keys' });
+        }
+        await trx.updateTable('hqUsers').set({ role: req.body.role }).where('id', '=', u.id).execute();
+        return { ok: true as const };
+      });
+    },
+  });
+
+  r.route({
+    method: 'DELETE',
+    url: '/hq/team/:id',
+    preHandler: [app.authenticateHq],
+    schema: {
+      params: z.object({ id: z.uuid() }),
+      response: { 200: z.object({ ok: z.literal(true) }), 403: Err, 404: Err, 409: Err },
+    },
+    handler: async (req, reply) => {
+      if (!superGate(reply, req.hqClaims.rol)) return reply;
+      if (req.params.id === req.hqClaims.sub)
+        return reply.code(409).send({ error: 'SELF', message: 'You cannot remove yourself' });
+      return withHq(async (trx) => {
+        const u = await trx
+          .selectFrom('hqUsers')
+          .select(['id', 'role', 'status'])
+          .where('id', '=', req.params.id)
+          .executeTakeFirst();
+        if (!u) return reply.code(404).send({ error: 'NOT_FOUND', message: 'Unknown HQ user' });
+        if (u.role === 'hq_super' && u.status === 'active') {
+          const supers = await trx
+            .selectFrom('hqUsers')
+            .select(({ fn }) => fn.countAll<string>().as('n'))
+            .where('role', '=', 'hq_super')
+            .where('status', '=', 'active')
+            .executeTakeFirstOrThrow();
+          if (Number(supers.n) <= 1)
+            return reply
+              .code(409)
+              .send({ error: 'LAST_SUPER', message: 'The last HQ super keeps the keys' });
+        }
+        await trx.deleteFrom('hqUsers').where('id', '=', u.id).execute();
+        return { ok: true as const };
+      });
+    },
+  });
+
+  r.route({
+    method: 'GET',
+    url: '/hq/outbox',
+    preHandler: [app.authenticateHq],
+    schema: { response: { 200: HqOutboxListSchema } },
+    handler: async () =>
+      withHq(async (trx) => {
+        const rows = await trx
+          .selectFrom('mailOutbox')
+          .selectAll()
+          .orderBy('createdAt', 'desc')
+          .limit(30)
+          .execute();
+        return {
+          mails: rows.map((m) => ({
+            id: m.id,
+            to: m.toEmail,
+            subject: m.subject,
+            kind: m.kind,
+            status: m.status,
+            createdAt: m.createdAt.toISOString(),
+          })),
+        };
+      }),
+  });
+
+  // ── Supplier Intelligence: the operator reads the whole chain. ──
+
+  r.route({
+    method: 'GET',
+    url: '/hq/suppliers',
+    preHandler: [app.authenticateHq],
+    schema: { response: { 200: HqSupplierListSchema } },
+    handler: async () =>
+      withHq(async (trx) => {
+        const sups = await trx.selectFrom('suppliers').selectAll().orderBy('name').execute();
+        const products = await trx
+          .selectFrom('supplierProducts')
+          .select(['supplierId'])
+          .select((eb) => eb.fn.countAll<string>().as('n'))
+          .groupBy('supplierId')
+          .execute();
+        const conns = await trx.selectFrom('supplierConnections').selectAll().execute();
+        const orders = await trx
+          .selectFrom('purchaseOrders')
+          .select(['supplierId', 'id'])
+          .where('status', '!=', 'draft')
+          .execute();
+        const lines = orders.length
+          ? await trx
+              .selectFrom('purchaseOrderLines')
+              .select(['orderId'])
+              .select((eb) => eb.fn.sum<string>(sql2`qty * price`).as('v'))
+              .where('orderId', 'in', orders.map((o) => o.id))
+              .groupBy('orderId')
+              .execute()
+          : [];
+        const valueOf = (supId: string) =>
+          orders
+            .filter((o) => o.supplierId === supId)
+            .reduce((n, o) => n + Number(lines.find((l) => l.orderId === o.id)?.v ?? 0), 0);
+        return {
+          suppliers: sups.map((s2) => ({
+            id: s2.id,
+            name: s2.name,
+            type: s2.type,
+            territory: s2.territory,
+            verified: s2.verified,
+            products: Number(products.find((p) => p.supplierId === s2.id)?.n ?? 0),
+            connectedSalons: conns.filter((c) => c.supplierId === s2.id && c.status === 'connected').length,
+            pendingSalons: conns.filter((c) => c.supplierId === s2.id && c.status === 'pending').length,
+            orders: orders.filter((o) => o.supplierId === s2.id).length,
+            orderValue: valueOf(s2.id),
+          })),
+        };
+      }),
+  });
+
+  r.route({
+    method: 'POST',
+    url: '/hq/suppliers',
+    preHandler: [app.authenticateHq],
+    schema: {
+      body: HqSupplierCreateSchema,
+      response: { 200: z.object({ id: z.uuid() }), 403: Err, 409: Err },
+    },
+    handler: async (req, reply) => {
+      if (!superGate(reply, req.hqClaims.rol)) return reply;
+      return withHq(async (trx) => {
+        const dupe = await trx
+          .selectFrom('suppliers')
+          .select('id')
+          .where('name', '=', req.body.name)
+          .executeTakeFirst();
+        if (dupe)
+          return reply.code(409).send({ error: 'DUPLICATE', message: 'That supplier already exists' });
+        const row = await trx
+          .insertInto('suppliers')
+          .values({
+            name: req.body.name,
+            type: req.body.type,
+            territory: req.body.territory,
+            contact: req.body.contact,
+            verified: false,
+          })
+          .returning('id')
+          .executeTakeFirstOrThrow();
+        return { id: row.id };
+      });
+    },
+  });
+
+  r.route({
+    method: 'PATCH',
+    url: '/hq/suppliers/:id',
+    preHandler: [app.authenticateHq],
+    schema: {
+      params: z.object({ id: z.uuid() }),
+      body: HqSupplierPatchSchema,
+      response: { 200: z.object({ ok: z.literal(true) }), 403: Err, 404: Err },
+    },
+    handler: async (req, reply) => {
+      if (!superGate(reply, req.hqClaims.rol)) return reply;
+      return withHq(async (trx) => {
+        const row = await trx
+          .selectFrom('suppliers')
+          .select('id')
+          .where('id', '=', req.params.id)
+          .executeTakeFirst();
+        if (!row) return reply.code(404).send({ error: 'NOT_FOUND', message: 'Unknown supplier' });
+        await trx
+          .updateTable('suppliers')
+          .set({
+            ...(req.body.verified !== undefined ? { verified: req.body.verified } : {}),
+            ...(req.body.territory !== undefined ? { territory: req.body.territory } : {}),
+            ...(req.body.contact !== undefined ? { contact: req.body.contact } : {}),
+          })
+          .where('id', '=', req.params.id)
+          .execute();
+        return { ok: true as const };
+      });
+    },
   });
 }

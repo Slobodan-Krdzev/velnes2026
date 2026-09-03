@@ -137,3 +137,26 @@ an audience='salons' notice targeted at the requesting tenant, title
 "Category request declined: X", body = the reason; the salon's bell
 carries it and clicking lands on Catalog → Categories where the
 request row shows the same reason.
+
+## HQ team, Supplier Intelligence, the mail outbox (2026-09-03)
+
+The two empty tabs are real now. **HQ team**: the people list with
+role badges, super-only invite (modal), per-row role change and
+removal — the last active hq_super can never be demoted, removed, or
+remove themselves; invited members carry an unusable hash and the
+login door refuses NOT_ACTIVE until the invite flow completes
+(status check widened to include 'invited'). **Supplier
+Intelligence**: GET `/hq/suppliers` reads the whole chain cross-
+tenant (new hq_read policies on supplier_connections/purchase_orders/
+purchase_order_lines, hq_write on suppliers) — products, connected +
+pending salons, order count and value per supplier; super-only create
+(starts unverified) and verify/unverify.
+
+**The mail outbox** models SMTP honestly until the provider is
+decided (likely Resend): every mail the platform would send goes
+through `queueMail` into `mail_outbox`; the mock transport stamps
+rows `mock_sent` and nothing leaves the building. Wired senders:
+salon employee invites, customer email-verification on change, HQ
+team invites. HQ sees the whole outbox on the team tab (GET
+`/hq/outbox`); a real Resend adapter later flips queued → sent with
+no schema change.
