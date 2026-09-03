@@ -6,7 +6,9 @@ import {
   HqBusinessListSchema,
   HqCategoryListSchema,
   HqCategoryRequestListSchema,
+  HqBrandListSchema,
   HqOutboxListSchema,
+  HqRoleListSchema,
   HqSupplierListSchema,
   HqTeamListSchema,
   HqLocationQueueSchema,
@@ -970,22 +972,82 @@ function PlatformLog() {
   );
 }
 
-/** Supplier Intelligence: the operator's view over the whole chain —
- *  who is verified, who is connected, what moves. */
+/** The prototype's addPop: one Add + button, a menu of kinds. */
+function AddPop({
+  items,
+}: {
+  items: { icon: string; label: string; sub: string; onPick: () => void }[];
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onPointer = (e: PointerEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('pointerdown', onPointer);
+    return () => document.removeEventListener('pointerdown', onPointer);
+  }, [open]);
+  return (
+    <div className="pop" ref={ref}>
+      <button
+        className={`btn btn-primary btn-add${open ? ' open' : ''}`}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+      >
+        Add <Icon d={open ? I.left : I.plus} size={20} w={2.5} />
+      </button>
+      {open ? (
+        <div className="menu menu-wide" role="menu">
+          {items.map((it) => (
+            <button
+              key={it.label}
+              className="menu-row"
+              role="menuitem"
+              onClick={() => {
+                setOpen(false);
+                it.onPick();
+              }}
+            >
+              <Icon d={it.icon} size={20} />
+              <span className="grow" style={{ textAlign: 'left' }}>
+                <span>{it.label}</span>
+                <span className="menu-sub">{it.sub}</span>
+              </span>
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/** Supplier Intelligence — the prototype's hqSuppliers: the table
+ *  with brands and merchant config, and the brand/distributor card. */
 function Suppliers({ say, isSuper }: { say: (m: string) => void; isSuper: boolean }) {
   const { t } = useTranslation();
   const [rows, setRows] = useState<z.infer<typeof HqSupplierListSchema>['suppliers']>([]);
-  const [adding, setAdding] = useState(false);
+  const [brandData, setBrandData] = useState<z.infer<typeof HqBrandListSchema> | null>(null);
+  const [missOnly, setMissOnly] = useState(false);
+  const [adding, setAdding] = useState<'supplier' | 'brand' | null>(null);
   const [name, setName] = useState('');
   const [territory, setTerritory] = useState('North Macedonia');
+  const [brandOwner, setBrandOwner] = useState('');
+  const [brandCountry, setBrandCountry] = useState('');
+  const [brandSupplier, setBrandSupplier] = useState('');
   const load = useCallback(
-    () => void hqGet(HqSupplierListSchema, '/hq/suppliers').then((r) => setRows(r.suppliers)),
+    () =>
+      void Promise.all([
+        hqGet(HqSupplierListSchema, '/hq/suppliers').then((r) => setRows(r.suppliers)),
+        hqGet(HqBrandListSchema, '/hq/brands').then(setBrandData),
+      ]),
     [],
   );
   useEffect(load, [load]);
 
-  const money = (n: number) =>
-    new Intl.NumberFormat('mk-MK', { style: 'currency', currency: 'MKD', maximumFractionDigits: 0 }).format(n);
+  const missing = rows.filter((s2) => !s2.merchant?.ready).length;
+  const shown = rows.filter((s2) => !missOnly || !s2.merchant?.ready);
 
   const verify = async (id: string, verified: boolean) => {
     try {
@@ -998,13 +1060,26 @@ function Suppliers({ say, isSuper }: { say: (m: string) => void; isSuper: boolea
   };
   const add = async () => {
     try {
-      await hqPost(z.object({ id: z.string() }), '/hq/suppliers', {
-        name: name.trim(),
-        territory: territory.trim(),
-      });
-      setAdding(false);
+      if (adding === 'supplier') {
+        await hqPost(z.object({ id: z.string() }), '/hq/suppliers', {
+          name: name.trim(),
+          territory: territory.trim(),
+        });
+        say(t('hq.supAdded'));
+      } else {
+        await hqPost(z.object({ id: z.string() }), '/hq/brands', {
+          name: name.trim(),
+          owner: brandOwner.trim(),
+          country: brandCountry.trim(),
+          supplierId: brandSupplier || null,
+        });
+        say(t('hq.brandAdded'));
+      }
+      setAdding(null);
       setName('');
-      say(t('hq.supAdded'));
+      setBrandOwner('');
+      setBrandCountry('');
+      setBrandSupplier('');
       load();
     } catch (e) {
       say(e instanceof HqApiError ? e.message : String(e));
@@ -1022,85 +1097,217 @@ function Suppliers({ say, isSuper }: { say: (m: string) => void; isSuper: boolea
         </div>
         <div className="toolbar-actions">
           {isSuper ? (
-            <button className="btn btn-primary btn-add" onClick={() => setAdding(true)}>
-              {t('hq.addSupplier')} <Icon d={I.plus} size={18} w={2.5} />
-            </button>
+            <AddPop
+              items={[
+                {
+                  icon: I.products,
+                  label: t('hq.kindSupplier'),
+                  sub: t('hq.kindSupplierSub'),
+                  onPick: () => setAdding('supplier'),
+                },
+                {
+                  icon: I.tag,
+                  label: t('hq.kindBrand'),
+                  sub: t('hq.kindBrandSub'),
+                  onPick: () => setAdding('brand'),
+                },
+              ]}
+            />
           ) : null}
         </div>
       </div>
+
       <div className="card">
-        {rows.map((s2) => (
-          <div key={s2.id} className="rowcard">
-            <span className={`mark${s2.verified ? ' on' : ''}`}>
-              <Icon d={I.products} size={20} />
+        <div className="card-header">
+          <h2>{t('hq.tabSuppliers')}</h2>
+          <span className="hstack">
+            <button className={`chip${missOnly ? ' on' : ''}`} onClick={() => setMissOnly((v) => !v)}>
+              {t('hq.missingConfig')} · {missing}
+            </button>
+            <span className="muted" style={{ fontWeight: 500 }}>
+              {t('hq.onlyHqActivates')}
             </span>
-            <span className="grow">
-              <span className="t">
-                {s2.name}{' '}
-                {s2.verified ? (
-                  <span className="badge success">{t('hq.verified')}</span>
-                ) : (
-                  <span className="badge warning">{t('hq.unverified')}</span>
-                )}
-              </span>
-              <span className="s">
-                {s2.type} · {s2.territory} · {s2.products} {t('hq.productsN')}
-              </span>
-            </span>
-            <span className="badge">
-              {s2.connectedSalons} {t('hq.salonsConnected')}
-              {s2.pendingSalons ? ` · ${s2.pendingSalons} ${t('hq.salonsPending')}` : ''}
-            </span>
-            <span className="badge">
-              {s2.orders} {t('hq.ordersN')} · {money(s2.orderValue)}
-            </span>
-            {isSuper ? (
-              <span className="acts">
-                <button
-                  className={s2.verified ? 'btn btn-subtle btn-sm' : 'btn btn-primary btn-sm'}
-                  onClick={() => void verify(s2.id, !s2.verified)}
-                >
-                  {s2.verified ? t('hq.unverify') : t('hq.verify')}
-                </button>
-              </span>
-            ) : null}
-          </div>
-        ))}
+          </span>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>{t('hq.colSupplier')}</th>
+              <th>{t('hq.colType')}</th>
+              <th>{t('hq.colBrands')}</th>
+              <th>{t('hq.colMerchant')}</th>
+              <th>{t('hq.colCatalog')}</th>
+              <th>{t('hq.colStatus')}</th>
+              <th />
+            </tr>
+          </thead>
+          <tbody>
+            {shown.map((s2) => (
+              <tr key={s2.id}>
+                <td>
+                  <span className="bold">{s2.name}</span>
+                  <span className="muted" style={{ display: 'block', fontSize: 12 }}>
+                    {s2.contact}
+                  </span>
+                </td>
+                <td>{s2.type}</td>
+                <td className="muted">{s2.brands.join(', ') || '—'}</td>
+                <td>
+                  {s2.merchant ? (
+                    <>
+                      <span className="tnum" style={{ fontWeight: 600 }}>
+                        {s2.merchant.merchantId ?? '—'}
+                      </span>
+                      <span className="muted" style={{ display: 'block', fontSize: 12 }}>
+                        {s2.merchant.entityName}
+                      </span>
+                      {s2.merchant.ready ? (
+                        <span className="badge success">{t('hq.active')}</span>
+                      ) : (
+                        <span className="badge warning">{t('hq.missingConfig')}</span>
+                      )}
+                    </>
+                  ) : (
+                    <span className="badge danger">{t('hq.noEntity')}</span>
+                  )}
+                </td>
+                <td className="tnum">
+                  {s2.products} {t('hq.productsN')}
+                  <span className="muted" style={{ display: 'block', fontSize: 12 }}>
+                    {s2.connectedSalons} {t('hq.salonsConnected')} · {s2.orders} {t('hq.ordersN')}
+                  </span>
+                </td>
+                <td>
+                  {s2.verified ? (
+                    <span className="badge success">{t('hq.verified')}</span>
+                  ) : (
+                    <span className="badge warning">{t('hq.underReview')}</span>
+                  )}
+                </td>
+                <td className="right">
+                  {isSuper ? (
+                    <span className="rowact">
+                      <button
+                        className={s2.verified ? 'btn btn-ghost btn-sm' : 'btn btn-primary btn-sm'}
+                        onClick={() => void verify(s2.id, !s2.verified)}
+                      >
+                        {s2.verified ? t('hq.unverify') : t('hq.verify')}
+                      </button>
+                    </span>
+                  ) : null}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
+
+      <div className="card">
+        <div className="card-header">
+          <h2>{t('hq.bsdTitle')}</h2>
+          <span className="muted" style={{ fontWeight: 500 }}>
+            {t('hq.bsdSub')}
+          </span>
+        </div>
+        <div className="grid3" style={{ padding: 20, gap: 16 }}>
+          <div className="minicard">
+            <span className="t">{t('hq.brandsTitle')}</span>
+            {(brandData?.brands ?? []).map((b) => (
+              <div key={b.id} className="kv">
+                <span className="k">{b.name}</span>
+                <span className="v">{b.country}</span>
+              </div>
+            ))}
+          </div>
+          <div className="minicard">
+            <span className="t">{t('hq.distributorsTitle')}</span>
+            {(brandData?.carriage ?? []).map((c) => (
+              <div key={c.supplierId} className="kv">
+                <span className="k">{c.supplierName}</span>
+                <span className="v">{c.territory}</span>
+              </div>
+            ))}
+          </div>
+          <div className="minicard">
+            <span className="t">{t('hq.carriesTitle')}</span>
+            {(brandData?.carriage ?? []).map((c) => (
+              <div key={c.supplierId} className="kv">
+                <span className="k">{c.supplierName}</span>
+                <span className="v">{c.brands.join(', ') || '—'}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="note" style={{ margin: '0 20px 20px' }}>
+          {t('hq.bsdNote')}
+        </div>
+      </div>
+
       {adding ? (
-        <div className="overlay" onClick={() => setAdding(false)}>
+        <div className="overlay" onClick={() => setAdding(null)}>
           <div
             className="modal"
             role="dialog"
             aria-modal="true"
-            style={{ maxWidth: 420 }}
+            style={{ maxWidth: 460 }}
             onClick={(e) => e.stopPropagation()}
           >
             <div className="modal-head">
-              <h2>{t('hq.addSupplier')}</h2>
+              <h2>{adding === 'supplier' ? t('hq.addSupplier') : t('hq.addBrand')}</h2>
             </div>
             <div className="modal-body" style={{ display: 'grid', gap: 14 }}>
               <label className="field">
                 <span>{t('hq.categoryName')}</span>
                 <input className="input" value={name} autoFocus onChange={(e) => setName(e.target.value)} />
               </label>
-              <label className="field">
-                <span>{t('hq.territory')}</span>
-                <input className="input" value={territory} onChange={(e) => setTerritory(e.target.value)} />
-              </label>
-              <p className="muted" style={{ fontWeight: 500, fontSize: 12, margin: 0 }}>
-                {t('hq.supStartsUnverified')}
-              </p>
+              {adding === 'supplier' ? (
+                <label className="field">
+                  <span>{t('hq.territory')}</span>
+                  <input className="input" value={territory} onChange={(e) => setTerritory(e.target.value)} />
+                </label>
+              ) : (
+                <>
+                  <label className="field">
+                    <span>{t('hq.brandOwner')}</span>
+                    <input className="input" value={brandOwner} onChange={(e) => setBrandOwner(e.target.value)} />
+                  </label>
+                  <label className="field">
+                    <span>{t('hq.brandCountry')}</span>
+                    <input className="input" value={brandCountry} onChange={(e) => setBrandCountry(e.target.value)} />
+                  </label>
+                  <label className="field">
+                    <span>{t('hq.carriedBy')}</span>
+                    <select
+                      className="select"
+                      style={{ width: '100%' }}
+                      value={brandSupplier}
+                      onChange={(e) => setBrandSupplier(e.target.value)}
+                    >
+                      <option value="">—</option>
+                      {rows.map((s2) => (
+                        <option key={s2.id} value={s2.id}>
+                          {s2.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </>
+              )}
+              {adding === 'supplier' ? (
+                <p className="muted" style={{ fontWeight: 500, fontSize: 12, margin: 0 }}>
+                  {t('hq.supStartsUnverified')}
+                </p>
+              ) : null}
             </div>
             <div className="modal-foot">
-              <button className="btn btn-secondary" onClick={() => setAdding(false)}>
+              <button className="btn btn-secondary" onClick={() => setAdding(null)}>
                 {t('hq.cancel')}
               </button>
               <button className="btn btn-primary" disabled={!name.trim()} onClick={() => void add()}>
-                {t('hq.addSupplier')}
+                {adding === 'supplier' ? t('hq.addSupplier') : t('hq.addBrand')}
               </button>
             </div>
-            <button className="modal-close" aria-label={t('hq.cancel')} onClick={() => setAdding(false)}>
+            <button className="modal-close" aria-label={t('hq.cancel')} onClick={() => setAdding(null)}>
               <Icon d={I.x} size={20} />
             </button>
           </div>
@@ -1110,62 +1317,117 @@ function Suppliers({ say, isSuper }: { say: (m: string) => void; isSuper: boolea
   );
 }
 
-/** The HQ team: people, roles, invites through the outbox (mock
- *  transport until the provider is decided — likely Resend). */
+/** The prototype's hqTeam: the role kit card and the people table.
+ *  Invites travel through the outbox (mock until the provider). */
 function Team({ say, me }: { say: (m: string) => void; me: HqUser }) {
   const { t } = useTranslation();
   const [members, setMembers] = useState<z.infer<typeof HqTeamListSchema>['members']>([]);
+  const [roles, setRoles] = useState<z.infer<typeof HqRoleListSchema>['roles']>([]);
   const [mails, setMails] = useState<z.infer<typeof HqOutboxListSchema>['mails']>([]);
-  const [inviting, setInviting] = useState(false);
+  const [usersPop, setUsersPop] = useState<string | null>(null);
+  const popRef = useRef<HTMLDivElement | null>(null);
+  const [editing, setEditing] = useState<'new' | (typeof members)[number] | null>(null);
+  const [roleModal, setRoleModal] = useState<'new' | (typeof roles)[number] | null>(null);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
-  const [role, setRole] = useState<'hq_super' | 'hq_onboard' | 'hq_support'>('hq_support');
+  const [role, setRole] = useState('hq_support');
+  const [roleDesc, setRoleDesc] = useState('');
+  const [roleBase, setRoleBase] = useState('hq_support');
   const isSuper = me.role === 'hq_super';
 
   const load = useCallback(
     () =>
       void Promise.all([
         hqGet(HqTeamListSchema, '/hq/team').then((r) => setMembers(r.members)),
+        hqGet(HqRoleListSchema, '/hq/roles').then((r) => setRoles(r.roles)),
         hqGet(HqOutboxListSchema, '/hq/outbox').then((r) => setMails(r.mails)),
       ]),
     [],
   );
   useEffect(load, [load]);
+  useEffect(() => {
+    if (!usersPop) return;
+    const onPointer = (e: PointerEvent) => {
+      if (popRef.current && !popRef.current.contains(e.target as Node)) setUsersPop(null);
+    };
+    document.addEventListener('pointerdown', onPointer);
+    return () => document.removeEventListener('pointerdown', onPointer);
+  }, [usersPop]);
 
-  const invite = async () => {
-    try {
-      await hqPost(z.object({ id: z.string() }), '/hq/team', {
-        name: name.trim(),
-        email: email.trim(),
-        role,
-      });
-      setInviting(false);
+  const openMember = (m: 'new' | (typeof members)[number]) => {
+    if (m === 'new') {
       setName('');
       setEmail('');
-      say(t('hq.teamInvited'));
-      load();
-    } catch (e) {
-      say(e instanceof HqApiError ? e.message : String(e));
+      setRole('hq_support');
+    } else {
+      setName(m.name);
+      setEmail(m.email);
+      setRole(m.role);
     }
+    setEditing(m);
   };
-  const setMemberRole = async (id: string, next: string) => {
+  const saveMember = async () => {
     try {
-      await hqPatch(z.object({ ok: z.literal(true) }), `/hq/team/${id}`, { role: next });
-      say(t('hq.roleChanged'));
+      if (editing === 'new') {
+        await hqPost(z.object({ id: z.string() }), '/hq/team', {
+          name: name.trim(),
+          email: email.trim(),
+          role,
+        });
+        say(t('hq.teamInvited'));
+      } else if (editing) {
+        await hqPatch(z.object({ ok: z.literal(true) }), `/hq/team/${editing.id}`, {
+          name: name.trim(),
+          email: email.trim(),
+          role,
+        });
+        say(t('hq.memberSaved'));
+      }
+      setEditing(null);
       load();
     } catch (e) {
       say(e instanceof HqApiError ? e.message : String(e));
     }
   };
-  const remove = async (id: string) => {
+  const removeMember = async (id: string) => {
     try {
       await hqDelete(z.object({ ok: z.literal(true) }), `/hq/team/${id}`);
       say(t('hq.memberRemoved'));
+      setEditing(null);
       load();
     } catch (e) {
       say(e instanceof HqApiError ? e.message : String(e));
     }
   };
+  const saveRole = async () => {
+    try {
+      await hqPost(z.object({ id: z.string() }), '/hq/roles', {
+        name: name.trim(),
+        descr: roleDesc.trim(),
+        base: roleBase,
+      });
+      say(t('hq.roleCreated'));
+      setRoleModal(null);
+      load();
+    } catch (e) {
+      say(e instanceof HqApiError ? e.message : String(e));
+    }
+  };
+  const removeRole = async (id: string) => {
+    try {
+      await hqDelete(z.object({ ok: z.literal(true) }), `/hq/roles/${id}`);
+      say(t('hq.roleRemoved'));
+      load();
+    } catch (e) {
+      say(e instanceof HqApiError ? e.message : String(e));
+    }
+  };
+
+  const accessBadge = (a: 'write' | 'read' | 'none') => (
+    <span className={`badge ${a === 'write' ? 'warning' : a === 'read' ? '' : 'success'}`}>
+      {a === 'write' ? t('hq.accessWrite') : a === 'read' ? t('hq.accessRead') : t('hq.accessNone')}
+    </span>
+  );
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
@@ -1178,52 +1440,148 @@ function Team({ say, me }: { say: (m: string) => void; me: HqUser }) {
         </div>
         <div className="toolbar-actions">
           {isSuper ? (
-            <button className="btn btn-primary btn-add" onClick={() => setInviting(true)}>
-              {t('hq.inviteMember')} <Icon d={I.plus} size={18} w={2.5} />
-            </button>
+            <AddPop
+              items={[
+                {
+                  icon: I.users,
+                  label: t('hq.kindMember'),
+                  sub: t('hq.kindMemberSub'),
+                  onPick: () => openMember('new'),
+                },
+                {
+                  icon: I.user,
+                  label: t('hq.kindRole'),
+                  sub: t('hq.kindRoleSub'),
+                  onPick: () => {
+                    setName('');
+                    setRoleDesc('');
+                    setRoleBase('hq_support');
+                    setRoleModal('new');
+                  },
+                },
+              ]}
+            />
           ) : null}
         </div>
       </div>
+
       <div className="card">
+        <div className="card-header">
+          <h2>{t('hq.hqRoles')}</h2>
+          <span className="muted" style={{ fontWeight: 500 }}>
+            {t('hq.hqRolesSub')}
+          </span>
+        </div>
+        {roles.map((r2) => (
+          <div key={r2.id} className="rowcard">
+            <span className={`mark${r2.locked ? ' on' : ''}`}>
+              <Icon d={r2.std ? I.user : I.users} size={20} />
+            </span>
+            <span className="grow">
+              <span className="t">
+                {r2.name}{' '}
+                {r2.std ? (
+                  <span className="badge">{t('hq.stdBadge')}</span>
+                ) : (
+                  <span className="badge accent">{t('hq.customBadge')}</span>
+                )}
+                {r2.locked ? <span className="badge warning">{t('hq.lockedBadge')}</span> : null}
+              </span>
+              <span className="s">{r2.descr}</span>
+            </span>
+            {accessBadge(r2.customerAccess)}
+            <span className="pop" ref={usersPop === r2.id ? popRef : undefined}>
+              <button
+                className={`badge badge-count${usersPop === r2.id ? ' on' : ''}`}
+                aria-haspopup="menu"
+                aria-expanded={usersPop === r2.id}
+                onClick={() => setUsersPop(usersPop === r2.id ? null : r2.id)}
+              >
+                {r2.users} {r2.users === 1 ? t('hq.userOne') : t('hq.usersMany')}
+              </button>
+              {usersPop === r2.id ? (
+                <div className="menu menu-wide" role="menu">
+                  <div className="menu-label">{r2.name}</div>
+                  {r2.userNames.length ? (
+                    r2.userNames.map((u) => (
+                      <div key={u.email} className="menu-row" style={{ cursor: 'default' }}>
+                        <span className="avatar">
+                          {u.name
+                            .split(' ')
+                            .map((p2) => p2[0])
+                            .join('')
+                            .slice(0, 2)}
+                        </span>
+                        <span className="grow">
+                          <span className="mi-t">{u.name}</span>
+                          <span className="mi-s">{u.email}</span>
+                        </span>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="menu-row" style={{ cursor: 'default' }}>
+                      <span className="grow">
+                        <span className="mi-t">{t('hq.nobodyYet')}</span>
+                      </span>
+                    </div>
+                  )}
+                </div>
+              ) : null}
+            </span>
+            <span className="acts">
+              <button className="btn btn-ghost btn-sm" onClick={() => setRoleModal(r2)}>
+                {r2.locked ? t('hq.view') : t('hq.view')}
+              </button>
+              {isSuper && !r2.locked && !r2.std && !r2.users ? (
+                <button className="btn btn-ghost btn-sm" onClick={() => void removeRole(r2.id)}>
+                  {t('hq.remove')}
+                </button>
+              ) : null}
+            </span>
+          </div>
+        ))}
+        <p className="muted" style={{ padding: '14px 20px', fontWeight: 500, fontSize: 12 }}>
+          {t('hq.roleKitNote')}
+        </p>
+      </div>
+
+      <div className="card">
+        <div className="card-header">
+          <h2>{t('hq.people')}</h2>
+        </div>
         <table>
+          <thead>
+            <tr>
+              <th>{t('hq.colName')}</th>
+              <th>{t('hq.roleLabel')}</th>
+              <th>{t('hq.twofa')}</th>
+              <th>{t('hq.lastActive')}</th>
+              <th />
+            </tr>
+          </thead>
           <tbody>
             {members.map((m) => (
               <tr key={m.id} className={m.status === 'invited' ? 'dim' : ''}>
-                <td className="bold">
-                  {m.name}
-                  <span className="muted" style={{ display: 'block', fontSize: 12, fontWeight: 500 }}>
+                <td>
+                  <span className="bold">{m.name}</span>
+                  <span className="muted" style={{ display: 'block', fontSize: 12 }}>
                     {m.email}
                   </span>
                 </td>
+                <td>{m.roleName}</td>
                 <td>
-                  {isSuper && m.status === 'active' ? (
-                    <select
-                      className="cell sel"
-                      value={m.role}
-                      aria-label={`Role ${m.name}`}
-                      onChange={(e) => void setMemberRole(m.id, e.target.value)}
-                    >
-                      <option value="hq_super">hq_super</option>
-                      <option value="hq_onboard">hq_onboard</option>
-                      <option value="hq_support">hq_support</option>
-                    </select>
-                  ) : (
-                    <span className="muted">{m.role}</span>
-                  )}
+                  <span className="badge success">{t('hq.twofaRequired')}</span>
                 </td>
-                <td>
-                  {m.status === 'invited' ? (
-                    <span className="badge warning">{t('hq.inviteSent')}</span>
-                  ) : (
-                    <span className="badge success">{t('hq.active')}</span>
-                  )}
+                <td className="muted tnum">
+                  {m.status === 'invited' ? t('hq.inviteSent') : '—'}
                 </td>
                 <td className="right">
-                  {isSuper && m.id !== me.id ? (
-                    <button className="btn btn-subtle btn-sm" onClick={() => void remove(m.id)}>
-                      {t('hq.remove')}
+                  {isSuper ? (
+                    <button className="btn btn-ghost btn-sm" onClick={() => openMember(m)}>
+                      {t('hq.edit')}
                     </button>
                   ) : null}
+                  {m.id === me.id ? <span className="badge">{t('hq.you')}</span> : null}
                 </td>
               </tr>
             ))}
@@ -1266,57 +1624,152 @@ function Team({ say, me }: { say: (m: string) => void; me: HqUser }) {
         )}
       </div>
 
-      {inviting ? (
-        <div className="overlay" onClick={() => setInviting(false)}>
+      {editing ? (
+        <div className="overlay" onClick={() => setEditing(null)}>
           <div
             className="modal"
             role="dialog"
             aria-modal="true"
-            style={{ maxWidth: 420 }}
+            style={{ maxWidth: 560 }}
             onClick={(e) => e.stopPropagation()}
           >
             <div className="modal-head">
-              <h2>{t('hq.inviteMember')}</h2>
+              <h2>{editing === 'new' ? t('hq.inviteMember') : name}</h2>
             </div>
             <div className="modal-body" style={{ display: 'grid', gap: 14 }}>
-              <label className="field">
-                <span>{t('hq.categoryName')}</span>
-                <input className="input" value={name} autoFocus onChange={(e) => setName(e.target.value)} />
-              </label>
-              <label className="field">
-                <span>Email</span>
-                <input className="input" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
-              </label>
-              <label className="field">
-                <span>{t('hq.roleLabel')}</span>
-                <select
-                  className="select"
-                  style={{ width: '100%' }}
-                  value={role}
-                  onChange={(e) => setRole(e.target.value as typeof role)}
-                >
-                  <option value="hq_support">hq_support</option>
-                  <option value="hq_onboard">hq_onboard</option>
-                  <option value="hq_super">hq_super</option>
-                </select>
-              </label>
+              <div className="grid2">
+                <label className="field">
+                  <span>{t('hq.categoryName')}</span>
+                  <input className="input" value={name} autoFocus onChange={(e) => setName(e.target.value)} />
+                </label>
+                <label className="field">
+                  <span>Email</span>
+                  <input
+                    className="input"
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                  />
+                  <span className="hint">
+                    {editing === 'new' ? t('hq.emailHintNew') : t('hq.emailHintEdit')}
+                  </span>
+                </label>
+              </div>
+              <div className="field">
+                <span>{t('hq.whatEachRole')}</span>
+                {roles.map((r2) => (
+                  <button
+                    key={r2.id}
+                    type="button"
+                    className="rowcard"
+                    style={{ width: '100%', textAlign: 'left', cursor: 'pointer' }}
+                    onClick={() => setRole(r2.id)}
+                  >
+                    <span className={`mark${role === r2.id ? ' on' : ''}`}>
+                      <Icon d={I.user} size={20} />
+                    </span>
+                    <span className="grow">
+                      <span className="t">{r2.name}</span>
+                      <span className="s">{r2.descr}</span>
+                    </span>
+                    {accessBadge(r2.customerAccess)}
+                    {role === r2.id ? <span className="badge success">{t('hq.selected')}</span> : null}
+                  </button>
+                ))}
+              </div>
               <p className="muted" style={{ fontWeight: 500, fontSize: 12, margin: 0 }}>
-                {t('hq.inviteNote')}
+                {editing === 'new' ? t('hq.inviteNote') : t('hq.twofaStays')}
               </p>
             </div>
             <div className="modal-foot">
-              <button className="btn btn-secondary" onClick={() => setInviting(false)}>
+              {editing !== 'new' && editing.id !== me.id ? (
+                <button
+                  className="btn btn-subtle"
+                  style={{ marginRight: 'auto', color: 'var(--danger)' }}
+                  onClick={() => void removeMember(editing.id)}
+                >
+                  {t('hq.remove')}
+                </button>
+              ) : null}
+              <button className="btn btn-secondary" onClick={() => setEditing(null)}>
                 {t('hq.cancel')}
               </button>
               <button
                 className="btn btn-primary"
                 disabled={!name.trim() || !email.trim()}
-                onClick={() => void invite()}
+                onClick={() => void saveMember()}
               >
-                {t('hq.inviteMember')}
+                {editing === 'new' ? t('hq.inviteMember') : t('hq.save')}
               </button>
             </div>
-            <button className="modal-close" aria-label={t('hq.cancel')} onClick={() => setInviting(false)}>
+            <button className="modal-close" aria-label={t('hq.cancel')} onClick={() => setEditing(null)}>
+              <Icon d={I.x} size={20} />
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {roleModal ? (
+        <div className="overlay" onClick={() => setRoleModal(null)}>
+          <div
+            className="modal"
+            role="dialog"
+            aria-modal="true"
+            style={{ maxWidth: 460 }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="modal-head">
+              <h2>{roleModal === 'new' ? t('hq.newRole') : roleModal.name}</h2>
+            </div>
+            <div className="modal-body" style={{ display: 'grid', gap: 14 }}>
+              {roleModal === 'new' ? (
+                <>
+                  <label className="field">
+                    <span>{t('hq.categoryName')}</span>
+                    <input className="input" value={name} autoFocus onChange={(e) => setName(e.target.value)} />
+                  </label>
+                  <label className="field">
+                    <span>{t('hq.descLabel')}</span>
+                    <input className="input" value={roleDesc} onChange={(e) => setRoleDesc(e.target.value)} />
+                  </label>
+                  <label className="field">
+                    <span>{t('hq.startFrom')}</span>
+                    <select
+                      className="select"
+                      style={{ width: '100%' }}
+                      value={roleBase}
+                      onChange={(e) => setRoleBase(e.target.value)}
+                    >
+                      {roles
+                        .filter((r2) => r2.std)
+                        .map((r2) => (
+                          <option key={r2.id} value={r2.id}>
+                            {r2.name}
+                          </option>
+                        ))}
+                    </select>
+                    <span className="hint">{t('hq.startFromHint')}</span>
+                  </label>
+                </>
+              ) : (
+                <>
+                  <p style={{ fontWeight: 500, margin: 0 }}>{roleModal.descr}</p>
+                  <div>{accessBadge(roleModal.customerAccess)}</div>
+                  {roleModal.locked ? <div className="note warn">{t('hq.superLockedNote')}</div> : null}
+                </>
+              )}
+            </div>
+            <div className="modal-foot">
+              <button className="btn btn-secondary" onClick={() => setRoleModal(null)}>
+                {t('hq.cancel')}
+              </button>
+              {roleModal === 'new' ? (
+                <button className="btn btn-primary" disabled={!name.trim()} onClick={() => void saveRole()}>
+                  {t('hq.createRole')}
+                </button>
+              ) : null}
+            </div>
+            <button className="modal-close" aria-label={t('hq.cancel')} onClick={() => setRoleModal(null)}>
               <Icon d={I.x} size={20} />
             </button>
           </div>

@@ -126,6 +126,13 @@ export interface AuditLog {
   ts: Generated<Timestamp>;
 }
 
+export interface Brands {
+  country: Generated<string>;
+  id: Generated<string>;
+  name: string;
+  owner: Generated<string>;
+}
+
 export interface Businesses {
   address: string | null;
   city: string | null;
@@ -318,6 +325,16 @@ export interface Holidays {
   name: string;
   type: string;
   year: number;
+}
+
+export interface HqRoles {
+  customerAccess: Generated<string>;
+  descr: Generated<string>;
+  id: string;
+  locked: Generated<boolean>;
+  name: string;
+  sensitive: Generated<boolean>;
+  std: Generated<boolean>;
 }
 
 export interface HqUsers {
@@ -802,6 +819,11 @@ export interface StockMovements {
   tenantId: string;
 }
 
+export interface SupplierBrands {
+  brandId: string;
+  supplierId: string;
+}
+
 export interface SupplierConnections {
   connected: Timestamp | null;
   customerNo: Generated<string>;
@@ -920,6 +942,7 @@ export interface DB {
   appointmentHistory: AppointmentHistory;
   appointments: Appointments;
   auditLog: AuditLog;
+  brands: Brands;
   businesses: Businesses;
   categoryRequests: CategoryRequests;
   checkoutItems: CheckoutItems;
@@ -935,6 +958,7 @@ export interface DB {
   holds: Holds;
   holidayCalendarYears: HolidayCalendarYears;
   holidays: Holidays;
+  hqRoles: HqRoles;
   hqUsers: HqUsers;
   integrationEvents: IntegrationEvents;
   invoiceCounters: InvoiceCounters;
@@ -973,6 +997,7 @@ export interface DB {
   services: Services;
   serviceVariants: ServiceVariants;
   stockMovements: StockMovements;
+  supplierBrands: SupplierBrands;
   supplierConnections: SupplierConnections;
   supplierProducts: SupplierProducts;
   supplierPromotions: SupplierPromotions;

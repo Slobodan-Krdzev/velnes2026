@@ -7,7 +7,11 @@ import {
   HqCategoryListSchema,
   HqCategoryPatchSchema,
   HqCategoryRequestListSchema,
+  HqBrandCreateSchema,
+  HqBrandListSchema,
   HqOutboxListSchema,
+  HqRoleCreateSchema,
+  HqRoleListSchema,
   HqSupplierCreateSchema,
   HqSupplierListSchema,
   HqSupplierPatchSchema,
@@ -730,14 +734,21 @@ export function hqRoutes(app: FastifyInstance) {
     schema: { response: { 200: HqTeamListSchema } },
     handler: async () =>
       withHq(async (trx) => {
-        const rows = await trx.selectFrom('hqUsers').selectAll().orderBy('createdAt').execute();
+        const rows = await trx
+          .selectFrom('hqUsers as u')
+          .leftJoin('hqRoles as r2', 'r2.id', 'u.role')
+          .selectAll('u')
+          .select('r2.name as roleName')
+          .orderBy('u.createdAt')
+          .execute();
         return {
           members: rows.map((u) => ({
             id: u.id,
             name: u.name,
             email: u.email,
-            role: u.role as 'hq_super' | 'hq_onboard' | 'hq_support',
-            status: u.status as 'active' | 'invited',
+            role: u.role,
+            roleName: u.roleName ?? u.role,
+            status: u.status as 'active' | 'invited' | 'disabled',
             createdAt: u.createdAt.toISOString(),
           })),
         };
@@ -762,6 +773,13 @@ export function hqRoutes(app: FastifyInstance) {
           .executeTakeFirst();
         if (dupe)
           return reply.code(409).send({ error: 'DUPLICATE', message: 'That email is already on the team' });
+        const roleRow = await trx
+          .selectFrom('hqRoles')
+          .select('id')
+          .where('id', '=', req.body.role)
+          .executeTakeFirst();
+        if (!roleRow)
+          return reply.code(409).send({ error: 'NO_ROLE', message: 'Pick an existing HQ role' });
         // Invited and without a usable password: the login door
         // refuses NOT_ACTIVE until the invite flow completes.
         const row = await trx
@@ -807,7 +825,7 @@ export function hqRoutes(app: FastifyInstance) {
           .executeTakeFirst();
         if (!u) return reply.code(404).send({ error: 'NOT_FOUND', message: 'Unknown HQ user' });
         // The platform always keeps a keyholder.
-        if (u.role === 'hq_super' && req.body.role !== 'hq_super') {
+        if (u.role === 'hq_super' && req.body.role !== undefined && req.body.role !== 'hq_super') {
           const supers = await trx
             .selectFrom('hqUsers')
             .select(({ fn }) => fn.countAll<string>().as('n'))
@@ -819,7 +837,24 @@ export function hqRoutes(app: FastifyInstance) {
               .code(409)
               .send({ error: 'LAST_SUPER', message: 'The last HQ super keeps the keys' });
         }
-        await trx.updateTable('hqUsers').set({ role: req.body.role }).where('id', '=', u.id).execute();
+        if (req.body.role !== undefined) {
+          const roleRow = await trx
+            .selectFrom('hqRoles')
+            .select('id')
+            .where('id', '=', req.body.role)
+            .executeTakeFirst();
+          if (!roleRow)
+            return reply.code(409).send({ error: 'NO_ROLE', message: 'Pick an existing HQ role' });
+        }
+        await trx
+          .updateTable('hqUsers')
+          .set({
+            ...(req.body.role !== undefined ? { role: req.body.role } : {}),
+            ...(req.body.name !== undefined ? { name: req.body.name } : {}),
+            ...(req.body.email !== undefined ? { email: req.body.email } : {}),
+          })
+          .where('id', '=', u.id)
+          .execute();
         return { ok: true as const };
       });
     },
@@ -923,13 +958,35 @@ export function hqRoutes(app: FastifyInstance) {
           orders
             .filter((o) => o.supplierId === supId)
             .reduce((n, o) => n + Number(lines.find((l) => l.orderId === o.id)?.v ?? 0), 0);
+        const carried = await trx
+          .selectFrom('supplierBrands as sb')
+          .innerJoin('brands as b', 'b.id', 'sb.brandId')
+          .select(['sb.supplierId', 'b.name'])
+          .execute();
+        const entities = await trx
+          .selectFrom('legalEntities as e')
+          .leftJoin('paymentAccounts as pa', 'pa.legalEntityId', 'e.id')
+          .select(['e.ownerId', 'e.name as entityName', 'e.status as entityStatus', 'pa.merchantId', 'pa.status as paStatus'])
+          .where('e.ownerType', '=', 'supplier')
+          .execute();
         return {
           suppliers: sups.map((s2) => ({
             id: s2.id,
             name: s2.name,
             type: s2.type,
             territory: s2.territory,
+            contact: s2.contact,
             verified: s2.verified,
+            brands: carried.filter((c) => c.supplierId === s2.id).map((c) => c.name),
+            merchant: (() => {
+              const e = entities.find((x) => x.ownerId === s2.id);
+              if (!e) return null;
+              return {
+                entityName: e.entityName,
+                merchantId: e.merchantId ?? null,
+                ready: e.entityStatus === 'verified' && e.paStatus === 'active' && !!e.merchantId,
+              };
+            })(),
             products: Number(products.find((p) => p.supplierId === s2.id)?.n ?? 0),
             connectedSalons: conns.filter((c) => c.supplierId === s2.id && c.status === 'connected').length,
             pendingSalons: conns.filter((c) => c.supplierId === s2.id && c.status === 'pending').length,
@@ -1002,6 +1059,167 @@ export function hqRoutes(app: FastifyInstance) {
           .where('id', '=', req.params.id)
           .execute();
         return { ok: true as const };
+      });
+    },
+  });
+
+  // ── The HQ role kit and the brand registry. ──────────────────
+
+  r.route({
+    method: 'GET',
+    url: '/hq/roles',
+    preHandler: [app.authenticateHq],
+    schema: { response: { 200: HqRoleListSchema } },
+    handler: async () =>
+      withHq(async (trx) => {
+        const roles = await trx.selectFrom('hqRoles').selectAll().orderBy('std', 'desc').orderBy('name').execute();
+        const users = await trx.selectFrom('hqUsers').select(['name', 'email', 'role']).execute();
+        return {
+          roles: roles.map((r2) => ({
+            id: r2.id,
+            name: r2.name,
+            descr: r2.descr,
+            customerAccess: r2.customerAccess as 'write' | 'read' | 'none',
+            std: r2.std,
+            locked: r2.locked,
+            users: users.filter((u) => u.role === r2.id).length,
+            userNames: users
+              .filter((u) => u.role === r2.id)
+              .map((u) => ({ name: u.name, email: u.email })),
+          })),
+        };
+      }),
+  });
+
+  r.route({
+    method: 'POST',
+    url: '/hq/roles',
+    preHandler: [app.authenticateHq],
+    schema: {
+      body: HqRoleCreateSchema,
+      response: { 200: z.object({ id: z.string() }), 403: Err, 409: Err },
+    },
+    handler: async (req, reply) => {
+      if (!superGate(reply, req.hqClaims.rol)) return reply;
+      return withHq(async (trx) => {
+        const base = await trx
+          .selectFrom('hqRoles')
+          .selectAll()
+          .where('id', '=', req.body.base)
+          .where('std', '=', true)
+          .executeTakeFirst();
+        if (!base)
+          return reply.code(409).send({ error: 'NO_BASE', message: 'Start from a standard role' });
+        const id = 'hqc_' + req.body.name.toLowerCase().replace(/[^a-z0-9]+/g, '_').slice(0, 40);
+        const dupe = await trx.selectFrom('hqRoles').select('id').where('id', '=', id).executeTakeFirst();
+        if (dupe)
+          return reply.code(409).send({ error: 'DUPLICATE', message: 'That role already exists' });
+        await trx
+          .insertInto('hqRoles')
+          .values({
+            id,
+            name: req.body.name,
+            descr: req.body.descr || `Custom role, based on ${base.name}.`,
+            customerAccess: base.customerAccess,
+            std: false,
+            locked: false,
+            sensitive: base.sensitive,
+          })
+          .execute();
+        return { id };
+      });
+    },
+  });
+
+  r.route({
+    method: 'DELETE',
+    url: '/hq/roles/:id',
+    preHandler: [app.authenticateHq],
+    schema: {
+      params: z.object({ id: z.string() }),
+      response: { 200: z.object({ ok: z.literal(true) }), 403: Err, 404: Err, 409: Err },
+    },
+    handler: async (req, reply) => {
+      if (!superGate(reply, req.hqClaims.rol)) return reply;
+      return withHq(async (trx) => {
+        const role = await trx
+          .selectFrom('hqRoles')
+          .select(['id', 'std', 'locked'])
+          .where('id', '=', req.params.id)
+          .executeTakeFirst();
+        if (!role) return reply.code(404).send({ error: 'NOT_FOUND', message: 'Unknown role' });
+        if (role.std || role.locked)
+          return reply.code(409).send({ error: 'STANDARD', message: 'A standard role cannot be removed' });
+        const holders = await trx
+          .selectFrom('hqUsers')
+          .select(({ fn }) => fn.countAll<string>().as('n'))
+          .where('role', '=', role.id)
+          .executeTakeFirstOrThrow();
+        if (Number(holders.n))
+          return reply
+            .code(409)
+            .send({ error: 'IN_USE', message: 'People are still on this role — move them first' });
+        await trx.deleteFrom('hqRoles').where('id', '=', role.id).execute();
+        return { ok: true as const };
+      });
+    },
+  });
+
+  r.route({
+    method: 'GET',
+    url: '/hq/brands',
+    preHandler: [app.authenticateHq],
+    schema: { response: { 200: HqBrandListSchema } },
+    handler: async () =>
+      withHq(async (trx) => {
+        const brands = await trx.selectFrom('brands').selectAll().orderBy('name').execute();
+        const sups = await trx.selectFrom('suppliers').select(['id', 'name', 'territory']).orderBy('name').execute();
+        const carried = await trx
+          .selectFrom('supplierBrands as sb')
+          .innerJoin('brands as b', 'b.id', 'sb.brandId')
+          .select(['sb.supplierId', 'b.name'])
+          .execute();
+        return {
+          brands: brands.map((b) => ({ id: b.id, name: b.name, owner: b.owner, country: b.country })),
+          carriage: sups.map((s2) => ({
+            supplierId: s2.id,
+            supplierName: s2.name,
+            territory: s2.territory,
+            brands: carried.filter((c) => c.supplierId === s2.id).map((c) => c.name),
+          })),
+        };
+      }),
+  });
+
+  r.route({
+    method: 'POST',
+    url: '/hq/brands',
+    preHandler: [app.authenticateHq],
+    schema: {
+      body: HqBrandCreateSchema,
+      response: { 200: z.object({ id: z.uuid() }), 403: Err, 409: Err },
+    },
+    handler: async (req, reply) => {
+      if (!superGate(reply, req.hqClaims.rol)) return reply;
+      return withHq(async (trx) => {
+        const dupe = await trx
+          .selectFrom('brands')
+          .select('id')
+          .where('name', '=', req.body.name)
+          .executeTakeFirst();
+        if (dupe)
+          return reply.code(409).send({ error: 'DUPLICATE', message: 'That brand already exists' });
+        const row = await trx
+          .insertInto('brands')
+          .values({ name: req.body.name, owner: req.body.owner, country: req.body.country })
+          .returning('id')
+          .executeTakeFirstOrThrow();
+        if (req.body.supplierId)
+          await trx
+            .insertInto('supplierBrands')
+            .values({ supplierId: req.body.supplierId, brandId: row.id })
+            .execute();
+        return { id: row.id };
       });
     },
   });

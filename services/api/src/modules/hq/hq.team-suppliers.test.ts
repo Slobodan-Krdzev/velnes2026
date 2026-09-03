@@ -48,6 +48,9 @@ describe('HQ team, supplier intelligence and the mail outbox', () => {
     await admin.query(`DELETE FROM hq_users WHERE email='petra@revelapps.com'`);
     await admin.query(`DELETE FROM mail_outbox`);
     await admin.query(`DELETE FROM suppliers WHERE name='GlowLine Skopje (test)'`);
+    await admin.query(`DELETE FROM supplier_brands WHERE brand_id IN (SELECT id FROM brands WHERE name='OrthoFlex (test)')`);
+    await admin.query(`DELETE FROM brands WHERE name='OrthoFlex (test)'`);
+    await admin.query(`DELETE FROM hq_roles WHERE std = false`);
     await admin.end();
     await app.close();
     await closeDb();
@@ -166,5 +169,65 @@ describe('HQ team, supplier intelligence and the mail outbox', () => {
       [demo.c6],
     );
     await admin.query(`DELETE FROM customer_activity WHERE type='contact_changed'`);
+  });
+
+  it('the role kit: six standard roles, custom creation from a base, guarded removal', async () => {
+    const roles = (await call('GET', '/hq/roles')).json() as {
+      roles: { id: string; std: boolean; locked: boolean; users: number; customerAccess: string }[];
+    };
+    expect(roles.roles.filter((r) => r.std).map((r) => r.id).sort()).toEqual([
+      'hq_audit', 'hq_finance', 'hq_onboard', 'hq_super', 'hq_support', 'hq_tech',
+    ]);
+    expect(roles.roles.find((r) => r.id === 'hq_super')).toMatchObject({ locked: true, users: 1 });
+
+    const created = await call('POST', '/hq/roles', {
+      name: 'Balkans Onboarding (test)',
+      descr: '',
+      base: 'hq_onboard',
+    });
+    expect(created.statusCode).toBe(200);
+    const id = (created.json() as { id: string }).id;
+    const after = (await call('GET', '/hq/roles')).json() as {
+      roles: { id: string; std: boolean; customerAccess: string }[];
+    };
+    expect(after.roles.find((r) => r.id === id)).toMatchObject({ std: false, customerAccess: 'write' });
+
+    // A standard role never leaves; an unused custom one does.
+    expect((await call('DELETE', '/hq/roles/hq_support')).statusCode).toBe(409);
+    expect((await call('DELETE', `/hq/roles/${id}`)).statusCode).toBe(200);
+  });
+
+  it('brands and carriage: the registry reads, a brand lands under its supplier', async () => {
+    const before = (await call('GET', '/hq/brands')).json() as {
+      brands: { name: string }[];
+      carriage: { supplierName: string; brands: string[] }[];
+    };
+    expect(before.brands.map((b) => b.name)).toContain('Thera-Band');
+    expect(
+      before.carriage.find((c) => c.supplierName === 'BeautyPro MK')?.brands.sort(),
+    ).toEqual(['CureTape', 'Thera-Band']);
+
+    const sup = ((await call('GET', '/hq/suppliers')).json() as {
+      suppliers: { name: string; id: string; brands: string[]; merchant: { ready: boolean } | null }[];
+    }).suppliers;
+    const beauty = sup.find((s2) => s2.name === 'BeautyPro MK')!;
+    expect(beauty.brands.sort()).toEqual(['CureTape', 'Thera-Band']);
+    expect(beauty.merchant?.ready).toBe(true);
+    const aroma = sup.find((s2) => s2.name === 'Aroma Nordic Direct')!;
+    expect(aroma.merchant?.ready).toBe(false);
+
+    const brand = await call('POST', '/hq/brands', {
+      name: 'OrthoFlex (test)',
+      owner: 'OrthoFlex GmbH',
+      country: 'Germany',
+      supplierId: beauty.id,
+    });
+    expect(brand.statusCode).toBe(200);
+    const now = (await call('GET', '/hq/brands')).json() as {
+      carriage: { supplierName: string; brands: string[] }[];
+    };
+    expect(now.carriage.find((c) => c.supplierName === 'BeautyPro MK')?.brands).toContain(
+      'OrthoFlex (test)',
+    );
   });
 });

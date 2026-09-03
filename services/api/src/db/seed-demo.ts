@@ -182,7 +182,7 @@ export async function seedDemo(adminUrl: string) {
       integration_events, widgets, registrations, hq_users,
       customer_activity, personal_offers, last_minute_offers, member_recs, premium_offers,
       purchase_order_lines, purchase_orders, supplier_connections, supplier_promotions,
-      supplier_users, supplier_products, suppliers,
+      supplier_users, supplier_products, supplier_brands, suppliers,
       tax_rules, service_recipes, loyalty_ledger, loyalty_config,
       discount_codes, gift_cards, checkout_items, merchant_transactions,
       checkouts, invoice_lines, invoices, invoice_counters,
@@ -316,12 +316,12 @@ export async function seedDemo(adminUrl: string) {
     // Legal entities. Aroma Nordic stays deliberately unfinished —
     // its pending state is load-bearing for HQ diagnostics later.
     await q(
-      `INSERT INTO legal_entities (id, tenant_id, owner_type, is_default, name, tax_id, vat_reg, currency, status, fiscal_profile_id)
+      `INSERT INTO legal_entities (id, tenant_id, owner_type, owner_id, is_default, name, tax_id, vat_reg, currency, status, fiscal_profile_id)
        VALUES
-       ($1,$4,'salon',true,'Velnes Studio DOOEL Skopje','MK4030026512345','MK4030026512345','MKD','verified','fp-mk-1'),
-       ($2,NULL,'supplier',true,'BeautyPro MK DOO Skopje','MK4030019876543','MK4030019876543','MKD','verified','fp-mk-1'),
-       ($3,NULL,'supplier',true,'Aroma Nordic Direct AB','SE556677889901','','MKD','pending',NULL)`,
-      [demo.leVelnes, demo.leBeautyPro, demo.leAroma, demo.business],
+       ($1,$4,'salon',NULL,true,'Velnes Studio DOOEL Skopje','MK4030026512345','MK4030026512345','MKD','verified','fp-mk-1'),
+       ($2,NULL,'supplier',$5,true,'BeautyPro MK DOO Skopje','MK4030019876543','MK4030019876543','MKD','verified','fp-mk-1'),
+       ($3,NULL,'supplier',$6,true,'Aroma Nordic Direct AB','SE556677889901','','MKD','pending',NULL)`,
+      [demo.leVelnes, demo.leBeautyPro, demo.leAroma, demo.business, demo.sup1, demo.sup2],
     );
     await q(
       `INSERT INTO legal_entity_locations (tenant_id, legal_entity_id, location_id)
@@ -931,6 +931,15 @@ export async function seedDemo(adminUrl: string) {
         `INSERT INTO hq_users (id, name, email, role, password_hash) VALUES ($1,$2,$3,$4,$5)`,
         [id, name, email, role, hash],
       );
+
+    // Who carries what — the prototype's distributor→brand mapping.
+    await q(
+      `INSERT INTO supplier_brands (supplier_id, brand_id)
+       SELECT $1::uuid, id FROM brands WHERE name IN ('Thera-Band','CureTape')
+       UNION ALL
+       SELECT $2::uuid, id FROM brands WHERE name IN ('Nordic Recovery')`,
+      [demo.sup1, demo.sup2],
+    );
 
     // BeautyPro's portal people — same demo password.
     const supUsers: [string, string, string, string][] = [

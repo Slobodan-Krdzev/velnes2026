@@ -376,6 +376,20 @@ ALTER TABLE ONLY public.audit_log FORCE ROW LEVEL SECURITY;
 
 
 --
+-- Name: brands; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.brands (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    name text NOT NULL,
+    owner text DEFAULT ''::text NOT NULL,
+    country text DEFAULT ''::text NOT NULL
+);
+
+ALTER TABLE ONLY public.brands FORCE ROW LEVEL SECURITY;
+
+
+--
 -- Name: businesses; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -678,6 +692,24 @@ ALTER TABLE ONLY public.holidays FORCE ROW LEVEL SECURITY;
 
 
 --
+-- Name: hq_roles; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.hq_roles (
+    id text NOT NULL,
+    name text NOT NULL,
+    descr text DEFAULT ''::text NOT NULL,
+    customer_access text DEFAULT 'none'::text NOT NULL,
+    std boolean DEFAULT false NOT NULL,
+    locked boolean DEFAULT false NOT NULL,
+    sensitive boolean DEFAULT false NOT NULL,
+    CONSTRAINT hq_roles_customer_access_check CHECK ((customer_access = ANY (ARRAY['write'::text, 'read'::text, 'none'::text])))
+);
+
+ALTER TABLE ONLY public.hq_roles FORCE ROW LEVEL SECURITY;
+
+
+--
 -- Name: hq_users; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -689,7 +721,6 @@ CREATE TABLE public.hq_users (
     password_hash text NOT NULL,
     status text DEFAULT 'active'::text NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT hq_users_role_check CHECK ((role = ANY (ARRAY['hq_super'::text, 'hq_onboard'::text, 'hq_support'::text, 'hq_tech'::text, 'hq_audit'::text]))),
     CONSTRAINT hq_users_status_check CHECK ((status = ANY (ARRAY['active'::text, 'invited'::text, 'disabled'::text])))
 );
 
@@ -1436,6 +1467,18 @@ ALTER TABLE ONLY public.stock_movements FORCE ROW LEVEL SECURITY;
 
 
 --
+-- Name: supplier_brands; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.supplier_brands (
+    supplier_id uuid NOT NULL,
+    brand_id uuid NOT NULL
+);
+
+ALTER TABLE ONLY public.supplier_brands FORCE ROW LEVEL SECURITY;
+
+
+--
 -- Name: supplier_connections; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1632,6 +1675,22 @@ ALTER TABLE ONLY public.audit_log
 
 
 --
+-- Name: brands brands_name_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.brands
+    ADD CONSTRAINT brands_name_key UNIQUE (name);
+
+
+--
+-- Name: brands brands_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.brands
+    ADD CONSTRAINT brands_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: businesses businesses_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1789,6 +1848,14 @@ ALTER TABLE ONLY public.holiday_calendar_years
 
 ALTER TABLE ONLY public.holidays
     ADD CONSTRAINT holidays_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: hq_roles hq_roles_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.hq_roles
+    ADD CONSTRAINT hq_roles_pkey PRIMARY KEY (id);
 
 
 --
@@ -2149,6 +2216,14 @@ ALTER TABLE ONLY public.services
 
 ALTER TABLE ONLY public.stock_movements
     ADD CONSTRAINT stock_movements_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: supplier_brands supplier_brands_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.supplier_brands
+    ADD CONSTRAINT supplier_brands_pkey PRIMARY KEY (supplier_id, brand_id);
 
 
 --
@@ -2934,6 +3009,14 @@ ALTER TABLE ONLY public.holidays
 
 
 --
+-- Name: hq_users hq_users_role_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.hq_users
+    ADD CONSTRAINT hq_users_role_fkey FOREIGN KEY (role) REFERENCES public.hq_roles(id);
+
+
+--
 -- Name: integration_events integration_events_tenant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3646,6 +3729,22 @@ ALTER TABLE ONLY public.stock_movements
 
 
 --
+-- Name: supplier_brands supplier_brands_brand_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.supplier_brands
+    ADD CONSTRAINT supplier_brands_brand_id_fkey FOREIGN KEY (brand_id) REFERENCES public.brands(id);
+
+
+--
+-- Name: supplier_brands supplier_brands_supplier_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.supplier_brands
+    ADD CONSTRAINT supplier_brands_supplier_id_fkey FOREIGN KEY (supplier_id) REFERENCES public.suppliers(id);
+
+
+--
 -- Name: supplier_connections supplier_connections_supplier_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3772,6 +3871,12 @@ CREATE POLICY auth_login_lookup ON public.user_credentials FOR SELECT USING ((cu
 
 
 --
+-- Name: brands; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.brands ENABLE ROW LEVEL SECURITY;
+
+--
 -- Name: businesses; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -3866,6 +3971,13 @@ ALTER TABLE public.holidays ENABLE ROW LEVEL SECURITY;
 --
 
 CREATE POLICY hq_all ON public.category_requests USING ((current_setting('app.hq'::text, true) = '1'::text)) WITH CHECK ((current_setting('app.hq'::text, true) = '1'::text));
+
+
+--
+-- Name: hq_roles hq_all; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY hq_all ON public.hq_roles USING ((current_setting('app.hq'::text, true) = '1'::text)) WITH CHECK ((current_setting('app.hq'::text, true) = '1'::text));
 
 
 --
@@ -3974,10 +4086,23 @@ CREATE POLICY hq_read ON public.supplier_connections FOR SELECT USING ((current_
 
 
 --
+-- Name: hq_roles; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.hq_roles ENABLE ROW LEVEL SECURITY;
+
+--
 -- Name: hq_users; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
 ALTER TABLE public.hq_users ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: brands hq_write; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY hq_write ON public.brands USING ((current_setting('app.hq'::text, true) = '1'::text)) WITH CHECK ((current_setting('app.hq'::text, true) = '1'::text));
+
 
 --
 -- Name: platform_notices hq_write; Type: POLICY; Schema: public; Owner: -
@@ -3998,6 +4123,13 @@ CREATE POLICY hq_write ON public.product_categories USING ((current_setting('app
 --
 
 CREATE POLICY hq_write ON public.service_categories USING ((current_setting('app.hq'::text, true) = '1'::text)) WITH CHECK ((current_setting('app.hq'::text, true) = '1'::text));
+
+
+--
+-- Name: supplier_brands hq_write; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY hq_write ON public.supplier_brands USING ((current_setting('app.hq'::text, true) = '1'::text)) WITH CHECK ((current_setting('app.hq'::text, true) = '1'::text));
 
 
 --
@@ -4200,6 +4332,13 @@ ALTER TABLE public.purchase_order_lines ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.purchase_orders ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: brands read_all; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY read_all ON public.brands FOR SELECT USING (true);
+
+
+--
 -- Name: holiday_calendar_years read_all; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -4225,6 +4364,13 @@ CREATE POLICY read_all ON public.product_categories FOR SELECT USING (true);
 --
 
 CREATE POLICY read_all ON public.service_categories FOR SELECT USING (true);
+
+
+--
+-- Name: supplier_brands read_all; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY read_all ON public.supplier_brands FOR SELECT USING (true);
 
 
 --
@@ -4299,6 +4445,12 @@ ALTER TABLE public.services ENABLE ROW LEVEL SECURITY;
 --
 
 ALTER TABLE public.stock_movements ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: supplier_brands; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.supplier_brands ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: supplier_connections; Type: ROW SECURITY; Schema: public; Owner: -
@@ -4866,4 +5018,5 @@ INSERT INTO public.schema_migrations (version) VALUES
     ('20260903200024'),
     ('20260903210025'),
     ('20260903220026'),
-    ('20260903230027');
+    ('20260903230027'),
+    ('20260903240028');

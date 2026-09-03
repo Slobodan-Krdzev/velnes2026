@@ -160,3 +160,30 @@ salon employee invites, customer email-verification on change, HQ
 team invites. HQ sees the whole outbox on the team tab (GET
 `/hq/outbox`); a real Resend adapter later flips queued → sent with
 no schema change.
+
+## Full prototype parity for the two tabs (2026-09-03, second pass)
+
+**Suppliers** wears the prototype's hqSuppliers now: the Add+ pop
+(Supplier / Brand kinds), the suppliers TABLE — supplier + contact,
+type, brands carried, the Merchant column (legal entity + MID +
+Active/Missing-config from the real payment_accounts rows, seeded
+owner_id links), catalog counts with salons/orders underneath, and
+Verified/Under-review status — plus the missing-config chip filter
+and the "Brand, supplier and distributor" tri-minicard ("three
+different things, on purpose"): migration 20260903240028 adds
+platform `brands` + `supplier_brands` (seeded with the prototype's
+four brands and BeautyPro/Aroma carriage), doors GET/POST
+`/hq/brands`.
+
+**HQ team** wears hqTeam: the Add+ pop (Team member / Role), the
+role-kit card over a real `hq_roles` table — the prototype's six
+standard roles (hq_super locked; hq_finance and hq_audit join the
+vocabulary, the check constraint replaced by an FK) with
+customer-access badges, per-role user-count popups listing the
+people, View, and custom-role create-from-base / guarded delete
+(GET/POST/DELETE `/hq/roles`) — and the People table (name, role
+name, two-factor Required, last active honest '—'/Invite sent) with
+the prototype's member edit panel (name, email, the
+what-each-role-may-reach picker, remove inside). Honest omission:
+the prototype's "Work as this role" switcher waits for the
+customer-environment support surface.

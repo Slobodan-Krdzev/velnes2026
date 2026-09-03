@@ -9,6 +9,7 @@ export const HqRoleSchema = z.enum([
   'hq_super',
   'hq_onboard',
   'hq_support',
+  'hq_finance',
   'hq_tech',
   'hq_audit',
 ]);
@@ -35,7 +36,7 @@ export const HqClaimsSchema = z.object({
   hq: z.literal(true),
   sub: z.uuid(),
   name: z.string(),
-  rol: HqRoleSchema,
+  rol: z.string(),
 });
 export type HqClaims = z.infer<typeof HqClaimsSchema>;
 
@@ -144,18 +145,64 @@ export const HqTeamMemberSchema = z.object({
   id: z.uuid(),
   name: z.string(),
   email: z.string(),
-  role: z.enum(['hq_super', 'hq_onboard', 'hq_support']),
-  status: z.enum(['active', 'invited']),
+  role: z.string(),
+  roleName: z.string().default(''),
+  status: z.enum(['active', 'invited', 'disabled']),
   createdAt: z.string(),
 });
 export const HqTeamListSchema = z.object({ members: z.array(HqTeamMemberSchema) });
 export const HqTeamInviteSchema = z.object({
   name: z.string().min(1),
   email: z.email(),
-  role: z.enum(['hq_super', 'hq_onboard', 'hq_support']),
+  role: z.string().min(1),
 });
 export const HqTeamRolePatchSchema = z.object({
-  role: z.enum(['hq_super', 'hq_onboard', 'hq_support']),
+  name: z.string().min(1).optional(),
+  email: z.email().optional(),
+  role: z.string().min(1).optional(),
+});
+
+/** The HQ role kit — the prototype's six standard roles plus custom. */
+export const HqRoleKitSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  descr: z.string(),
+  customerAccess: z.enum(['write', 'read', 'none']),
+  std: z.boolean(),
+  locked: z.boolean(),
+  users: z.number().int(),
+  userNames: z.array(z.object({ name: z.string(), email: z.string() })),
+});
+export const HqRoleListSchema = z.object({ roles: z.array(HqRoleKitSchema) });
+export const HqRoleCreateSchema = z.object({
+  name: z.string().min(1).max(60),
+  descr: z.string().max(300).default(''),
+  base: z.string().min(1), // standard role whose customer reach it copies
+});
+
+/** Brand, supplier and distributor — three different things. */
+export const HqBrandSchema = z.object({
+  id: z.uuid(),
+  name: z.string(),
+  owner: z.string(),
+  country: z.string(),
+});
+export const HqBrandListSchema = z.object({
+  brands: z.array(HqBrandSchema),
+  carriage: z.array(
+    z.object({
+      supplierId: z.uuid(),
+      supplierName: z.string(),
+      territory: z.string(),
+      brands: z.array(z.string()),
+    }),
+  ),
+});
+export const HqBrandCreateSchema = z.object({
+  name: z.string().min(1).max(80),
+  owner: z.string().max(120).default(''),
+  country: z.string().max(80).default(''),
+  supplierId: z.uuid().nullable().optional(),
 });
 
 /** Supplier Intelligence — the operator's view over the chain. */
@@ -164,7 +211,17 @@ export const HqSupplierRowSchema = z.object({
   name: z.string(),
   type: z.string(),
   territory: z.string(),
+  contact: z.string().default(''),
   verified: z.boolean(),
+  brands: z.array(z.string()).default([]),
+  merchant: z
+    .object({
+      entityName: z.string(),
+      merchantId: z.string().nullable(),
+      ready: z.boolean(),
+    })
+    .nullable()
+    .default(null),
   products: z.number().int(),
   connectedSalons: z.number().int(),
   pendingSalons: z.number().int(),
