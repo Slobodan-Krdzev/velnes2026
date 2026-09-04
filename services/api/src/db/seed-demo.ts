@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import argon2 from 'argon2';
 import pg from 'pg';
 import {
@@ -19,6 +20,10 @@ export const DEMO_PASSWORD = 'velnes-demo';
 // Stable ids so tests and docs can reference the world.
 export const demo = {
   business: '10000000-0000-4000-8000-000000000001',
+  // The prototype's other hqBusinesses: the HQ dashboard's demo world.
+  bizVita: '10000000-0000-4000-8000-000000000002',
+  bizLumen: '10000000-0000-4000-8000-000000000003',
+  bizSpa: '10000000-0000-4000-8000-000000000004',
   hqIvana: 'c0000000-0000-4000-8000-000000000001',
   hqDamjan: 'c0000000-0000-4000-8000-000000000002',
   hqTea: 'c0000000-0000-4000-8000-000000000003',
@@ -74,6 +79,7 @@ export const demo = {
   sup4: 'd1000000-0000-4000-8000-000000000004',
   supUserVesna: 'd3000000-0000-4000-8000-000000000001',
   supUserGoran: 'd3000000-0000-4000-8000-000000000002',
+  supUserBojan: 'd3000000-0000-4000-8000-000000000003',
   po1: 'd4000000-0000-4000-8000-000000000001',
   po2: 'd4000000-0000-4000-8000-000000000002',
   po3: 'd4000000-0000-4000-8000-000000000003',
@@ -941,8 +947,10 @@ export async function seedDemo(adminUrl: string) {
       [demo.sup1, demo.sup2],
     );
 
-    // BeautyPro's portal people — same demo password.
+    // BeautyPro's portal people — same demo password. Bojan owns the
+    // portal account (sr_owner), so team + roles have a keyholder.
     const supUsers: [string, string, string, string][] = [
+      [demo.supUserBojan, 'Bojan Cvetkov', 'bojan@beautypro.mk', 'sr_owner'],
       [demo.supUserVesna, 'Vesna Todorova', 'vesna@beautypro.mk', 'sr_account'],
       [demo.supUserGoran, 'Goran Iliev', 'goran@beautypro.mk', 'sr_order'],
     ];
@@ -951,6 +959,96 @@ export async function seedDemo(adminUrl: string) {
         `INSERT INTO supplier_users (id, supplier_id, name, email, role, password_hash) VALUES ($1,$2,$3,$4,$5,$6)`,
         [id, demo.sup1, name, email, role, hash],
       );
+
+    // ── The other customer accounts (prototype hqBusinesses) ─────
+    // Their dashboard rows are DERIVED — status from owner + location
+    // lifecycles, onboarding steps from which rows exist — so each is
+    // seeded with exactly the world that yields the prototype's row:
+    // Vita Fizio mid-onboarding, Lumen Beauty live without the
+    // widget, Spa Ohrid invited and untouched.
+    const others: {
+      id: string;
+      name: string;
+      city: string;
+      plan: string;
+      since: string;
+      owner: [string, string, 'active' | 'invited'];
+      staff: number;
+      locs: [string, 'APPROVED' | 'ACTIVE' | 'DRAFT'][];
+      catalog: boolean;
+      payments: boolean;
+    }[] = [
+      {
+        id: demo.bizVita, name: 'Vita Fizio', city: 'Bitola', plan: 'Starter', since: '2026-07-28',
+        owner: ['Stefan Ristov', 'stefan@vitafizio.mk', 'active'], staff: 1,
+        locs: [['Vita Fizio Centar', 'APPROVED']], catalog: false, payments: false,
+      },
+      {
+        id: demo.bizLumen, name: 'Lumen Beauty', city: 'Skopje', plan: 'Business', since: '2026-05-02',
+        owner: ['Ana Gjorgieva', 'ana@lumen.mk', 'active'], staff: 3,
+        locs: [['Lumen Centar', 'ACTIVE'], ['Lumen Vodno', 'ACTIVE']], catalog: true, payments: true,
+      },
+      {
+        id: demo.bizSpa, name: 'Spa Ohrid', city: 'Ohrid', plan: 'Starter', since: '2026-08-04',
+        owner: ['Igor Petrov', 'igor@spaohrid.mk', 'invited'], staff: 0,
+        locs: [['Spa Ohrid', 'DRAFT']], catalog: false, payments: false,
+      },
+    ];
+    for (const b of others) {
+      await q(
+        `INSERT INTO businesses (id, name, country, plan, since, city)
+         VALUES ($1,$2,'North Macedonia',$3,$4,$5)`,
+        [b.id, b.name, b.plan, b.since, b.city],
+      );
+      const roleId = randomUUID();
+      await q(
+        `INSERT INTO roles (id, tenant_id, name, std, locked, description, perms)
+         VALUES ($1,$2,'Owner',true,true,'Everything, everywhere. The account itself.',$3)`,
+        [roleId, b.id, JSON.stringify(ownerPerms)],
+      );
+      const ownerId = randomUUID();
+      await q(
+        `INSERT INTO employees (id, tenant_id, name, role_title, email, access, role_id, bookable, status, color)
+         VALUES ($1,$2,$3,'Owner',$4,'owner',$5,true,$6,'olive')`,
+        [ownerId, b.id, b.owner[0], b.owner[1], roleId, b.owner[2]],
+      );
+      await q(`UPDATE businesses SET owner_employee_id=$1 WHERE id=$2`, [ownerId, b.id]);
+      if (b.owner[2] === 'active')
+        await q(
+          `INSERT INTO user_credentials (employee_id, tenant_id, password_hash) VALUES ($1,$2,$3)`,
+          [ownerId, b.id, hash],
+        );
+      for (let i = 0; i < b.staff; i++)
+        await q(
+          `INSERT INTO employees (tenant_id, name, role_title, email, access, bookable, status)
+           VALUES ($1,$2,'Staff',$3,'staff',true,'active')`,
+          [b.id, `${b.name} teammate ${i + 1}`, `staff${i + 1}@${b.owner[1].split('@')[1]}`],
+        );
+      for (const [locName, lifecycle] of b.locs)
+        await q(
+          `INSERT INTO locations (tenant_id, name, city, inv_prefix, lifecycle)
+           VALUES ($1,$2,$3,$4,$5)`,
+          [b.id, locName, b.city, `${b.name.slice(0, 3).toUpperCase()}-`, lifecycle],
+        );
+      if (b.catalog)
+        await q(
+          `INSERT INTO services (tenant_id, name, duration_min, price) VALUES ($1,'Classic facial',45,1200)`,
+          [b.id],
+        );
+      if (b.payments) {
+        const leId = randomUUID();
+        await q(
+          `INSERT INTO legal_entities (id, tenant_id, owner_type, is_default, name, tax_id, currency, status)
+           VALUES ($1,$2,'salon',true,$3,'MK4030021112233','MKD','verified')`,
+          [leId, b.id, `${b.name} DOOEL`],
+        );
+        await q(
+          `INSERT INTO payment_accounts (tenant_id, legal_entity_id, provider, merchant_id, status)
+           VALUES ($1,$2,'CaSys (demo)','MID-77301-LB','active')`,
+          [b.id, leId],
+        );
+      }
+    }
 
     await q(
       `INSERT INTO audit_log (tenant_id, actor_name, role_name, business_name, location_name, action, object, before, after, source)

@@ -60,3 +60,5 @@ export const pPost = <S extends z.ZodType>(schema: S, path: string, body?: unkno
   call(schema, path, { method: 'POST', ...(body !== undefined ? { body: JSON.stringify(body) } : {}) });
 export const pPatch = <S extends z.ZodType>(schema: S, path: string, body: unknown) =>
   call(schema, path, { method: 'PATCH', body: JSON.stringify(body) });
+export const pDelete = <S extends z.ZodType>(schema: S, path: string) =>
+  call(schema, path, { method: 'DELETE' });

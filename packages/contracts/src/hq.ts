@@ -87,17 +87,69 @@ export const HqLocationDecisionSchema = z.object({
   reason: z.string().optional(), // mandatory for request_changes
 });
 
+/** The prototype's ONBOARD_STEPS, derived from the real tables —
+ *  never stored, so they can't drift from the truth. */
+export const HqOnboardStepsSchema = z.object({
+  account: z.boolean(),
+  locations: z.boolean(),
+  catalog: z.boolean(),
+  employees: z.boolean(),
+  payments: z.boolean(),
+  widget: z.boolean(),
+});
+export type HqOnboardSteps = z.infer<typeof HqOnboardStepsSchema>;
+
+/** Derived, not stored: invited while the owner hasn't completed the
+ *  invite, live once a location is ACTIVE, onboarding in between. */
+export const HqBusinessStatusSchema = z.enum(['live', 'invited', 'onboarding']);
+
+/** Platform plan prices (MKD a month, subscriptions only) — the
+ *  prototype's numbers, the platform's single source. */
+export const PLAN_PRICES: Record<string, number> = { Starter: 49, Business: 139 };
+
 export const HqBusinessRowSchema = z.object({
   id: z.uuid(),
   name: z.string(),
   slug: z.string().nullable(),
+  city: z.string().nullable(),
+  plan: z.string(),
+  since: z.string().nullable(),
   ownerName: z.string().nullable(),
   ownerEmail: z.string().nullable(),
   locations: z.number().int(),
   liveLocations: z.number().int(),
   employees: z.number().int(),
+  status: HqBusinessStatusSchema,
+  steps: HqOnboardStepsSchema,
+  mrr: z.number(),
+  syncErrors7d: z.number().int(),
+  // Support tickets aren't built yet — honest zeros/nulls from the
+  // one door until the support surface lands, never UI guesses.
+  openTickets: z.number().int(),
+  lastSupportAccess: z.string().nullable(),
 });
-export const HqBusinessListSchema = z.object({ businesses: z.array(HqBusinessRowSchema) });
+export const HqBusinessListSchema = z.object({
+  businesses: z.array(HqBusinessRowSchema),
+  stats: z.object({
+    businesses: z.number().int(),
+    live: z.number().int(),
+    onboarding: z.number().int(),
+    openTickets: z.number().int(),
+    monthlyRevenue: z.number(),
+  }),
+});
+
+/** The prototype's hqNewBiz panel: HQ creates the account and the
+ *  owner is invited — HQ never holds customer passwords. */
+export const HqBusinessCreateSchema = z.object({
+  name: z.string().min(1).max(80),
+  city: z.string().min(1).max(60),
+  plan: z.enum(['Starter', 'Business']).default('Business'),
+  ownerName: z.string().min(1).max(80),
+  ownerEmail: z.email(),
+  firstLocation: z.string().max(80).optional(),
+});
+export const HqBusinessCreateResponseSchema = z.object({ id: z.uuid() });
 
 export const HqAuditListSchema = z.object({
   entries: z.array(AuditEntrySchema.extend({ tenantName: z.string() })),
@@ -162,6 +214,34 @@ export const HqTeamRolePatchSchema = z.object({
   role: z.string().min(1).optional(),
 });
 
+/** The prototype's HQ_PERM_GROUPS: what an HQ role may reach, and at
+ *  which scope. The platform's single source for the role drawer. */
+export const HQ_PERM_GROUPS: [string, [string, string][]][] = [
+  [
+    'Customers',
+    [
+      ['hq.customers', 'See businesses, locations and their settings'],
+      ['hq.enter', 'Open a customer environment'],
+    ],
+  ],
+  ['Suppliers', [['hq.suppliers', 'Verify and manage suppliers']]],
+  ['Finance', [['hq.finance', 'Invoices, payouts and platform fees']]],
+  [
+    'Platform',
+    [
+      ['hq.settings', 'Platform settings and feature flags'],
+      ['hq.team', 'Manage HQ users and roles'],
+      ['hq.audit', 'Read the platform log'],
+    ],
+  ],
+];
+export const HQ_SCOPES: [string, string][] = [
+  ['none', 'No access'],
+  ['read', 'Read-only'],
+  ['write', 'Full'],
+];
+export const HqScopeSchema = z.enum(['none', 'read', 'write']);
+
 /** The HQ role kit — the prototype's six standard roles plus custom. */
 export const HqRoleKitSchema = z.object({
   id: z.string(),
@@ -170,6 +250,7 @@ export const HqRoleKitSchema = z.object({
   customerAccess: z.enum(['write', 'read', 'none']),
   std: z.boolean(),
   locked: z.boolean(),
+  perms: z.record(z.string(), HqScopeSchema),
   users: z.number().int(),
   userNames: z.array(z.object({ name: z.string(), email: z.string() })),
 });
@@ -177,8 +258,19 @@ export const HqRoleListSchema = z.object({ roles: z.array(HqRoleKitSchema) });
 export const HqRoleCreateSchema = z.object({
   name: z.string().min(1).max(60),
   descr: z.string().max(300).default(''),
-  base: z.string().min(1), // standard role whose customer reach it copies
+  base: z.string().min(1), // any existing role whose permissions it copies
 });
+/** The role drawer: rename/describe a custom role, and move
+ *  permission scopes one select at a time (merged into perms). */
+export const HqRolePatchSchema = z
+  .object({
+    name: z.string().min(1).max(60).optional(),
+    descr: z.string().max(300).optional(),
+    perms: z.record(z.string(), HqScopeSchema).optional(),
+  })
+  .refine((b) => b.name !== undefined || b.descr !== undefined || b.perms !== undefined, {
+    message: 'Nothing to change',
+  });
 
 /** Brand, supplier and distributor — three different things. */
 export const HqBrandSchema = z.object({

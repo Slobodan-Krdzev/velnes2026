@@ -197,6 +197,58 @@ describe('HQ team, supplier intelligence and the mail outbox', () => {
     expect((await call('DELETE', `/hq/roles/${id}`)).statusCode).toBe(200);
   });
 
+  it('roles carry their permission scopes; the drawer moves them one select at a time', async () => {
+    const roles = (await call('GET', '/hq/roles')).json() as {
+      roles: { id: string; perms: Record<string, string> }[];
+    };
+    // The migration's matrix (the prototype's seedHqRolePerms).
+    expect(roles.roles.find((r) => r.id === 'hq_support')?.perms).toMatchObject({
+      'hq.customers': 'read',
+      'hq.enter': 'read',
+      'hq.audit': 'read',
+      'hq.team': 'none',
+    });
+    expect(roles.roles.find((r) => r.id === 'hq_super')?.perms['hq.team']).toBe('write');
+
+    // A custom role copies its base's perms — any base, not only std.
+    const created = await call('POST', '/hq/roles', {
+      name: 'Perms Copy (test)',
+      descr: '',
+      base: 'hq_tech',
+    });
+    const id = (created.json() as { id: string }).id;
+    const copy = (await call('GET', '/hq/roles')).json() as {
+      roles: { id: string; perms: Record<string, string> }[];
+    };
+    expect(copy.roles.find((r) => r.id === id)?.perms).toMatchObject({
+      'hq.settings': 'write',
+      'hq.customers': 'read',
+    });
+
+    // Scope moves merge; unknown keys and the locked keyholder refuse.
+    expect(
+      (await call('PATCH', `/hq/roles/${id}`, { perms: { 'hq.finance': 'read' } })).statusCode,
+    ).toBe(200);
+    const moved = (await call('GET', '/hq/roles')).json() as {
+      roles: { id: string; perms: Record<string, string> }[];
+    };
+    expect(moved.roles.find((r) => r.id === id)?.perms).toMatchObject({
+      'hq.finance': 'read',
+      'hq.settings': 'write',
+    });
+    expect(
+      (await call('PATCH', `/hq/roles/${id}`, { perms: { 'hq.nonsense': 'read' } })).statusCode,
+    ).toBe(409);
+    expect(
+      (await call('PATCH', '/hq/roles/hq_super', { perms: { 'hq.team': 'read' } })).statusCode,
+    ).toBe(409);
+    expect(
+      (await call('PATCH', `/hq/roles/${id}`, { name: 'Renamed (test)' }, supportToken)).statusCode,
+    ).toBe(403);
+
+    expect((await call('DELETE', `/hq/roles/${id}`)).statusCode).toBe(200);
+  });
+
   it('brands and carriage: the registry reads, a brand lands under its supplier', async () => {
     const before = (await call('GET', '/hq/brands')).json() as {
       brands: { name: string }[];

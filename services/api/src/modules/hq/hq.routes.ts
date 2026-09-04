@@ -1,6 +1,8 @@
 import {
   HqApproveResponseSchema,
   HqAuditListSchema,
+  HqBusinessCreateResponseSchema,
+  HqBusinessCreateSchema,
   HqBusinessListSchema,
   HqCategoryCreateSchema,
   HqCategoryDeclineSchema,
@@ -12,6 +14,8 @@ import {
   HqOutboxListSchema,
   HqRoleCreateSchema,
   HqRoleListSchema,
+  HqRolePatchSchema,
+  HQ_PERM_GROUPS,
   HqSupplierCreateSchema,
   HqSupplierListSchema,
   HqSupplierPatchSchema,
@@ -41,7 +45,13 @@ import {
   RegistrationError,
   reviewRegistration,
 } from '../registrations/registrations.service.js';
-import { canReview, hqLogin, hqUserById } from '../hq/hq.service.js';
+import {
+  canReview,
+  hqBusinessList,
+  hqCreateBusiness,
+  hqLogin,
+  hqUserById,
+} from '../hq/hq.service.js';
 import { queueMail } from '../mail/mail.service.js';
 
 const Err = z.object({ error: z.string(), message: z.string() });
@@ -375,31 +385,61 @@ export function hqRoutes(app: FastifyInstance) {
     url: '/hq/businesses',
     preHandler: [app.authenticateHq],
     schema: { response: { 200: HqBusinessListSchema } },
-    handler: async () =>
+    handler: async () => hqBusinessList(),
+  });
+
+  r.route({
+    method: 'POST',
+    url: '/hq/businesses',
+    preHandler: [app.authenticateHq],
+    schema: {
+      body: HqBusinessCreateSchema,
+      response: { 200: HqBusinessCreateResponseSchema, 403: Err, 409: Err },
+    },
+    handler: async (req, reply) => {
+      if (!reviewGate(reply, req.hqClaims.rol)) return reply;
+      try {
+        return await hqCreateBusiness(req.body, {
+          name: req.hqClaims.name,
+          role: req.hqClaims.rol,
+        });
+      } catch (e) {
+        if (e instanceof RegistrationError && e.code === 'EMAIL_TAKEN')
+          return reply.code(409).send({ error: e.code, message: e.message });
+        return sendErr(reply, e);
+      }
+    },
+  });
+
+  // The detail page's "Send reminder": a real mail through the
+  // outbox, never a toast pretending one left.
+  r.route({
+    method: 'POST',
+    url: '/hq/businesses/:id/reminder',
+    preHandler: [app.authenticateHq],
+    schema: {
+      params: z.object({ id: z.uuid() }),
+      response: { 200: z.object({ ok: z.literal(true) }), 404: Err },
+    },
+    handler: async (req, reply) =>
       withHq(async (trx) => {
-        const rows = await trx
+        const b = await trx
           .selectFrom('businesses as b')
-          .leftJoin('employees as o', 'o.id', 'b.ownerEmployeeId')
-          .select(['b.id', 'b.name', 'b.slug', 'o.name as ownerName', 'o.email as ownerEmail'])
-          .orderBy('b.createdAt')
-          .execute();
-        const locs = await trx
-          .selectFrom('locations')
-          .select(['tenantId', 'lifecycle'])
-          .execute();
-        const emps = await trx.selectFrom('employees').select(['tenantId']).execute();
-        return {
-          businesses: rows.map((b) => ({
-            id: b.id,
-            name: b.name,
-            slug: b.slug,
-            ownerName: b.ownerName,
-            ownerEmail: b.ownerEmail,
-            locations: locs.filter((l) => l.tenantId === b.id).length,
-            liveLocations: locs.filter((l) => l.tenantId === b.id && l.lifecycle === 'ACTIVE').length,
-            employees: emps.filter((e) => e.tenantId === b.id).length,
-          })),
-        };
+          .innerJoin('employees as o', 'o.id', 'b.ownerEmployeeId')
+          .select(['b.id', 'b.name', 'o.email as ownerEmail'])
+          .where('b.id', '=', req.params.id)
+          .executeTakeFirst();
+        if (!b)
+          return reply.code(404).send({ error: 'NOT_FOUND', message: 'Unknown business' });
+        await queueMail(trx, {
+          tenantId: b.id,
+          to: b.ownerEmail,
+          subject: `Finish setting up ${b.name} on Velnes`,
+          body: `${req.hqClaims.name} (Revelapps) nudged you: a few onboarding steps are still open. Sign in to finish them.`,
+          kind: 'onboarding_reminder',
+          refId: b.id,
+        });
+        return { ok: true as const };
       }),
   });
 
@@ -1072,7 +1112,15 @@ export function hqRoutes(app: FastifyInstance) {
     schema: { response: { 200: HqRoleListSchema } },
     handler: async () =>
       withHq(async (trx) => {
-        const roles = await trx.selectFrom('hqRoles').selectAll().orderBy('std', 'desc').orderBy('name').execute();
+        // The prototype's order: the six standard roles as authored,
+        // then customs alphabetically after them.
+        const STD_ORDER = ['hq_super', 'hq_onboard', 'hq_support', 'hq_tech', 'hq_finance', 'hq_audit'];
+        const roles = (await trx.selectFrom('hqRoles').selectAll().execute()).sort((a, b2) => {
+          const ia = STD_ORDER.indexOf(a.id);
+          const ib = STD_ORDER.indexOf(b2.id);
+          if (ia !== -1 || ib !== -1) return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+          return a.name.localeCompare(b2.name);
+        });
         const users = await trx.selectFrom('hqUsers').select(['name', 'email', 'role']).execute();
         return {
           roles: roles.map((r2) => ({
@@ -1082,6 +1130,7 @@ export function hqRoutes(app: FastifyInstance) {
             customerAccess: r2.customerAccess as 'write' | 'read' | 'none',
             std: r2.std,
             locked: r2.locked,
+            perms: (r2.perms ?? {}) as Record<string, 'none' | 'read' | 'write'>,
             users: users.filter((u) => u.role === r2.id).length,
             userNames: users
               .filter((u) => u.role === r2.id)
@@ -1102,14 +1151,15 @@ export function hqRoutes(app: FastifyInstance) {
     handler: async (req, reply) => {
       if (!superGate(reply, req.hqClaims.rol)) return reply;
       return withHq(async (trx) => {
+        // The prototype starts from ANY existing role — its
+        // permissions are the copied starting point.
         const base = await trx
           .selectFrom('hqRoles')
           .selectAll()
           .where('id', '=', req.body.base)
-          .where('std', '=', true)
           .executeTakeFirst();
         if (!base)
-          return reply.code(409).send({ error: 'NO_BASE', message: 'Start from a standard role' });
+          return reply.code(409).send({ error: 'NO_BASE', message: 'Start from an existing role' });
         const id = 'hqc_' + req.body.name.toLowerCase().replace(/[^a-z0-9]+/g, '_').slice(0, 40);
         const dupe = await trx.selectFrom('hqRoles').select('id').where('id', '=', id).executeTakeFirst();
         if (dupe)
@@ -1124,9 +1174,56 @@ export function hqRoutes(app: FastifyInstance) {
             std: false,
             locked: false,
             sensitive: base.sensitive,
+            perms: JSON.stringify(base.perms ?? {}),
           })
           .execute();
         return { id };
+      });
+    },
+  });
+
+  // The role drawer: rename/describe, and move permission scopes.
+  // Scope moves apply one select at a time, like the prototype — the
+  // body's perms map is merged over what the role already has.
+  r.route({
+    method: 'PATCH',
+    url: '/hq/roles/:id',
+    preHandler: [app.authenticateHq],
+    schema: {
+      params: z.object({ id: z.string() }),
+      body: HqRolePatchSchema,
+      response: { 200: z.object({ ok: z.literal(true) }), 403: Err, 404: Err, 409: Err },
+    },
+    handler: async (req, reply) => {
+      if (!superGate(reply, req.hqClaims.rol)) return reply;
+      return withHq(async (trx) => {
+        const role = await trx
+          .selectFrom('hqRoles')
+          .selectAll()
+          .where('id', '=', req.params.id)
+          .executeTakeFirst();
+        if (!role) return reply.code(404).send({ error: 'NOT_FOUND', message: 'Unknown role' });
+        if (role.locked)
+          return reply
+            .code(409)
+            .send({ error: 'LOCKED', message: 'This role is fixed. Somebody has to keep the keys.' });
+        if (req.body.perms) {
+          const known = new Set(HQ_PERM_GROUPS.flatMap(([, list]) => list.map(([k]) => k)));
+          for (const k of Object.keys(req.body.perms))
+            if (!known.has(k))
+              return reply.code(409).send({ error: 'NO_PERM', message: `Unknown permission ${k}` });
+        }
+        const perms = { ...((role.perms ?? {}) as Record<string, string>), ...(req.body.perms ?? {}) };
+        await trx
+          .updateTable('hqRoles')
+          .set({
+            ...(req.body.name !== undefined ? { name: req.body.name } : {}),
+            ...(req.body.descr !== undefined ? { descr: req.body.descr } : {}),
+            ...(req.body.perms !== undefined ? { perms: JSON.stringify(perms) } : {}),
+          })
+          .where('id', '=', role.id)
+          .execute();
+        return { ok: true as const };
       });
     },
   });

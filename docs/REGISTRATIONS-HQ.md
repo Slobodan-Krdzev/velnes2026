@@ -187,3 +187,58 @@ the prototype's member edit panel (name, email, the
 what-each-role-may-reach picker, remove inside). Honest omission:
 the prototype's "Work as this role" switcher waits for the
 customer-environment support surface.
+
+## The customers dashboard takes the prototype's shape (2026-09-04)
+
+**Customers** now wears hqCustomers in full: the toolbar (Businesses ·
+n accounts, the signed-in badge, the Add button for hq_super/
+hq_onboard), the four stat blocks and the complete accounts table —
+plan, onboarding progress bar, last support access, Live/Invited/
+Onboarding badge, and Open into the prototype's hqBusiness detail
+page (onboarding checklist, integrations, commercial, support cards).
+Everything on it is DERIVED, never stored: status comes from the
+owner's invite state and location lifecycles, the six ONBOARD_STEPS
+from whether the rows actually exist (locations past DRAFT, catalog
+items, ≥2 employees, an active payment account, a widget), MRR from
+`PLAN_PRICES` in contracts (Starter 49 / Business 139 MKD,
+subscriptions only, 0 while invited), and sync errors from
+`integration_events` (migration 20260904100030 gives HQ read-only
+windows on services/products/widgets/integration_events). Open
+tickets and last support access are honest zeros/nulls from the same
+door until the support-ticket surface is built — the UI never guesses.
+The Add button is the prototype's hqNewBiz panel behind POST
+`/hq/businesses`: one transaction provisions business + Owner role +
+invited owner (no credentials — the owner sets their own password) +
+optional APPROVED first location, queues the `owner_invite` through
+the outbox, writes the audit line, and refuses duplicate owner emails
+(409) and non-onboarding roles (403). "Send reminder" on the detail
+page queues a real `onboarding_reminder` mail. The seed now includes
+the prototype's other three accounts (Vita Fizio mid-onboarding,
+Lumen Beauty live without the widget, Spa Ohrid invited) built from
+exactly the rows that derive those dashboard rows. Honest omissions:
+"Open customer environment" stays a disabled door and per-step
+"Offer help" is left out — both wait for support sessions.
+
+## The team screen's Add flows take the prototype's shape (2026-09-04)
+
+The Add+ pop's two doors stop being modals and wear the prototype's
+drawers. **Team member** is hqUser/hqUserEdit: Full name, Email (with
+the invite/moving-sign-in hints), the Role select over the live role
+kit, the "What each role may reach" card, the prototype's guard
+toasts (name first, incomplete email — duplicates refuse server-side
+with 409), "Send invite"/"Save changes" in the panel head with the
+saved/unsaved status pill, and the guarded remove kept inside the
+drawer. **Role** is roleKitNew/roleKitEdit over a real perms column:
+migration 20260904110031 adds `hq_roles.perms` seeded with the
+prototype's seedHqRolePerms matrix, GET `/hq/roles` serves it in the
+prototype's role order, create copies ANY base role's permissions
+(no longer std-only), and the create drawer honestly ends with "the
+permissions appear once it exists". The edit drawer delivers on
+that: the HQ_PERM_GROUPS (now platform vocabulary in
+`@velnes/contracts`) render as scope selects (none/read/write) that
+apply one move at a time through PATCH `/hq/roles/:id` — merged
+server-side, unknown keys refused, the locked keyholder refused,
+super-only — with name/description saves through the same door.
+Honest omission: role changes are not yet audited — the platform log
+writes need a tenantless audit lane first, the same gap every HQ
+team/role door already has.

@@ -703,6 +703,7 @@ CREATE TABLE public.hq_roles (
     std boolean DEFAULT false NOT NULL,
     locked boolean DEFAULT false NOT NULL,
     sensitive boolean DEFAULT false NOT NULL,
+    perms jsonb DEFAULT '{}'::jsonb NOT NULL,
     CONSTRAINT hq_roles_customer_access_check CHECK ((customer_access = ANY (ARRAY['write'::text, 'read'::text, 'none'::text])))
 );
 
@@ -1245,7 +1246,8 @@ CREATE TABLE public.purchase_orders (
     expected date,
     offer_id uuid,
     track text DEFAULT ''::text NOT NULL,
-    created_at timestamp with time zone DEFAULT now() NOT NULL
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    supplier_note text DEFAULT ''::text NOT NULL
 );
 
 ALTER TABLE ONLY public.purchase_orders FORCE ROW LEVEL SECURITY;
@@ -1498,6 +1500,23 @@ ALTER TABLE ONLY public.supplier_connections FORCE ROW LEVEL SECURITY;
 
 
 --
+-- Name: supplier_notifications; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.supplier_notifications (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    supplier_id uuid NOT NULL,
+    kind text NOT NULL,
+    title text NOT NULL,
+    body text DEFAULT ''::text NOT NULL,
+    ref_id text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+ALTER TABLE ONLY public.supplier_notifications FORCE ROW LEVEL SECURITY;
+
+
+--
 -- Name: supplier_products; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1554,6 +1573,22 @@ ALTER TABLE ONLY public.supplier_promotions FORCE ROW LEVEL SECURITY;
 
 
 --
+-- Name: supplier_roles; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.supplier_roles (
+    id text NOT NULL,
+    name text NOT NULL,
+    scope text DEFAULT ''::text NOT NULL,
+    perms jsonb DEFAULT '{}'::jsonb NOT NULL,
+    std boolean DEFAULT false NOT NULL,
+    locked boolean DEFAULT false NOT NULL
+);
+
+ALTER TABLE ONLY public.supplier_roles FORCE ROW LEVEL SECURITY;
+
+
+--
 -- Name: supplier_users; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1566,7 +1601,7 @@ CREATE TABLE public.supplier_users (
     password_hash text NOT NULL,
     status text DEFAULT 'active'::text NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT supplier_users_status_check CHECK ((status = ANY (ARRAY['active'::text, 'disabled'::text])))
+    CONSTRAINT supplier_users_status_check CHECK ((status = ANY (ARRAY['active'::text, 'invited'::text, 'disabled'::text])))
 );
 
 ALTER TABLE ONLY public.supplier_users FORCE ROW LEVEL SECURITY;
@@ -2235,6 +2270,14 @@ ALTER TABLE ONLY public.supplier_connections
 
 
 --
+-- Name: supplier_notifications supplier_notifications_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.supplier_notifications
+    ADD CONSTRAINT supplier_notifications_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: supplier_products supplier_products_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2248,6 +2291,14 @@ ALTER TABLE ONLY public.supplier_products
 
 ALTER TABLE ONLY public.supplier_promotions
     ADD CONSTRAINT supplier_promotions_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: supplier_roles supplier_roles_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.supplier_roles
+    ADD CONSTRAINT supplier_roles_pkey PRIMARY KEY (id);
 
 
 --
@@ -2647,6 +2698,13 @@ CREATE INDEX services_tenant ON public.services USING btree (tenant_id, status, 
 --
 
 CREATE INDEX stock_movements_tenant ON public.stock_movements USING btree (tenant_id, location_id, product_id, at);
+
+
+--
+-- Name: supplier_notifications_feed; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX supplier_notifications_feed ON public.supplier_notifications USING btree (supplier_id, created_at DESC);
 
 
 --
@@ -3485,7 +3543,7 @@ ALTER TABLE ONLY public.products
 --
 
 ALTER TABLE ONLY public.products
-    ADD CONSTRAINT products_supplier_product_id_fkey FOREIGN KEY (supplier_product_id) REFERENCES public.supplier_products(id);
+    ADD CONSTRAINT products_supplier_product_id_fkey FOREIGN KEY (supplier_product_id) REFERENCES public.supplier_products(id) ON DELETE SET NULL;
 
 
 --
@@ -3761,6 +3819,14 @@ ALTER TABLE ONLY public.supplier_connections
 
 
 --
+-- Name: supplier_notifications supplier_notifications_supplier_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.supplier_notifications
+    ADD CONSTRAINT supplier_notifications_supplier_id_fkey FOREIGN KEY (supplier_id) REFERENCES public.suppliers(id);
+
+
+--
 -- Name: supplier_products supplier_products_supplier_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3774,6 +3840,14 @@ ALTER TABLE ONLY public.supplier_products
 
 ALTER TABLE ONLY public.supplier_promotions
     ADD CONSTRAINT supplier_promotions_supplier_id_fkey FOREIGN KEY (supplier_id) REFERENCES public.suppliers(id);
+
+
+--
+-- Name: supplier_users supplier_users_role_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.supplier_users
+    ADD CONSTRAINT supplier_users_role_fkey FOREIGN KEY (role) REFERENCES public.supplier_roles(id);
 
 
 --
@@ -4002,6 +4076,20 @@ CREATE POLICY hq_all ON public.registrations USING ((current_setting('app.hq'::t
 
 
 --
+-- Name: supplier_notifications hq_all; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY hq_all ON public.supplier_notifications USING ((current_setting('app.hq'::text, true) = '1'::text)) WITH CHECK ((current_setting('app.hq'::text, true) = '1'::text));
+
+
+--
+-- Name: supplier_roles hq_all; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY hq_all ON public.supplier_roles USING ((current_setting('app.hq'::text, true) = '1'::text)) WITH CHECK ((current_setting('app.hq'::text, true) = '1'::text));
+
+
+--
 -- Name: hq_users hq_login_lookup; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -4027,6 +4115,13 @@ CREATE POLICY hq_read ON public.businesses FOR SELECT USING ((current_setting('a
 --
 
 CREATE POLICY hq_read ON public.employees FOR SELECT USING ((current_setting('app.hq'::text, true) = '1'::text));
+
+
+--
+-- Name: integration_events hq_read; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY hq_read ON public.integration_events FOR SELECT USING ((current_setting('app.hq'::text, true) = '1'::text));
 
 
 --
@@ -4065,6 +4160,13 @@ CREATE POLICY hq_read ON public.payment_accounts FOR SELECT USING ((current_sett
 
 
 --
+-- Name: products hq_read; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY hq_read ON public.products FOR SELECT USING ((current_setting('app.hq'::text, true) = '1'::text));
+
+
+--
 -- Name: purchase_order_lines hq_read; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -4079,10 +4181,24 @@ CREATE POLICY hq_read ON public.purchase_orders FOR SELECT USING ((current_setti
 
 
 --
+-- Name: services hq_read; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY hq_read ON public.services FOR SELECT USING ((current_setting('app.hq'::text, true) = '1'::text));
+
+
+--
 -- Name: supplier_connections hq_read; Type: POLICY; Schema: public; Owner: -
 --
 
 CREATE POLICY hq_read ON public.supplier_connections FOR SELECT USING ((current_setting('app.hq'::text, true) = '1'::text));
+
+
+--
+-- Name: widgets hq_read; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY hq_read ON public.widgets FOR SELECT USING ((current_setting('app.hq'::text, true) = '1'::text));
 
 
 --
@@ -4473,6 +4589,19 @@ CREATE POLICY supplier_login_lookup ON public.supplier_users FOR SELECT USING ((
 
 
 --
+-- Name: suppliers supplier_login_lookup; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY supplier_login_lookup ON public.suppliers FOR SELECT USING ((current_setting('app.auth'::text, true) = 'login'::text));
+
+
+--
+-- Name: supplier_notifications; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.supplier_notifications ENABLE ROW LEVEL SECURITY;
+
+--
 -- Name: supplier_users supplier_own; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -4508,6 +4637,22 @@ CREATE POLICY supplier_read ON public.businesses FOR SELECT USING (((current_set
 
 
 --
+-- Name: legal_entities supplier_read; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY supplier_read ON public.legal_entities FOR SELECT USING (((owner_type = 'supplier'::public.legal_entity_owner) AND ((owner_id)::text = current_setting('app.supplier_id'::text, true))));
+
+
+--
+-- Name: payment_accounts supplier_read; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY supplier_read ON public.payment_accounts FOR SELECT USING ((legal_entity_id IN ( SELECT legal_entities.id
+   FROM public.legal_entities
+  WHERE ((legal_entities.owner_type = 'supplier'::public.legal_entity_owner) AND ((legal_entities.owner_id)::text = current_setting('app.supplier_id'::text, true))))));
+
+
+--
 -- Name: purchase_order_lines supplier_read; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -4531,10 +4676,37 @@ CREATE POLICY supplier_read ON public.supplier_connections FOR SELECT USING (((s
 
 
 --
+-- Name: supplier_notifications supplier_read; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY supplier_read ON public.supplier_notifications FOR SELECT USING (((supplier_id)::text = current_setting('app.supplier_id'::text, true)));
+
+
+--
+-- Name: supplier_roles supplier_read; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY supplier_read ON public.supplier_roles FOR SELECT USING ((current_setting('app.supplier_id'::text, true) IS NOT NULL));
+
+
+--
+-- Name: supplier_roles; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.supplier_roles ENABLE ROW LEVEL SECURITY;
+
+--
 -- Name: supplier_users; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
 ALTER TABLE public.supplier_users ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: mail_outbox supplier_write; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY supplier_write ON public.mail_outbox FOR INSERT WITH CHECK (((current_setting('app.supplier_id'::text, true) IS NOT NULL) AND (tenant_id IS NULL)));
+
 
 --
 -- Name: supplier_products supplier_write; Type: POLICY; Schema: public; Owner: -
@@ -4548,6 +4720,13 @@ CREATE POLICY supplier_write ON public.supplier_products USING (((supplier_id)::
 --
 
 CREATE POLICY supplier_write ON public.supplier_promotions USING (((supplier_id)::text = current_setting('app.supplier_id'::text, true))) WITH CHECK (((supplier_id)::text = current_setting('app.supplier_id'::text, true)));
+
+
+--
+-- Name: supplier_roles supplier_write; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY supplier_write ON public.supplier_roles USING ((current_setting('app.supplier_id'::text, true) IS NOT NULL)) WITH CHECK ((current_setting('app.supplier_id'::text, true) IS NOT NULL));
 
 
 --
@@ -4906,6 +5085,13 @@ CREATE POLICY tenant_isolation ON public.widgets USING ((tenant_id = app.current
 
 
 --
+-- Name: supplier_notifications tenant_notify; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY tenant_notify ON public.supplier_notifications FOR INSERT WITH CHECK ((current_setting('app.tenant_id'::text, true) IS NOT NULL));
+
+
+--
 -- Name: category_requests tenant_own; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -5019,4 +5205,13 @@ INSERT INTO public.schema_migrations (version) VALUES
     ('20260903210025'),
     ('20260903220026'),
     ('20260903230027'),
-    ('20260903240028');
+    ('20260903240028'),
+    ('20260904090029'),
+    ('20260904100030'),
+    ('20260904110031'),
+    ('20260904120032'),
+    ('20260904130033'),
+    ('20260904140034'),
+    ('20260904150035'),
+    ('20260904160036'),
+    ('20260904170037');

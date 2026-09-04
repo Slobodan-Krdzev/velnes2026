@@ -6,7 +6,52 @@ import type {
 import { sql } from 'kysely';
 import type { Trx } from '../../db/index.js';
 import { logAudit } from '../audit/audit.service.js';
+import { queueMail } from '../mail/mail.service.js';
 import { localIso } from '../scheduling/scheduling.service.js';
+
+/**
+ * A salon submitted an order to a supplier: drop a notification in
+ * the supplier's portal feed and an "order placed" mail into the
+ * outbox (mock transport until the provider is decided). Runs inside
+ * the order's own transaction, under the salon's tenant context.
+ */
+export async function notifyOrderSubmitted(trx: Trx, orderId: string) {
+  const o = await trx
+    .selectFrom('purchaseOrders as o')
+    .innerJoin('suppliers as s', 's.id', 'o.supplierId')
+    .leftJoin('businesses as b', 'b.id', 'o.tenantId')
+    .select(['o.id', 'o.ref', 'o.supplierId', 'o.tenantId', 's.name as supplierName', 's.contact', 'b.name as salonName'])
+    .where('o.id', '=', orderId)
+    .executeTakeFirst();
+  if (!o) return;
+  const totalRow = await trx
+    .selectFrom('purchaseOrderLines')
+    .select(sql<string>`COALESCE(SUM(qty * price),0)`.as('total'))
+    .where('orderId', '=', orderId)
+    .executeTakeFirst();
+  const total = Number(totalRow?.total ?? 0);
+  const salon = o.salonName ?? 'A salon';
+  await trx
+    .insertInto('supplierNotifications')
+    .values({
+      supplierId: o.supplierId,
+      kind: 'order',
+      title: `New order ${o.ref}`,
+      body: `${salon} placed ${o.ref}${total ? ` · ${total} ден` : ''} — accept it in the portal`,
+      refId: o.id,
+    })
+    .execute();
+  const email = (o.contact ?? '').match(/[\w.+-]+@[\w.-]+\.\w+/)?.[0];
+  if (email)
+    await queueMail(trx, {
+      tenantId: o.tenantId,
+      to: email,
+      subject: `New order ${o.ref} — ${salon}`,
+      body: `${salon} placed order ${o.ref}${total ? ` for ${total} ден` : ''} with ${o.supplierName}. Sign in to the supplier portal to accept and ship it.`,
+      kind: 'order_placed',
+      refId: o.id,
+    });
+}
 
 export class SupplierError extends Error {
   constructor(
@@ -44,8 +89,10 @@ export async function toOrderContract(trx: Trx, id: string): Promise<PurchaseOrd
   const o = await trx
     .selectFrom('purchaseOrders as o')
     .innerJoin('suppliers as s', 's.id', 'o.supplierId')
+    .leftJoin('businesses as b', 'b.id', 'o.tenantId')
+    .leftJoin('locations as loc', 'loc.id', 'o.locationId')
     .selectAll('o')
-    .select('s.name as supplierName')
+    .select(['s.name as supplierName', 'b.name as salonName', 'loc.name as locationName'])
     .where('o.id', '=', id)
     .executeTakeFirstOrThrow();
   const lines = await trx
@@ -61,11 +108,14 @@ export async function toOrderContract(trx: Trx, id: string): Promise<PurchaseOrd
     ref: o.ref,
     supplierId: o.supplierId,
     supplierName: o.supplierName,
+    salonName: o.salonName ?? null,
     locationId: o.locationId,
+    locationName: o.locationName ?? null,
     status: o.status,
     byName: o.byName,
     expected: o.expected ? localIso(o.expected) : null,
     track: o.track,
+    supplierNote: o.supplierNote ?? '',
     createdAt: o.createdAt.toISOString(),
     lines: lines.map((l) => ({
       id: l.id,
@@ -189,7 +239,7 @@ export async function createOrder(
         sort: i,
       })
       .execute();
-  if (req.submit)
+  if (req.submit) {
     await logAudit(trx, claims.ten, {
       actorEmployeeId: claims.sub,
       actorName: by,
@@ -197,6 +247,8 @@ export async function createOrder(
       object: `Order · ${ref}`,
       after: `${sup.name} · ${total} ден`,
     });
+    await notifyOrderSubmitted(trx, order.id);
+  }
   return toOrderContract(trx, order.id);
 }
 
@@ -206,7 +258,7 @@ export async function poTransition(
   actor: { id: string | null; name: string; tenantId?: string },
   id: string,
   to: PurchaseOrderStatus,
-  extra?: { track?: string },
+  extra?: { track?: string; reason?: string },
 ) {
   const o = await trx
     .selectFrom('purchaseOrders')
@@ -217,6 +269,10 @@ export async function poTransition(
   const edges = side === 'salon' ? SALON_EDGES : SUPPLIER_EDGES;
   if (!(edges[o.status] ?? []).includes(to))
     throw new SupplierError('WRONG_STATE', `${o.status} → ${to} is not this side's step`);
+  // Declining an order (supplier cancelling) must carry a reason.
+  const declining = side === 'supplier' && to === 'cancelled';
+  if (declining && !(extra?.reason ?? '').trim())
+    throw new SupplierError('INVALID', 'A reason is required to decline an order');
   // The supplier's step still lands in the salon's audit trail — the
   // write needs the order's tenant context inside this transaction.
   if (side === 'supplier')
@@ -226,6 +282,7 @@ export async function poTransition(
     .set({
       status: to,
       ...(extra?.track !== undefined ? { track: extra.track } : {}),
+      ...(declining ? { supplierNote: extra!.reason!.trim() } : {}),
       ...(to === 'shipped' && !o.expected
         ? { expected: new Date(Date.now() + 3 * 864e5) }
         : {}),
@@ -239,7 +296,11 @@ export async function poTransition(
     object: `Order · ${o.ref}`,
     before: o.status,
     after: to,
+    ...(declining ? { reason: extra!.reason!.trim() } : {}),
   });
+  // Reaching 'submitted' from an internal-approval draft notifies the
+  // supplier, exactly like a direct submit.
+  if (side === 'salon' && to === 'submitted') await notifyOrderSubmitted(trx, id);
   return toOrderContract(trx, id);
 }
 

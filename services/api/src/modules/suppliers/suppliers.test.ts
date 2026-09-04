@@ -15,6 +15,7 @@ const app = await buildServer();
 const admin = new pg.Client({ connectionString: ADMIN_URL });
 let ownerToken = '';
 let vesnaToken = '';
+let bojanToken = '';
 let orderId = '';
 const SP1 = 'd2000000-0000-4000-8000-000000000001';
 const SP10 = 'd2000000-0000-4000-8000-000000000010';
@@ -45,9 +46,17 @@ describe('the supplier chain', () => {
       payload: { email: 'vesna@beautypro.mk', password: 'velnes-demo' },
     });
     vesnaToken = portal.json().accessToken;
+    const owner = await app.inject({
+      method: 'POST',
+      url: `${API_PREFIX}/portal/auth/login`,
+      payload: { email: 'bojan@beautypro.mk', password: 'velnes-demo' },
+    });
+    bojanToken = owner.json().accessToken;
   });
   afterAll(async () => {
     if (orderId) {
+      await admin.query(`DELETE FROM supplier_notifications WHERE ref_id=$1`, [orderId]);
+      await admin.query(`DELETE FROM mail_outbox WHERE ref_id=$1`, [orderId]);
       await admin.query(`DELETE FROM purchase_order_lines WHERE order_id=$1`, [orderId]);
       await admin.query(`DELETE FROM purchase_orders WHERE id=$1`, [orderId]);
     }
@@ -136,6 +145,30 @@ describe('the supplier chain', () => {
       [`Order · ${o.ref}`],
     );
     expect(audit.rows).toHaveLength(1);
+
+    // The supplier is notified and gets an "order placed" mail.
+    const notif = await admin.query(
+      `SELECT title, kind FROM supplier_notifications WHERE ref_id=$1`,
+      [o.id],
+    );
+    expect(notif.rows[0]).toMatchObject({ kind: 'order', title: `New order ${o.ref}` });
+    const mail = await admin.query(
+      `SELECT to_email, kind FROM mail_outbox WHERE ref_id=$1 AND kind='order_placed'`,
+      [o.id],
+    );
+    expect(mail.rows[0]).toMatchObject({ to_email: 'vesna@beautypro.mk', kind: 'order_placed' });
+
+    // The portal notification feed surfaces it.
+    const feed = (await get(`${API_PREFIX}/portal/notifications`, vesnaToken)).json() as {
+      notifications: { title: string; refId: string }[];
+    };
+    expect(feed.notifications.some((n) => n.refId === o.id)).toBe(true);
+
+    // And it leads the dashboard's newest-orders list.
+    const dash = (await get(`${API_PREFIX}/portal/dashboard`, vesnaToken)).json() as {
+      recentOrders: { id: string }[];
+    };
+    expect(dash.recentOrders[0]?.id).toBe(o.id);
   });
 
   it('the portal walks its side of the flow: accept → processing → shipped with tracking', async () => {
@@ -159,6 +192,45 @@ describe('the supplier chain', () => {
       vesnaToken,
     );
     expect(wrong.statusCode).toBe(409);
+  });
+
+  it('declining an order needs a reason, and records it on the order', async () => {
+    // A fresh submitted order to decline.
+    const made = await post(`${API_PREFIX}/purchase-orders`, {
+      supplierId: demo.sup1,
+      locationId: demo.locCentar,
+      lines: [{ supplierProductId: SP1, qty: 20 }],
+      submit: true,
+    });
+    const o = PurchaseOrderSchema.parse(made.json());
+    // Decline with no reason is refused.
+    const noReason = await post(
+      `${API_PREFIX}/portal/orders/${o.id}/transitions`,
+      { to: 'cancelled' },
+      vesnaToken,
+    );
+    expect(noReason.statusCode).toBe(422);
+    // With a reason it cancels and the reason lands on the order.
+    const declined = await post(
+      `${API_PREFIX}/portal/orders/${o.id}/transitions`,
+      { to: 'cancelled', reason: 'Out of stock until next month' },
+      vesnaToken,
+    );
+    expect(declined.statusCode).toBe(200);
+    const body = PurchaseOrderSchema.parse(declined.json());
+    expect(body.status).toBe('cancelled');
+    expect(body.supplierNote).toBe('Out of stock until next month');
+    const audit = await admin.query(
+      `SELECT reason FROM audit_log WHERE object=$1 AND after='cancelled' ORDER BY ts DESC LIMIT 1`,
+      [`Order · ${o.ref}`],
+    );
+    expect(audit.rows[0].reason).toBe('Out of stock until next month');
+    // cleanup
+    await admin.query(`DELETE FROM supplier_notifications WHERE ref_id=$1`, [o.id]);
+    await admin.query(`DELETE FROM mail_outbox WHERE ref_id=$1`, [o.id]);
+    await admin.query(`DELETE FROM purchase_order_lines WHERE order_id=$1`, [o.id]);
+    await admin.query(`DELETE FROM purchase_orders WHERE id=$1`, [o.id]);
+    await admin.query(`DELETE FROM audit_log WHERE object=$1`, [`Order · ${o.ref}`]);
   });
 
   it('receiving counts what actually arrived: good units into stock, shortage keeps it open', async () => {
@@ -199,5 +271,155 @@ describe('the supplier chain', () => {
     expect(denied.statusCode).toBe(401);
     const denied2 = await get(`${API_PREFIX}/portal/orders`);
     expect(denied2.statusCode).toBe(401);
+  });
+
+  it('the portal Settings kit: real roles/team, owner-only writes, scope moves, guarded delete', async () => {
+    const patch = (url: string, payload: unknown, token = bojanToken) =>
+      app.inject({ method: 'PATCH', url, headers: { authorization: `Bearer ${token}` }, payload: payload as Record<string, unknown> });
+    const del = (url: string, token = bojanToken) =>
+      app.inject({ method: 'DELETE', url, headers: { authorization: `Bearer ${token}` } });
+
+    // The seven standard roles carry the prototype's perm matrix.
+    const roles = (await get(`${API_PREFIX}/portal/roles`, bojanToken)).json() as {
+      roles: { id: string; std: boolean; locked: boolean; perms: Record<string, string> }[];
+    };
+    expect(roles.roles.map((r) => r.id)).toEqual([
+      'sr_owner', 'sr_account', 'sr_catalog', 'sr_order', 'sr_trainer', 'sr_finance', 'sr_analyst',
+    ]);
+    expect(roles.roles.find((r) => r.id === 'sr_owner')).toMatchObject({ locked: true });
+    expect(roles.roles.find((r) => r.id === 'sr_account')?.perms).toMatchObject({
+      'po.promotions': 'own', 'po.catalog': 'none', 'po.users': 'none',
+    });
+
+    // Team: the three seeded people, owner first.
+    const team = (await get(`${API_PREFIX}/portal/team`, bojanToken)).json() as {
+      members: { name: string; role: string }[];
+    };
+    expect(team.members.map((m) => m.role)).toContain('sr_owner');
+
+    // An Account Manager (Vesna) cannot manage the team.
+    expect((await post(`${API_PREFIX}/portal/roles`, { name: 'X', scope: '', base: 'sr_account' }, vesnaToken)).statusCode).toBe(403);
+    expect(
+      (await app.inject({
+        method: 'POST', url: `${API_PREFIX}/portal/team`,
+        headers: { authorization: `Bearer ${vesnaToken}` },
+        payload: { name: 'X', email: 'x@beautypro.mk', role: 'sr_account' },
+      })).statusCode,
+    ).toBe(403);
+
+    // The owner creates a custom role from a base, moves a scope, and
+    // the locked owner role refuses edits.
+    const created = await post(`${API_PREFIX}/portal/roles`, { name: 'Balkans AM (test)', scope: '', base: 'sr_account' }, bojanToken);
+    expect(created.statusCode).toBe(200);
+    const rid = (created.json() as { id: string }).id;
+    expect((await patch(`${API_PREFIX}/portal/roles/${rid}`, { perms: { 'po.catalog': 'all' } })).statusCode).toBe(200);
+    const after = (await get(`${API_PREFIX}/portal/roles`, bojanToken)).json() as {
+      roles: { id: string; perms: Record<string, string> }[];
+    };
+    expect(after.roles.find((r) => r.id === rid)?.perms['po.catalog']).toBe('all');
+    expect((await patch(`${API_PREFIX}/portal/roles/sr_owner`, { perms: { 'po.users': 'none' } })).statusCode).toBe(409);
+    expect((await patch(`${API_PREFIX}/portal/roles/${rid}`, { perms: { 'po.nonsense': 'all' } })).statusCode).toBe(409);
+
+    // A standard role never leaves; the unused custom one does.
+    expect((await del(`${API_PREFIX}/portal/roles/sr_account`)).statusCode).toBe(409);
+    expect((await del(`${API_PREFIX}/portal/roles/${rid}`)).statusCode).toBe(200);
+  });
+
+  it('invites a portal teammate through the outbox, keeps the last owner, and refuses self-removal', async () => {
+    const del = (url: string, token = bojanToken) =>
+      app.inject({ method: 'DELETE', url, headers: { authorization: `Bearer ${token}` } });
+
+    const invited = await post(
+      `${API_PREFIX}/portal/team`,
+      { name: 'Sara Ilieva', email: 'sara.test@beautypro.mk', role: 'sr_trainer' },
+      bojanToken,
+    );
+    expect(invited.statusCode).toBe(200);
+    const uid = (invited.json() as { id: string }).id;
+    const mail = await admin.query(
+      `SELECT kind, status FROM mail_outbox WHERE to_email='sara.test@beautypro.mk' AND kind='supplier_invite'`,
+    );
+    expect(mail.rows).toHaveLength(1);
+    const member = await admin.query(`SELECT status FROM supplier_users WHERE id=$1`, [uid]);
+    expect(member.rows[0].status).toBe('invited');
+
+    // The last owner cannot be demoted or removed; nobody removes self.
+    const ownerId = (
+      await admin.query(`SELECT id FROM supplier_users WHERE role='sr_owner' AND email='bojan@beautypro.mk'`)
+    ).rows[0].id;
+    expect(
+      (await app.inject({
+        method: 'PATCH', url: `${API_PREFIX}/portal/team/${ownerId}`,
+        headers: { authorization: `Bearer ${bojanToken}` }, payload: { role: 'sr_account' },
+      })).statusCode,
+    ).toBe(409);
+    expect((await del(`${API_PREFIX}/portal/team/${ownerId}`)).statusCode).toBe(409);
+
+    // Clean up the invited teammate.
+    expect((await del(`${API_PREFIX}/portal/team/${uid}`)).statusCode).toBe(200);
+    await admin.query(`DELETE FROM mail_outbox WHERE to_email='sara.test@beautypro.mk'`);
+  });
+
+  it('reports and company read real figures from the supplier’s own data', async () => {
+    const rep = (await get(`${API_PREFIX}/portal/reports`, bojanToken)).json() as {
+      orderValue: number; orders: number; averageOrder: number; repeatRate: number | null;
+      promotionUptake: number | null; bySalon: { name: string; value: number }[];
+    };
+    expect(rep.orders).toBeGreaterThan(0);
+    expect(rep.orderValue).toBeGreaterThan(0);
+    expect(rep.averageOrder).toBe(Math.round(rep.orderValue / rep.orders));
+    expect(rep.promotionUptake).toBeNull(); // not tracked yet — honest
+    expect(rep.bySalon.length).toBeGreaterThan(0);
+
+    const co = (await get(`${API_PREFIX}/portal/company`, bojanToken)).json() as { name: string; minOrder: number };
+    expect(co.name).toBe('BeautyPro MK');
+    expect(co.minOrder).toBe(6000);
+  });
+
+  it('catalog edit/delete/bulk: full edit, guarded delete, bulk price, owner-only', async () => {
+    const patch = (url: string, payload: unknown, token = bojanToken) =>
+      app.inject({ method: 'PATCH', url, headers: { authorization: `Bearer ${token}` }, payload: payload as Record<string, unknown> });
+    const del = (url: string, token = bojanToken) =>
+      app.inject({ method: 'DELETE', url, headers: { authorization: `Bearer ${token}` } });
+
+    // Create a throwaway product, edit every kind of field, delete it.
+    const created = await post(
+      `${API_PREFIX}/portal/catalog`,
+      { name: 'Test Widget', brand: 'Thera-Band', sku: 'TW-1', buy: 100 },
+      bojanToken,
+    );
+    expect(created.statusCode).toBe(200);
+    const pid = (created.json() as { id: string }).id;
+    expect((await patch(`${API_PREFIX}/portal/catalog/${pid}`, { name: 'Renamed', size: '250 ml', use: 'pro', rrp: 180, active: false })).statusCode).toBe(200);
+    const row = await admin.query(`SELECT name, size, use, rrp, active FROM supplier_products WHERE id=$1`, [pid]);
+    expect(row.rows[0]).toMatchObject({ name: 'Renamed', size: '250 ml', use: 'pro', rrp: 180, active: false });
+    // An Account Manager (no po.catalog) cannot edit or delete.
+    expect((await patch(`${API_PREFIX}/portal/catalog/${pid}`, { name: 'x' }, vesnaToken)).statusCode).toBe(403);
+    expect((await del(`${API_PREFIX}/portal/catalog/${pid}`, vesnaToken)).statusCode).toBe(403);
+    expect((await del(`${API_PREFIX}/portal/catalog/${pid}`)).statusCode).toBe(200);
+
+    // A product with order history refuses delete (409 — deactivate).
+    const onOrder = (
+      await admin.query(
+        `SELECT sp.id FROM supplier_products sp JOIN purchase_order_lines l ON l.supplier_product_id=sp.id
+         WHERE sp.supplier_id=$1 LIMIT 1`,
+        [demo.sup1],
+      )
+    ).rows[0].id as string;
+    expect((await del(`${API_PREFIX}/portal/catalog/${onOrder}`)).statusCode).toBe(409);
+
+    // Bulk +50% on buy, then restore exactly from a snapshot.
+    const before = (await admin.query(`SELECT id, buy FROM supplier_products WHERE supplier_id=$1`, [demo.sup1])).rows as {
+      id: string; buy: number;
+    }[];
+    const bulk = await post(`${API_PREFIX}/portal/catalog/bulk`, { target: 'buy', percent: 50 }, bojanToken);
+    expect(bulk.statusCode).toBe(200);
+    expect((bulk.json() as { updated: number }).updated).toBe(before.length);
+    const sample = before[0]!;
+    const after = (await admin.query(`SELECT buy FROM supplier_products WHERE id=$1`, [sample.id])).rows[0].buy as number;
+    expect(after).toBe(Math.round(sample.buy * 1.5));
+    for (const r of before) await admin.query(`UPDATE supplier_products SET buy=$1 WHERE id=$2`, [r.buy, r.id]);
+    // Non-catalog role cannot bulk.
+    expect((await post(`${API_PREFIX}/portal/catalog/bulk`, { target: 'buy', percent: 10 }, vesnaToken)).statusCode).toBe(403);
   });
 });

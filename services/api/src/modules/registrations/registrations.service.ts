@@ -21,8 +21,8 @@ export class RegistrationError extends Error {
 }
 
 /** Owner role: every permission at its widest legal scope — the same
- *  rule the seed uses. */
-const ownerPerms = (): PermMap =>
+ *  rule the seed uses. Shared with HQ's create-business door. */
+export const ownerPerms = (): PermMap =>
   Object.fromEntries(PERM_KEYS.map((k) => [k, scopeChoices(k).at(-1) ?? 'none'])) as PermMap;
 
 /** mon..sun (wizard) → weekday index 0..6 (locations.hours). */

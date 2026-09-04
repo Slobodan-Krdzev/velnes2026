@@ -56,13 +56,30 @@ function mockApi(calls: { method: string; path: string; body?: unknown }[]) {
             },
           ],
         });
+      if (path.includes('/reminder') && method === 'POST') return ok({ ok: true });
+      if (path.includes('/hq/businesses') && method === 'POST')
+        return ok({ id: '10000000-0000-4000-8000-000000000099' });
       if (path.includes('/hq/businesses'))
         return ok({
           businesses: [
             {
               id: BIZ, name: 'Velnes Fizio Centar', slug: 'velnes-fizio',
+              city: 'Skopje', plan: 'Business', since: '2026-02-14',
               ownerName: 'Maria Petrovska', ownerEmail: 'maria@velnes.mk',
               locations: 2, liveLocations: 2, employees: 5,
+              status: 'live',
+              steps: { account: true, locations: true, catalog: true, employees: true, payments: true, widget: true },
+              mrr: 139, syncErrors7d: 0, openTickets: 0, lastSupportAccess: null,
+            },
+          ],
+          stats: { businesses: 1, live: 1, onboarding: 0, openTickets: 0, monthlyRevenue: 139 },
+        });
+      if (path.includes('/hq/roles'))
+        return ok({
+          roles: [
+            {
+              id: 'hq_onboard', name: 'Onboarding Specialist', descr: '',
+              customerAccess: 'write', std: true, locked: false, users: 1, userNames: [],
             },
           ],
         });
@@ -106,7 +123,49 @@ describe('Revelapps HQ', () => {
     expect(screen.getByText('Awaiting SMTP')).toBeDefined();
     expect(screen.getAllByText('Debar Maalo').length).toBeGreaterThan(0);
     expect(screen.getByText('new — compound')).toBeDefined();
-    expect(screen.getByText('velnes.mk/book/velnes-fizio')).toBeDefined();
+    expect(screen.getByText('6 of 6 steps')).toBeDefined();
+    expect(screen.getByText('Monthly revenue')).toBeDefined();
+    expect(screen.getAllByText('Live').length).toBeGreaterThan(0);
+  });
+
+  it('creates a business account behind the Add door', async () => {
+    const calls: { method: string; path: string; body?: unknown }[] = [];
+    mockApi(calls);
+    await signIn();
+    await userEvent.click(screen.getByRole('button', { name: 'Add' }));
+    await userEvent.type(screen.getByLabelText(/Business name/), 'Studio Ki');
+    await userEvent.type(screen.getByLabelText(/^City/), 'Tetovo');
+    await userEvent.type(screen.getByLabelText(/Owner name/), 'Lira Osmani');
+    await userEvent.type(screen.getByLabelText(/Owner email/), 'lira@studioki.mk');
+    await userEvent.type(screen.getByLabelText(/First location/), 'Centar');
+    await userEvent.click(screen.getByRole('button', { name: 'Create and invite owner' }));
+    await waitFor(() => {
+      const post = calls.find((c) => c.method === 'POST' && c.path.includes('/hq/businesses'));
+      expect(post).toBeDefined();
+      expect(post?.body).toMatchObject({
+        name: 'Studio Ki',
+        city: 'Tetovo',
+        plan: 'Business',
+        ownerName: 'Lira Osmani',
+        ownerEmail: 'lira@studioki.mk',
+        firstLocation: 'Centar',
+      });
+    });
+    expect(await screen.findByText(/invite sent to the owner/)).toBeDefined();
+  });
+
+  it('opens the customer account page from the table', async () => {
+    const calls: { method: string; path: string; body?: unknown }[] = [];
+    mockApi(calls);
+    await signIn();
+    await userEvent.click(screen.getByRole('button', { name: 'Open' }));
+    await screen.findByText('What the customer still has to finish');
+    expect(screen.getByText('Nobody from Revelapps has opened this account.')).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Open customer environment' })).toHaveProperty('disabled', true);
+    await userEvent.click(screen.getByRole('button', { name: 'Send reminder' }));
+    await waitFor(() =>
+      expect(calls.some((c) => c.method === 'POST' && c.path.includes('/reminder'))).toBe(true),
+    );
   });
 
   it('approves a registration through the door', async () => {

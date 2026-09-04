@@ -41,6 +41,7 @@ let regToken = '';
 let hqToken = '';
 let supportToken = '';
 let newBusinessId = '';
+let createdBusinessId = '';
 const submittedLoc = randomUUID();
 const pendingEntity = randomUUID();
 
@@ -80,6 +81,13 @@ describe('registrations and the HQ intake table', () => {
   afterAll(async () => {
     // The registration references the business — release it first.
     await admin.query(`DELETE FROM registrations WHERE id=$1`, [regId]);
+    if (createdBusinessId) {
+      const b = createdBusinessId;
+      await admin.query(`UPDATE businesses SET owner_employee_id=NULL WHERE id=$1`, [b]);
+      for (const t of ['audit_log', 'mail_outbox', 'locations', 'employees', 'roles'])
+        await admin.query(`DELETE FROM ${t} WHERE tenant_id=$1`, [b]);
+      await admin.query(`DELETE FROM businesses WHERE id=$1`, [b]);
+    }
     if (newBusinessId) {
       const b = newBusinessId;
       await admin.query(`UPDATE businesses SET owner_employee_id=NULL WHERE id=$1`, [b]);
@@ -329,5 +337,119 @@ describe('registrations and the HQ intake table', () => {
     expect(audit.statusCode).toBe(200);
     expect(audit.json().entries.length).toBeGreaterThan(0);
     expect(audit.json().entries[0].tenantName).toBeDefined();
+  });
+
+  it('derives the dashboard truthfully: status, onboarding steps, plan revenue', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: `${API_PREFIX}/hq/businesses`,
+      headers: { authorization: `Bearer ${hqToken}` },
+    });
+    const { businesses, stats } = res.json();
+    const velnes = businesses.find((b: { name: string }) => b.name === 'Velnes Fizio Centar');
+    // Fully set-up demo world: every step derived true, live, Business plan.
+    expect(velnes.status).toBe('live');
+    expect(Object.values(velnes.steps).every(Boolean)).toBe(true);
+    expect(velnes.mrr).toBe(139);
+    const vita = businesses.find((b: { name: string }) => b.name === 'Vita Fizio');
+    expect(vita.status).toBe('onboarding');
+    expect(vita.steps).toMatchObject({ catalog: false, payments: false, widget: false });
+    expect(vita.mrr).toBe(49);
+    const spa = businesses.find((b: { name: string }) => b.name === 'Spa Ohrid');
+    // Invited owner: one draft location counts, the step does not, and
+    // nothing is billed yet.
+    expect(spa.status).toBe('invited');
+    expect(spa.locations).toBe(1);
+    expect(spa.steps.locations).toBe(false);
+    expect(spa.mrr).toBe(0);
+    // Support isn't built: the numbers say so instead of pretending.
+    expect(spa.openTickets).toBe(0);
+    expect(spa.lastSupportAccess).toBeNull();
+    expect(stats.businesses).toBe(businesses.length);
+    expect(stats.monthlyRevenue).toBe(
+      businesses.reduce((s: number, b: { mrr: number }) => s + b.mrr, 0),
+    );
+  });
+
+  it('creates a business account behind the HQ door: invited owner, no password, queued invite', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: `${API_PREFIX}/hq/businesses`,
+      headers: { authorization: `Bearer ${hqToken}` },
+      payload: {
+        name: 'Studio Ki',
+        city: 'Tetovo',
+        plan: 'Starter',
+        ownerName: 'Lira Osmani',
+        ownerEmail: 'lira@studioki.mk',
+        firstLocation: 'Centar',
+      },
+    });
+    expect(res.statusCode).toBe(200);
+    createdBusinessId = res.json().id;
+
+    const owner = await admin.query(
+      `SELECT e.status, e.access,
+              (SELECT count(*) FROM user_credentials c WHERE c.employee_id=e.id) AS creds
+       FROM businesses b JOIN employees e ON e.id=b.owner_employee_id WHERE b.id=$1`,
+      [createdBusinessId],
+    );
+    expect(owner.rows[0]).toMatchObject({ status: 'invited', access: 'owner', creds: '0' });
+    const loc = await admin.query(`SELECT name, lifecycle FROM locations WHERE tenant_id=$1`, [
+      createdBusinessId,
+    ]);
+    expect(loc.rows[0]).toMatchObject({ name: 'Centar', lifecycle: 'APPROVED' });
+    const mail = await admin.query(
+      `SELECT kind, status FROM mail_outbox WHERE tenant_id=$1 AND kind='owner_invite'`,
+      [createdBusinessId],
+    );
+    expect(mail.rows).toHaveLength(1);
+    const audit = await admin.query(
+      `SELECT action FROM audit_log WHERE tenant_id=$1 AND action='Business created'`,
+      [createdBusinessId],
+    );
+    expect(audit.rows).toHaveLength(1);
+
+    // The new row derives as the prototype's invited account.
+    const list = await app.inject({
+      method: 'GET',
+      url: `${API_PREFIX}/hq/businesses`,
+      headers: { authorization: `Bearer ${hqToken}` },
+    });
+    const ki = list.json().businesses.find((b: { name: string }) => b.name === 'Studio Ki');
+    expect(ki).toMatchObject({ status: 'invited', mrr: 0 });
+    expect(ki.steps).toMatchObject({ account: true, locations: true, catalog: false });
+
+    // The owner's email is now taken, platform-wide.
+    const dupe = await app.inject({
+      method: 'POST',
+      url: `${API_PREFIX}/hq/businesses`,
+      headers: { authorization: `Bearer ${hqToken}` },
+      payload: { name: 'X', city: 'Y', plan: 'Starter', ownerName: 'Z', ownerEmail: 'lira@studioki.mk' },
+    });
+    expect(dupe.statusCode).toBe(409);
+
+    // Support agents don't create accounts.
+    const forbidden = await app.inject({
+      method: 'POST',
+      url: `${API_PREFIX}/hq/businesses`,
+      headers: { authorization: `Bearer ${supportToken}` },
+      payload: { name: 'X', city: 'Y', plan: 'Starter', ownerName: 'Z', ownerEmail: 'no@x.mk' },
+    });
+    expect(forbidden.statusCode).toBe(403);
+  });
+
+  it('sends the onboarding reminder through the outbox, never a toast alone', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: `${API_PREFIX}/hq/businesses/${createdBusinessId}/reminder`,
+      headers: { authorization: `Bearer ${supportToken}` },
+    });
+    expect(res.statusCode).toBe(200);
+    const mail = await admin.query(
+      `SELECT to_email FROM mail_outbox WHERE tenant_id=$1 AND kind='onboarding_reminder'`,
+      [createdBusinessId],
+    );
+    expect(mail.rows).toEqual([{ to_email: 'lira@studioki.mk' }]);
   });
 });

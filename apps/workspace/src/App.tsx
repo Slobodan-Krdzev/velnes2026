@@ -19,7 +19,7 @@ import { Register } from './pages/Register.js';
 import { SessionProvider, useSession } from '@velnes/client';
 import { Shell } from './shell/Shell.js';
 
-const queryClient = new QueryClient({
+export const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, staleTime: 15_000 } },
 });
 

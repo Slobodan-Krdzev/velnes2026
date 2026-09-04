@@ -323,7 +323,13 @@ function OrderRow({
     }
   };
   const tone =
-    o.status === 'delivered' ? 'success' : o.status === 'disputed' ? 'danger' : o.status === 'approval' ? 'warning' : 'info';
+    o.status === 'delivered'
+      ? 'success'
+      : o.status === 'disputed' || o.status === 'cancelled'
+        ? 'danger'
+        : o.status === 'approval'
+          ? 'warning'
+          : 'info';
   return (
     <tr>
       <td>
@@ -331,6 +337,11 @@ function OrderRow({
         <span className="muted" style={{ display: 'block', fontSize: 12 }}>
           {t('sup.by', { name: o.byName })}
         </span>
+        {o.status === 'cancelled' && o.supplierNote ? (
+          <span style={{ display: 'block', fontSize: 12, color: 'var(--danger)', fontWeight: 500 }}>
+            {t('sup.declinedReason', { reason: o.supplierNote })}
+          </span>
+        ) : null}
       </td>
       <td>{o.supplierName}</td>
       <td className="muted">{locations.data?.locations.find((l) => l.id === o.locationId)?.name ?? '—'}</td>

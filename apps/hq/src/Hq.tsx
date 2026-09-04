@@ -1,6 +1,8 @@
 import type {
   HqMeResponseSchema} from '@velnes/contracts';
 import {
+  HQ_PERM_GROUPS,
+  HQ_SCOPES,
   HqApproveResponseSchema,
   HqAuditListSchema,
   HqBusinessListSchema,
@@ -18,7 +20,8 @@ import {
 } from '@velnes/contracts';
 import type { Lang } from '@velnes/i18n';
 import { I, Icon, VelnesMark } from '@velnes/ui';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { z } from 'zod';
 import { PlatformNoticeListSchema } from '@velnes/contracts';
@@ -271,7 +274,7 @@ export function Hq({
           </div>
         </header>
         <main id="view">
-          {tab === 'customers' ? <Customers say={say} /> : null}
+          {tab === 'customers' ? <Customers say={say} me={user} /> : null}
           {tab === 'categories' ? <Categories say={say} /> : null}
           {tab === 'suppliers' ? <Suppliers say={say} isSuper={user.role === 'hq_super'} /> : null}
           {tab === 'team' ? <Team say={say} me={user} /> : null}
@@ -564,21 +567,81 @@ function Categories({ say }: { say: (m: string) => void }) {
   );
 }
 
-function Customers({ say }: { say: (m: string) => void }) {
+/** mk-MK MKD, no decimals — the prototype's money() verbatim. */
+const money = (n: number) =>
+  new Intl.NumberFormat('mk-MK', {
+    style: 'currency',
+    currency: 'MKD',
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(n);
+
+type HqBizRow = z.infer<typeof HqBusinessListSchema>['businesses'][number];
+const ONBOARD_STEP_KEYS = [
+  'account',
+  'locations',
+  'catalog',
+  'employees',
+  'payments',
+  'widget',
+] as const;
+
+function Customers({ say, me }: { say: (m: string) => void; me: HqUser }) {
   const { t } = useTranslation();
   const [openLoc, setOpenLoc] = useState<string | null>(null);
+  const [openBiz, setOpenBiz] = useState<string | null>(null);
   const [regs, setRegs] = useState<z.infer<typeof HqRegistrationListSchema> | null>(null);
   const [queue, setQueue] = useState<z.infer<typeof HqLocationQueueSchema> | null>(null);
   const [biz, setBiz] = useState<z.infer<typeof HqBusinessListSchema> | null>(null);
+  const [roles, setRoles] = useState<z.infer<typeof HqRoleListSchema>['roles']>([]);
   const [regReq, setRegReq] = useState<string | null>(null);
   const [reason, setReason] = useState('');
+  const [adding, setAdding] = useState(false);
+  const [nb, setNb] = useState({
+    name: '',
+    city: '',
+    plan: 'Business' as 'Starter' | 'Business',
+    ownerName: '',
+    ownerEmail: '',
+    firstLocation: '',
+  });
 
   const reload = useCallback(() => {
     void hqGet(HqRegistrationListSchema, '/hq/registrations').then(setRegs);
     void hqGet(HqLocationQueueSchema, '/hq/locations').then(setQueue);
     void hqGet(HqBusinessListSchema, '/hq/businesses').then(setBiz);
+    void hqGet(HqRoleListSchema, '/hq/roles')
+      .then((r) => setRoles(r.roles))
+      .catch(() => undefined);
   }, []);
   useEffect(reload, [reload]);
+
+  const myRole = roles.find((r) => r.id === me.role);
+  const canCreate = me.role === 'hq_super' || me.role === 'hq_onboard';
+  const nbDirty = Object.values(nb).some((v) => v.trim() !== '' && v !== 'Business');
+
+  const createBiz = async () => {
+    if (!nb.name.trim()) {
+      say(t('hq.nameFirst'));
+      return;
+    }
+    try {
+      await hqPost(z.object({ id: z.string() }), '/hq/businesses', {
+        name: nb.name.trim(),
+        city: nb.city.trim(),
+        plan: nb.plan,
+        ownerName: nb.ownerName.trim(),
+        ownerEmail: nb.ownerEmail.trim(),
+        ...(nb.firstLocation.trim() ? { firstLocation: nb.firstLocation.trim() } : {}),
+      });
+      say(t('hq.bizCreated'));
+      setAdding(false);
+      setNb({ name: '', city: '', plan: 'Business', ownerName: '', ownerEmail: '', firstLocation: '' });
+      reload();
+    } catch (e) {
+      say(e instanceof HqApiError ? e.message : 'failed');
+    }
+  };
 
   if (openLoc)
     return (
@@ -586,6 +649,21 @@ function Customers({ say }: { say: (m: string) => void }) {
         id={openLoc}
         back={() => {
           setOpenLoc(null);
+          reload();
+        }}
+        say={say}
+      />
+    );
+
+  const openRow = biz?.businesses.find((b) => b.id === openBiz);
+  if (openRow)
+    return (
+      <BusinessDetail
+        b={openRow}
+        access={myRole?.customerAccess ?? 'read'}
+        roleName={myRole?.name ?? me.role}
+        back={() => {
+          setOpenBiz(null);
           reload();
         }}
         say={say}
@@ -621,10 +699,28 @@ function Customers({ say }: { say: (m: string) => void }) {
     }
   };
 
+  const rows = biz?.businesses ?? [];
+  const stats = biz?.stats;
   return (
-    <div className="stacked">
+    <>
+      <div className="toolbar">
+        <div className="toolbar-context">
+          <span className="k">{t('hq.businesses')}</span>
+          <span className="v">{t('hq.accounts', { n: rows.length })}</span>
+        </div>
+        <div className="toolbar-actions">
+          <span className="badge">
+            {t('hq.signedInAs')} {me.name} · {myRole?.name ?? me.role}
+          </span>
+          {canCreate ? (
+            <button className="btn btn-primary btn-add" onClick={() => setAdding(true)}>
+              {t('hq.add')} <Icon d={I.plus} size={20} w={2.5} />
+            </button>
+          ) : null}
+        </div>
+      </div>
       {nlq.length ? (
-        <div className="card">
+        <div className="card" style={{ marginBottom: 16 }}>
           <div className="card-header">
             <h2>{t('hq.newLocations')}</h2>
             <span className="badge warning">{t('hq.awaiting', { n: nlq.length })}</span>
@@ -668,7 +764,7 @@ function Customers({ say }: { say: (m: string) => void }) {
       ) : null}
 
       {pend.length ? (
-        <div className="card">
+        <div className="card" style={{ marginBottom: 16 }}>
           <div className="card-header">
             <h2>{t('hq.newRegistrations')}</h2>
             <span className="badge warning">{t('hq.awaiting', { n: pend.length })}</span>
@@ -761,51 +857,400 @@ function Customers({ say }: { say: (m: string) => void }) {
         </div>
       ) : null}
 
-      {!nlq.length && !pend.length && regs && queue ? (
-        <div className="note">{t('hq.noQueue')}</div>
-      ) : null}
-
-      <div className="card">
-        <div className="card-header">
-          <h2>{t('hq.businesses')}</h2>
-          <span className="muted" style={{ fontWeight: 500 }}>
-            {t('hq.accounts', { n: biz?.businesses.length ?? 0 })}
-          </span>
+      <div className="grid4" style={{ marginBottom: 20 }}>
+        <div className="stat">
+          <span className="stat-label">{t('hq.statBusinesses')}</span>
+          <span className="stat-value">{stats?.businesses ?? 0}</span>
+          <span className="stat-hint">{t('hq.statLive', { n: stats?.live ?? 0 })}</span>
         </div>
+        <div className="stat">
+          <span className="stat-label">{t('hq.statOnboarding')}</span>
+          <span className="stat-value">{stats?.onboarding ?? 0}</span>
+          <span className="stat-hint">{t('hq.statNotFinished')}</span>
+        </div>
+        <div className="stat">
+          <span className="stat-label">{t('hq.statTickets')}</span>
+          <span className="stat-value">{stats?.openTickets ?? 0}</span>
+          <span className="stat-hint">{t('hq.statTicketsSub')}</span>
+        </div>
+        <div className="stat">
+          <span className="stat-label">{t('hq.statRevenue')}</span>
+          <span className="stat-value">{money(stats?.monthlyRevenue ?? 0)}</span>
+          <span className="stat-hint">{t('hq.statRevenueSub')}</span>
+        </div>
+      </div>
+      <div className="card">
         <table>
           <thead>
             <tr>
               <th>{t('hq.business')}</th>
               <th>{t('hq.owner')}</th>
+              <th>{t('hq.planCol')}</th>
               <th>{t('hq.locationsCol')}</th>
-              <th>{t('hq.teamCol')}</th>
-              <th>{t('hq.bookingLinkCol')}</th>
+              <th>{t('hq.onboardingCol')}</th>
+              <th>{t('hq.lastSupport')}</th>
+              <th>{t('hq.statusCol')}</th>
+              <th />
             </tr>
           </thead>
           <tbody>
-            {(biz?.businesses ?? []).map((b) => (
-              <tr key={b.id}>
-                <td className="bold">{b.name}</td>
-                <td>
-                  {b.ownerName ?? '—'}
-                  <span className="muted" style={{ display: 'block', fontSize: 12 }}>
-                    {b.ownerEmail ?? ''}
-                  </span>
-                </td>
-                <td className="tnum">
-                  {b.locations}{' '}
-                  {b.liveLocations ? (
-                    <span className="badge success">{b.liveLocations} {t('hq.live')}</span>
-                  ) : null}
-                </td>
-                <td className="tnum">{b.employees}</td>
-                <td className="muted">{b.slug ? `velnes.mk/book/${b.slug}` : '—'}</td>
-              </tr>
-            ))}
+            {rows.map((b) => {
+              const done = ONBOARD_STEP_KEYS.filter((k) => b.steps[k]).length;
+              return (
+                <tr key={b.id} className="clickable" onClick={() => setOpenBiz(b.id)}>
+                  <td>
+                    <span className="bold">{b.name}</span>
+                    <span className="muted" style={{ display: 'block', fontSize: 12 }}>
+                      {t('hq.citySince', { city: b.city ?? '—', since: b.since ?? '—' })}
+                    </span>
+                  </td>
+                  <td>
+                    {b.ownerName ?? '—'}
+                    <span className="muted" style={{ display: 'block', fontSize: 12 }}>
+                      {b.ownerEmail ?? ''}
+                    </span>
+                  </td>
+                  <td>{b.plan}</td>
+                  <td className="tnum">{b.locations}</td>
+                  <td style={{ minWidth: 180 }}>
+                    <div className={`bar-h ${done === ONBOARD_STEP_KEYS.length ? '' : 'warn'}`}>
+                      <span style={{ width: `${(done / ONBOARD_STEP_KEYS.length) * 100}%` }} />
+                    </div>
+                    <span className="muted" style={{ fontSize: 12 }}>
+                      {t('hq.stepsOf', { done, total: ONBOARD_STEP_KEYS.length })}
+                    </span>
+                  </td>
+                  <td className="muted tnum" style={{ fontSize: 12 }}>
+                    {b.lastSupportAccess ?? t('hq.never')}
+                  </td>
+                  <td>
+                    <span
+                      className={`badge ${b.status === 'live' ? 'success' : b.status === 'invited' ? '' : 'warning'}`}
+                    >
+                      {t(`hq.status_${b.status}`)}
+                    </span>
+                  </td>
+                  <td className="right">
+                    <button className="btn btn-ghost btn-sm" onClick={() => setOpenBiz(b.id)}>
+                      {t('hq.open')}
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
-    </div>
+
+      {adding ? (
+        <Panel onClose={() => setAdding(false)}>
+          <div className="panel-head plain">
+            <div>
+              <h2>{t('hq.newBizTitle')}</h2>
+              <p className="sub">{t('hq.newBizSub')}</p>
+            </div>
+            <div className="panel-actions">
+              <span className={`panel-status${nbDirty ? ' warn' : ''}`}>
+                {nbDirty ? t('drawer.statusUnsaved') : t('drawer.statusSaved')}
+              </span>
+              <button
+                className="btn btn-primary btn-sm"
+                disabled={
+                  !nb.name.trim() || !nb.city.trim() || !nb.ownerName.trim() || !nb.ownerEmail.trim()
+                }
+                onClick={() => void createBiz()}
+              >
+                {t('hq.createInvite')}
+              </button>
+              <button className="iconbtn" aria-label={t('common.close')} onClick={() => setAdding(false)}>
+                <Icon d={I.x} size={20} />
+              </button>
+            </div>
+          </div>
+          <div className="panel-body">
+            <div className="grid2">
+                <label className="field span2">
+                  <span>
+                    {t('hq.bizName')}
+                    <span className="req">*</span>
+                  </span>
+                  <input
+                    className="input"
+                    placeholder="Studio Nova"
+                    value={nb.name}
+                    autoFocus
+                    onChange={(e) => setNb({ ...nb, name: e.target.value })}
+                  />
+                </label>
+                <label className="field">
+                  <span>
+                    {t('hq.city')}
+                    <span className="req">*</span>
+                  </span>
+                  <input
+                    className="input"
+                    placeholder="Skopje"
+                    value={nb.city}
+                    onChange={(e) => setNb({ ...nb, city: e.target.value })}
+                  />
+                </label>
+                <label className="field">
+                  <span>{t('hq.planCol')}</span>
+                  <select
+                    className="select"
+                    style={{ width: '100%' }}
+                    value={nb.plan}
+                    onChange={(e) => setNb({ ...nb, plan: e.target.value as 'Starter' | 'Business' })}
+                  >
+                    <option>Starter</option>
+                    <option>Business</option>
+                  </select>
+                </label>
+                <label className="field">
+                  <span>
+                    {t('hq.ownerName')}
+                    <span className="req">*</span>
+                  </span>
+                  <input
+                    className="input"
+                    placeholder="Ana Gjorgieva"
+                    value={nb.ownerName}
+                    onChange={(e) => setNb({ ...nb, ownerName: e.target.value })}
+                  />
+                </label>
+                <label className="field">
+                  <span>
+                    {t('hq.ownerEmail')}
+                    <span className="req">*</span>
+                  </span>
+                  <input
+                    className="input"
+                    type="email"
+                    placeholder="ana@studionova.mk"
+                    value={nb.ownerEmail}
+                    onChange={(e) => setNb({ ...nb, ownerEmail: e.target.value })}
+                  />
+                </label>
+                <label className="field span2">
+                  <span>{t('hq.firstLoc')}</span>
+                  <input
+                    className="input"
+                    placeholder="Centar"
+                    value={nb.firstLocation}
+                    onChange={(e) => setNb({ ...nb, firstLocation: e.target.value })}
+                  />
+                  <span className="hint">{t('hq.firstLocHint')}</span>
+                </label>
+              </div>
+              <div className="note">{t('hq.newBizNote')}</div>
+          </div>
+        </Panel>
+      ) : null}
+    </>
+  );
+}
+
+/** The prototype's #panel drawer: scrim + right slide-over, portaled
+ *  to the body so the shell's stacking never paints over it, with the
+ *  body class that shifts the page aside while it is open. */
+function Panel({ children, onClose }: { children: ReactNode; onClose: () => void }) {
+  useEffect(() => {
+    document.body.classList.add('panel-open');
+    return () => document.body.classList.remove('panel-open');
+  }, []);
+  return createPortal(
+    <>
+      <div className="scrim on" onClick={onClose} />
+      <aside className="panel open" role="dialog" aria-modal="true">
+        {children}
+      </aside>
+    </>,
+    document.body,
+  );
+}
+
+/** The prototype's hqBusiness detail: the account's plan and
+ *  onboarding truth, integrations, and the support surface — support
+ *  history stays honestly empty and the environment door honestly
+ *  shut until support sessions are built. */
+function BusinessDetail({
+  b,
+  access,
+  roleName,
+  back,
+  say,
+}: {
+  b: HqBizRow;
+  access: 'write' | 'read' | 'none';
+  roleName: string;
+  back: () => void;
+  say: (m: string) => void;
+}) {
+  const { t } = useTranslation();
+  const remind = async () => {
+    try {
+      await hqPost(z.object({ ok: z.literal(true) }), `/hq/businesses/${b.id}/reminder`);
+      say(t('hq.reminderSent'));
+    } catch (e) {
+      say(e instanceof HqApiError ? e.message : 'failed');
+    }
+  };
+  return (
+    <>
+      <div className="toolbar">
+        <div className="toolbar-context">
+          <span className="k">{t('hq.customerAccount')}</span>
+          <span className="v">{b.name}</span>
+        </div>
+        <div className="toolbar-actions">
+          <button className="btn btn-ghost" onClick={back}>
+            {t('hq.backToCustomers')}
+          </button>
+          <button className="btn btn-secondary" onClick={() => void remind()}>
+            {t('hq.sendReminder')}
+          </button>
+          <button className="btn btn-primary" disabled title={t('hq.envSoon')}>
+            {t('hq.openEnv')}
+          </button>
+        </div>
+      </div>
+      <div className="stacked">
+        <div className="grid4">
+          <div className="stat">
+            <span className="stat-label">{t('hq.planCol')}</span>
+            <span className="stat-value">{b.plan}</span>
+            <span className="stat-hint">{t('hq.planMonth', { m: money(b.mrr) })}</span>
+          </div>
+          <div className="stat">
+            <span className="stat-label">{t('hq.locationsCol')}</span>
+            <span className="stat-value">{b.locations}</span>
+          </div>
+          <div className="stat">
+            <span className="stat-label">{t('hq.usersStat')}</span>
+            <span className="stat-value">{b.employees}</span>
+          </div>
+          <div className="stat">
+            <span className="stat-label">{t('hq.statTickets')}</span>
+            <span className="stat-value">{b.openTickets}</span>
+            <span className="stat-hint">
+              {b.openTickets ? t('hq.ticketsNeedReply') : t('hq.ticketsNone')}
+            </span>
+          </div>
+        </div>
+        <div className="card">
+          <div className="card-header">
+            <h2>{t('hq.onboardingTitle')}</h2>
+            <span className="muted" style={{ fontWeight: 500 }}>
+              {t('hq.onboardingSub')}
+            </span>
+          </div>
+          {ONBOARD_STEP_KEYS.map((k) => (
+            <div key={k} className="rowcard" style={{ padding: '12px 20px' }}>
+              <span className={`mark${b.steps[k] ? ' on' : ''}`} style={{ width: 32, height: 32 }}>
+                <Icon d={b.steps[k] ? I.check : I.minus} size={16} w={2.5} />
+              </span>
+              <span className="grow">
+                <span className="t">{t(`hq.step_${k}`)}</span>
+              </span>
+              {b.steps[k] ? (
+                <span className="badge success">{t('hq.stepDone')}</span>
+              ) : (
+                <span className="badge warning">{t('hq.stepOpen')}</span>
+              )}
+            </div>
+          ))}
+        </div>
+        <div className="grid2">
+          <div className="card">
+            <div className="card-header">
+              <h2>{t('hq.integrations')}</h2>
+            </div>
+            <div style={{ padding: '16px 20px' }}>
+              <div className="kv">
+                <span className="k">{t('hq.bookingWidget')}</span>
+                <span className="v">{b.steps.widget ? t('hq.installed') : t('hq.notInstalled')}</span>
+              </div>
+              <div className="kv">
+                <span className="k">{t('hq.paymentsRow')}</span>
+                <span className="v">{b.steps.payments ? t('hq.connected') : t('hq.notConnected')}</span>
+              </div>
+              <div className="kv">
+                <span className="k">{t('hq.marketplaceProfile')}</span>
+                <span className="v">{b.status === 'live' ? t('hq.published') : t('hq.draft')}</span>
+              </div>
+              <div className="kv">
+                <span className="k">{t('hq.syncErrors')}</span>
+                <span className="v">{b.syncErrors7d}</span>
+              </div>
+            </div>
+          </div>
+          <div className="card">
+            <div className="card-header">
+              <h2>{t('hq.supportHistory')}</h2>
+              <span className="muted" style={{ fontWeight: 500 }}>
+                {t('hq.custSeesToo')}
+              </span>
+            </div>
+            <p className="muted" style={{ padding: '16px 20px', fontWeight: 500 }}>
+              {t('hq.noSupportYet')}
+            </p>
+          </div>
+        </div>
+        <div className="grid2">
+          <div className="card">
+            <div className="card-header">
+              <h2>{t('hq.supportAccess')}</h2>
+            </div>
+            <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div className="kv">
+                <span className="k">{t('hq.yourRole')}</span>
+                <span className="v">{roleName}</span>
+              </div>
+              <div className="kv">
+                <span className="k">{t('hq.allowed')}</span>
+                <span className="v">
+                  {access === 'write'
+                    ? t('hq.readWrite')
+                    : access === 'read'
+                      ? t('hq.readOnly')
+                      : t('hq.noAccess')}
+                </span>
+              </div>
+              <div className="kv">
+                <span className="k">{t('hq.twofa')}</span>
+                <span className="v">{t('hq.twofaReq')}</span>
+              </div>
+              <div className="note">{t('hq.accessNote')}</div>
+            </div>
+          </div>
+          <div className="card">
+            <div className="card-header">
+              <h2>{t('hq.commercial')}</h2>
+            </div>
+            <div style={{ padding: '16px 20px' }}>
+              <div className="kv">
+                <span className="k">{t('hq.subscription')}</span>
+                <span className="v">
+                  {b.plan} · {t('hq.planMonth', { m: money(b.mrr) })}
+                </span>
+              </div>
+              <div className="kv">
+                <span className="k">{t('hq.customerSince')}</span>
+                <span className="v">{b.since ?? '—'}</span>
+              </div>
+              <div className="kv">
+                <span className="k">{t('hq.openIssues')}</span>
+                <span className="v">{b.openTickets}</span>
+              </div>
+              <div className="kv">
+                <span className="k">{t('hq.bookingIntegration')}</span>
+                <span className="v">{b.steps.widget ? t('hq.healthy') : t('hq.notInstalled')}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </>
   );
 }
 
@@ -1327,12 +1772,14 @@ function Team({ say, me }: { say: (m: string) => void; me: HqUser }) {
   const [usersPop, setUsersPop] = useState<string | null>(null);
   const popRef = useRef<HTMLDivElement | null>(null);
   const [editing, setEditing] = useState<'new' | (typeof members)[number] | null>(null);
-  const [roleModal, setRoleModal] = useState<'new' | (typeof roles)[number] | null>(null);
+  const [roleOpen, setRoleOpen] = useState<'new' | string | null>(null);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [role, setRole] = useState('hq_support');
   const [roleDesc, setRoleDesc] = useState('');
-  const [roleBase, setRoleBase] = useState('hq_support');
+  const [roleBase, setRoleBase] = useState('hq_super');
+  const [snap, setSnap] = useState('');
+  const memberDirty = `${name}|${email}|${role}` !== snap;
   const isSuper = me.role === 'hq_super';
 
   const load = useCallback(
@@ -1356,17 +1803,29 @@ function Team({ say, me }: { say: (m: string) => void; me: HqUser }) {
 
   const openMember = (m: 'new' | (typeof members)[number]) => {
     if (m === 'new') {
+      const first = roles[0]?.id ?? 'hq_super';
       setName('');
       setEmail('');
-      setRole('hq_support');
+      setRole(first);
+      setSnap(`||${first}`);
     } else {
       setName(m.name);
       setEmail(m.email);
       setRole(m.role);
+      setSnap(`${m.name}|${m.email}|${m.role}`);
     }
     setEditing(m);
   };
   const saveMember = async () => {
+    // The prototype's saveHqUser guards, in its order and words.
+    if (!name.trim()) {
+      say(t('hq.namePersonFirst'));
+      return;
+    }
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.trim())) {
+      say(t('hq.emailIncomplete'));
+      return;
+    }
     try {
       if (editing === 'new') {
         await hqPost(z.object({ id: z.string() }), '/hq/team', {
@@ -1400,6 +1859,10 @@ function Team({ say, me }: { say: (m: string) => void; me: HqUser }) {
     }
   };
   const saveRole = async () => {
+    if (!name.trim()) {
+      say(t('hq.roleNameFirst'));
+      return;
+    }
     try {
       await hqPost(z.object({ id: z.string() }), '/hq/roles', {
         name: name.trim(),
@@ -1407,8 +1870,17 @@ function Team({ say, me }: { say: (m: string) => void; me: HqUser }) {
         base: roleBase,
       });
       say(t('hq.roleCreated'));
-      setRoleModal(null);
+      setRoleOpen(null);
       load();
+    } catch (e) {
+      say(e instanceof HqApiError ? e.message : String(e));
+    }
+  };
+  const patchRole = async (id: string, body: Record<string, unknown>, toastMsg: string) => {
+    try {
+      await hqPatch(z.object({ ok: z.literal(true) }), `/hq/roles/${id}`, body);
+      say(toastMsg);
+      await load();
     } catch (e) {
       say(e instanceof HqApiError ? e.message : String(e));
     }
@@ -1455,8 +1927,9 @@ function Team({ say, me }: { say: (m: string) => void; me: HqUser }) {
                   onPick: () => {
                     setName('');
                     setRoleDesc('');
-                    setRoleBase('hq_support');
-                    setRoleModal('new');
+                    setRoleBase(roles[0]?.id ?? 'hq_super');
+                    setSnap('|');
+                    setRoleOpen('new');
                   },
                 },
               ]}
@@ -1529,8 +2002,16 @@ function Team({ say, me }: { say: (m: string) => void; me: HqUser }) {
               ) : null}
             </span>
             <span className="acts">
-              <button className="btn btn-ghost btn-sm" onClick={() => setRoleModal(r2)}>
-                {r2.locked ? t('hq.view') : t('hq.view')}
+              <button
+                className="btn btn-ghost btn-sm"
+                onClick={() => {
+                  setName(r2.name);
+                  setRoleDesc(r2.descr);
+                  setSnap(`${r2.name}|${r2.descr}`);
+                  setRoleOpen(r2.id);
+                }}
+              >
+                {r2.locked ? t('hq.view') : t('hq.edit')}
               </button>
               {isSuper && !r2.locked && !r2.std && !r2.users ? (
                 <button className="btn btn-ghost btn-sm" onClick={() => void removeRole(r2.id)}>
@@ -1625,155 +2106,241 @@ function Team({ say, me }: { say: (m: string) => void; me: HqUser }) {
       </div>
 
       {editing ? (
-        <div className="overlay" onClick={() => setEditing(null)}>
-          <div
-            className="modal"
-            role="dialog"
-            aria-modal="true"
-            style={{ maxWidth: 560 }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="modal-head">
-              <h2>{editing === 'new' ? t('hq.inviteMember') : name}</h2>
+        <Panel onClose={() => setEditing(null)}>
+          <div className="panel-head plain">
+            <div>
+              <h2>{editing === 'new' ? t('hq.newHqUser') : editing.name}</h2>
+              <p className="sub">{editing === 'new' ? t('hq.hqPanelSub') : t('hq.hqUserPanelSub')}</p>
             </div>
-            <div className="modal-body" style={{ display: 'grid', gap: 14 }}>
-              <div className="grid2">
-                <label className="field">
-                  <span>{t('hq.categoryName')}</span>
-                  <input className="input" value={name} autoFocus onChange={(e) => setName(e.target.value)} />
-                </label>
-                <label className="field">
-                  <span>Email</span>
-                  <input
-                    className="input"
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                  />
-                  <span className="hint">
-                    {editing === 'new' ? t('hq.emailHintNew') : t('hq.emailHintEdit')}
-                  </span>
-                </label>
-              </div>
-              <div className="field">
-                <span>{t('hq.whatEachRole')}</span>
-                {roles.map((r2) => (
-                  <button
-                    key={r2.id}
-                    type="button"
-                    className="rowcard"
-                    style={{ width: '100%', textAlign: 'left', cursor: 'pointer' }}
-                    onClick={() => setRole(r2.id)}
-                  >
-                    <span className={`mark${role === r2.id ? ' on' : ''}`}>
-                      <Icon d={I.user} size={20} />
-                    </span>
-                    <span className="grow">
-                      <span className="t">{r2.name}</span>
-                      <span className="s">{r2.descr}</span>
-                    </span>
-                    {accessBadge(r2.customerAccess)}
-                    {role === r2.id ? <span className="badge success">{t('hq.selected')}</span> : null}
-                  </button>
-                ))}
-              </div>
-              <p className="muted" style={{ fontWeight: 500, fontSize: 12, margin: 0 }}>
-                {editing === 'new' ? t('hq.inviteNote') : t('hq.twofaStays')}
-              </p>
-            </div>
-            <div className="modal-foot">
-              {editing !== 'new' && editing.id !== me.id ? (
-                <button
-                  className="btn btn-subtle"
-                  style={{ marginRight: 'auto', color: 'var(--danger)' }}
-                  onClick={() => void removeMember(editing.id)}
-                >
-                  {t('hq.remove')}
-                </button>
-              ) : null}
-              <button className="btn btn-secondary" onClick={() => setEditing(null)}>
-                {t('hq.cancel')}
-              </button>
+            <div className="panel-actions">
+              <span className={`panel-status${memberDirty ? ' warn' : ''}`}>
+                {memberDirty ? t('drawer.statusUnsaved') : t('drawer.statusSaved')}
+              </span>
               <button
-                className="btn btn-primary"
-                disabled={!name.trim() || !email.trim()}
+                className="btn btn-primary btn-sm"
+                disabled={editing === 'new' && !memberDirty}
                 onClick={() => void saveMember()}
               >
-                {editing === 'new' ? t('hq.inviteMember') : t('hq.save')}
+                {editing === 'new' ? t('hq.sendInvite') : t('hq.saveChanges')}
+              </button>
+              <button className="iconbtn" aria-label={t('common.close')} onClick={() => setEditing(null)}>
+                <Icon d={I.x} size={20} />
               </button>
             </div>
-            <button className="modal-close" aria-label={t('hq.cancel')} onClick={() => setEditing(null)}>
-              <Icon d={I.x} size={20} />
-            </button>
           </div>
-        </div>
+          <div className="panel-body">
+            <div className="grid2">
+              <label className="field">
+                <span>
+                  {t('hq.fullName')}
+                  <span className="req">*</span>
+                </span>
+                <input
+                  className="input"
+                  value={name}
+                  autoFocus
+                  placeholder="Sara Ilieva"
+                  onChange={(e) => setName(e.target.value)}
+                />
+              </label>
+              <label className="field">
+                <span>
+                  Email<span className="req">*</span>
+                </span>
+                <input
+                  className="input"
+                  type="email"
+                  value={email}
+                  placeholder="sara@revelapps.com"
+                  onChange={(e) => setEmail(e.target.value)}
+                />
+                <span className="hint">
+                  {editing === 'new' ? t('hq.emailHintNew') : t('hq.emailHintEdit')}
+                </span>
+              </label>
+              <label className="field span2">
+                <span>
+                  {t('hq.roleLabel')}
+                  <span className="req">*</span>
+                </span>
+                <select
+                  className="select"
+                  style={{ width: '100%' }}
+                  value={role}
+                  onChange={(e) => setRole(e.target.value)}
+                >
+                  {roles.map((r2) => (
+                    <option key={r2.id} value={r2.id}>
+                      {r2.name}
+                    </option>
+                  ))}
+                </select>
+                <span className="hint">{t('hq.roleSelectHint')}</span>
+              </label>
+            </div>
+            <div className="card">
+              <div className="card-header">
+                <h2>{t('hq.whatEachRole')}</h2>
+              </div>
+              {roles.map((r2) => (
+                <div key={r2.id} className="rowcard">
+                  <span className={`mark${role === r2.id ? ' on' : ''}`}>
+                    <Icon d={I.user} size={20} />
+                  </span>
+                  <span className="grow">
+                    <span className="t">{r2.name}</span>
+                    <span className="s">{r2.descr}</span>
+                  </span>
+                  {accessBadge(r2.customerAccess)}
+                  {role === r2.id ? <span className="badge success">{t('hq.selected')}</span> : null}
+                </div>
+              ))}
+            </div>
+            <div className="note">{editing === 'new' ? t('hq.inviteNote') : t('hq.twofaStays')}</div>
+            {editing !== 'new' && editing.id !== me.id && isSuper ? (
+              <button
+                className="btn btn-subtle"
+                style={{ color: 'var(--danger)', alignSelf: 'flex-start' }}
+                onClick={() => void removeMember(editing.id)}
+              >
+                {t('hq.remove')}
+              </button>
+            ) : null}
+          </div>
+        </Panel>
       ) : null}
 
-      {roleModal ? (
-        <div className="overlay" onClick={() => setRoleModal(null)}>
-          <div
-            className="modal"
-            role="dialog"
-            aria-modal="true"
-            style={{ maxWidth: 460 }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="modal-head">
-              <h2>{roleModal === 'new' ? t('hq.newRole') : roleModal.name}</h2>
-            </div>
-            <div className="modal-body" style={{ display: 'grid', gap: 14 }}>
-              {roleModal === 'new' ? (
-                <>
-                  <label className="field">
-                    <span>{t('hq.categoryName')}</span>
-                    <input className="input" value={name} autoFocus onChange={(e) => setName(e.target.value)} />
-                  </label>
-                  <label className="field">
-                    <span>{t('hq.descLabel')}</span>
-                    <input className="input" value={roleDesc} onChange={(e) => setRoleDesc(e.target.value)} />
-                  </label>
-                  <label className="field">
-                    <span>{t('hq.startFrom')}</span>
-                    <select
-                      className="select"
-                      style={{ width: '100%' }}
-                      value={roleBase}
-                      onChange={(e) => setRoleBase(e.target.value)}
+      {roleOpen ? (
+        <Panel onClose={() => setRoleOpen(null)}>
+          {(() => {
+            const r2 = roleOpen === 'new' ? null : roles.find((x) => x.id === roleOpen);
+            const locked = !!r2?.locked;
+            const dirty = `${name}|${roleDesc}` !== snap;
+            const save = () => {
+              if (r2) void patchRole(r2.id, { name: name.trim(), descr: roleDesc.trim() }, t('hq.roleUpdated'));
+              else void saveRole();
+              if (r2) setRoleOpen(null);
+            };
+            return (
+              <>
+                <div className="panel-head plain">
+                  <div>
+                    <h2>{r2 ? r2.name : t('hq.createRoleTitle')}</h2>
+                    <p className="sub">
+                      {r2 ? (r2.std ? t('hq.stdRoleSub') : t('hq.customRoleSub')) : t('hq.hqRoles')}
+                    </p>
+                  </div>
+                  <div className="panel-actions">
+                    <span className={`panel-status${dirty && !locked ? ' warn' : ''}`}>
+                      {dirty && !locked ? t('drawer.statusUnsaved') : t('drawer.statusSaved')}
+                    </span>
+                    <button
+                      className="btn btn-primary btn-sm"
+                      disabled={!locked && !dirty}
+                      onClick={() => (locked ? setRoleOpen(null) : save())}
                     >
-                      {roles
-                        .filter((r2) => r2.std)
-                        .map((r2) => (
-                          <option key={r2.id} value={r2.id}>
-                            {r2.name}
-                          </option>
-                        ))}
-                    </select>
-                    <span className="hint">{t('hq.startFromHint')}</span>
-                  </label>
-                </>
-              ) : (
-                <>
-                  <p style={{ fontWeight: 500, margin: 0 }}>{roleModal.descr}</p>
-                  <div>{accessBadge(roleModal.customerAccess)}</div>
-                  {roleModal.locked ? <div className="note warn">{t('hq.superLockedNote')}</div> : null}
-                </>
-              )}
-            </div>
-            <div className="modal-foot">
-              <button className="btn btn-secondary" onClick={() => setRoleModal(null)}>
-                {t('hq.cancel')}
-              </button>
-              {roleModal === 'new' ? (
-                <button className="btn btn-primary" disabled={!name.trim()} onClick={() => void saveRole()}>
-                  {t('hq.createRole')}
-                </button>
-              ) : null}
-            </div>
-            <button className="modal-close" aria-label={t('hq.cancel')} onClick={() => setRoleModal(null)}>
-              <Icon d={I.x} size={20} />
-            </button>
-          </div>
-        </div>
+                      {locked ? t('common.close') : r2 ? t('hq.saveChanges') : t('hq.createRole')}
+                    </button>
+                    <button className="iconbtn" aria-label={t('common.close')} onClick={() => setRoleOpen(null)}>
+                      <Icon d={I.x} size={20} />
+                    </button>
+                  </div>
+                </div>
+                <div className="panel-body">
+                  <div className="grid2">
+                    <label className="field span2">
+                      <span>
+                        {t('hq.roleName')}
+                        <span className="req">*</span>
+                      </span>
+                      <input
+                        className="input"
+                        value={name}
+                        disabled={locked}
+                        autoFocus={!r2}
+                        placeholder="Regional account manager"
+                        onChange={(e) => setName(e.target.value)}
+                      />
+                    </label>
+                    <label className="field span2">
+                      <span>{t('hq.descLabel')}</span>
+                      <input
+                        className="input"
+                        value={roleDesc}
+                        disabled={locked}
+                        placeholder={t('hq.descPh')}
+                        onChange={(e) => setRoleDesc(e.target.value)}
+                      />
+                    </label>
+                    {r2 ? null : (
+                      <label className="field span2">
+                        <span>{t('hq.startFrom')}</span>
+                        <select
+                          className="select"
+                          style={{ width: '100%' }}
+                          value={roleBase}
+                          onChange={(e) => setRoleBase(e.target.value)}
+                        >
+                          {roles.map((x) => (
+                            <option key={x.id} value={x.id}>
+                              {x.name}
+                            </option>
+                          ))}
+                        </select>
+                        <span className="hint">{t('hq.startFromHint')}</span>
+                      </label>
+                    )}
+                  </div>
+                  {locked ? <div className="note warn">{t('hq.roleFixedNote')}</div> : null}
+                  {r2 ? (
+                    HQ_PERM_GROUPS.map(([g, list]) => (
+                      <div key={g} className="field">
+                        <span>{t(`hq.permGroup_${g}`)}</span>
+                        {list.map(([key]) => {
+                          const val = r2.perms[key] ?? 'none';
+                          return (
+                            <div key={key} className="togglerow" style={{ alignItems: 'center' }}>
+                              <span style={{ display: 'flex', flexDirection: 'column' }}>
+                                <span className="l">{t(`hq.perm_${key.replace('.', '_')}`)}</span>
+                                <span className="h">{key}</span>
+                              </span>
+                              {locked || !isSuper ? (
+                                <span className={`scopetag${val === 'none' ? '' : ' on'}`}>
+                                  {t(`hq.scope_${val}`)}
+                                </span>
+                              ) : (
+                                <select
+                                  className="scopesel"
+                                  data-on={val === 'none' ? 0 : 1}
+                                  value={val}
+                                  onChange={(e) =>
+                                    void patchRole(
+                                      r2.id,
+                                      { perms: { [key]: e.target.value } },
+                                      t('hq.permChanged'),
+                                    )
+                                  }
+                                >
+                                  {HQ_SCOPES.map(([o]) => (
+                                    <option key={o} value={o}>
+                                      {t(`hq.scope_${o}`)}
+                                    </option>
+                                  ))}
+                                </select>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ))
+                  ) : (
+                    <div className="note">{t('hq.roleNameFirstNote')}</div>
+                  )}
+                </div>
+              </>
+            );
+          })()}
+        </Panel>
       ) : null}
     </div>
   );

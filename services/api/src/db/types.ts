@@ -333,6 +333,7 @@ export interface HqRoles {
   id: string;
   locked: Generated<boolean>;
   name: string;
+  perms: Generated<Json>;
   sensitive: Generated<boolean>;
   std: Generated<boolean>;
 }
@@ -682,6 +683,7 @@ export interface PurchaseOrders {
   ref: string;
   status: Generated<PurchaseOrderStatus>;
   supplierId: string;
+  supplierNote: Generated<string>;
   tenantId: string;
   track: Generated<string>;
 }
@@ -892,6 +894,25 @@ export interface Suppliers {
   verified: Generated<boolean>;
 }
 
+export interface SupplierNotifications {
+  body: Generated<string>;
+  createdAt: Generated<Timestamp>;
+  id: Generated<string>;
+  kind: string;
+  refId: string | null;
+  supplierId: string;
+  title: string;
+}
+
+export interface SupplierRoles {
+  id: string;
+  locked: Generated<boolean>;
+  name: string;
+  perms: Generated<Json>;
+  scope: Generated<string>;
+  std: Generated<boolean>;
+}
+
 export interface SupplierUsers {
   createdAt: Generated<Timestamp>;
   email: string;
@@ -1002,6 +1023,8 @@ export interface DB {
   supplierProducts: SupplierProducts;
   supplierPromotions: SupplierPromotions;
   suppliers: Suppliers;
+  supplierNotifications: SupplierNotifications;
+  supplierRoles: SupplierRoles;
   supplierUsers: SupplierUsers;
   taxRules: TaxRules;
   userCredentials: UserCredentials;

@@ -1,7 +1,7 @@
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { App } from '../../App.js';
+import { App, queryClient } from '../../App.js';
 import { setAccessToken } from '@velnes/client';
 
 const LOC = '20000000-0000-4000-8000-000000000001';
@@ -36,17 +36,17 @@ const spRow = {
   sample: false, linkedProductId: '70000000-0000-4000-8000-000000000001',
 };
 
-const order = (status: string) => ({
+const order = (status: string, supplierNote = '') => ({
   id: PO, ref: 'CEN-0044', supplierId: SUP1, supplierName: 'BeautyPro MK',
   locationId: LOC, status, byName: 'Maria Petrovska', expected: '2026-08-30',
-  track: 'MK-PARCEL-90002', createdAt: '2026-08-26T09:00:00.000Z',
+  track: 'MK-PARCEL-90002', supplierNote, createdAt: '2026-08-26T09:00:00.000Z',
   lines: [{ id: 'e9000000-0000-4000-8000-000000000001', supplierProductId: SP1,
     name: 'Thera-Band resistance set, 3 levels', sku: 'TB-SET-03',
     qty: 12, price: 550, free: 2, recv: 0, dmg: 0 }],
   total: 6600,
 });
 
-function mockApi(calls: { method: string; path: string; body?: unknown }[], orderStatus = 'shipped') {
+function mockApi(calls: { method: string; path: string; body?: unknown }[], orderStatus = 'shipped', orderNote = '') {
   vi.stubGlobal(
     'fetch',
     vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
@@ -61,7 +61,7 @@ function mockApi(calls: { method: string; path: string; body?: unknown }[], orde
       if (path.includes('/purchase-orders') && path.includes('/receive'))
         return ok(order('partdelivered'));
       if (path.includes('/purchase-orders') && method === 'POST') return ok(order('submitted'));
-      if (path.includes('/purchase-orders')) return ok({ orders: [order(orderStatus)] });
+      if (path.includes('/purchase-orders')) return ok({ orders: [order(orderStatus, orderNote)] });
       if (path.includes('/supplier-promotions'))
         return ok({
           promotions: [
@@ -99,6 +99,7 @@ async function openSuppliers() {
 describe('suppliers', () => {
   beforeEach(() => {
     localStorage.clear();
+    queryClient.clear();
     setAccessToken(null);
   });
   afterEach(() => {
@@ -153,5 +154,13 @@ describe('suppliers', () => {
       expect(sent).toBeDefined();
       expect((sent!.body as { lines: { received: number }[] }).lines[0]!.received).toBe(12);
     });
+  });
+
+  it('shows the supplier’s decline reason on a cancelled order', async () => {
+    const calls: { method: string; path: string; body?: unknown }[] = [];
+    mockApi(calls, 'cancelled', 'Out of stock until next month');
+    await openSuppliers();
+    await userEvent.click(screen.getByRole('button', { name: 'Orders' }));
+    expect(await screen.findByText(/Out of stock until next month/)).toBeDefined();
   });
 });
