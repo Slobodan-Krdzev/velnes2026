@@ -261,3 +261,29 @@ until the provider). The dashboard's open-ticket stat now counts real
 open + in-progress tickets across the platform, and each salon row shows
 its own count. Honest note: HQ role changes on tickets are not yet in
 the audit trail — the same deferral as the rest of the HQ role kit.
+
+## Import from your website — AI-onboarding, Phase 1 (2026-09-05)
+
+The registration wizard's first step now offers "Start faster — import
+from your website". The owner pastes their salon's own link and
+`POST /registrations/import` fetches it under strict SSRF guards —
+http/https only, no credentials in the URL, the host resolved and every
+address rejected if private/loopback/link-local/CGNAT/metadata, redirects
+followed hop-by-hop with each host re-checked, an 8s timeout and a 2 MB
+cap. It then reads the page's **structured data** — JSON-LD
+(`LocalBusiness`/`HealthAndBeautyBusiness`/…), OpenGraph and `<title>`,
+schema.org `PostalAddress`, `openingHoursSpecification` and
+`makesOffer`/`hasOfferCatalog` — into a partial draft: salon name and
+phone, legal name, street/city/zip, opening hours, and service names
+matched to the starter templates. The wizard pre-fills whatever was
+found and names it ("Found and filled: name, address, opening hours");
+the owner reviews every step and nothing is submitted automatically.
+
+This is the deterministic, honest slice — no model call and no scraping
+of Instagram/Facebook/Fresha/Treatwell (login-walled, anti-bot, ToS).
+Deferrals recorded for the later phases: an **LLM extraction** provider
+for unstructured pages (behind the same swappable, honest-until-keyed
+seam as the flightdeck), and **real third-party integrations** (Google
+Places / Instagram Graph / booking-platform partner APIs), each with its
+own auth and approval. The endpoint is anonymous but tightly rate-limited
+(8 requests / 5 minutes) because it fetches a URL on the caller's behalf.

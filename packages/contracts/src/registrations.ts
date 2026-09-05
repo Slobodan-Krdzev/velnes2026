@@ -81,6 +81,46 @@ export const RegistrationDraftSchema = z.object({
 });
 export type RegistrationDraft = z.infer<typeof RegistrationDraftSchema>;
 
+/** Import from your own website: the owner pastes one link, the server
+ *  fetches it (with SSRF guards) and reads the structured data on the
+ *  page — JSON-LD, OpenGraph, microdata — into a partial draft the
+ *  wizard pre-fills. Best-effort; the owner reviews everything. */
+export const RegistrationImportRequestSchema = z.object({
+  url: z.string().url().max(2048),
+});
+export const RegistrationImportResultSchema = z.object({
+  source: z.string(),
+  /** Human labels of what was filled, for the "we found …" summary. */
+  found: z.array(z.string()),
+  salon: z
+    .object({ name: z.string().optional(), phone: z.string().optional(), type: z.string().optional() })
+    .default({}),
+  legal: z.object({ name: z.string().optional() }).default({}),
+  loc: z
+    .object({
+      street: z.string().optional(),
+      no: z.string().optional(),
+      city: z.string().optional(),
+      zip: z.string().optional(),
+    })
+    .default({}),
+  /** Starter-template keys matched from the services named on the page. */
+  serviceKeys: z.array(z.string()).default([]),
+  /** Raw service names found, shown as hints. */
+  serviceNames: z.array(z.string()).default([]),
+  hours: z
+    .array(
+      z.object({
+        day: z.enum(REG_DAYS),
+        open: z.string(),
+        close: z.string(),
+        closed: z.boolean(),
+      }),
+    )
+    .default([]),
+});
+export type RegistrationImportResult = z.infer<typeof RegistrationImportResultSchema>;
+
 export const RegistrationCreateResponseSchema = z.object({
   id: z.uuid(),
   status: RegistrationStatusSchema,

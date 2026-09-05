@@ -1065,6 +1065,12 @@ export const sq: Record<TranslationKey, string> = {
   'hq.healthy': 'Në rregull',
 
   'reg.title': 'Krijoni sallonin tuaj',
+  'reg.impTitle': 'Nisni më shpejt — importoni nga faqja juaj',
+  'reg.impSub': 'Ngjitni faqen e internetit të sallonit tuaj. Lexojmë të dhënat në faqe dhe plotësojmë ç\'të mundemi — ju shqyrtoni çdo hap.',
+  'reg.impRead': 'Lexo faqen time',
+  'reg.impWorking': 'Duke lexuar…',
+  'reg.impFound': 'U gjet dhe u plotësua: {{list}}. Kontrolloni çdo hap më poshtë.',
+  'reg.impFailed': 'Nuk mundëm ta lexojmë atë faqe — plotësoni hapat vetë.',
   'reg.haveAccount': 'Kam llogari',
   'reg.stepAccount': 'Llogaria',
   'reg.stepSalon': 'Salloni',

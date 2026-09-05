@@ -1,6 +1,8 @@
 import {
   RegistrationCreateResponseSchema,
   RegistrationDraftSchema,
+  RegistrationImportRequestSchema,
+  RegistrationImportResultSchema,
   RegistrationStatusResponseSchema,
   RegistrationStatusSchema,
   type RegistrationDraft,
@@ -14,6 +16,7 @@ import {
   RegistrationError,
   resubmitRegistration,
 } from './registrations.service.js';
+import { ImportError, importSalon } from './import.service.js';
 
 const Err = z.object({ error: z.string(), message: z.string() });
 
@@ -30,6 +33,28 @@ function sendRegError(reply: FastifyReply, e: unknown) {
  *  is the applicant's only key — RLS matches it row-by-row. */
 export function registrationsRoutes(app: FastifyInstance) {
   const r = app.withTypeProvider<ZodTypeProvider>();
+
+  // Import-from-website: the owner pastes their own link, we fetch it
+  // under SSRF guards and read its structured data into a partial
+  // draft. Anonymous but tightly rate-limited (it fetches a URL).
+  r.route({
+    method: 'POST',
+    url: '/registrations/import',
+    config: { rateLimit: { max: 8, timeWindow: '5 minutes' } },
+    schema: {
+      body: RegistrationImportRequestSchema,
+      response: { 200: RegistrationImportResultSchema, 422: Err },
+    },
+    handler: async (req, reply) => {
+      try {
+        return await importSalon(req.body.url);
+      } catch (e) {
+        if (e instanceof ImportError)
+          return reply.code(422).send({ error: e.code, message: e.message });
+        throw e;
+      }
+    },
+  });
 
   r.route({
     method: 'POST',

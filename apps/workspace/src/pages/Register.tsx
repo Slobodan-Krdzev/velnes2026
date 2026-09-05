@@ -1,6 +1,7 @@
 import {
   REG_SERVICE_TEMPLATES,
   RegistrationCreateResponseSchema,
+  RegistrationImportResultSchema,
   RegistrationStatusResponseSchema,
   RegistrationStatusSchema,
   type RegistrationDraft,
@@ -71,6 +72,50 @@ export function Register() {
   const [ref, setRef] = useState<string | null>(null);
   const [hqReason, setHqReason] = useState<string | null>(null);
   const [fixing, setFixing] = useState(false);
+  const [impUrl, setImpUrl] = useState('');
+  const [importing, setImporting] = useState(false);
+  const [impMsg, setImpMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  // Import from your website: fetch the pasted link, read its
+  // structured data, and pre-fill whatever it found. Best-effort — the
+  // owner reviews every step; nothing is submitted.
+  const runImport = async () => {
+    setImporting(true);
+    setImpMsg(null);
+    try {
+      const res = await fetch(`${API_PREFIX}/registrations/import`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ url: impUrl.trim() }),
+      });
+      if (!res.ok) {
+        const e = (await res.json()) as { message?: string };
+        setImpMsg({ ok: false, text: e.message ?? t('reg.impFailed') });
+        return;
+      }
+      const found = RegistrationImportResultSchema.parse(await res.json());
+      setR((d) => {
+        const next = structuredClone(d);
+        if (found.salon.name) next.salon.name = found.salon.name;
+        if (found.salon.phone) next.salon.phone = found.salon.phone;
+        if (found.salon.type) next.salon.type = found.salon.type;
+        if (found.legal.name) next.legal.name = found.legal.name;
+        if (found.loc.street) next.loc.street = found.loc.street;
+        if (found.loc.no) next.loc.no = found.loc.no;
+        if (found.loc.city) next.loc.city = found.loc.city;
+        if (found.loc.zip) next.loc.zip = found.loc.zip;
+        for (const k of found.serviceKeys) next.picks[k] = true;
+        for (const h of found.hours)
+          next.hours[h.day] = { ...next.hours[h.day], open: h.open, close: h.close, closed: h.closed, split: false };
+        return next;
+      });
+      setImpMsg({ ok: true, text: t('reg.impFound', { list: found.found.join(', ') }) });
+    } catch {
+      setImpMsg({ ok: false, text: t('reg.impFailed') });
+    } finally {
+      setImporting(false);
+    }
+  };
 
   // A returning applicant: their token shows where the machine stands.
   useEffect(() => {
@@ -301,6 +346,43 @@ export function Register() {
         <div className="card" style={{ padding: 22 }}>
           {step === 1 ? (
             <>
+              <div
+                className="note"
+                style={{ marginBottom: 18, display: 'flex', flexDirection: 'column', gap: 10 }}
+              >
+                <div>
+                  <b>{t('reg.impTitle')}</b>
+                  <span className="muted" style={{ display: 'block', fontWeight: 500, fontSize: 13 }}>
+                    {t('reg.impSub')}
+                  </span>
+                </div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <input
+                    className="input"
+                    style={{ flex: 1 }}
+                    type="url"
+                    inputMode="url"
+                    placeholder="https://your-salon.mk"
+                    value={impUrl}
+                    aria-label={t('reg.impTitle')}
+                    onChange={(e) => setImpUrl(e.target.value)}
+                  />
+                  <button
+                    className="btn btn-secondary"
+                    disabled={importing || !impUrl.trim()}
+                    onClick={() => void runImport()}
+                  >
+                    {importing ? t('reg.impWorking') : t('reg.impRead')}
+                  </button>
+                </div>
+                {impMsg ? (
+                  <span
+                    style={{ fontWeight: 600, fontSize: 13, color: impMsg.ok ? 'var(--success)' : 'var(--danger)' }}
+                  >
+                    {impMsg.text}
+                  </span>
+                ) : null}
+              </div>
               <div className="grid2">
                 {F(t('reg.yourName'), r.acct.name, (v) => setR((d) => ({ ...d, acct: { ...d.acct, name: v } })))}
                 {F(t('reg.email'), r.acct.email, (v) => setR((d) => ({ ...d, acct: { ...d.acct, email: v } })), { ph: 'you@salon.mk' })}

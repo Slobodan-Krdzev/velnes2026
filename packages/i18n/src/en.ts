@@ -1072,6 +1072,12 @@ export const en = {
   'hq.healthy': 'Healthy',
 
   'reg.title': 'Create your salon',
+  'reg.impTitle': 'Start faster — import from your website',
+  'reg.impSub': 'Paste your salon\'s website. We read the details on the page and fill in what we can — you review every step.',
+  'reg.impRead': 'Read my website',
+  'reg.impWorking': 'Reading…',
+  'reg.impFound': 'Found and filled: {{list}}. Check each step below.',
+  'reg.impFailed': 'We could not read that page — fill the steps in yourself.',
   'reg.haveAccount': 'I have an account',
   'reg.stepAccount': 'Account',
   'reg.stepSalon': 'Salon',
