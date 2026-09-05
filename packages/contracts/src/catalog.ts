@@ -180,6 +180,52 @@ export const ProductWriteSchema = z.object({
 });
 export type ProductWrite = z.infer<typeof ProductWriteSchema>;
 
+/** A combo is a sellable bundle: it books the services it names,
+ *  reserves their time and deducts the included products from stock.
+ *  Never a text-only line — every item points at a real catalog row. */
+export const ComboItemSchema = z.object({
+  type: z.enum(['service', 'product']),
+  id: z.uuid(),
+  qty: z.number().int().positive().default(1),
+});
+export type ComboItem = z.infer<typeof ComboItemSchema>;
+
+export const ComboStatusSchema = z.enum(['active', 'draft']);
+export const ComboSchema = z.object({
+  id: z.uuid(),
+  name: z.string(),
+  category: z.string().nullable(),
+  descr: z.string().default(''),
+  validity: z.string().default('12 months'),
+  regular: MoneySchema,
+  price: MoneySchema,
+  vat: z.number().int(),
+  status: ComboStatusSchema,
+  pos: z.boolean(),
+  online: z.boolean(),
+  items: z.array(ComboItemSchema),
+  /** first included item that carries an image, for the till tile */
+  img: z.string().nullable().default(null),
+  bg: z.string().nullable().default(null),
+});
+export type Combo = z.infer<typeof ComboSchema>;
+export const ComboListSchema = z.object({ combos: z.array(ComboSchema) });
+
+export const ComboWriteSchema = z.object({
+  name: z.string().min(1),
+  category: z.string().nullable().optional(),
+  descr: z.string().optional(),
+  validity: z.string().optional(),
+  regular: MoneySchema.nonnegative(),
+  price: MoneySchema.nonnegative(),
+  vat: z.number().int().optional(),
+  status: ComboStatusSchema.optional(),
+  pos: z.boolean().optional(),
+  online: z.boolean().optional(),
+  items: z.array(ComboItemSchema).min(1, 'A combo needs at least one item'),
+});
+export type ComboWrite = z.infer<typeof ComboWriteSchema>;
+
 export const IdResponseSchema = z.object({ id: z.uuid() });
 
 /** svcLine — one quoted line for calendar/till/booking. */
@@ -244,6 +290,7 @@ export const PlatformNoticeSchema = z.object({
   kind: z.string(),
   title: z.string(),
   body: z.string(),
+  refId: z.string().nullable().default(null),
   createdAt: z.string(),
 });
 export const PlatformNoticeListSchema = z.object({

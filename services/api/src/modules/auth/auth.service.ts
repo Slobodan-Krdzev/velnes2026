@@ -27,22 +27,38 @@ interface AuthLookupRow {
 /** The login lookup: the one deliberate door through tenant
  *  isolation, unlocked only inside this transaction via the
  *  auth_login_lookup policies. */
+const AUTH_COLS = [
+  'e.id as employeeId',
+  'e.tenantId',
+  'e.name',
+  'e.access',
+  'e.roleId',
+  'e.status',
+  'c.passwordHash',
+] as const;
+
 async function authLookup(email: string): Promise<AuthLookupRow | undefined> {
   return db.transaction().execute(async (trx) => {
     await sql`select set_config('app.auth', 'login', true)`.execute(trx);
     return trx
       .selectFrom('employees as e')
       .innerJoin('userCredentials as c', 'c.employeeId', 'e.id')
-      .select([
-        'e.id as employeeId',
-        'e.tenantId',
-        'e.name',
-        'e.access',
-        'e.roleId',
-        'e.status',
-        'c.passwordHash',
-      ])
+      .select(AUTH_COLS)
       .where(sql<boolean>`lower(e.email) = lower(${email})`)
+      .executeTakeFirst();
+  });
+}
+
+/** Look up by employee id — the phone's tap-your-name path, where the
+ *  device already holds the roster of ids but never the email. */
+async function authLookupById(employeeId: string): Promise<AuthLookupRow | undefined> {
+  return db.transaction().execute(async (trx) => {
+    await sql`select set_config('app.auth', 'login', true)`.execute(trx);
+    return trx
+      .selectFrom('employees as e')
+      .innerJoin('userCredentials as c', 'c.employeeId', 'e.id')
+      .select(AUTH_COLS)
+      .where('e.id', '=', employeeId)
       .executeTakeFirst();
   });
 }
@@ -122,9 +138,8 @@ export function claimsFor(e: SessionEmployee & { tenantId: string }): AccessClai
 }
 
 /** The login door. */
-export async function login(email: string, password: string) {
-  const row = await authLookup(email);
-  // Always burn a hash verification so unknown emails take as long
+async function finishLogin(row: AuthLookupRow | undefined, password: string) {
+  // Always burn a hash verification so unknown users take as long
   // as wrong passwords.
   const hash =
     row?.passwordHash ??
@@ -144,6 +159,16 @@ export async function login(email: string, password: string) {
     }),
   );
   return { employee, refreshToken };
+}
+
+export async function login(email: string, password: string) {
+  return finishLogin(await authLookup(email), password);
+}
+
+/** The phone's tap-your-name sign-in: the roster gave the id, the
+ *  person gives the password. Same verification as email login. */
+export async function loginById(employeeId: string, password: string) {
+  return finishLogin(await authLookupById(employeeId), password);
 }
 
 /** Rotate a refresh token. Reuse of an already-rotated token is

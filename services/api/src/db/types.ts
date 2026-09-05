@@ -53,6 +53,10 @@ export type PurchaseOrderStatus = "accepted" | "approval" | "cancelled" | "deliv
 
 export type RegistrationStatus = "active" | "changes_required" | "declined" | "pending_review" | "resubmitted" | "under_review";
 
+export type ComboStatus = "active" | "draft";
+
+export type SupportStatus = "open" | "in_progress" | "resolved" | "closed";
+
 export type ScheduleExceptionSource = "MANUAL" | "PUBLIC_HOLIDAY";
 
 export type ScheduleExceptionType = "CLOSED" | "CUSTOM_HOURS";
@@ -608,6 +612,7 @@ export interface PlatformNotices {
   createdAt: Generated<Timestamp>;
   id: Generated<string>;
   kind: string;
+  refId: string | null;
   tenantId: string | null;
   title: string;
 }
@@ -637,6 +642,24 @@ export interface ProductCategories {
   name: string;
   parentId: string | null;
   sort: Generated<number>;
+}
+
+export interface Combos {
+  category: string | null;
+  createdAt: Generated<Timestamp>;
+  descr: Generated<string>;
+  id: Generated<string>;
+  items: Generated<Json>;
+  name: string;
+  online: Generated<boolean>;
+  pos: Generated<boolean>;
+  price: number;
+  regular: number;
+  sort: Generated<number>;
+  status: Generated<ComboStatus>;
+  tenantId: string;
+  validity: Generated<string>;
+  vat: Generated<number>;
 }
 
 export interface Products {
@@ -879,6 +902,23 @@ export interface SupplierPromotions {
   value: Generated<number>;
 }
 
+export interface SupportTickets {
+  category: Generated<string>;
+  createdAt: Generated<Timestamp>;
+  createdBy: string;
+  id: Generated<string>;
+  lastActor: Generated<string>;
+  messages: Generated<Json>;
+  origin: string;
+  originName: Generated<string>;
+  replyTo: Generated<string>;
+  status: Generated<SupportStatus>;
+  subject: string;
+  supplierId: string | null;
+  tenantId: string | null;
+  updatedAt: Generated<Timestamp>;
+}
+
 export interface Suppliers {
   contact: Generated<string>;
   createdAt: Generated<Timestamp>;
@@ -968,6 +1008,7 @@ export interface DB {
   categoryRequests: CategoryRequests;
   checkoutItems: CheckoutItems;
   checkouts: Checkouts;
+  combos: Combos;
   customerActivity: CustomerActivity;
   customers: Customers;
   discountCodes: DiscountCodes;
@@ -1026,6 +1067,7 @@ export interface DB {
   supplierNotifications: SupplierNotifications;
   supplierRoles: SupplierRoles;
   supplierUsers: SupplierUsers;
+  supportTickets: SupportTickets;
   taxRules: TaxRules;
   userCredentials: UserCredentials;
   widgets: Widgets;

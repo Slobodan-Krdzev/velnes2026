@@ -12,6 +12,7 @@ import { ReportsPage } from './pages/reports/Reports.js';
 import { MarketingPage } from './pages/marketing/Marketing.js';
 import { SettingsPage } from './pages/settings/Settings.js';
 import { SuppliersPage } from './pages/suppliers/Suppliers.js';
+import { SupportPage } from './pages/support/Support.js';
 import { InvoicesPage } from './pages/till/Invoices.js';
 import { TillPage } from './pages/till/Till.js';
 import { Login } from './pages/Login.js';
@@ -59,6 +60,7 @@ export function App() {
                 <Route path="/customers/:id" element={<CustomersPage />} />
                 <Route path="/marketing" element={<MarketingPage />} />
                 <Route path="/reports" element={<ReportsPage />} />
+                <Route path="/support" element={<SupportPage />} />
                 <Route path="/settings" element={<SettingsPage />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Route>

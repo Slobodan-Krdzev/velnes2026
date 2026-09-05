@@ -75,6 +75,24 @@ function mockApi(calls: { method: string; path: string; body?: unknown }[]) {
             },
           ],
         });
+      if (path.endsWith('/employees') && method === 'GET')
+        return ok({
+          employees: [
+            { id: ANA, name: 'Ana Dimitrova', roleTitle: 'Therapist', email: 'ana@velnes.mk', phone: null, access: 'staff', roleId: null, bookable: true, status: 'active', color: null, locationIds: [LOC], skillServiceIds: [], hours: null, twofaEnabled: false, lastActive: null },
+            { id: '40000000-0000-4000-8000-000000000001', name: 'Maria Petrovska', roleTitle: 'Owner', email: 'maria@velnes.mk', phone: null, access: 'owner', roleId: null, bookable: true, status: 'active', color: null, locationIds: [LOC], skillServiceIds: [], hours: null, twofaEnabled: false, lastActive: null },
+          ],
+        });
+      if (path.endsWith('/ranking'))
+        return ok({
+          rows: [
+            { employeeId: ANA, name: 'Ana Dimitrova', appointments: 3, turnover: 9400, score: 100 },
+            { employeeId: '40000000-0000-4000-8000-000000000001', name: 'Maria Petrovska', appointments: 2, turnover: 7750, score: 33 },
+          ],
+          criteria: ['rank_upsellcount'],
+          notMeasured: [],
+          provider: 'rules',
+          weekStart: '2026-08-31',
+        });
       if (path.endsWith('/sales') && method === 'POST')
         return ok({
           invoice: {
@@ -144,5 +162,42 @@ describe('employee app', () => {
     };
     expect(sale.lines[0]!.kind).toBe('appointment');
     expect(sale.employeeId).toBe(ANA);
+  });
+
+  it('the ranking tab shows the board from the owner\'s standards', async () => {
+    mockApi([]);
+    localStorage.setItem('velnes.refresh', 'rt');
+    render(<App />);
+    await screen.findByText('My day');
+    await userEvent.click(screen.getByRole('button', { name: 'Ranking' }));
+    // Ana leads on score even though the board honours upsell, not raw
+    // revenue; her row shows turnover and marks her as "you".
+    expect(await screen.findByText(/Ana Dimitrova · you/)).toBeDefined();
+    expect(screen.getByText('Maria Petrovska')).toBeDefined();
+  });
+
+  it('a bound device shows tap-your-name and signs in by id', async () => {
+    const calls: { method: string; path: string; body?: unknown }[] = [];
+    mockApi(calls);
+    // No session; the device remembers its salon roster.
+    localStorage.setItem(
+      'velnes.emp.roster',
+      JSON.stringify({
+        tenantId: '10000000-0000-4000-8000-000000000001',
+        staff: [{ id: ANA, name: 'Ana Dimitrova', role: 'Therapist' }],
+      }),
+    );
+    render(<App />);
+    await userEvent.click(await screen.findByText('Ana Dimitrova'));
+    const pw = await screen.findByLabelText(/Password/i);
+    await userEvent.type(pw, 'velnes-demo');
+    await userEvent.click(screen.getByRole('button', { name: 'Sign in' }));
+    await waitFor(() => {
+      const sent = calls.find((c) => c.path.endsWith('/auth/login-id'));
+      expect(sent).toBeDefined();
+      expect((sent!.body as { employeeId: string }).employeeId).toBe(ANA);
+    });
+    // Signed in — the agenda takes over.
+    expect(await screen.findByText('My day')).toBeDefined();
   });
 });

@@ -2,17 +2,19 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { get, post, refusalText, useSession } from '@velnes/client';
 import {
   AppointmentListResponseSchema,
-  InvoiceListResponseSchema,
   LocationCatalogResponseSchema,
   LocationListResponseSchema,
+  RankingBoardSchema,
   SaleResponseSchema,
   type Appointment,
   type SaleLine,
 } from '@velnes/contracts';
 import { I, Icon } from '@velnes/ui';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { z } from 'zod';
+import { EmployeeListResponseSchema } from '@velnes/contracts';
+import { getRoster, setRoster } from './roster.js';
 
 const uuid = () =>
   crypto.randomUUID ? crypto.randomUUID() : String(Math.random()).slice(2) + Date.now();
@@ -52,6 +54,27 @@ export function EmployeeApp() {
     setToast(m);
     setTimeout(() => setToast(null), 2400);
   };
+  // The header wears the person's role, like the prototype — read from
+  // the cached roster (its role titles), not the raw sign-in email.
+  const myRole = getRoster()?.staff.find((e) => e.id === me?.id)?.role ?? '';
+
+  // Signing in binds the device to this salon: cache the roster so the
+  // next shift opens straight to "tap your name". Kept across sign-out.
+  const meId = me?.id;
+  const meTenant = me?.tenantId;
+  useEffect(() => {
+    if (!meId || !meTenant) return;
+    void get(EmployeeListResponseSchema, '/employees')
+      .then((r) =>
+        setRoster({
+          tenantId: meTenant,
+          staff: r.employees
+            .filter((e) => e.status === 'active')
+            .map((e) => ({ id: e.id, name: e.name, role: e.roleTitle })),
+        }),
+      )
+      .catch(() => {});
+  }, [meId, meTenant]);
 
   const locations = useQuery({
     queryKey: ['locations'],
@@ -79,9 +102,9 @@ export function EmployeeApp() {
     queryFn: () => get(LocationCatalogResponseSchema, `/locations/${here}/catalog`),
     enabled: !!here && tab === 'pos',
   });
-  const invoices = useQuery({
-    queryKey: ['rank'],
-    queryFn: () => get(InvoiceListResponseSchema, '/invoices?limit=200'),
+  const ranking = useQuery({
+    queryKey: ['ranking'],
+    queryFn: () => get(RankingBoardSchema, '/ranking'),
     enabled: tab === 'rank',
   });
 
@@ -341,46 +364,42 @@ export function EmployeeApp() {
     </>
   );
 
-  const week = (() => {
-    const rows = new Map<string, { revenue: number; jobs: number }>();
-    for (const i of invoices.data?.invoices ?? []) {
-      if (i.status !== 'Paid') continue;
-      const r = rows.get(i.employeeName) ?? { revenue: 0, jobs: 0 };
-      r.revenue += i.total;
-      r.jobs += 1;
-      rows.set(i.employeeName, r);
-    }
-    return [...rows.entries()]
-      .map(([name, r]) => ({ name, ...r }))
-      .sort((a, b) => b.revenue - a.revenue);
-  })();
-  const top = week[0]?.revenue ?? 1;
+  const board = ranking.data?.rows ?? [];
+  const topScore = Math.max(1, ...board.map((e) => e.score));
   const rank = (
     <>
       <p className="muted" style={{ fontWeight: 500 }}>
         {t('mo.rankSub')}
       </p>
-      {week.map((e, i) => (
+      {board.map((e, i) => (
         <div
-          key={e.name}
-          className={`rank-row${i === 0 ? ' top' : ''}${e.name === me?.name ? ' me' : ''}`}
+          key={e.employeeId}
+          className={`rank-row${i === 0 ? ' top' : ''}${e.employeeId === me?.id ? ' me' : ''}`}
         >
           <span className="rank-n">{i + 1}</span>
           <span style={{ flex: 1 }}>
             <span className="bold">
               {e.name}
-              {e.name === me?.name ? ` · ${t('mo.you')}` : ''}
+              {e.employeeId === me?.id ? ` · ${t('mo.you')}` : ''}
             </span>
             <span className="muted" style={{ display: 'block', fontSize: 12, fontWeight: 500 }}>
-              {e.jobs} {t('mo.sales')}
+              {e.appointments} {t('mo.appointments')}
             </span>
             <span className="rank-bar">
-              <span style={{ width: `${Math.round((e.revenue / top) * 100)}%` }} />
+              <span style={{ width: `${Math.round((e.score / topScore) * 100)}%` }} />
             </span>
           </span>
-          <span className="tnum bold">{money(e.revenue)}</span>
+          <span className="tnum bold">{money(e.turnover)}</span>
         </div>
       ))}
+      {ranking.data?.notMeasured.length ? (
+        <p className="muted" style={{ fontWeight: 500, fontSize: 12 }}>
+          {t('mo.rankNotMeasured')}
+        </p>
+      ) : null}
+      <p className="muted" style={{ fontWeight: 500, fontSize: 12 }}>
+        {t('mo.rankReset')}
+      </p>
     </>
   );
 
@@ -392,7 +411,8 @@ export function EmployeeApp() {
             {tab === 'agenda' ? t('mo.myDay') : tab === 'pos' ? t('mo.checkout') : t('mo.ranking')}
           </div>
           <div className="s">
-            {me?.name.split(' ')[0]} · {me?.email}
+            {me?.name.split(' ')[0]}
+            {myRole ? ` · ${myRole}` : ''}
           </div>
         </div>
         <button className="iconbtn" aria-label={t('shell.signOut')} onClick={() => void logout()}>

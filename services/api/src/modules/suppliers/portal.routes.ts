@@ -21,6 +21,9 @@ import {
   type PurchaseOrderStatus,
   SupplierLoginResponseSchema,
   SupplierProductListSchema,
+  SupportTicketCreateSchema,
+  SupportTicketListSchema,
+  SupportTicketReplySchema,
 } from '@velnes/contracts';
 import argon2 from 'argon2';
 import type { FastifyInstance, FastifyReply } from 'fastify';
@@ -32,6 +35,7 @@ import { AuthError } from '../auth/auth.service.js';
 import { localIso } from '../scheduling/scheduling.service.js';
 import { poTransition, SupplierError, toOrderContract } from './suppliers.service.js';
 import { queueMail } from '../mail/mail.service.js';
+import { createTicket, listTickets, replyToTicket, SupportError } from '../support/support.service.js';
 
 const Err = z.object({ error: z.string(), message: z.string() });
 
@@ -39,6 +43,10 @@ function sendErr(reply: FastifyReply, e: unknown) {
   if (e instanceof SupplierError)
     return reply
       .code(e.code === 'NOT_FOUND' ? 404 : e.code === 'INVALID' ? 422 : 409)
+      .send({ error: e.code, message: e.message });
+  if (e instanceof SupportError)
+    return reply
+      .code(e.code === 'NOT_FOUND' ? 404 : 422)
       .send({ error: e.code, message: e.message });
   throw e;
 }
@@ -1066,6 +1074,78 @@ export function portalRoutes(app: FastifyInstance) {
           promotions: promos.map((p) => ({ title: p.title })),
         };
       }),
+  });
+
+  // ── Support: the supplier's own tickets to Revelapps HQ. ──────
+  r.route({
+    method: 'GET',
+    url: '/portal/support/tickets',
+    preHandler: [app.authenticateSupplier],
+    schema: { response: { 200: SupportTicketListSchema } },
+    handler: async (req) =>
+      withSupplier(req.supplierClaims.sup, async (trx) => ({ tickets: await listTickets(trx) })),
+  });
+
+  r.route({
+    method: 'POST',
+    url: '/portal/support/tickets',
+    preHandler: [app.authenticateSupplier],
+    schema: { body: SupportTicketCreateSchema, response: { 200: z.object({ id: z.uuid() }), 422: Err } },
+    handler: async (req, reply) => {
+      try {
+        return await withSupplier(req.supplierClaims.sup, async (trx) => {
+          const me = await trx
+            .selectFrom('supplierUsers')
+            .select(['name', 'email'])
+            .where('id', '=', req.supplierClaims.sub)
+            .executeTakeFirst();
+          const id = await createTicket(trx, {
+            origin: 'supplier',
+            tenantId: null,
+            supplierId: req.supplierClaims.sup,
+            originName: req.supplierClaims.name,
+            createdBy: me?.name ?? 'Supplier',
+            replyTo: me?.email ?? '',
+            subject: req.body.subject,
+            category: req.body.category,
+            body: req.body.body,
+          });
+          return { id };
+        });
+      } catch (e) {
+        return sendErr(reply, e);
+      }
+    },
+  });
+
+  r.route({
+    method: 'POST',
+    url: '/portal/support/tickets/:id/reply',
+    preHandler: [app.authenticateSupplier],
+    schema: {
+      params: z.object({ id: z.uuid() }),
+      body: SupportTicketReplySchema.pick({ body: true }),
+      response: { 200: z.object({ ok: z.literal(true) }), 404: Err, 422: Err },
+    },
+    handler: async (req, reply) => {
+      try {
+        await withSupplier(req.supplierClaims.sup, async (trx) => {
+          const me = await trx
+            .selectFrom('supplierUsers')
+            .select('name')
+            .where('id', '=', req.supplierClaims.sub)
+            .executeTakeFirst();
+          await replyToTicket(trx, req.params.id, {
+            authorKind: 'supplier',
+            authorName: me?.name ?? 'Supplier',
+            body: req.body.body,
+          });
+        });
+        return { ok: true as const };
+      } catch (e) {
+        return sendErr(reply, e);
+      }
+    },
   });
 }
 export { AuthError };

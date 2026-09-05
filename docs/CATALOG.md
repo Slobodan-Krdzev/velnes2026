@@ -52,3 +52,21 @@ with before/after.
 s2/s6/s8, 9 modifier groups, employee skills, 7 retail + 3 own-use
 products (BeautyPro sells the arnica oil — the multi-merchant seam for
 Phase 4), opening stock at Centar entered as real ledger movements.
+
+## Combos — the till's Packages (2026-09-04)
+
+A combo bundles services and products into one sellable line, exactly
+the prototype's `combos`. The **Combos** tab (previously an empty
+"arrives later" pane) now carries the real table — name, includes,
+regular vs combo price, an on-till toggle, Edit — and a right-hand
+panel (`ComboPanel`) that adds/edits a combo with a checkbox roster of
+services and products, per-item quantities, category, validity, prices
+and a Delete action. One door: `combos` (migration 20260904190039,
+tenant-scoped RLS, items as validated JSONB) behind `GET/POST/PUT/PATCH/
+DELETE /combos`, gated by `catalog.edit`. Every item is checked against
+the tenant's own catalog before the combo will save (422 `BAD_ITEM`
+otherwise) — a combo can never become a text-only line. The seed
+carries the prototype's two packages (Recovery start pack, Assessment
+with home kit). Honest deferral: **selling** a combo at the till (booking
+its services and deducting its products from stock) is the next
+increment — this delivers creating and managing them.

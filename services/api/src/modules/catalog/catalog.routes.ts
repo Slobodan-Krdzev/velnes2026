@@ -2,6 +2,8 @@ import {
   CategoryListResponseSchema,
   CategoryRequestCreateSchema,
   CategoryRequestListSchema,
+  ComboListSchema,
+  ComboWriteSchema,
   IdResponseSchema,
   PlatformNoticeListSchema,
   LineQuoteRequestSchema,
@@ -21,10 +23,15 @@ import { z } from 'zod';
 import { withTenant, type Trx } from '../../db/index.js';
 import { can, permsFor } from '../auth/authz.service.js';
 import {
+  createCombo,
   createProduct,
   createService,
+  deleteCombo,
+  listCombos,
+  patchCombo,
   patchServiceOverride,
   patchVariantOverride,
+  updateCombo,
   updateProduct,
   updateService,
 } from './catalog.crud.service.js';
@@ -304,6 +311,7 @@ export function catalogRoutes(app: FastifyInstance) {
             kind: n.kind,
             title: n.title,
             body: n.body,
+            refId: n.refId ?? null,
             createdAt: n.createdAt.toISOString(),
           })),
         };
@@ -430,6 +438,105 @@ export function catalogRoutes(app: FastifyInstance) {
         await withTenant(req.claims.ten, async (trx) => {
           await requirePerm('catalog.edit')(trx, req);
           await updateProduct(trx, req.claims, req.params.id, req.body);
+        });
+        return { ok: true as const };
+      } catch (e) {
+        return sendCatalogError(reply, e);
+      }
+    },
+  });
+
+  // ── Combos (the till's Packages): tenant-level sellable bundles. ──
+  r.route({
+    method: 'GET',
+    url: '/combos',
+    preHandler: [app.authenticate],
+    schema: { response: { 200: ComboListSchema, 403: ErrorSchema } },
+    handler: async (req, reply) =>
+      withTenant(req.claims.ten, async (trx) => {
+        if (!(await canReadCatalog(trx, req.claims)))
+          return reply
+            .code(403)
+            .send({ error: 'FORBIDDEN', message: 'Missing permission: catalog.view' });
+        return { combos: await listCombos(trx) };
+      }),
+  });
+
+  r.route({
+    method: 'POST',
+    url: '/combos',
+    preHandler: [app.authenticate],
+    schema: { body: ComboWriteSchema, response: { 200: IdResponseSchema, 403: ErrorSchema, 422: ErrorSchema } },
+    handler: async (req, reply) => {
+      try {
+        return await withTenant(req.claims.ten, async (trx) => {
+          await requirePerm('catalog.edit')(trx, req);
+          return { id: await createCombo(trx, req.claims, req.body) };
+        });
+      } catch (e) {
+        return sendCatalogError(reply, e);
+      }
+    },
+  });
+
+  r.route({
+    method: 'PUT',
+    url: '/combos/:id',
+    preHandler: [app.authenticate],
+    schema: {
+      params: IdParams,
+      body: ComboWriteSchema,
+      response: { 200: OkSchema, 403: ErrorSchema, 404: ErrorSchema, 422: ErrorSchema },
+    },
+    handler: async (req, reply) => {
+      try {
+        await withTenant(req.claims.ten, async (trx) => {
+          await requirePerm('catalog.edit')(trx, req);
+          await updateCombo(trx, req.claims, req.params.id, req.body);
+        });
+        return { ok: true as const };
+      } catch (e) {
+        return sendCatalogError(reply, e);
+      }
+    },
+  });
+
+  r.route({
+    method: 'PATCH',
+    url: '/combos/:id',
+    preHandler: [app.authenticate],
+    schema: {
+      params: IdParams,
+      body: z.object({
+        pos: z.boolean().optional(),
+        online: z.boolean().optional(),
+        status: z.enum(['active', 'draft']).optional(),
+      }),
+      response: { 200: OkSchema, 403: ErrorSchema, 404: ErrorSchema },
+    },
+    handler: async (req, reply) => {
+      try {
+        await withTenant(req.claims.ten, async (trx) => {
+          await requirePerm('catalog.edit')(trx, req);
+          await patchCombo(trx, req.params.id, req.body);
+        });
+        return { ok: true as const };
+      } catch (e) {
+        return sendCatalogError(reply, e);
+      }
+    },
+  });
+
+  r.route({
+    method: 'DELETE',
+    url: '/combos/:id',
+    preHandler: [app.authenticate],
+    schema: { params: IdParams, response: { 200: OkSchema, 403: ErrorSchema, 404: ErrorSchema } },
+    handler: async (req, reply) => {
+      try {
+        await withTenant(req.claims.ten, async (trx) => {
+          await requirePerm('catalog.edit')(trx, req);
+          await deleteCombo(trx, req.params.id);
         });
         return { ok: true as const };
       } catch (e) {

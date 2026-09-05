@@ -270,3 +270,28 @@ supplier's words inline under the order reference
 (`sup.declinedReason` → "Declined by supplier: {{reason}}"), read from
 `supplierNote` on the purchase-order contract. One door, one reason,
 audited server-side and honestly shown on both sides of the connection.
+
+## HQ bootstraps a supplier's first portal login (2026-09-04)
+
+HQ could create and verify a supplier row, but nothing let it hand that
+supplier its first way in — the initial `sr_owner` existed only in the
+seed. Now `POST /hq/suppliers/:id/invite` (super-gated, migration
+20260904180038 opens `supplier_users` to an HQ INSERT under `app.hq`)
+creates that first owner as `invited` with a placeholder hash and
+queues a `supplier_invite` mail through the outbox — the same honest
+mock path as every other invite. A second invite is refused (409, one
+bootstrap only); the supplier's own `/portal/team` invites take over
+from there. HQ's supplier list carries an `ownerStatus`
+(none/invited/active) so the row shows **Invite owner** until the
+supplier has claimed its login. This closes the HQ→supplier→catalog→
+order chain end to end. See [decline reason flow](#order-accept--decline-with-a-reason-surfaced-back-to-the-salon) for the other half of that chain.
+
+## Support tickets — the supplier's door to Revelapps (2026-09-04)
+
+The portal grew a **Support** tab: the supplier opens a thread to
+Revelapps HQ (`POST /portal/support/tickets`), reads the conversation
+and replies (`/portal/support/tickets/:id/reply`), all scoped to its
+own `supplier_id` by RLS. Every open and reply also queues mail through
+the outbox, so the thread lives in the app and (once the provider is
+live) over SMTP. HQ answers from its own Tickets queue; see
+REGISTRATIONS-HQ.md.

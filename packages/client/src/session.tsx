@@ -33,6 +33,7 @@ interface Session {
   me: MeResponse | null;
   booting: boolean;
   login: (email: string, password: string) => Promise<void>;
+  loginById: (employeeId: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   setLang: (lang: Lang) => Promise<void>;
   can: (key: PermKey) => boolean;
@@ -117,6 +118,12 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       booting,
       login: async (email, password) => {
         const res = await post(LoginResponseSchema, '/auth/login', { email, password });
+        setAccessToken(res.accessToken);
+        setRefreshToken(res.refreshToken);
+        adopt(await get(MeResponseSchema, '/auth/me'));
+      },
+      loginById: async (employeeId, password) => {
+        const res = await post(LoginResponseSchema, '/auth/login-id', { employeeId, password });
         setAccessToken(res.accessToken);
         setRefreshToken(res.refreshToken);
         adopt(await get(MeResponseSchema, '/auth/me'));

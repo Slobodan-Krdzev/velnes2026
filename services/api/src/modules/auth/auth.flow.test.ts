@@ -41,6 +41,17 @@ describe('auth flow', () => {
     expect(res.json().error).toBe('NOT_ACTIVE');
   });
 
+  it('signs in by employee id (the phone tap-your-name path)', async () => {
+    const first = LoginResponseSchema.parse((await login('maria@velnes.mk', 'velnes-demo')).json());
+    const loginId = (employeeId: string, password: string) =>
+      app.inject({ method: 'POST', url: `${API_PREFIX}/auth/login-id`, payload: { employeeId, password } });
+    const wrong = await loginId(first.employee.id, 'nope');
+    expect(wrong.statusCode).toBe(401);
+    const ok = await loginId(first.employee.id, 'velnes-demo');
+    expect(ok.statusCode).toBe(200);
+    expect(LoginResponseSchema.parse(ok.json()).employee.id).toBe(first.employee.id);
+  });
+
   it('logs Maria in, serves /me, rotates refresh tokens, and revokes the family on reuse', async () => {
     const res = await login('maria@velnes.mk', 'velnes-demo');
     expect(res.statusCode).toBe(200);

@@ -19,6 +19,7 @@ import {
   HqSupplierCreateSchema,
   HqSupplierListSchema,
   HqSupplierPatchSchema,
+  HqSupplierInviteSchema,
   HqTeamInviteSchema,
   HqTeamListSchema,
   HqTeamRolePatchSchema,
@@ -32,6 +33,9 @@ import {
   HqRegistrationListSchema,
   RegistrationStatusSchema,
   type RegistrationDraft,
+  SupportTicketListSchema,
+  SupportTicketReplySchema,
+  SupportTicketStatusSchema,
 } from '@velnes/contracts';
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
@@ -53,6 +57,12 @@ import {
   hqUserById,
 } from '../hq/hq.service.js';
 import { queueMail } from '../mail/mail.service.js';
+import {
+  listTickets as listSupportTickets,
+  replyToTicket as replySupportTicket,
+  setTicketStatus as setSupportStatus,
+  SupportError,
+} from '../support/support.service.js';
 
 const Err = z.object({ error: z.string(), message: z.string() });
 
@@ -623,6 +633,7 @@ export function hqRoutes(app: FastifyInstance) {
             kind: n.kind,
             title: n.title,
             body: n.body,
+            refId: n.refId ?? null,
             createdAt: n.createdAt.toISOString(),
           })),
         };
@@ -1009,6 +1020,16 @@ export function hqRoutes(app: FastifyInstance) {
           .select(['e.ownerId', 'e.name as entityName', 'e.status as entityStatus', 'pa.merchantId', 'pa.status as paStatus'])
           .where('e.ownerType', '=', 'supplier')
           .execute();
+        const keyholders = await trx
+          .selectFrom('supplierUsers')
+          .select(['supplierId', 'status'])
+          .execute();
+        const ownerOf = (supId: string): 'none' | 'invited' | 'active' => {
+          const rows = keyholders.filter((k) => k.supplierId === supId);
+          if (rows.some((k) => k.status === 'active')) return 'active';
+          if (rows.some((k) => k.status === 'invited')) return 'invited';
+          return 'none';
+        };
         return {
           suppliers: sups.map((s2) => ({
             id: s2.id,
@@ -1032,6 +1053,8 @@ export function hqRoutes(app: FastifyInstance) {
             pendingSalons: conns.filter((c) => c.supplierId === s2.id && c.status === 'pending').length,
             orders: orders.filter((o) => o.supplierId === s2.id).length,
             orderValue: valueOf(s2.id),
+            hasOwner: ownerOf(s2.id) !== 'none',
+            ownerStatus: ownerOf(s2.id),
           })),
         };
       }),
@@ -1100,6 +1123,128 @@ export function hqRoutes(app: FastifyInstance) {
           .execute();
         return { ok: true as const };
       });
+    },
+  });
+
+  // HQ hands a freshly-created supplier its first portal keyholder:
+  // the one bootstrap the supplier cannot do for itself. The owner
+  // lands as `invited` (sr_owner) with a placeholder hash, and a
+  // supplier_invite mail goes out through the same mock outbox.
+  r.route({
+    method: 'POST',
+    url: '/hq/suppliers/:id/invite',
+    preHandler: [app.authenticateHq],
+    schema: {
+      params: z.object({ id: z.uuid() }),
+      body: HqSupplierInviteSchema,
+      response: { 200: z.object({ id: z.uuid() }), 403: Err, 404: Err, 409: Err },
+    },
+    handler: async (req, reply) => {
+      if (!superGate(reply, req.hqClaims.rol)) return reply;
+      return withHq(async (trx) => {
+        const sup = await trx
+          .selectFrom('suppliers')
+          .select(['id', 'name'])
+          .where('id', '=', req.params.id)
+          .executeTakeFirst();
+        if (!sup) return reply.code(404).send({ error: 'NOT_FOUND', message: 'Unknown supplier' });
+        const already = await trx
+          .selectFrom('supplierUsers')
+          .select('id')
+          .where('supplierId', '=', req.params.id)
+          .executeTakeFirst();
+        if (already)
+          return reply
+            .code(409)
+            .send({ error: 'HAS_OWNER', message: 'That supplier already has a portal owner' });
+        const taken = await trx
+          .selectFrom('supplierUsers')
+          .select('id')
+          .where(sql2<boolean>`lower(email) = lower(${req.body.email})`)
+          .executeTakeFirst();
+        if (taken)
+          return reply.code(409).send({ error: 'DUPLICATE', message: 'Someone already uses that address' });
+        const row = await trx
+          .insertInto('supplierUsers')
+          .values({
+            supplierId: req.params.id,
+            name: req.body.name,
+            email: req.body.email,
+            role: 'sr_owner',
+            status: 'invited',
+            passwordHash:
+              '$argon2id$v=19$m=65536,t=3,p=4$AAAAAAAAAAAAAAAAAAAAAA$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+          })
+          .returning('id')
+          .executeTakeFirstOrThrow();
+        await queueMail(trx, {
+          to: req.body.email,
+          subject: 'You are invited to run the Velnes supplier portal',
+          body: `Revelapps invited you as the owner of ${sup.name} on the Velnes supplier portal. Two-factor is required at first sign-in.`,
+          kind: 'supplier_invite',
+          refId: row.id,
+        });
+        return { id: row.id };
+      });
+    },
+  });
+
+  // ── Support tickets: HQ reads every salon and supplier thread,
+  //    answers them (a reply mails the opener), and moves status. ──
+  r.route({
+    method: 'GET',
+    url: '/hq/tickets',
+    preHandler: [app.authenticateHq],
+    schema: { response: { 200: SupportTicketListSchema } },
+    handler: async () => withHq(async (trx) => ({ tickets: await listSupportTickets(trx) })),
+  });
+
+  r.route({
+    method: 'POST',
+    url: '/hq/tickets/:id/reply',
+    preHandler: [app.authenticateHq],
+    schema: {
+      params: z.object({ id: z.uuid() }),
+      body: SupportTicketReplySchema,
+      response: { 200: z.object({ ok: z.literal(true) }), 404: Err, 422: Err },
+    },
+    handler: async (req, reply) => {
+      try {
+        await withHq(async (trx) => {
+          await replySupportTicket(trx, req.params.id, {
+            authorKind: 'hq',
+            authorName: req.hqClaims.name,
+            body: req.body.body,
+            status: req.body.status,
+          });
+        });
+        return { ok: true as const };
+      } catch (e) {
+        if (e instanceof SupportError)
+          return reply.code(e.code === 'NOT_FOUND' ? 404 : 422).send({ error: e.code, message: e.message });
+        throw e;
+      }
+    },
+  });
+
+  r.route({
+    method: 'PATCH',
+    url: '/hq/tickets/:id',
+    preHandler: [app.authenticateHq],
+    schema: {
+      params: z.object({ id: z.uuid() }),
+      body: SupportTicketStatusSchema,
+      response: { 200: z.object({ ok: z.literal(true) }), 404: Err },
+    },
+    handler: async (req, reply) => {
+      try {
+        await withHq(async (trx) => setSupportStatus(trx, req.params.id, req.body.status));
+        return { ok: true as const };
+      } catch (e) {
+        if (e instanceof SupportError)
+          return reply.code(404).send({ error: e.code, message: e.message });
+        throw e;
+      }
     },
   });
 

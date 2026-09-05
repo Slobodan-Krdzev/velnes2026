@@ -58,6 +58,7 @@ describe('catalog doors (contract tests vs prototype)', () => {
     await admin.query(`DELETE FROM category_requests WHERE name IN ('Prenatal care (req test)','Crystal healing (req test)')`);
     await admin.query(`DELETE FROM platform_notices WHERE title LIKE '%Crystal healing (req test)%'`);
     await admin.query(`DELETE FROM platform_notices WHERE title LIKE '%Prenatal care (req test)%'`);
+    await admin.query(`DELETE FROM combos WHERE name LIKE '%(test)%'`);
     await admin.query(`DELETE FROM location_catalog_variants WHERE variant_id=$1`, [v45]);
     await admin.query(
       `UPDATE location_catalog_services SET price=1800, active=true WHERE service_id=$1 AND location_id=$2`,
@@ -523,5 +524,55 @@ describe('catalog doors (contract tests vs prototype)', () => {
         headers: { authorization: `Bearer ${hqToken}` },
       })).statusCode,
     ).toBe(200);
+  });
+
+  it('combos: seeded packages read back, a bad item is refused, CRUD + till toggle work', async () => {
+    const auth = { authorization: `Bearer ${mariaToken}` };
+    const list1 = await app.inject({ method: 'GET', url: `${API_PREFIX}/combos`, headers: auth });
+    expect(list1.statusCode).toBe(200);
+    const seeded = (list1.json() as { combos: { id: string; name: string; items: unknown[] }[] }).combos;
+    const pack = seeded.find((k) => k.name === 'Recovery start pack');
+    expect(pack).toBeDefined();
+    expect(pack!.items.length).toBe(3);
+
+    // A combo item that points at nothing is refused (422).
+    const bad = await app.inject({
+      method: 'POST',
+      url: `${API_PREFIX}/combos`,
+      headers: auth,
+      payload: {
+        name: 'Bad combo (test)', regular: 1000, price: 800,
+        items: [{ type: 'product', id: '70000000-0000-4000-8000-0000000000ff', qty: 1 }],
+      },
+    });
+    expect(bad.statusCode).toBe(422);
+    expect((bad.json() as { error: string }).error).toBe('BAD_ITEM');
+
+    // A valid combo saves, toggles off the till, then deletes.
+    const made = await app.inject({
+      method: 'POST',
+      url: `${API_PREFIX}/combos`,
+      headers: auth,
+      payload: {
+        name: 'Home starter (test)', category: 'Assessment', regular: 2700, price: 2300,
+        items: [{ type: 'service', id: demo.s6, qty: 1 }, { type: 'product', id: demo.p5, qty: 2 }],
+      },
+    });
+    expect(made.statusCode).toBe(200);
+    const id = (made.json() as { id: string }).id;
+
+    const off = await app.inject({
+      method: 'PATCH', url: `${API_PREFIX}/combos/${id}`, headers: auth,
+      payload: { pos: false },
+    });
+    expect(off.statusCode).toBe(200);
+    const list2 = await app.inject({ method: 'GET', url: `${API_PREFIX}/combos`, headers: auth });
+    const mine = (list2.json() as { combos: { id: string; pos: boolean }[] }).combos.find((k) => k.id === id);
+    expect(mine?.pos).toBe(false);
+
+    const del = await app.inject({ method: 'DELETE', url: `${API_PREFIX}/combos/${id}`, headers: auth });
+    expect(del.statusCode).toBe(200);
+    const list3 = await app.inject({ method: 'GET', url: `${API_PREFIX}/combos`, headers: auth });
+    expect((list3.json() as { combos: { id: string }[] }).combos.find((k) => k.id === id)).toBeUndefined();
   });
 });

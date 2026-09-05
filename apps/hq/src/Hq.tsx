@@ -17,6 +17,9 @@ import {
   HqLocationReviewSchema,
   RegistrationStatusSchema,
   HqRegistrationListSchema,
+  SupportTicketListSchema,
+  type SupportStatus,
+  type SupportTicket,
 } from '@velnes/contracts';
 import type { Lang } from '@velnes/i18n';
 import { I, Icon, VelnesMark } from '@velnes/ui';
@@ -32,7 +35,7 @@ import { HqApiError, hqDelete, hqGet, hqPatch, hqPost } from './api.js';
  *  platform. Suppliers and HQ team wait for their phases, honestly. */
 
 type HqUser = z.infer<typeof HqMeResponseSchema>;
-type Tab = 'customers' | 'categories' | 'suppliers' | 'team' | 'search' | 'audit';
+type Tab = 'customers' | 'categories' | 'suppliers' | 'tickets' | 'team' | 'search' | 'audit';
 const DecisionResp = z.object({ id: z.uuid(), lifecycle: z.string() });
 const RegDecisionResp = z.object({ id: z.uuid(), status: RegistrationStatusSchema });
 
@@ -47,6 +50,7 @@ export function Hq({
 }) {
   const { t, i18n } = useTranslation();
   const [tab, setTab] = useState<Tab>('customers');
+  const [focusTicket, setFocusTicket] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [envMenu, setEnvMenu] = useState(false);
   const envRef = useRef<HTMLDivElement | null>(null);
@@ -111,6 +115,7 @@ export function Hq({
     { tab: 'customers', label: t('hq.tabCustomers'), icon: I.users, size: 28 },
     { tab: 'categories', label: t('hq.tabCategories'), icon: I.tag, size: 26 },
     { tab: 'suppliers', label: t('hq.tabSuppliers'), icon: I.products, size: 28 },
+    { tab: 'tickets', label: t('support.hqTitle'), icon: I.info, size: 26 },
     { tab: 'team', label: t('hq.tabTeam'), icon: I.user, size: 26 },
     { tab: 'search', label: t('hq.tabSearch'), icon: I.pulse, size: 26 },
     { tab: 'audit', label: t('hq.tabAudit'), icon: I.note, size: 26 },
@@ -199,8 +204,11 @@ export function Hq({
                         onClick={() => {
                           setNotifOpen(false);
                           // A notice knows its screen: category talk
-                          // lands on the Categories tab.
-                          if (n.kind.startsWith('category')) setTab('categories');
+                          // lands on Categories, support on its ticket.
+                          if (n.kind === 'support') {
+                            setTab('tickets');
+                            setFocusTicket(n.refId);
+                          } else if (n.kind.startsWith('category')) setTab('categories');
                         }}
                       >
                         <span className="grow" style={{ textAlign: 'left' }}>
@@ -277,6 +285,9 @@ export function Hq({
           {tab === 'customers' ? <Customers say={say} me={user} /> : null}
           {tab === 'categories' ? <Categories say={say} /> : null}
           {tab === 'suppliers' ? <Suppliers say={say} isSuper={user.role === 'hq_super'} /> : null}
+          {tab === 'tickets' ? (
+            <Tickets say={say} focusId={focusTicket} clearFocus={() => setFocusTicket(null)} />
+          ) : null}
           {tab === 'team' ? <Team say={say} me={user} /> : null}
           {tab === 'search' ? (
             <div className="empty">
@@ -1481,6 +1492,9 @@ function Suppliers({ say, isSuper }: { say: (m: string) => void; isSuper: boolea
   const [brandOwner, setBrandOwner] = useState('');
   const [brandCountry, setBrandCountry] = useState('');
   const [brandSupplier, setBrandSupplier] = useState('');
+  const [inviting, setInviting] = useState<{ id: string; supplier: string } | null>(null);
+  const [invName, setInvName] = useState('');
+  const [invEmail, setInvEmail] = useState('');
   const load = useCallback(
     () =>
       void Promise.all([
@@ -1498,6 +1512,22 @@ function Suppliers({ say, isSuper }: { say: (m: string) => void; isSuper: boolea
     try {
       await hqPatch(z.object({ ok: z.literal(true) }), `/hq/suppliers/${id}`, { verified });
       say(verified ? t('hq.supVerified') : t('hq.supUnverified'));
+      load();
+    } catch (e) {
+      say(e instanceof HqApiError ? e.message : String(e));
+    }
+  };
+  const invite = async () => {
+    if (!inviting) return;
+    try {
+      await hqPost(z.object({ id: z.string() }), `/hq/suppliers/${inviting.id}/invite`, {
+        name: invName.trim(),
+        email: invEmail.trim(),
+      });
+      say(t('hq.supOwnerInvited'));
+      setInviting(null);
+      setInvName('');
+      setInvEmail('');
       load();
     } catch (e) {
       say(e instanceof HqApiError ? e.message : String(e));
@@ -1632,6 +1662,21 @@ function Suppliers({ say, isSuper }: { say: (m: string) => void; isSuper: boolea
                 <td className="right">
                   {isSuper ? (
                     <span className="rowact">
+                      {s2.ownerStatus === 'none' ? (
+                        <button
+                          className="btn btn-ghost btn-sm"
+                          onClick={() => setInviting({ id: s2.id, supplier: s2.name })}
+                        >
+                          {t('hq.inviteOwner')}
+                        </button>
+                      ) : (
+                        <span
+                          className={`badge ${s2.ownerStatus === 'active' ? 'success' : 'warning'}`}
+                          title={t('hq.ownerStateHint')}
+                        >
+                          {s2.ownerStatus === 'active' ? t('hq.ownerActive') : t('hq.ownerInvited')}
+                        </span>
+                      )}
                       <button
                         className={s2.verified ? 'btn btn-ghost btn-sm' : 'btn btn-primary btn-sm'}
                         onClick={() => void verify(s2.id, !s2.verified)}
@@ -1753,6 +1798,55 @@ function Suppliers({ say, isSuper }: { say: (m: string) => void; isSuper: boolea
               </button>
             </div>
             <button className="modal-close" aria-label={t('hq.cancel')} onClick={() => setAdding(null)}>
+              <Icon d={I.x} size={20} />
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {inviting ? (
+        <div className="overlay" onClick={() => setInviting(null)}>
+          <div
+            className="modal"
+            role="dialog"
+            aria-modal="true"
+            style={{ maxWidth: 460 }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="modal-head">
+              <h2>{t('hq.inviteOwnerTitle', { supplier: inviting.supplier })}</h2>
+            </div>
+            <div className="modal-body" style={{ display: 'grid', gap: 14 }}>
+              <label className="field">
+                <span>{t('hq.ownerName')}</span>
+                <input className="input" value={invName} autoFocus onChange={(e) => setInvName(e.target.value)} />
+              </label>
+              <label className="field">
+                <span>{t('hq.ownerEmail')}</span>
+                <input
+                  className="input"
+                  type="email"
+                  value={invEmail}
+                  onChange={(e) => setInvEmail(e.target.value)}
+                />
+              </label>
+              <p className="muted" style={{ fontWeight: 500, fontSize: 12, margin: 0 }}>
+                {t('hq.inviteOwnerNote')}
+              </p>
+            </div>
+            <div className="modal-foot">
+              <button className="btn btn-secondary" onClick={() => setInviting(null)}>
+                {t('hq.cancel')}
+              </button>
+              <button
+                className="btn btn-primary"
+                disabled={!invName.trim() || !invEmail.trim()}
+                onClick={() => void invite()}
+              >
+                {t('hq.sendInvite')}
+              </button>
+            </div>
+            <button className="modal-close" aria-label={t('hq.cancel')} onClick={() => setInviting(null)}>
               <Icon d={I.x} size={20} />
             </button>
           </div>
@@ -2342,6 +2436,206 @@ function Team({ say, me }: { say: (m: string) => void; me: HqUser }) {
           })()}
         </Panel>
       ) : null}
+    </div>
+  );
+}
+
+const tkStatusTone: Record<string, string> = {
+  open: 'info',
+  in_progress: 'warning',
+  resolved: 'success',
+  closed: '',
+};
+function tkFmt(at: string) {
+  try {
+    return new Date(at).toLocaleString();
+  } catch {
+    return at;
+  }
+}
+
+/** HQ's support desk: every salon and supplier thread in one queue.
+ *  A reply mails the opener; the status control moves the lifecycle. */
+function Tickets({
+  say,
+  focusId,
+  clearFocus,
+}: {
+  say: (m: string) => void;
+  focusId?: string | null;
+  clearFocus?: () => void;
+}) {
+  const { t } = useTranslation();
+  const [tickets, setTickets] = useState<SupportTicket[]>([]);
+  const [selId, setSelId] = useState<string | null>(null);
+  const [reply, setReply] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(() => {
+    void hqGet(SupportTicketListSchema, '/hq/tickets').then((r) => setTickets(r.tickets));
+  }, []);
+  useEffect(load, [load]);
+  // A bell click opens the ticket it named, once the list is in.
+  useEffect(() => {
+    if (focusId && tickets.some((x) => x.id === focusId)) {
+      setSelId(focusId);
+      clearFocus?.();
+    }
+  }, [focusId, tickets, clearFocus]);
+  const sel = tickets.find((x) => x.id === selId) ?? null;
+
+  const sendReply = async (status?: SupportStatus) => {
+    if (!sel) return;
+    setBusy(true);
+    try {
+      await hqPost(z.object({ ok: z.literal(true) }), `/hq/tickets/${sel.id}/reply`, {
+        body: reply,
+        ...(status ? { status } : {}),
+      });
+      setReply('');
+      say(t('support.replied'));
+      load();
+    } catch (e) {
+      say(e instanceof HqApiError ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const setStatus = async (status: SupportStatus) => {
+    if (!sel) return;
+    setBusy(true);
+    try {
+      await hqPatch(z.object({ ok: z.literal(true) }), `/hq/tickets/${sel.id}`, { status });
+      load();
+    } catch (e) {
+      say(e instanceof HqApiError ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: '360px 1fr', gap: 20 }}>
+      <div className="card" style={{ overflow: 'hidden' }}>
+        <div className="card-header">
+          <h2>{t('support.hqAll')}</h2>
+          <span className="muted" style={{ fontWeight: 500 }}>
+            {tickets.filter((x) => x.status === 'open' || x.status === 'in_progress').length}
+          </span>
+        </div>
+        {tickets.length === 0 ? (
+          <div className="empty" style={{ padding: 24 }}>
+            <p>{t('support.empty')}</p>
+          </div>
+        ) : (
+          <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+            {tickets.map((r) => (
+              <li key={r.id}>
+                <button
+                  className="ticketrow"
+                  style={{
+                    display: 'block',
+                    width: '100%',
+                    textAlign: 'left',
+                    padding: '12px 16px',
+                    border: 'none',
+                    borderTop: '1px solid var(--line)',
+                    background: selId === r.id ? 'var(--wash)' : 'transparent',
+                    cursor: 'pointer',
+                  }}
+                  onClick={() => setSelId(r.id)}
+                >
+                  <span style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                    <span className="bold">{r.subject}</span>
+                    <span className={`badge ${tkStatusTone[r.status] ?? ''}`}>
+                      {t(`support.status.${r.status}`)}
+                    </span>
+                  </span>
+                  <span className="muted" style={{ display: 'block', fontSize: 12, marginTop: 2 }}>
+                    {t(`support.origin.${r.origin}`)} · {r.originName} · {t(`support.cat.${r.category}`)} ·{' '}
+                    {tkFmt(r.updatedAt)}
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      <div className="card" style={{ minHeight: 320 }}>
+        {sel ? (
+          <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <div className="card-header" style={{ padding: 0 }}>
+              <div>
+                <h2>{sel.subject}</h2>
+                <span className="muted" style={{ fontSize: 12, fontWeight: 500 }}>
+                  {t(`support.origin.${sel.origin}`)} · {sel.originName} ·{' '}
+                  {t('support.openedBy', { name: sel.createdBy })}
+                </span>
+              </div>
+              <span className={`badge ${tkStatusTone[sel.status] ?? ''}`}>
+                {t(`support.status.${sel.status}`)}
+              </span>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {sel.messages.map((m, i) => (
+                <div
+                  key={i}
+                  style={{
+                    alignSelf: m.authorKind === 'hq' ? 'flex-end' : 'flex-start',
+                    maxWidth: '80%',
+                    background: m.authorKind === 'hq' ? 'var(--accent-wash, #eef2ff)' : 'var(--wash)',
+                    borderRadius: 12,
+                    padding: '10px 14px',
+                  }}
+                >
+                  <span className="muted" style={{ display: 'block', fontSize: 12, fontWeight: 600 }}>
+                    {m.authorKind === 'hq' ? t('support.fromHq') : m.authorName} · {tkFmt(m.at)}
+                  </span>
+                  <span style={{ whiteSpace: 'pre-wrap' }}>{m.body}</span>
+                </div>
+              ))}
+            </div>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
+              <textarea
+                className="input"
+                style={{ height: 64, flex: 1 }}
+                placeholder={t('support.hqReplyPlaceholder')}
+                value={reply}
+                onChange={(e) => setReply(e.target.value)}
+              />
+              <button
+                className="btn btn-primary"
+                disabled={busy || !reply.trim()}
+                onClick={() => void sendReply('in_progress')}
+              >
+                {t('support.reply')}
+              </button>
+            </div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {sel.status !== 'resolved' ? (
+                <button className="btn btn-secondary btn-sm" disabled={busy} onClick={() => void setStatus('resolved')}>
+                  {t('support.markResolved')}
+                </button>
+              ) : null}
+              {sel.status === 'resolved' || sel.status === 'closed' ? (
+                <button className="btn btn-ghost btn-sm" disabled={busy} onClick={() => void setStatus('open')}>
+                  {t('support.reopen')}
+                </button>
+              ) : (
+                <button className="btn btn-ghost btn-sm" disabled={busy} onClick={() => void setStatus('closed')}>
+                  {t('support.close')}
+                </button>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div className="empty" style={{ padding: 40 }}>
+            <h3>{t('support.pickTitle')}</h3>
+            <p>{t('support.pickSub')}</p>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

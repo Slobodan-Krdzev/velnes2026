@@ -26,6 +26,9 @@ import { suppliersRoutes } from './modules/suppliers/suppliers.routes.js';
 import { portalRoutes } from './modules/suppliers/portal.routes.js';
 import { businessRoutes } from './modules/business/business.routes.js';
 import { reportsRoutes } from './modules/reports/reports.routes.js';
+import { supportRoutes } from './modules/support/support.routes.js';
+import { flightdeckRoutes } from './modules/flightdeck/flightdeck.routes.js';
+import { rankingRoutes } from './modules/ranking/ranking.routes.js';
 import { registrationsRoutes } from './modules/registrations/registrations.routes.js';
 import { authPlugin } from './plugins/auth.js';
 import { publicRoutes } from './public/public.routes.js';
@@ -70,6 +73,9 @@ export async function buildServer() {
       portalRoutes(api);
       businessRoutes(api);
       reportsRoutes(api);
+      supportRoutes(api);
+      flightdeckRoutes(api);
+      rankingRoutes(api);
     },
     { prefix: API_PREFIX },
   );

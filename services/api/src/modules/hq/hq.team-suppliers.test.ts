@@ -47,6 +47,9 @@ describe('HQ team, supplier intelligence and the mail outbox', () => {
   afterAll(async () => {
     await admin.query(`DELETE FROM hq_users WHERE email='petra@revelapps.com'`);
     await admin.query(`DELETE FROM mail_outbox`);
+    await admin.query(
+      `DELETE FROM supplier_users WHERE supplier_id IN (SELECT id FROM suppliers WHERE name='GlowLine Skopje (test)')`,
+    );
     await admin.query(`DELETE FROM suppliers WHERE name='GlowLine Skopje (test)'`);
     await admin.query(`DELETE FROM supplier_brands WHERE brand_id IN (SELECT id FROM brands WHERE name='OrthoFlex (test)')`);
     await admin.query(`DELETE FROM brands WHERE name='OrthoFlex (test)'`);
@@ -137,6 +140,42 @@ describe('HQ team, supplier intelligence and the mail outbox', () => {
     // Support reads the intelligence but cannot create.
     const deniedCreate = await call('POST', '/hq/suppliers', { name: 'Nope' }, supportToken);
     expect(deniedCreate.statusCode).toBe(403);
+
+    // HQ hands the fresh supplier its first portal owner.
+    const beforeInvite = again.suppliers.find((s) => s.id === id) as unknown as {
+      ownerStatus: string;
+    };
+    expect(beforeInvite.ownerStatus).toBe('none');
+    const deniedInvite = await call(
+      'POST',
+      `/hq/suppliers/${id}/invite`,
+      { name: 'Owner', email: 'owner@glowline.test' },
+      supportToken,
+    );
+    expect(deniedInvite.statusCode).toBe(403);
+    const invited = await call('POST', `/hq/suppliers/${id}/invite`, {
+      name: 'Goran Owner',
+      email: 'owner@glowline.test',
+    });
+    expect(invited.statusCode).toBe(200);
+    const withOwner = (await call('GET', '/hq/suppliers')).json() as {
+      suppliers: { id: string; ownerStatus: string; hasOwner: boolean }[];
+    };
+    const row = withOwner.suppliers.find((s) => s.id === id)!;
+    expect(row.ownerStatus).toBe('invited');
+    expect(row.hasOwner).toBe(true);
+    // A second invite is refused — one owner bootstrap only.
+    const twice = await call('POST', `/hq/suppliers/${id}/invite`, {
+      name: 'Another',
+      email: 'another@glowline.test',
+    });
+    expect(twice.statusCode).toBe(409);
+    // The invite mail sits in the outbox, stamped mock_sent.
+    const mail = await admin.query(
+      `SELECT status, kind FROM mail_outbox WHERE to_email='owner@glowline.test'`,
+    );
+    expect(mail.rows[0]?.kind).toBe('supplier_invite');
+    expect(mail.rows[0]?.status).toBe('mock_sent');
   });
 
   it('a salon invite and an email change also land in the outbox', async () => {

@@ -2,6 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   CategoryListResponseSchema,
   CategoryRequestListSchema,
+  ComboListSchema,
   StockMovementListSchema,
 } from '@velnes/contracts';
 import { I, Icon } from '@velnes/ui';
@@ -14,6 +15,7 @@ import { useToast } from '../../lib/toast.js';
 import { useSession } from '@velnes/client';
 import { useLocation as useRouterLocation } from 'react-router-dom';
 import { useScope } from '../../shell/Shell.js';
+import { ComboPanel } from './ComboPanel.js';
 import { ProductPanel } from './ProductPanel.js';
 import { ServicePanel } from './ServicePanel.js';
 import { z } from 'zod';
@@ -56,6 +58,7 @@ export function CatalogPage() {
   const [panel, setPanel] = useState<
     | { kind: 'service'; id: string | null }
     | { kind: 'product'; id: string | null }
+    | { kind: 'combo'; id: string | null }
     | null
   >(null);
 
@@ -83,6 +86,11 @@ export function CatalogPage() {
     queryKey: ['categoryRequests'],
     queryFn: () => get(CategoryRequestListSchema, '/category-requests'),
   });
+  // Combos are tenant-level, not per-location — their own door.
+  const combos = useQuery({
+    queryKey: ['combos'],
+    queryFn: () => get(ComboListSchema, '/combos'),
+  });
   const catNames = (type: 'services' | 'products') =>
     (cats.data?.categories ?? []).filter((c) => c.type === type).map((c) => c.name);
   const svcCats = [
@@ -95,6 +103,11 @@ export function CatalogPage() {
   const refresh = () => {
     void qc.invalidateQueries({ queryKey: ['catalog'] });
     void qc.invalidateQueries({ queryKey: ['categories'] });
+    void qc.invalidateQueries({ queryKey: ['combos'] });
+  };
+  const patchCombo = async (id: string, patch: Record<string, unknown>) => {
+    await api(OkSchema, `/combos/${id}`, { method: 'PATCH', body: JSON.stringify(patch) });
+    refresh();
   };
 
   const patchOverride = async (serviceId: string, patch: Record<string, unknown>) => {
@@ -477,14 +490,75 @@ export function CatalogPage() {
     </div>
   ) : null;
 
-  const combosPane = (
-    <div className="card">
-      <div className="empty">
-        <h3>{t('catalog.noCombos')}</h3>
-        <p>{t('catalog.noCombosSub')}</p>
+  const comboRows = combos.data?.combos ?? [];
+  const nameOf = (it: { type: 'service' | 'product'; id: string }) =>
+    it.type === 'service'
+      ? (services.find((s) => s.id === it.id)?.name ?? '—')
+      : (products.find((p) => p.id === it.id)?.name ?? '—');
+  const combosPane =
+    comboRows.length === 0 ? (
+      <div className="card">
+        <div className="empty">
+          <h3>{t('catalog.noCombos')}</h3>
+          <p>{t('catalog.noCombosSub')}</p>
+        </div>
       </div>
-    </div>
-  );
+    ) : (
+      <div className="card">
+        <table>
+          <thead>
+            <tr>
+              <th>{t('catalog.combo')}</th>
+              <th>{t('catalog.includes')}</th>
+              <th className="right">{t('catalog.regular')}</th>
+              <th className="right">{t('catalog.comboPrice')}</th>
+              <th className="right">{t('catalog.onTill')}</th>
+              <th />
+            </tr>
+          </thead>
+          <tbody>
+            {comboRows.map((k) => (
+              <tr key={k.id} className={k.status === 'draft' || !k.pos ? 'dim' : ''}>
+                <td>
+                  <span className="bold">{k.name}</span>{' '}
+                  <span className={`badge ${k.status === 'active' ? 'success' : ''}`}>
+                    {t(k.status === 'active' ? 'catalog.active' : 'catalog.draft')}
+                  </span>
+                  <span
+                    className="muted"
+                    style={{ display: 'block', fontSize: 12, fontWeight: 500 }}
+                  >
+                    {k.category} · {t('catalog.validFor', { validity: k.validity })}
+                  </span>
+                </td>
+                <td className="muted">
+                  {k.items.map((it, i) => (
+                    <span key={i} style={{ display: 'block' }}>
+                      {it.qty}× {nameOf(it)}
+                    </span>
+                  ))}
+                </td>
+                <td className="right muted tnum" style={{ textDecoration: 'line-through' }}>
+                  {money(k.regular)}
+                </td>
+                <td className="right bold tnum">{money(k.price)}</td>
+                <td className="right">
+                  {toggle(k.pos, () => void patchCombo(k.id, { pos: !k.pos }), `${k.name} on till`)}
+                </td>
+                <td className="right">
+                  <button
+                    className="btn btn-ghost btn-sm"
+                    onClick={() => setPanel({ kind: 'combo', id: k.id })}
+                  >
+                    {t('common.edit')}
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
 
   return (
     <>
@@ -506,11 +580,14 @@ export function CatalogPage() {
           <button className="btn btn-subtle" disabled title={t('catalog.importLater')}>
             <Icon d={I.filter} size={18} w={1.9} /> {t('catalog.importAI')}
           </button>
-          {tab === 'services' || tab === 'products' ? (
+          {tab === 'services' || tab === 'products' || tab === 'combos' ? (
             <button
               className="btn btn-primary btn-add"
               onClick={() =>
-                setPanel({ kind: tab === 'services' ? 'service' : 'product', id: null })
+                setPanel({
+                  kind: tab === 'services' ? 'service' : tab === 'products' ? 'product' : 'combo',
+                  id: null,
+                })
               }
             >
               {t('cal.add')} <Icon d={I.plus} size={20} w={2.5} />
@@ -558,6 +635,25 @@ export function CatalogPage() {
             refresh();
             setPanel(null);
             toast(t('catalog.saved'));
+          }}
+          onClose={() => setPanel(null)}
+        />
+      ) : null}
+      {panel?.kind === 'combo' ? (
+        <ComboPanel
+          combo={panel.id ? (comboRows.find((k) => k.id === panel.id) ?? null) : null}
+          services={services}
+          products={products}
+          categories={svcCats}
+          onSaved={() => {
+            refresh();
+            setPanel(null);
+            toast(t('catalog.saved'));
+          }}
+          onDeleted={() => {
+            refresh();
+            setPanel(null);
+            toast(t('catalog.comboDeleted'));
           }}
           onClose={() => setPanel(null)}
         />

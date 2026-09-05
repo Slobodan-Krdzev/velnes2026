@@ -242,3 +242,22 @@ super-only — with name/description saves through the same door.
 Honest omission: role changes are not yet audited — the platform log
 writes need a tenantless audit lane first, the same gap every HQ
 team/role door already has.
+
+## Support tickets — salon and supplier reach Revelapps HQ (2026-09-04)
+
+Support tickets are now real, replacing the dashboard's honest
+`openTickets: 0` placeholder. A salon (workspace **Support** page) or a
+supplier (portal **Support** tab) opens a thread to Revelapps HQ; the
+ticket carries the conversation as a JSONB thread on one row
+(`support_tickets`, migration 20260904200040). Exactly one of
+`tenant_id`/`supplier_id` is set, and RLS gives each side only its own
+while HQ (`app.hq`) reads them all. HQ's new **Tickets** tab lists every
+thread across both origins, answers them (`POST /hq/tickets/:id/reply`,
+which mails the opener at the email captured when the ticket was opened)
+and moves the lifecycle (`PATCH /hq/tickets/:id`: open → in_progress →
+resolved/closed). Every inbound ticket and reply also queues mail
+through the outbox — the thread exists in the apps and over SMTP (mock
+until the provider). The dashboard's open-ticket stat now counts real
+open + in-progress tickets across the platform, and each salon row shows
+its own count. Honest note: HQ role changes on tickets are not yet in
+the audit trail — the same deferral as the rest of the HQ role kit.

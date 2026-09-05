@@ -9,7 +9,7 @@ import type { Trx } from '../../db/index.js';
 
 export class CatalogError extends Error {
   constructor(
-    public code: 'NOT_FOUND' | 'BAD_MODIFIER' | 'BAD_CATEGORY',
+    public code: 'NOT_FOUND' | 'BAD_MODIFIER' | 'BAD_CATEGORY' | 'BAD_ITEM',
     message: string,
   ) {
     super(message);

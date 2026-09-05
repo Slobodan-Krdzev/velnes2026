@@ -7,6 +7,14 @@ export const LoginRequestSchema = z.object({
 });
 export type LoginRequest = z.infer<typeof LoginRequestSchema>;
 
+/** The phone's tap-your-name sign-in: the device holds the roster of
+ *  ids from a prior session; the person supplies the password. */
+export const LoginByIdRequestSchema = z.object({
+  employeeId: z.uuid(),
+  password: z.string().min(1),
+});
+export type LoginByIdRequest = z.infer<typeof LoginByIdRequestSchema>;
+
 export const SessionEmployeeSchema = z.object({
   id: z.uuid(),
   name: z.string(),

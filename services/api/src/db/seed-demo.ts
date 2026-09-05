@@ -73,6 +73,8 @@ export const demo = {
   et3: '90000000-0000-4000-8000-000000000003',
   p8: '70000000-0000-4000-8000-000000000008',
   p9: '70000000-0000-4000-8000-000000000009',
+  k1: '72000000-0000-4000-8000-000000000001',
+  k2: '72000000-0000-4000-8000-000000000002',
   sup1: 'd1000000-0000-4000-8000-000000000001',
   sup2: 'd1000000-0000-4000-8000-000000000002',
   sup3: 'd1000000-0000-4000-8000-000000000003',
@@ -518,6 +520,26 @@ export async function seedDemo(adminUrl: string) {
         );
       }
 
+    // Combos (the till's Packages) — the prototype's k1 and k2.
+    const comboRows: [string, string, string, string, number, number, string, unknown[]][] = [
+      [
+        demo.k1, 'Recovery start pack', 'Manual therapy',
+        'Assessment, treatment and a follow-up.', 5400, 4700, '12 months',
+        [{ type: 'service', id: demo.s1, qty: 1 }, { type: 'service', id: demo.s2, qty: 1 }, { type: 'service', id: demo.s3, qty: 1 }],
+      ],
+      [
+        demo.k2, 'Assessment with home kit', 'Assessment',
+        'Full assessment plus a cold pack to take home.', 3100, 2700, '6 months',
+        [{ type: 'service', id: demo.s6, qty: 1 }, { type: 'product', id: demo.p5, qty: 1 }],
+      ],
+    ];
+    for (const [i, [id, name, cat, descr, regular, price, validity, items]] of comboRows.entries())
+      await q(
+        `INSERT INTO combos (id, tenant_id, name, category, descr, validity, regular, price, vat, status, pos, online, items, sort)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,18,'active',true,false,$9,$10)`,
+        [id, demo.business, name, cat, descr, validity, regular, price, JSON.stringify(items), i],
+      );
+
     // ── Customers (minimal profile; Phase 9 adds intelligence) ────
     const custRows: [string, string, string, string, string, string, number, number, number, number, boolean, number, string | null][] = [
       [demo.c1, 'Katerina Stojanovska', 'katerina.s@example.com', '+389 70 221 884', 'Regulars', '2022-03-14', 38, 98500, 320, 2700, false, 0, 'Prefers Maria. Recovering from a hamstring tear, left leg.'],
@@ -959,6 +981,41 @@ export async function seedDemo(adminUrl: string) {
         `INSERT INTO supplier_users (id, supplier_id, name, email, role, password_hash) VALUES ($1,$2,$3,$4,$5,$6)`,
         [id, demo.sup1, name, email, role, hash],
       );
+
+    // Support tickets — one open from the salon, one from a supplier,
+    // so HQ's queue and the open-ticket count are real from the start.
+    await q(
+      `INSERT INTO support_tickets (origin, tenant_id, origin_name, created_by, reply_to, subject, category, status, last_actor, messages)
+       VALUES ('tenant', $1, 'Velnes Demo Salon', 'Maria Petrovska', 'maria@velnes.mk',
+               'Booking widget shows no times', 'technical', 'open', 'origin', $2)`,
+      [
+        demo.business,
+        JSON.stringify([
+          {
+            authorKind: 'tenant',
+            authorName: 'Maria Petrovska',
+            body: 'Our online booking page shows no available slots since this morning.',
+            at: '2026-09-03T09:12:00.000Z',
+          },
+        ]),
+      ],
+    );
+    await q(
+      `INSERT INTO support_tickets (origin, supplier_id, origin_name, created_by, reply_to, subject, category, status, last_actor, messages)
+       VALUES ('supplier', $1, 'BeautyPro MK', 'Bojan Cvetkov', 'bojan@beautypro.mk',
+               'Payout statement question', 'billing', 'open', 'origin', $2)`,
+      [
+        demo.sup1,
+        JSON.stringify([
+          {
+            authorKind: 'supplier',
+            authorName: 'Bojan Cvetkov',
+            body: 'Where can I download last month’s payout statement?',
+            at: '2026-09-02T14:40:00.000Z',
+          },
+        ]),
+      ],
+    );
 
     // ── The other customer accounts (prototype hqBusinesses) ─────
     // Their dashboard rows are DERIVED — status from owner + location

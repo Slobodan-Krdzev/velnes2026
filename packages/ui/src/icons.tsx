@@ -1,6 +1,8 @@
 /** The prototype's icon library, verbatim (const I / icon()). */
 
 export const I = {
+  sparkle:
+    '<path d="M10.5 3.4 12.2 8.3 17.1 10 12.2 11.7 10.5 16.6 8.8 11.7 3.9 10 8.8 8.3z"/><path d="M17.4 14.1l.8 2.1 2.1.8-2.1.8-.8 2.1-.8-2.1-2.1-.8 2.1-.8z"/>',
   calendar: '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M8 2v4M16 2v4M3 10h18"/>',
   register:
     '<rect x="2" y="9" width="20" height="12" rx="2"/><path d="M6 9V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v4M6 13h4M14 13h4M6 17h12"/>',

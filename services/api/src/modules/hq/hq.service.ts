@@ -81,7 +81,7 @@ export async function hqBusinessList() {
       .orderBy('b.createdAt')
       .execute();
     const weekAgo = new Date(Date.now() - 7 * 24 * 3600 * 1000);
-    const [locs, emps, svcs, prods, pays, widgets, errs] = await Promise.all([
+    const [locs, emps, svcs, prods, pays, widgets, errs, tickets] = await Promise.all([
       trx.selectFrom('locations').select(['tenantId', 'lifecycle']).execute(),
       trx.selectFrom('employees').select(['tenantId']).execute(),
       trx.selectFrom('services').select(['tenantId']).execute(),
@@ -94,7 +94,16 @@ export async function hqBusinessList() {
         .where('level', '=', 'error')
         .where('ts', '>', weekAgo)
         .execute(),
+      trx
+        .selectFrom('supportTickets')
+        .select(['tenantId'])
+        .where('status', 'in', ['open', 'in_progress'])
+        .execute(),
     ]);
+    // Open tickets are real now: per-salon on the row, and the whole
+    // platform (suppliers included) in the header stat.
+    const openTicketCount = countBy(tickets.filter((tt) => tt.tenantId).map((tt) => ({ tenantId: tt.tenantId as string })));
+    const openTicketTotal = tickets.length;
     const empCount = countBy(emps);
     const svcCount = countBy(svcs);
     const prodCount = countBy(prods);
@@ -131,7 +140,7 @@ export async function hqBusinessList() {
         steps,
         mrr: status === 'invited' ? 0 : (PLAN_PRICES[b.plan] ?? 0),
         syncErrors7d: errCount.get(b.id) ?? 0,
-        openTickets: 0,
+        openTickets: openTicketCount.get(b.id) ?? 0,
         lastSupportAccess: null,
       };
     });
@@ -141,7 +150,7 @@ export async function hqBusinessList() {
         businesses: businesses.length,
         live: businesses.filter((b) => b.status === 'live').length,
         onboarding: businesses.filter((b) => b.status !== 'live').length,
-        openTickets: businesses.reduce((s, b) => s + b.openTickets, 0),
+        openTickets: openTicketTotal,
         monthlyRevenue: businesses.reduce((s, b) => s + b.mrr, 0),
       },
     };

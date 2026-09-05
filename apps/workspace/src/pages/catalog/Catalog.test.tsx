@@ -75,6 +75,30 @@ function mockApi(calls: { method: string; path: string; body?: unknown }[]) {
             },
           ],
         });
+      if (path.endsWith('/combos') && method === 'GET')
+        return ok({
+          combos: [
+            {
+              id: '72000000-0000-4000-8000-000000000001',
+              name: 'Recovery start pack',
+              category: 'Recovery',
+              descr: 'Assessment, treatment and a follow-up.',
+              validity: '12 months',
+              regular: 5400,
+              price: 4700,
+              vat: 18,
+              status: 'active',
+              pos: true,
+              online: false,
+              items: [{ type: 'service', id: SVC, qty: 1 }],
+              img: null,
+              bg: null,
+            },
+          ],
+        });
+      if (path.includes('/combos') && method === 'POST') return ok({ id: '72000000-0000-4000-8000-0000000000aa' });
+      if (path.includes('/combos') && (method === 'PUT' || method === 'PATCH' || method === 'DELETE'))
+        return ok({ ok: true });
       if (path.includes('/catalog/services/') && method === 'PATCH') return ok({ ok: true });
       if (path.includes('/services/') && method === 'PUT') return ok({ ok: true });
       if (path.endsWith('/stock/movements')) return ok({ levels: [] });
@@ -178,5 +202,35 @@ describe('catalog', () => {
         ),
       ).toBe(true),
     );
+  });
+
+  it('lists combos and builds a new one through the combo panel', async () => {
+    const calls: { method: string; path: string; body?: unknown }[] = [];
+    mockApi(calls);
+    await openCatalog();
+    await userEvent.click(screen.getByRole('button', { name: 'Combos' }));
+    // The seeded package reads back in the table.
+    expect(await screen.findByText('Recovery start pack')).toBeDefined();
+
+    // Add opens the panel; pick a service, name it, save posts the item.
+    await userEvent.click(screen.getByRole('button', { name: /Add/ }));
+    const name = await screen.findByLabelText(/Name/);
+    await userEvent.type(name, 'Test pack');
+    // Check the service's box (the checkbox precedes its qty input).
+    const svcCheck = screen.getByLabelText('Qty Sports massage')
+      .closest('label')!
+      .querySelector('input[type=checkbox]') as HTMLInputElement;
+    await userEvent.click(svcCheck);
+    const priceInput = screen.getByLabelText(/Combo sale price/);
+    await userEvent.clear(priceInput);
+    await userEvent.type(priceInput, '2300');
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => {
+      const sent = calls.find((c) => c.method === 'POST' && c.path.endsWith('/combos'));
+      expect(sent).toBeDefined();
+      const body = sent!.body as { name: string; items: { type: string; id: string }[] };
+      expect(body.name).toBe('Test pack');
+      expect(body.items.some((i) => i.type === 'service' && i.id === SVC)).toBe(true);
+    });
   });
 });

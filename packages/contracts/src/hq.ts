@@ -319,6 +319,9 @@ export const HqSupplierRowSchema = z.object({
   pendingSalons: z.number().int(),
   orders: z.number().int(),
   orderValue: z.number().int(),
+  /** Whether the supplier has its first portal keyholder yet. */
+  hasOwner: z.boolean().default(false),
+  ownerStatus: z.enum(['none', 'invited', 'active']).default('none'),
 });
 export const HqSupplierListSchema = z.object({ suppliers: z.array(HqSupplierRowSchema) });
 export const HqSupplierCreateSchema = z.object({
@@ -326,6 +329,11 @@ export const HqSupplierCreateSchema = z.object({
   type: z.string().default('Distributor'),
   territory: z.string().default('North Macedonia'),
   contact: z.string().default(''),
+});
+/** HQ hands a freshly-created supplier its first portal owner. */
+export const HqSupplierInviteSchema = z.object({
+  name: z.string().min(1).max(80),
+  email: z.string().email().max(120),
 });
 export const HqSupplierPatchSchema = z.object({
   verified: z.boolean().optional(),

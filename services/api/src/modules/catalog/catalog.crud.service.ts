@@ -1,4 +1,4 @@
-import type { AccessClaims } from '@velnes/contracts';
+import type { AccessClaims, Combo, ComboWrite } from '@velnes/contracts';
 import type { Trx } from '../../db/index.js';
 import { logAudit } from '../audit/audit.service.js';
 import { CatalogError } from './catalog.service.js';
@@ -457,4 +457,158 @@ export async function updateProduct(
       before: `${before.price} ден`,
       after: `${w.price} ден`,
     });
+}
+
+// ── Combos (the till's Packages): a sellable bundle of services and
+//    products. Every item is validated against the tenant's own
+//    catalog before the combo will save — never a text-only line. ──
+
+async function validateComboItems(trx: Trx, items: ComboWrite['items']) {
+  for (const it of items) {
+    const table = it.type === 'service' ? 'services' : 'products';
+    const found = await trx
+      .selectFrom(table)
+      .select('id')
+      .where('id', '=', it.id)
+      .executeTakeFirst();
+    if (!found)
+      throw new CatalogError('BAD_ITEM', `A combo item points at an unknown ${it.type}`);
+  }
+}
+
+async function comboCategory(trx: Trx, name: string | null | undefined): Promise<string | null> {
+  if (!name) return null;
+  const existing = await trx
+    .selectFrom('serviceCategories')
+    .select('id')
+    .where('name', '=', name)
+    .executeTakeFirst();
+  if (!existing)
+    throw new CatalogError('BAD_CATEGORY', 'Pick a Velnes category — salons cannot create their own');
+  return name;
+}
+
+type ComboRow = {
+  id: string; name: string; category: string | null; descr: string; validity: string;
+  regular: number; price: number; vat: number; status: 'active' | 'draft';
+  pos: boolean; online: boolean; items: unknown;
+};
+
+export function toComboContract(k: ComboRow): Combo {
+  return {
+    id: k.id,
+    name: k.name,
+    category: k.category,
+    descr: k.descr,
+    validity: k.validity,
+    regular: k.regular,
+    price: k.price,
+    vat: k.vat,
+    status: k.status,
+    pos: k.pos,
+    online: k.online,
+    items: (Array.isArray(k.items) ? k.items : []) as Combo['items'],
+    img: null,
+    bg: null,
+  };
+}
+
+export async function listCombos(trx: Trx): Promise<Combo[]> {
+  const rows = await trx.selectFrom('combos').selectAll().orderBy('sort').orderBy('name').execute();
+  return rows.map((r) => toComboContract(r as unknown as ComboRow));
+}
+
+export async function createCombo(trx: Trx, claims: AccessClaims, w: ComboWrite) {
+  const tenantId = claims.ten;
+  await validateComboItems(trx, w.items);
+  const category = await comboCategory(trx, w.category);
+  const row = await trx
+    .insertInto('combos')
+    .values({
+      tenantId,
+      name: w.name,
+      category,
+      descr: w.descr ?? '',
+      validity: w.validity ?? '12 months',
+      regular: w.regular,
+      price: w.price,
+      vat: w.vat ?? 18,
+      status: w.status ?? 'active',
+      pos: w.pos ?? true,
+      online: w.online ?? false,
+      items: JSON.stringify(w.items),
+    })
+    .returning('id')
+    .executeTakeFirstOrThrow();
+  return row.id;
+}
+
+export async function updateCombo(trx: Trx, claims: AccessClaims, comboId: string, w: ComboWrite) {
+  const before = await trx
+    .selectFrom('combos')
+    .selectAll()
+    .where('id', '=', comboId)
+    .executeTakeFirst();
+  if (!before) throw new CatalogError('NOT_FOUND', 'Unknown combo');
+  await validateComboItems(trx, w.items);
+  const category = await comboCategory(trx, w.category);
+  await trx
+    .updateTable('combos')
+    .set({
+      name: w.name,
+      category,
+      descr: w.descr ?? before.descr,
+      validity: w.validity ?? before.validity,
+      regular: w.regular,
+      price: w.price,
+      vat: w.vat ?? before.vat,
+      status: w.status ?? before.status,
+      pos: w.pos ?? before.pos,
+      online: w.online ?? before.online,
+      items: JSON.stringify(w.items),
+    })
+    .where('id', '=', comboId)
+    .execute();
+  if (w.price !== before.price)
+    await logAudit(trx, before.tenantId, {
+      actorEmployeeId: claims.sub,
+      actorName: await actorName(trx, claims),
+      action: 'Price changed',
+      object: `Combo · ${before.name}`,
+      before: `${before.price} ден`,
+      after: `${w.price} ден`,
+    });
+}
+
+/** The row toggle: turn a combo on or off for the till, or flip status. */
+export async function patchCombo(
+  trx: Trx,
+  comboId: string,
+  patch: { pos?: boolean | undefined; status?: 'active' | 'draft' | undefined; online?: boolean | undefined },
+) {
+  const before = await trx
+    .selectFrom('combos')
+    .select('id')
+    .where('id', '=', comboId)
+    .executeTakeFirst();
+  if (!before) throw new CatalogError('NOT_FOUND', 'Unknown combo');
+  await trx
+    .updateTable('combos')
+    .set({
+      ...(patch.pos !== undefined ? { pos: patch.pos } : {}),
+      ...(patch.status !== undefined ? { status: patch.status } : {}),
+      ...(patch.online !== undefined ? { online: patch.online } : {}),
+    })
+    .where('id', '=', comboId)
+    .execute();
+}
+
+export async function deleteCombo(trx: Trx, comboId: string) {
+  const before = await trx
+    .selectFrom('combos')
+    .select('id')
+    .where('id', '=', comboId)
+    .executeTakeFirst();
+  if (!before) throw new CatalogError('NOT_FOUND', 'Unknown combo');
+  await trx.deleteFrom('combos').where('id', '=', comboId).execute();
 }

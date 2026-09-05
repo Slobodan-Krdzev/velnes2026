@@ -1,21 +1,24 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { InvoiceListResponseSchema, TimingSuggestionsResponseSchema } from '@velnes/contracts';
+import { FlightdeckSchema, TimingSuggestionsResponseSchema } from '@velnes/contracts';
 import { I, Icon } from '@velnes/ui';
-import { useMemo } from 'react';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { z } from 'zod';
 import { get, post } from '@velnes/client';
-import { useAppointments, useLocations } from '../../api/queries.js';
 import { money } from '../../lib/money.js';
 import { useToast } from '../../lib/toast.js';
 import { useSession } from '@velnes/client';
 import { useScope } from '../../shell/Shell.js';
-import { localIso } from '../calendar/Calendar.js';
 
-/** Flightdeck: today's numbers from real data, plus the timing
- *  suggestions stack ("Velnes suggests 50 min") as the action queue.
- *  Premium/member cards arrive with Phase 9. */
+const OPP_ICON: Record<string, string> = { users: I.users, pulse: I.pulse, bottle: I.bottle };
+
+/** The salon flightdeck — the prototype's viewFlightdeck, composed from
+ *  live data by the one /flightdeck door. Above the fold: the pulse,
+ *  the priority-of-today hero, the opportunities and the stock that
+ *  needs a decision. Below: today at a glance, upsell per person, and
+ *  the Kumo insight. Opportunities/Kumo come from the insights engine
+ *  (rules today, Claude later) — the UI computes nothing. */
 export function FlightdeckPage() {
   const { t } = useTranslation();
   const toast = useToast();
@@ -23,18 +26,15 @@ export function FlightdeckPage() {
   const navigate = useNavigate();
   const { me, can } = useSession();
   const { scope } = useScope();
-  const locations = useLocations();
+  const [why, setWhy] = useState(false);
 
-  const myLocs = useMemo(() => {
-    const all = locations.data?.locations ?? [];
-    return me?.locationIds.length ? all.filter((l) => me.locationIds.includes(l.id)) : all;
-  }, [locations.data, me]);
-  const loc = scope !== 'all' ? scope : (myLocs[0]?.id ?? null);
-  const today = localIso(new Date());
-  const appts = useAppointments(loc, today, today);
-  const invoices = useQuery({
-    queryKey: ['invoices', 'today'],
-    queryFn: () => get(InvoiceListResponseSchema, '/invoices?limit=100'),
+  // A specific scope views that location; "All locations" lets the
+  // server show the primary operating location.
+  const loc = scope !== 'all' ? scope : null;
+
+  const fd = useQuery({
+    queryKey: ['flightdeck', loc ?? 'all'],
+    queryFn: () => get(FlightdeckSchema, `/flightdeck${loc ? `?locationId=${loc}` : ''}`),
   });
   const suggestions = useQuery({
     queryKey: ['timingSuggestions'],
@@ -42,120 +42,304 @@ export function FlightdeckPage() {
     enabled: can('ranking.manage') || me?.access === 'owner',
   });
 
-  const todays = (appts.data?.appointments ?? []).filter(
-    (a) => a.kind === 'appointment' && a.status !== 'cancelled',
-  );
-  const revToday = (invoices.data?.invoices ?? [])
-    .filter((i) => i.date === today && i.status === 'Paid')
-    .reduce((s, i) => s + i.total, 0);
-
   const act = async (id: string, action: 'approve' | 'dismiss') => {
     await post(z.object({ ok: z.literal(true) }), `/timings/${id}/${action}`, {});
     toast(action === 'approve' ? t('fd.timingApproved') : t('fd.timingDismissed'));
     void qc.invalidateQueries({ queryKey: ['timingSuggestions'] });
   };
 
+  const greeting = () => {
+    const h = new Date().getHours();
+    const key = h < 12 ? 'fd.greetMorning' : h < 18 ? 'fd.greetAfternoon' : 'fd.greetEvening';
+    return t(key, { name: fd.data?.greetingName || (me?.name ?? '').split(' ')[0] });
+  };
+  const delta = (base: string, pct: number | null) => {
+    if (pct === null) return t(`${base}Flat`);
+    return t(pct >= 0 ? `${base}Up` : `${base}Down`, { pct: Math.abs(pct) });
+  };
+  const stockLine = (stock: number) => {
+    const w = Math.max(1, Math.ceil(stock / 4));
+    return t('fd.stockLine', { n: stock, weeks: w });
+  };
+
+  if (!fd.data) return <div className="fd" />;
+  const d = fd.data;
+  const sugg = suggestions.data?.suggestions ?? [];
+  const maxUp = Math.max(1, ...d.staff.map((s) => s.value));
+
   return (
-    <div className="stacked">
-      <div className="grid4 fd-pulse">
-        <div className="stat">
-          <span className="stat-label">{t('fd.apptsToday')}</span>
-          <span className="stat-value">{todays.length}</span>
-          <span className="stat-hint">
-            {todays.filter((a) => a.status === 'confirmed').length} {t('fd.confirmed')}
-          </span>
+    <div className="fd">
+      <div className="fd-fold">
+        <div className="fd-greet">
+          <h2>{greeting()}</h2>
+          <p className="muted" style={{ fontWeight: 500 }}>
+            {t('fd.deserves')}
+          </p>
         </div>
-        <div className="stat">
-          <span className="stat-label">{t('fd.revenueToday')}</span>
-          <span className="stat-value">{money(revToday)}</span>
-          <span className="stat-hint">
-            {(invoices.data?.invoices ?? []).filter((i) => i.date === today).length}{' '}
-            {t('fd.salesToday')}
-          </span>
-        </div>
-        <div className="stat">
-          <span className="stat-label">{t('fd.nextUp')}</span>
-          <span className="stat-value tnum">
-            {todays.find((a) => a.start >= new Date().toTimeString().slice(0, 5))?.start ?? '—'}
-          </span>
-          <span className="stat-hint">
-            {todays.find((a) => a.start >= new Date().toTimeString().slice(0, 5))?.title ?? t('fd.dayDone')}
-          </span>
-        </div>
-        <div className="stat">
-          <span className="stat-label">{t('fd.suggestions')}</span>
-          <span className="stat-value">{suggestions.data?.suggestions.length ?? 0}</span>
-          <span className="stat-hint">{t('fd.timingStack')}</span>
+        <div className="fd-main">
+          <div className="fd-left">
+            <div className="grid4 fd-pulse">
+              <div className="stat">
+                <span className="stat-label">{t('fd.capacityToday')}</span>
+                <span className="stat-value">{d.pulse.capacityPct}%</span>
+                <span className="stat-hint">
+                  {t('fd.slotsBooked', { booked: d.pulse.bookedToday, total: d.pulse.totalSlots })}
+                </span>
+              </div>
+              <div className="stat">
+                <span className="stat-label">{t('fd.revenueToday')}</span>
+                <span className="stat-value">{money(d.pulse.revenueToday)}</span>
+                <span className="stat-hint">
+                  {d.pulse.revenueTarget
+                    ? t('fd.ofAverage', {
+                        pct: Math.round((d.pulse.revenueToday / d.pulse.revenueTarget) * 100),
+                        avg: money(d.pulse.revenueTarget),
+                      })
+                    : t('fd.noBaseline')}
+                </span>
+              </div>
+              <div className="stat">
+                <span className="stat-label">{t('fd.newCustomers')}</span>
+                <span className="stat-value">{d.pulse.newCustomers}</span>
+                <span className="stat-hint">{delta('fd.thisMonth', d.pulse.newCustomersDeltaPct)}</span>
+              </div>
+              <div className="stat">
+                <span className="stat-label">{t('fd.avgSpend')}</span>
+                <span className="stat-value">{money(d.pulse.avgSpend)}</span>
+                <span className="stat-hint">{delta('fd.perVisit', d.pulse.avgSpendDeltaPct)}</span>
+              </div>
+            </div>
+
+            {d.memberRecs.count > 0 ? (
+              <div className="fd-hero" data-fdrec>
+                <div className="fd-hero-main">
+                  <span className="fd-kicker">{t('fd.premiumKicker')}</span>
+                  <h2>
+                    {d.memberRecs.count === 1
+                      ? t('fd.recWaitingOne')
+                      : t('fd.recWaitingMany', { n: d.memberRecs.count })}
+                  </h2>
+                  <p>
+                    {d.memberRecs.count === 1
+                      ? t('fd.recBodyOne', { value: money(d.memberRecs.value) })
+                      : t('fd.recBodyMany', { n: d.memberRecs.count, value: money(d.memberRecs.value) })}
+                  </p>
+                  <div className="fd-hero-actions">
+                    <button
+                      className="btn btn-primary"
+                      onClick={() => navigate('/marketing', { state: { tab: 'premium' } })}
+                    >
+                      {t('fd.openPremium')}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : null}
+
+            {d.hero.kind === 'capacity' ? (
+              <div className="fd-hero">
+                <div className="fd-hero-main">
+                  <span className="fd-kicker">{t('fd.priorityToday')}</span>
+                  <h2>{d.hero.when === 'tomorrow' ? t('fd.fillTomorrow') : t('fd.fillToday')}</h2>
+                  <p>
+                    {t('fd.heroBody', {
+                      when: d.hero.when === 'tomorrow' ? t('fd.whenTomorrow') : t('fd.whenToday'),
+                      n: d.hero.openSlots,
+                      from: d.hero.fromTime,
+                      to: d.hero.toTime,
+                    })}{' '}
+                    {t('fd.heroMembers', { members: d.hero.memberCount })}
+                  </p>
+                  <div className="fd-hero-meta">
+                    <span>
+                      <Icon d={I.pulse} size={18} w={2} /> {t('fd.potential', { value: money(d.hero.potential) })}
+                    </span>
+                    <span>
+                      <Icon d={I.clock} size={18} w={2} /> {t('fd.timeNeeded')}
+                    </span>
+                  </div>
+                  <div className="fd-hero-actions">
+                    <button className="btn btn-primary" onClick={() => navigate('/marketing')}>
+                      {t('fd.sendOffer')}
+                    </button>
+                    <button className="btn btn-subtle" onClick={() => setWhy((v) => !v)}>
+                      {why ? t('fd.hideReasoning') : t('fd.viewReasoning')}
+                    </button>
+                  </div>
+                  {why ? <div className="note fd-why">{t('fd.reasoning')}</div> : null}
+                </div>
+              </div>
+            ) : (
+              <div className="fd-hero fd-hero-quiet">
+                <div className="fd-hero-main">
+                  <span className="fd-kicker">{t('fd.priorityToday')}</span>
+                  <h2>{t('fd.nothingOnFire')}</h2>
+                  <p>{t('fd.quietBody')}</p>
+                </div>
+              </div>
+            )}
+
+            {d.opportunities.length ? (
+              <div className="fd-opps">
+                {d.opportunities.map((o) => (
+                  <div key={o.key} className="fd-opp">
+                    <span className="fd-opp-ic">
+                      <Icon d={OPP_ICON[o.icon] ?? I.pulse} size={22} w={2} />
+                    </span>
+                    <span className="fd-opp-body">
+                      <span className="t">{o.title}</span>
+                      <span className="x">{o.detail}</span>
+                    </span>
+                    <span className="fd-opp-side">
+                      {o.value > 0 ? <span className="v">+{money(o.value)}</span> : null}
+                      <button className="btn btn-secondary btn-sm" onClick={() => navigate(`/${o.actionTarget}`)}>
+                        {o.actionLabel}
+                      </button>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+          </div>
+
+          <div className="fd-side">
+            <div className="card fd-card">
+              <h3>{t('fd.stockDecision')}</h3>
+              {d.inventory.length ? (
+                d.inventory.map((p) => (
+                  <div key={p.id} className="fd-emp">
+                    <span className="pthumb ph fd-shot">{(p.name[0] ?? '?').toUpperCase()}</span>
+                    <span className="fd-emp-body">
+                      <span className="n">{p.name}</span>
+                      <span className={`x ${p.soldOut ? 'danger' : ''}`}>
+                        {p.soldOut ? t('fd.soldOut') : stockLine(p.stock)}
+                      </span>
+                    </span>
+                    <button className="btn btn-secondary btn-sm" onClick={() => navigate('/suppliers')}>
+                      {t('fd.reorder')}
+                    </button>
+                  </div>
+                ))
+              ) : (
+                <p className="muted" style={{ fontWeight: 500 }}>
+                  {t('fd.nothingLow')}
+                </p>
+              )}
+              <button className="btn btn-subtle btn-sm" onClick={() => navigate('/suppliers')}>
+                {t('fd.viewSuppliers')} <Icon d={I.right} size={16} w={2.4} />
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 
-      {suggestions.data?.suggestions.length ? (
-        <div className="card">
-          <div className="card-header">
-            <h2>{t('fd.timingTitle')}</h2>
-            <span className="muted" style={{ fontWeight: 500 }}>
-              {t('fd.timingSub')}
-            </span>
+      <div className="fd-more">
+        <span className="fd-more-k">{t('fd.goodToKnow')}</span>
+        <div className="fd-more-grid">
+          <div className="card fd-card">
+            <h3>{t('fd.todayGlance')}</h3>
+            {(
+              [
+                [t('fd.treatmentsBooked'), `${d.snapshot.bookedToday} of ${d.snapshot.totalSlots}`],
+                [t('fd.onlineBookings'), `${d.snapshot.onlineToday} of ${d.snapshot.bookedToday}`],
+                [t('fd.noShows'), `${d.snapshot.noShows} (${d.snapshot.noShowPct}%)`],
+                [t('fd.revenue'), money(d.snapshot.revenue)],
+                [t('fd.productSales'), money(d.snapshot.productSales)],
+              ] as [string, string][]
+            ).map(([k, v]) => (
+              <div key={k} className="fd-row">
+                <span className="k">{k}</span>
+                <span className="v tnum">{v}</span>
+              </div>
+            ))}
+            <button className="btn btn-subtle btn-sm" onClick={() => navigate('/reports')}>
+              {t('fd.fullReports')} <Icon d={I.right} size={16} w={2.4} />
+            </button>
           </div>
-          {suggestions.data.suggestions.map((s) => (
-            <div key={s.id} className="rowcard">
-              <span className="grow">
-                <span className="t">
-                  {s.employeeName} · {s.serviceName}
-                </span>
-                <span className="s">
-                  {t('fd.timingLine', {
-                    current: s.currentMin ?? '—',
-                    suggested: s.recommendedMin ?? '—',
-                    n: s.observedN,
-                  })}
-                </span>
-              </span>
-              <button className="btn btn-secondary btn-sm" onClick={() => void act(s.id, 'dismiss')}>
-                {t('fd.dismiss')}
-              </button>
-              <button className="btn btn-primary btn-sm" onClick={() => void act(s.id, 'approve')}>
-                {t('fd.approve')}
-              </button>
-            </div>
-          ))}
-        </div>
-      ) : null}
 
-      <div className="card">
-        <div className="card-header">
-          <h2>{t('fd.todaysAppointments')}</h2>
-          <button className="btn btn-secondary btn-sm" onClick={() => navigate('/calendar')}>
-            {t('nav.calendar')} <Icon d={I.right} size={14} w={2.5} />
-          </button>
-        </div>
-        {todays.length === 0 ? (
-          <div className="empty">
-            <h3>{t('fd.quietDay')}</h3>
-            <p>{t('fd.quietDaySub')}</p>
+          <div className="card fd-card">
+            <h3>{t('fd.upsellPerPerson')}</h3>
+            {d.staff.length ? (
+              d.staff.map((s) => (
+                <div key={s.employeeId} className="fd-emp">
+                  <span className="pthumb ph fd-face">
+                    {s.name
+                      .split(' ')
+                      .map((w) => w[0])
+                      .join('')
+                      .slice(0, 2)
+                      .toUpperCase()}
+                  </span>
+                  <span className="fd-emp-body">
+                    <span className="n">{s.name}</span>
+                    <span className="fd-bar">
+                      <i style={{ width: `${Math.round((s.value / maxUp) * 100)}%` }} />
+                    </span>
+                  </span>
+                  <span className="v tnum">{money(s.value)}</span>
+                </div>
+              ))
+            ) : (
+              <p className="muted" style={{ fontWeight: 500 }}>
+                {t('fd.noUpsell')}
+              </p>
+            )}
+            <button className="btn btn-subtle btn-sm" onClick={() => navigate('/reports')}>
+              {t('fd.fullReports')} <Icon d={I.right} size={16} w={2.4} />
+            </button>
           </div>
-        ) : (
-          <table>
-            <tbody>
-              {todays
-                .sort((a, b) => a.start.localeCompare(b.start))
-                .map((a) => (
-                  <tr key={a.id}>
-                    <td className="bold tnum" style={{ width: 90 }}>
-                      {a.start}
-                    </td>
-                    <td>
-                      <span className="bold">{a.title}</span>
-                      <span className="muted" style={{ display: 'block', fontSize: 12 }}>
-                        {a.serviceName}
-                      </span>
-                    </td>
-                    <td className="right muted tnum">{money(a.price)}</td>
-                  </tr>
-                ))}
-            </tbody>
-          </table>
-        )}
+        </div>
+
+        {sugg.length ? (
+          <div className="card">
+            <div className="card-header">
+              <h2>{t('fd.timingTitle')}</h2>
+              <span className="muted" style={{ fontWeight: 500 }}>
+                {t('fd.timingSub')}
+              </span>
+            </div>
+            {sugg.map((s) => (
+              <div key={s.id} className="rowcard">
+                <span className="grow">
+                  <span className="t">
+                    {s.employeeName} · {s.serviceName}
+                  </span>
+                  <span className="s">
+                    {t('fd.timingLine', {
+                      current: s.currentMin ?? '—',
+                      suggested: s.recommendedMin ?? '—',
+                      n: s.observedN,
+                    })}
+                  </span>
+                </span>
+                <button className="btn btn-secondary btn-sm" onClick={() => void act(s.id, 'dismiss')}>
+                  {t('fd.dismiss')}
+                </button>
+                <button className="btn btn-primary btn-sm" onClick={() => void act(s.id, 'approve')}>
+                  {t('fd.approve')}
+                </button>
+              </div>
+            ))}
+          </div>
+        ) : null}
+
+        {d.kumo ? (
+          <div className="fd-kumo">
+            <span className="fd-kumo-ic">
+              <Icon d={I.sparkle} size={22} w={1.9} />
+            </span>
+            <span className="grow">
+              <span className="t">{t('fd.insightKumo')}</span>
+              <span className="x">{d.kumo.text}</span>
+            </span>
+            <button
+              className="btn btn-secondary btn-sm"
+              onClick={() => navigate(`/${d.kumo!.actionTarget}`)}
+            >
+              {t('fd.createCampaign')}
+            </button>
+          </div>
+        ) : null}
       </div>
     </div>
   );

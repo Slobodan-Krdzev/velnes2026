@@ -14,7 +14,11 @@ import {
   PurchaseOrderSchema,
   SupplierProductListSchema,
   SupplierPromotionListSchema,
+  SUPPORT_CATEGORIES,
+  SupportTicketListSchema,
   type PurchaseOrder,
+  type SupportCategory,
+  type SupportTicket,
 } from '@velnes/contracts';
 import type { Lang } from '@velnes/i18n';
 import { I, Icon, VelnesMark } from '@velnes/ui';
@@ -46,6 +50,7 @@ type Tab =
   | 'promotions'
   | 'academy'
   | 'reports'
+  | 'support'
   | 'settings';
 
 // The prototype's PORTAL_NAV order (Orders sits second); Settings is
@@ -58,6 +63,7 @@ const NAV: { tab: Tab; label: string; icon: string; size: number }[] = [
   { tab: 'promotions', label: 'po.tabPromotions', icon: I.tag, size: 26 },
   { tab: 'academy', label: 'po.tabAcademy', icon: I.note, size: 26 },
   { tab: 'reports', label: 'po.tabReports', icon: I.pulse, size: 26 },
+  { tab: 'support', label: 'nav.support', icon: I.info, size: 26 },
 ];
 
 export function Portal({
@@ -79,6 +85,8 @@ export function Portal({
   const notifRef = useRef<HTMLDivElement | null>(null);
   const [focusOrder, setFocusOrder] = useState<string | null>(null);
   const clearFocus = useCallback(() => setFocusOrder(null), []);
+  const [focusTicket, setFocusTicket] = useState<string | null>(null);
+  const clearTicketFocus = useCallback(() => setFocusTicket(null), []);
   const say = (m: string) => {
     setToast(m);
     setTimeout(() => setToast(null), 3500);
@@ -198,11 +206,16 @@ export function Portal({
                         className="menu-row"
                         onClick={() => {
                           setNotifOpen(false);
-                          setTab('orders');
-                          if (n.refId) setFocusOrder(n.refId);
+                          if (n.kind === 'ticket') {
+                            setTab('support');
+                            if (n.refId) setFocusTicket(n.refId);
+                          } else {
+                            setTab('orders');
+                            if (n.refId) setFocusOrder(n.refId);
+                          }
                         }}
                       >
-                        <Icon d={I.invoice} size={20} />
+                        <Icon d={n.kind === 'ticket' ? I.info : I.invoice} size={20} />
                         <span className="grow" style={{ textAlign: 'left' }}>
                           <span className="mi-t" style={{ fontWeight: 700 }}>
                             {n.title}
@@ -282,6 +295,9 @@ export function Portal({
           {tab === 'promotions' ? <Promotions user={user} say={say} /> : null}
           {tab === 'academy' ? <Academy say={say} user={user} /> : null}
           {tab === 'reports' ? <Reports /> : null}
+          {tab === 'support' ? (
+            <PortalSupport say={say} focusId={focusTicket} clearFocus={clearTicketFocus} />
+          ) : null}
           {tab === 'settings' ? <Settings user={user} say={say} /> : null}
         </main>
       </div>
@@ -2495,6 +2511,264 @@ function AddPop({ items }: { items: { icon: string; label: string; sub: string; 
           ))}
         </div>
       ) : null}
+    </div>
+  );
+}
+
+const supStatusTone: Record<string, string> = {
+  open: 'info',
+  in_progress: 'warning',
+  resolved: 'success',
+  closed: '',
+};
+function supFmt(at: string) {
+  try {
+    return new Date(at).toLocaleString();
+  } catch {
+    return at;
+  }
+}
+
+/** The supplier's support desk to Revelapps HQ — same door as the
+ *  salon, in the portal and over mail. */
+function PortalSupport({
+  say,
+  focusId,
+  clearFocus,
+}: {
+  say: (m: string) => void;
+  focusId?: string | null;
+  clearFocus?: () => void;
+}) {
+  const { t } = useTranslation();
+  const [tickets, setTickets] = useState<SupportTicket[]>([]);
+  const [selId, setSelId] = useState<string | null>(null);
+  const [composing, setComposing] = useState(false);
+  const [subject, setSubject] = useState('');
+  const [category, setCategory] = useState<SupportCategory>('other');
+  const [body, setBody] = useState('');
+  const [reply, setReply] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(() => {
+    void pGet(SupportTicketListSchema, '/portal/support/tickets').then((r) => setTickets(r.tickets));
+  }, []);
+  useEffect(load, [load]);
+  // A bell click opens the ticket it named, once the list is in.
+  useEffect(() => {
+    if (focusId && tickets.some((x) => x.id === focusId)) {
+      setSelId(focusId);
+      setComposing(false);
+      clearFocus?.();
+    }
+  }, [focusId, tickets, clearFocus]);
+  const sel = tickets.find((x) => x.id === selId) ?? null;
+
+  const create = async () => {
+    setBusy(true);
+    try {
+      const r = await pPost(z.object({ id: z.string() }), '/portal/support/tickets', {
+        subject,
+        category,
+        body,
+      });
+      say(t('support.sent'));
+      setSubject('');
+      setBody('');
+      setCategory('other');
+      setComposing(false);
+      load();
+      setSelId(r.id);
+    } catch (e) {
+      say(e instanceof PortalApiError ? e.message : 'failed');
+    } finally {
+      setBusy(false);
+    }
+  };
+  const sendReply = async () => {
+    if (!sel) return;
+    setBusy(true);
+    try {
+      await pPost(z.object({ ok: z.literal(true) }), `/portal/support/tickets/${sel.id}/reply`, {
+        body: reply,
+      });
+      setReply('');
+      say(t('support.replied'));
+      load();
+    } catch (e) {
+      say(e instanceof PortalApiError ? e.message : 'failed');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: '340px 1fr', gap: 20 }}>
+      <div className="card" style={{ overflow: 'hidden' }}>
+        <div className="card-header">
+          <h2>{t('support.title')}</h2>
+          <button
+            className="btn btn-primary btn-sm"
+            onClick={() => {
+              setComposing(true);
+              setSelId(null);
+            }}
+          >
+            {t('support.new')}
+          </button>
+        </div>
+        {tickets.length === 0 ? (
+          <div className="empty" style={{ padding: 24 }}>
+            <p>{t('support.empty')}</p>
+          </div>
+        ) : (
+          <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+            {tickets.map((r) => (
+              <li key={r.id}>
+                <button
+                  className="ticketrow"
+                  style={{
+                    display: 'block',
+                    width: '100%',
+                    textAlign: 'left',
+                    padding: '12px 16px',
+                    border: 'none',
+                    borderTop: '1px solid var(--line)',
+                    background: selId === r.id ? 'var(--wash)' : 'transparent',
+                    cursor: 'pointer',
+                  }}
+                  onClick={() => {
+                    setSelId(r.id);
+                    setComposing(false);
+                  }}
+                >
+                  <span style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                    <span className="bold">{r.subject}</span>
+                    <span className={`badge ${supStatusTone[r.status] ?? ''}`}>
+                      {t(`support.status.${r.status}`)}
+                    </span>
+                  </span>
+                  <span className="muted" style={{ display: 'block', fontSize: 12, marginTop: 2 }}>
+                    {t(`support.cat.${r.category}`)} · {supFmt(r.updatedAt)}
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      <div className="card" style={{ minHeight: 320 }}>
+        {composing ? (
+          <div style={{ padding: 20, display: 'grid', gap: 14 }}>
+            <h2>{t('support.newTitle')}</h2>
+            <label className="field">
+              <span>
+                {t('support.subject')}
+                <span className="req">*</span>
+              </span>
+              <input className="input" value={subject} onChange={(e) => setSubject(e.target.value)} />
+            </label>
+            <label className="field">
+              <span>{t('support.category')}</span>
+              <select
+                className="select"
+                style={{ width: '100%' }}
+                value={category}
+                onChange={(e) => setCategory(e.target.value as SupportCategory)}
+              >
+                {SUPPORT_CATEGORIES.map((c) => (
+                  <option key={c} value={c}>
+                    {t(`support.cat.${c}`)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="field">
+              <span>
+                {t('support.message')}
+                <span className="req">*</span>
+              </span>
+              <textarea
+                className="input"
+                style={{ height: 140 }}
+                value={body}
+                onChange={(e) => setBody(e.target.value)}
+              />
+            </label>
+            <p className="muted" style={{ fontWeight: 500, fontSize: 12, margin: 0 }}>
+              {t('support.honestNote')}
+            </p>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button className="btn btn-ghost" onClick={() => setComposing(false)}>
+                {t('common.cancel')}
+              </button>
+              <button
+                className="btn btn-primary"
+                disabled={busy || subject.trim().length < 3 || !body.trim()}
+                onClick={() => void create()}
+              >
+                {t('support.send')}
+              </button>
+            </div>
+          </div>
+        ) : sel ? (
+          <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <div className="card-header" style={{ padding: 0 }}>
+              <h2>{sel.subject}</h2>
+              <span className={`badge ${supStatusTone[sel.status] ?? ''}`}>
+                {t(`support.status.${sel.status}`)}
+              </span>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {sel.messages.map((m, i) => (
+                <div
+                  key={i}
+                  style={{
+                    alignSelf: m.authorKind === 'hq' ? 'flex-start' : 'flex-end',
+                    maxWidth: '80%',
+                    background: m.authorKind === 'hq' ? 'var(--wash)' : 'var(--accent-wash, #eef2ff)',
+                    borderRadius: 12,
+                    padding: '10px 14px',
+                  }}
+                >
+                  <span className="muted" style={{ display: 'block', fontSize: 12, fontWeight: 600 }}>
+                    {m.authorKind === 'hq' ? t('support.fromHq') : m.authorName} · {supFmt(m.at)}
+                  </span>
+                  <span style={{ whiteSpace: 'pre-wrap' }}>{m.body}</span>
+                </div>
+              ))}
+            </div>
+            {sel.status === 'closed' ? (
+              <p className="muted" style={{ fontWeight: 500 }}>
+                {t('support.closedNote')}
+              </p>
+            ) : (
+              <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
+                <textarea
+                  className="input"
+                  style={{ height: 64, flex: 1 }}
+                  placeholder={t('support.replyPlaceholder')}
+                  value={reply}
+                  onChange={(e) => setReply(e.target.value)}
+                />
+                <button
+                  className="btn btn-primary"
+                  disabled={busy || !reply.trim()}
+                  onClick={() => void sendReply()}
+                >
+                  {t('support.reply')}
+                </button>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="empty" style={{ padding: 40 }}>
+            <h3>{t('support.pickTitle')}</h3>
+            <p>{t('support.pickSub')}</p>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

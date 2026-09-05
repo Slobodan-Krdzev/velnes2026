@@ -20,3 +20,6 @@ export * from './marketing.js';
 export * from './suppliers.js';
 export * from './business.js';
 export * from './reports.js';
+export * from './support.js';
+export * from './flightdeck.js';
+export * from './ranking.js';

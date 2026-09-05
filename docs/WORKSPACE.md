@@ -273,3 +273,47 @@ prototype's viewReports with a period filter and a real CSV download
 per pane. The seed carries ten deterministic weeks of history
 (appointment + paid invoice pairs, sources rotated, six no-shows)
 kept away from the customers whose exact figures the suites assert.
+
+## Support — the salon's door to Revelapps (2026-09-04)
+
+A **Support** entry joins the sidebar foot (open to any employee, no
+permission gate). It lists the salon's tickets and opens new ones to
+Revelapps HQ (`POST /support/tickets`), with a thread view and reply
+box (`/support/tickets/:id/reply`). Tickets are scoped to the tenant by
+RLS; each open and reply also queues mail to HQ through the outbox
+(mock until the provider). HQ answers from its own Tickets queue and
+its reply appears back in the thread. See REGISTRATIONS-HQ.md for the
+HQ side and the shared `support_tickets` model.
+
+## The flightdeck, rebuilt to the prototype — with a real insights engine (2026-09-05)
+
+The salon home now matches the prototype's `viewFlightdeck` class-for-class
+(markup + `prototype.css` verbatim): the greeting, the four-stat pulse,
+the priority-of-today hero, the opportunities, and the "stock that needs
+a decision" side card above the fold; "today at a glance", "retail and
+upsell per person" and the Kumo strip below it. One door composes it all
+— `GET /flightdeck` (`flightdeck.service.ts`) — so the UI computes
+nothing. Every number is derived from live data: capacity from the
+scheduling engine's open gaps vs. booked appointments, revenue and
+average spend and new-customers from invoices and customers, low stock
+from `location_catalog_products`, the member-offer hero from real open
+capacity and the Velnes Premium member count. With "All locations"
+selected the flightdeck shows the **primary** operating location (the one
+with the most appointments), not the first by name, so the stock and
+capacity read from where the salon actually runs.
+
+The opportunities and the Kumo insight come from a **swappable insights
+provider** (`insights.provider.ts`) — the same honest-emptiness pattern
+as `mailTransport`. `INSIGHT_PROVIDER` defaults to **`rules`**: quiet
+regulars (last visit > 60 days), slow products (stock but no recent
+sale), and the team's upsell floor are all derived from the salon's own
+data, deterministically, no external call. A `claude` provider is
+**prepared but inert** — it builds the prompt from the same *aggregated*
+signals (counts and sums only, never customer rows) and would ask the
+Claude Messages API for ranked opportunities and a Kumo insight, but with
+no `ANTHROPIC_API_KEY` it returns null and the caller falls back to rules
+rather than fake an answer. Turning the model on is one env flip plus a
+key and a privacy sign-off; the flightdeck contract does not change.
+Deferred: the Velnes-specific timing-suggestions stack rides along in the
+"good to know" fold when present; opportunity copy is server-side English
+until the provider becomes the model.

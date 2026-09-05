@@ -72,6 +72,16 @@ CREATE TYPE public.checkout_status AS ENUM (
 
 
 --
+-- Name: combo_status; Type: TYPE; Schema: public; Owner: -
+--
+
+CREATE TYPE public.combo_status AS ENUM (
+    'active',
+    'draft'
+);
+
+
+--
 -- Name: discount_code_type; Type: TYPE; Schema: public; Owner: -
 --
 
@@ -255,6 +265,18 @@ CREATE TYPE public.stock_movement_kind AS ENUM (
     'delivery',
     'sale',
     'own_use'
+);
+
+
+--
+-- Name: support_status; Type: TYPE; Schema: public; Owner: -
+--
+
+CREATE TYPE public.support_status AS ENUM (
+    'open',
+    'in_progress',
+    'resolved',
+    'closed'
 );
 
 
@@ -471,6 +493,31 @@ CREATE TABLE public.checkouts (
 );
 
 ALTER TABLE ONLY public.checkouts FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: combos; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.combos (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    tenant_id uuid NOT NULL,
+    name text NOT NULL,
+    category text,
+    descr text DEFAULT ''::text NOT NULL,
+    validity text DEFAULT '12 months'::text NOT NULL,
+    regular integer NOT NULL,
+    price integer NOT NULL,
+    vat integer DEFAULT 18 NOT NULL,
+    status public.combo_status DEFAULT 'active'::public.combo_status NOT NULL,
+    pos boolean DEFAULT true NOT NULL,
+    online boolean DEFAULT false NOT NULL,
+    items jsonb DEFAULT '[]'::jsonb NOT NULL,
+    sort integer DEFAULT 0 NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+ALTER TABLE ONLY public.combos FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -1134,6 +1181,7 @@ CREATE TABLE public.platform_notices (
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     audience text DEFAULT 'salons'::text NOT NULL,
     tenant_id uuid,
+    ref_id text,
     CONSTRAINT platform_notices_audience_check CHECK ((audience = ANY (ARRAY['salons'::text, 'hq'::text])))
 );
 
@@ -1630,6 +1678,32 @@ ALTER TABLE ONLY public.suppliers FORCE ROW LEVEL SECURITY;
 
 
 --
+-- Name: support_tickets; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.support_tickets (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    origin text NOT NULL,
+    tenant_id uuid,
+    supplier_id uuid,
+    subject text NOT NULL,
+    category text DEFAULT 'other'::text NOT NULL,
+    status public.support_status DEFAULT 'open'::public.support_status NOT NULL,
+    created_by text NOT NULL,
+    reply_to text DEFAULT ''::text NOT NULL,
+    origin_name text DEFAULT ''::text NOT NULL,
+    messages jsonb DEFAULT '[]'::jsonb NOT NULL,
+    last_actor text DEFAULT 'origin'::text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT support_tickets_check CHECK ((((origin = 'tenant'::text) AND (tenant_id IS NOT NULL) AND (supplier_id IS NULL)) OR ((origin = 'supplier'::text) AND (supplier_id IS NOT NULL) AND (tenant_id IS NULL)))),
+    CONSTRAINT support_tickets_origin_check CHECK ((origin = ANY (ARRAY['tenant'::text, 'supplier'::text])))
+);
+
+ALTER TABLE ONLY public.support_tickets FORCE ROW LEVEL SECURITY;
+
+
+--
 -- Name: tax_rules; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1763,6 +1837,14 @@ ALTER TABLE ONLY public.checkout_items
 
 ALTER TABLE ONLY public.checkouts
     ADD CONSTRAINT checkouts_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: combos combos_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.combos
+    ADD CONSTRAINT combos_pkey PRIMARY KEY (id);
 
 
 --
@@ -2326,6 +2408,14 @@ ALTER TABLE ONLY public.suppliers
 
 
 --
+-- Name: support_tickets support_tickets_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.support_tickets
+    ADD CONSTRAINT support_tickets_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: tax_rules tax_rules_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2418,6 +2508,13 @@ CREATE INDEX checkout_items_tenant ON public.checkout_items USING btree (tenant_
 --
 
 CREATE INDEX checkouts_tenant ON public.checkouts USING btree (tenant_id, ts DESC);
+
+
+--
+-- Name: combos_tenant; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX combos_tenant ON public.combos USING btree (tenant_id, sort);
 
 
 --
@@ -2708,6 +2805,27 @@ CREATE INDEX supplier_notifications_feed ON public.supplier_notifications USING 
 
 
 --
+-- Name: support_tickets_status; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX support_tickets_status ON public.support_tickets USING btree (status);
+
+
+--
+-- Name: support_tickets_supplier; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX support_tickets_supplier ON public.support_tickets USING btree (supplier_id, updated_at);
+
+
+--
+-- Name: support_tickets_tenant; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX support_tickets_tenant ON public.support_tickets USING btree (tenant_id, updated_at);
+
+
+--
 -- Name: widgets_tenant; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2872,6 +2990,14 @@ ALTER TABLE ONLY public.checkouts
 
 ALTER TABLE ONLY public.checkouts
     ADD CONSTRAINT checkouts_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.businesses(id);
+
+
+--
+-- Name: combos combos_tenant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.combos
+    ADD CONSTRAINT combos_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.businesses(id);
 
 
 --
@@ -3859,6 +3985,22 @@ ALTER TABLE ONLY public.supplier_users
 
 
 --
+-- Name: support_tickets support_tickets_supplier_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.support_tickets
+    ADD CONSTRAINT support_tickets_supplier_id_fkey FOREIGN KEY (supplier_id) REFERENCES public.suppliers(id);
+
+
+--
+-- Name: support_tickets support_tickets_tenant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.support_tickets
+    ADD CONSTRAINT support_tickets_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.businesses(id);
+
+
+--
 -- Name: tax_rules tax_rules_legal_entity_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3975,6 +4117,12 @@ ALTER TABLE public.checkout_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.checkouts ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: combos; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.combos ENABLE ROW LEVEL SECURITY;
+
+--
 -- Name: customer_activity; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -4087,6 +4235,27 @@ CREATE POLICY hq_all ON public.supplier_notifications USING ((current_setting('a
 --
 
 CREATE POLICY hq_all ON public.supplier_roles USING ((current_setting('app.hq'::text, true) = '1'::text)) WITH CHECK ((current_setting('app.hq'::text, true) = '1'::text));
+
+
+--
+-- Name: support_tickets hq_all; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY hq_all ON public.support_tickets USING ((current_setting('app.hq'::text, true) = '1'::text)) WITH CHECK ((current_setting('app.hq'::text, true) = '1'::text));
+
+
+--
+-- Name: supplier_users hq_bootstrap; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY hq_bootstrap ON public.supplier_users FOR SELECT USING ((current_setting('app.hq'::text, true) = '1'::text));
+
+
+--
+-- Name: supplier_users hq_invite; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY hq_invite ON public.supplier_users FOR INSERT WITH CHECK ((current_setting('app.hq'::text, true) = '1'::text));
 
 
 --
@@ -4429,6 +4598,13 @@ CREATE POLICY public_key_lookup ON public.widgets FOR SELECT USING ((current_set
 
 
 --
+-- Name: combos public_read; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY public_read ON public.combos FOR SELECT USING (((current_setting('app.public'::text, true) = '1'::text) AND (online = true) AND (status = 'active'::public.combo_status)));
+
+
+--
 -- Name: businesses public_slug_lookup; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -4609,6 +4785,13 @@ CREATE POLICY supplier_own ON public.supplier_users USING (((supplier_id)::text 
 
 
 --
+-- Name: support_tickets supplier_own; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY supplier_own ON public.support_tickets USING (((supplier_id)::text = current_setting('app.supplier_id'::text, true))) WITH CHECK (((supplier_id)::text = current_setting('app.supplier_id'::text, true)));
+
+
+--
 -- Name: supplier_products; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -4736,6 +4919,12 @@ CREATE POLICY supplier_write ON public.supplier_roles USING ((current_setting('a
 ALTER TABLE public.suppliers ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: support_tickets; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.support_tickets ENABLE ROW LEVEL SECURITY;
+
+--
 -- Name: tax_rules; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -4809,6 +4998,13 @@ CREATE POLICY tenant_isolation ON public.checkout_items USING ((tenant_id = app.
 --
 
 CREATE POLICY tenant_isolation ON public.checkouts USING ((tenant_id = app.current_tenant())) WITH CHECK ((tenant_id = app.current_tenant()));
+
+
+--
+-- Name: combos tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY tenant_isolation ON public.combos USING ((tenant_id = app.current_tenant())) WITH CHECK ((tenant_id = app.current_tenant()));
 
 
 --
@@ -5064,6 +5260,13 @@ CREATE POLICY tenant_isolation ON public.supplier_connections USING ((tenant_id 
 
 
 --
+-- Name: support_tickets tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY tenant_isolation ON public.support_tickets USING ((tenant_id = app.current_tenant())) WITH CHECK ((tenant_id = app.current_tenant()));
+
+
+--
 -- Name: tax_rules tenant_isolation; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -5214,4 +5417,8 @@ INSERT INTO public.schema_migrations (version) VALUES
     ('20260904140034'),
     ('20260904150035'),
     ('20260904160036'),
-    ('20260904170037');
+    ('20260904170037'),
+    ('20260904180038'),
+    ('20260904190039'),
+    ('20260904200040'),
+    ('20260905090041');

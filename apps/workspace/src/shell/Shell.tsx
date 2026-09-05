@@ -32,6 +32,7 @@ const NAV: { to: string; key: string; icon: string; size: number; perm: PermKey 
   { to: '/reports', key: 'nav.reports', icon: I.reports, size: 30, perm: 'reports.view_own' },
 ];
 const FOOT: typeof NAV = [
+  { to: '/support', key: 'nav.support', icon: I.info, size: 26, perm: null },
   { to: '/settings', key: 'nav.settings', icon: I.gear, size: 26, perm: 'users.manage' },
 ];
 
@@ -258,8 +259,11 @@ export function Shell() {
                         className="menu-row"
                         onClick={() => {
                           setNotifOpen(false);
-                          // Category news opens the shelf it speaks of.
-                          if (n.kind.startsWith('category'))
+                          // A notice knows its screen: category news opens
+                          // its shelf, a support reply opens its ticket.
+                          if (n.kind === 'support')
+                            navigate('/support', { state: { ticket: n.refId } });
+                          else if (n.kind.startsWith('category'))
                             navigate('/catalog', { state: { tab: 'categories' } });
                         }}
                       >

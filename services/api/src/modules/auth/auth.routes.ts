@@ -1,5 +1,6 @@
 import {
   LoginRequestSchema,
+  LoginByIdRequestSchema,
   MePatchSchema,
   LoginResponseSchema,
   LogoutRequestSchema,
@@ -17,6 +18,7 @@ import {
   PreviewError,
   claimsFor,
   login,
+  loginById,
   logout,
   me,
   rotateRefreshToken,
@@ -40,6 +42,27 @@ export function authRoutes(app: FastifyInstance) {
     handler: async (req, reply) => {
       try {
         const { employee, refreshToken } = await login(req.body.email, req.body.password);
+        const accessToken = await reply.jwtSign(claimsFor(employee), {
+          expiresIn: env.accessTtl,
+        });
+        return { accessToken, refreshToken, employee };
+      } catch (e) {
+        if (e instanceof AuthError) return reply.code(401).send({ error: e.code });
+        throw e;
+      }
+    },
+  });
+
+  r.route({
+    method: 'POST',
+    url: '/auth/login-id',
+    schema: {
+      body: LoginByIdRequestSchema,
+      response: { 200: LoginResponseSchema, 401: ErrorSchema },
+    },
+    handler: async (req, reply) => {
+      try {
+        const { employee, refreshToken } = await loginById(req.body.employeeId, req.body.password);
         const accessToken = await reply.jwtSign(claimsFor(employee), {
           expiresIn: env.accessTtl,
         });
