@@ -259,8 +259,11 @@ export function Onboarding() {
               </span>
             </div>
           </div>
-          <span className="obs-ring" style={{ position: 'absolute', top: 20, right: 20 }}>
-            <span className="mk">
+          <span
+            className="obs-ring"
+            style={{ position: 'absolute', top: 18, right: 18, color: '#6f7357' }}
+          >
+            <span className="mk" style={{ display: 'inline-flex', color: '#6f7357' }}>
               <VelnesMark size={26} />
             </span>
           </span>
