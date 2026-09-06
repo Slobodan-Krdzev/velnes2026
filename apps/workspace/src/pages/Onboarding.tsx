@@ -3,19 +3,9 @@ import { I, Icon, VelnesMark } from '@velnes/ui';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
+import { OB_PATTERN } from '../lib/obPattern.js';
 
 type Stage = 'source' | 'reading' | 'ready';
-
-// The prototype's obPatternURL — two faint marks tiled across the sand.
-const MARK_PATH =
-  'M29.7675 10.7637C28.8761 8.0534 25.9691 6.58211 23.2947 7.47263C20.0389 8.51802 18.7598 13.3965 15.7753 14.4806C15.8528 11.3057 20.1164 8.55674 20.1164 5.14953C20.1164 2.28438 17.8296 0 15.0001 0C12.1706 0 9.88382 2.28438 9.88382 5.11081C9.88382 8.55674 14.1861 11.267 14.2249 14.4419C11.2404 13.3965 9.96134 8.51802 6.70552 7.47263C4.03111 6.58211 1.12413 8.0534 0.271416 10.7637C-0.620057 13.4352 0.852811 16.3391 3.56599 17.2296C6.78304 18.275 10.659 15.1389 13.721 15.9519C11.7443 18.4299 6.78304 18.1589 4.8063 20.9466C3.13963 23.231 3.68227 26.4446 5.96909 28.1095C8.25591 29.7744 11.473 29.2323 13.1396 26.9479C15.1551 24.1602 13.2559 19.4753 15.0389 16.8425C16.8218 19.4753 14.9613 24.1602 16.9381 26.9479C18.6047 29.2323 21.783 29.7744 24.1086 28.1095C26.3954 26.4446 26.9381 23.2697 25.2714 20.9466C23.2947 18.1976 18.2947 18.4299 16.3567 15.9519C19.4187 15.1389 23.2559 18.275 26.5117 17.2296C29.1474 16.3391 30.6203 13.4352 29.7675 10.7637Z';
-const one = (x: number, y: number, sc: number, rot: number) =>
-  `<g transform="translate(${x} ${y}) rotate(${rot}) scale(${sc})"><path d="${MARK_PATH}"/></g>`;
-const PATTERN =
-  'data:image/svg+xml;utf8,' +
-  encodeURIComponent(
-    `<svg xmlns="http://www.w3.org/2000/svg" width="132" height="132" viewBox="0 0 132 132"><g fill="#8e9673" fill-opacity="0.13">${one(12, 14, 0.72, -9)}${one(78, 80, 0.72, 13)}</g></svg>`,
-  );
 
 /** The prototype's viewOnboarding source flow — a standalone
  *  AI-onboarding screen on /onboarding, its own `.obw`/`.obs` design.
@@ -121,7 +111,7 @@ export function Onboarding() {
   );
 
   return (
-    <div className="obw" style={{ backgroundImage: `url("${PATTERN}")` }}>
+    <div className="obw" style={{ backgroundImage: `url("${OB_PATTERN}")` }}>
       <div className={`obs ob-st-${stage}`}>
         <div className="obs-left">
           <span className="obs-logo">

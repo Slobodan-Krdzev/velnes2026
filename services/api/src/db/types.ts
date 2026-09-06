@@ -137,6 +137,14 @@ export interface Brands {
   owner: Generated<string>;
 }
 
+export interface BusinessCategories {
+  createdAt: Generated<Timestamp>;
+  enabled: Generated<boolean>;
+  id: Generated<string>;
+  name: string;
+  sort: Generated<number>;
+}
+
 export interface Businesses {
   address: string | null;
   city: string | null;
@@ -1004,6 +1012,7 @@ export interface DB {
   appointments: Appointments;
   auditLog: AuditLog;
   brands: Brands;
+  businessCategories: BusinessCategories;
   businesses: Businesses;
   categoryRequests: CategoryRequests;
   checkoutItems: CheckoutItems;

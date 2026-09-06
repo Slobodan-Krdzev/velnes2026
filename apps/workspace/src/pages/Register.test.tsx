@@ -23,6 +23,18 @@ function mockApi(calls: { method: string; path: string; body?: unknown }[]) {
           }),
           { status: 200 },
         );
+      if (path.includes('/business-categories'))
+        return new Response(
+          JSON.stringify({
+            categories: [
+              { id: 'c0000000-0000-4000-8000-000000000001', name: 'Physiotherapy', enabled: true, sort: 1 },
+              { id: 'c0000000-0000-4000-8000-000000000002', name: 'Beauty salon', enabled: true, sort: 2 },
+            ],
+          }),
+          { status: 200 },
+        );
+      if (path.includes('nominatim.openstreetmap.org'))
+        return new Response(JSON.stringify([{ lat: '41.0297', lon: '21.3292' }]), { status: 200 });
       return new Response('{}', { status: 404 });
     }),
   );
@@ -70,7 +82,8 @@ describe('the salon registration wizard', () => {
 
     await fill('Street', 'Partizanska');
     await fill('City', 'Bitola');
-    await userEvent.click(screen.getByTestId('regmap'));
+    // The real map: geocode the address to drop the pin.
+    await userEvent.click(screen.getByRole('button', { name: 'Find address' }));
     await userEvent.click(screen.getByRole('button', { name: 'Next' }));
 
     // Services — the platform's starter templates, grouped.

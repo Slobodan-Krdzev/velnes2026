@@ -1,4 +1,5 @@
 import {
+  BusinessCategoryListSchema,
   REG_SERVICE_TEMPLATES,
   RegistrationCreateResponseSchema,
   RegistrationImportResultSchema,
@@ -7,11 +8,15 @@ import {
   type RegistrationDraft,
 } from '@velnes/contracts';
 import { API_PREFIX } from '@velnes/contracts';
+import { useQuery } from '@tanstack/react-query';
+import { get } from '@velnes/client';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { PhoneInput } from '@velnes/ui';
 import { z } from 'zod';
+import { OB_PATTERN } from '../lib/obPattern.js';
+import { LocationMap } from './register/LocationMap.js';
 
 /** The prototype's viewRegisterSalon: eight steps, one draft, the
  *  whole thing retained so "changes required" reopens the same
@@ -72,6 +77,13 @@ export function Register() {
   const [ref, setRef] = useState<string | null>(null);
   const [hqReason, setHqReason] = useState<string | null>(null);
   const [fixing, setFixing] = useState(false);
+
+  // The salon-type list is curated by Revelapps HQ (enabled ones only).
+  const bizCats = useQuery({
+    queryKey: ['businessCategories'],
+    queryFn: () => get(BusinessCategoryListSchema, '/business-categories'),
+  });
+  const catNames = bizCats.data?.categories.map((c) => c.name) ?? [];
 
   // The AI-onboarding screen may hand us a draft it read from a
   // website (router state); merge it once so the wizard opens filled.
@@ -195,22 +207,6 @@ export function Register() {
     setPhase('done');
   };
 
-  const pin = (e: React.MouseEvent<HTMLDivElement>) => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    // A zero-size rect (jsdom, hidden container) pins the centre.
-    const rawX = rect.width ? ((e.clientX - rect.left) / rect.width) * 100 : 50;
-    const rawY = rect.height ? ((e.clientY - rect.top) / rect.height) * 100 : 50;
-    const px = Math.max(4, Math.min(96, rawX));
-    const py = Math.max(6, Math.min(94, rawY));
-    setR((d) => ({
-      ...d,
-      loc: {
-        ...d.loc, px, py, pinned: true,
-        lat: Math.round((42.05 - py * 0.0012) * 1e5) / 1e5,
-        lng: Math.round((21.35 + px * 0.0015) * 1e5) / 1e5,
-      },
-    }));
-  };
 
   if (phase === 'approved' || phase === 'declined')
     return (
@@ -303,7 +299,17 @@ export function Register() {
   const picked = Object.keys(r.picks).filter((k) => r.picks[k]).length;
 
   return (
-    <div style={{ minHeight: '100vh', background: 'var(--surface-muted)', padding: '24px 12px', display: 'flex', justifyContent: 'center' }}>
+    <div
+      style={{
+        minHeight: '100vh',
+        background: '#f1ece2',
+        backgroundImage: `url("${OB_PATTERN}")`,
+        backgroundSize: '132px 132px',
+        padding: '24px 12px',
+        display: 'flex',
+        justifyContent: 'center',
+      }}
+    >
       <div style={{ width: 'min(680px,96vw)' }}>
         <div className="hstack" style={{ justifyContent: 'space-between', marginBottom: 12 }}>
           <h1 style={{ margin: 0 }}>{t('reg.title')}</h1>
@@ -356,7 +362,7 @@ export function Register() {
                   value={r.salon.type}
                   onChange={(e) => setR((d) => ({ ...d, salon: { ...d.salon, type: e.target.value } }))}
                 >
-                  {['Physiotherapy', 'Beauty salon', 'Wellness & spa', 'Barbershop', 'Nails'].map((x) => (
+                  {(catNames.includes(r.salon.type) ? catNames : [r.salon.type, ...catNames]).map((x) => (
                     <option key={x}>{x}</option>
                   ))}
                 </select>
@@ -385,34 +391,12 @@ export function Register() {
                 {F(t('reg.city'), r.loc.city, (v) => setR((d) => ({ ...d, loc: { ...d.loc, city: v } })))}
                 {F(t('reg.zip'), r.loc.zip, (v) => setR((d) => ({ ...d, loc: { ...d.loc, zip: v } })))}
               </div>
-              <div className="field" style={{ marginTop: 8 }}>
-                <label>{t('reg.pinLabel')}</label>
-                <div
-                  onClick={pin}
-                  data-testid="regmap"
-                  style={{
-                    position: 'relative', height: 220, border: '1px solid var(--line)', borderRadius: 12,
-                    cursor: 'crosshair', overflow: 'hidden',
-                    background:
-                      'repeating-linear-gradient(0deg,var(--surface-muted) 0 34px,var(--line) 34px 35px),repeating-linear-gradient(90deg,var(--surface-muted) 0 46px,var(--line) 46px 47px)',
-                  }}
-                >
-                  <span className="muted" style={{ position: 'absolute', left: 10, top: 8, fontSize: 12, fontWeight: 600 }}>
-                    {t('reg.demoMap')}
-                  </span>
-                  <span
-                    style={{
-                      position: 'absolute', left: `${r.loc.px}%`, top: `${r.loc.py}%`,
-                      transform: 'translate(-50%,-100%)', fontSize: 22, opacity: r.loc.pinned ? 1 : 0.35,
-                    }}
-                  >
-                    📍
-                  </span>
-                </div>
-                <span className="muted tnum" style={{ fontSize: 12, fontWeight: 600 }}>
-                  {r.loc.pinned ? `${r.loc.lat}, ${r.loc.lng}` : t('reg.pinHint')}
-                </span>
-              </div>
+              <LocationMap
+                lat={r.loc.lat}
+                lng={r.loc.lng}
+                query={`${r.loc.street} ${r.loc.no}, ${r.loc.zip} ${r.loc.city}`.trim()}
+                onPick={(lat, lng) => setR((d) => ({ ...d, loc: { ...d.loc, lat, lng, pinned: true } }))}
+              />
               <div className="note">{t('reg.pinNote')}</div>
             </>
           ) : null}
@@ -638,7 +622,17 @@ export function Register() {
 
 function Centered({ children, wide }: { children: React.ReactNode; wide?: boolean }) {
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--surface-muted)' }}>
+    <div
+      style={{
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: '#f1ece2',
+        backgroundImage: `url("${OB_PATTERN}")`,
+        backgroundSize: '132px 132px',
+      }}
+    >
       <div className="card" style={{ width: `min(${wide ? 560 : 520}px,94vw)`, padding: 28, textAlign: 'center' }}>
         {children}
       </div>

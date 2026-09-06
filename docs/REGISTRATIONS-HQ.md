@@ -294,3 +294,25 @@ seam as the flightdeck), and **real third-party integrations** (Google
 Places / Instagram Graph / booking-platform partner APIs), each with its
 own auth and approval. The endpoint is anonymous but tightly rate-limited
 (8 requests / 5 minutes) because it fetches a URL on the caller's behalf.
+
+## The registration wizard, redesigned (2026-09-06)
+
+The classic wizard now sits on the same flower-pattern sand ground as
+the AI-onboarding screen (shared `OB_PATTERN`), so the two front doors
+feel like one product.
+
+**Categories from HQ.** The salon-type dropdown (step 2) no longer holds
+a hardcoded list — it reads the verticals Revelapps HQ curates. A new
+`business_categories` table (migration 20260906120042) is public-read /
+HQ-write; HQ manages it under Categories → **Business categories** (add,
+rename, enable/disable, super-only), and the anonymous wizard fetches the
+enabled ones from `GET /business-categories`. Disabling a category drops
+it from the wizard while HQ still sees it.
+
+**A real map.** The Location step (step 4) drops the demo grid for a real
+**OpenStreetMap** via Leaflet: click the map or drag the pin to the exact
+spot, or press **Find address** to geocode the street + city through
+Nominatim and drop the pin there — the lat/lng flow straight into the
+draft. Tiles and geocoding are public OSM services, called from the
+browser; the wizard stays anonymous. In headless tests the map init is
+guarded so the address search still sets the pin.

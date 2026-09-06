@@ -1,6 +1,7 @@
 import type {
   HqMeResponseSchema} from '@velnes/contracts';
 import {
+  BusinessCategoryListSchema,
   HQ_PERM_GROUPS,
   HQ_SCOPES,
   HqApproveResponseSchema,
@@ -521,6 +522,8 @@ function Categories({ say }: { say: (m: string) => void }) {
         {pane('services')}
         {pane('products')}
       </div>
+      <BizCategories say={say} />
+      {/* end business categories */}
       {adding ? (
         <div className="overlay" onClick={() => setAdding(false)}>
           <div
@@ -596,6 +599,121 @@ const ONBOARD_STEP_KEYS = [
   'payments',
   'widget',
 ] as const;
+
+/** Business categories — the salon verticals the registration wizard
+ *  offers. HQ (super) curates the list: add, rename, enable/disable. */
+function BizCategories({ say }: { say: (m: string) => void }) {
+  const { t } = useTranslation();
+  const [rows, setRows] = useState<z.infer<typeof BusinessCategoryListSchema>['categories']>([]);
+  const [name, setName] = useState('');
+  const [renaming, setRenaming] = useState<{ id: string; name: string } | null>(null);
+  const load = useCallback(
+    () => void hqGet(BusinessCategoryListSchema, '/hq/business-categories').then((r) => setRows(r.categories)),
+    [],
+  );
+  useEffect(load, [load]);
+
+  const run = async (fn: () => Promise<unknown>, ok: string) => {
+    try {
+      await fn();
+      say(t(ok));
+      load();
+    } catch (e) {
+      say(e instanceof HqApiError ? e.message : String(e));
+    }
+  };
+  const add = () =>
+    run(async () => {
+      await hqPost(z.object({ id: z.string() }), '/hq/business-categories', { name: name.trim() });
+      setName('');
+    }, 'hq.bizCatAdded');
+  const toggle = (id: string, enabled: boolean) =>
+    run(() => hqPatch(z.object({ ok: z.literal(true) }), `/hq/business-categories/${id}`, { enabled }), 'hq.saved');
+  const rename = () =>
+    run(async () => {
+      if (!renaming) return;
+      await hqPatch(z.object({ ok: z.literal(true) }), `/hq/business-categories/${renaming.id}`, {
+        name: renaming.name.trim(),
+      });
+      setRenaming(null);
+    }, 'hq.categoryRenamed');
+
+  return (
+    <div className="card">
+      <div className="card-header">
+        <h2>{t('hq.bizCategories')}</h2>
+        <span className="muted" style={{ fontWeight: 500 }}>
+          {t('hq.bizCategoriesSub')}
+        </span>
+      </div>
+      <div style={{ display: 'flex', gap: 8, padding: '14px 20px' }}>
+        <input
+          className="input"
+          style={{ maxWidth: 260 }}
+          placeholder={t('hq.bizCatName')}
+          value={name}
+          aria-label={t('hq.bizCatName')}
+          onChange={(e) => setName(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && name.trim() && void add()}
+        />
+        <button className="btn btn-primary btn-sm" disabled={!name.trim()} onClick={() => void add()}>
+          {t('hq.addCategory')}
+        </button>
+      </div>
+      <table>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.id} className={r.enabled ? '' : 'dim'}>
+              <td className="bold">
+                {renaming?.id === r.id ? (
+                  <input
+                    className="input"
+                    value={renaming.name}
+                    aria-label={t('hq.renameCategory')}
+                    onChange={(e) => setRenaming({ ...renaming, name: e.target.value })}
+                  />
+                ) : (
+                  r.name
+                )}
+              </td>
+              <td>
+                {r.enabled ? (
+                  <span className="badge success">{t('hq.enabled')}</span>
+                ) : (
+                  <span className="badge">{t('hq.disabled')}</span>
+                )}
+              </td>
+              <td className="right">
+                {renaming?.id === r.id ? (
+                  <>
+                    <button className="btn btn-primary btn-sm" onClick={() => void rename()}>
+                      {t('hq.save')}
+                    </button>{' '}
+                    <button className="btn btn-subtle btn-sm" onClick={() => setRenaming(null)}>
+                      {t('hq.cancel')}
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      className="btn btn-ghost btn-sm"
+                      onClick={() => setRenaming({ id: r.id, name: r.name })}
+                    >
+                      {t('hq.rename')}
+                    </button>{' '}
+                    <button className="btn btn-subtle btn-sm" onClick={() => void toggle(r.id, !r.enabled)}>
+                      {r.enabled ? t('hq.disable') : t('hq.enable')}
+                    </button>
+                  </>
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
 
 function Customers({ say, me }: { say: (m: string) => void; me: HqUser }) {
   const { t } = useTranslation();

@@ -412,6 +412,21 @@ ALTER TABLE ONLY public.brands FORCE ROW LEVEL SECURITY;
 
 
 --
+-- Name: business_categories; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.business_categories (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    name text NOT NULL,
+    enabled boolean DEFAULT true NOT NULL,
+    sort integer DEFAULT 0 NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+ALTER TABLE ONLY public.business_categories FORCE ROW LEVEL SECURITY;
+
+
+--
 -- Name: businesses; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1797,6 +1812,22 @@ ALTER TABLE ONLY public.brands
 
 ALTER TABLE ONLY public.brands
     ADD CONSTRAINT brands_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: business_categories business_categories_name_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.business_categories
+    ADD CONSTRAINT business_categories_name_key UNIQUE (name);
+
+
+--
+-- Name: business_categories business_categories_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.business_categories
+    ADD CONSTRAINT business_categories_pkey PRIMARY KEY (id);
 
 
 --
@@ -4093,6 +4124,12 @@ CREATE POLICY auth_login_lookup ON public.user_credentials FOR SELECT USING ((cu
 ALTER TABLE public.brands ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: business_categories; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.business_categories ENABLE ROW LEVEL SECURITY;
+
+--
 -- Name: businesses; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -4390,6 +4427,13 @@ CREATE POLICY hq_write ON public.brands USING ((current_setting('app.hq'::text, 
 
 
 --
+-- Name: business_categories hq_write; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY hq_write ON public.business_categories USING ((current_setting('app.hq'::text, true) = '1'::text)) WITH CHECK ((current_setting('app.hq'::text, true) = '1'::text));
+
+
+--
 -- Name: platform_notices hq_write; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -4595,6 +4639,13 @@ CREATE POLICY public_apply ON public.registrations FOR INSERT WITH CHECK ((curre
 --
 
 CREATE POLICY public_key_lookup ON public.widgets FOR SELECT USING ((current_setting('app.public'::text, true) = '1'::text));
+
+
+--
+-- Name: business_categories public_read; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY public_read ON public.business_categories FOR SELECT USING (true);
 
 
 --
@@ -5421,4 +5472,5 @@ INSERT INTO public.schema_migrations (version) VALUES
     ('20260904180038'),
     ('20260904190039'),
     ('20260904200040'),
-    ('20260905090041');
+    ('20260905090041'),
+    ('20260906120042');
