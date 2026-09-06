@@ -87,7 +87,7 @@ export function Login() {
           <button
             type="button"
             className="btn btn-ghost btn-sm"
-            onClick={() => navigate('/register')}
+            onClick={() => navigate('/onboarding')}
           >
             {t('reg.createSalon')}
           </button>

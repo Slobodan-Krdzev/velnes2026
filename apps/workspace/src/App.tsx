@@ -16,6 +16,7 @@ import { SupportPage } from './pages/support/Support.js';
 import { InvoicesPage } from './pages/till/Invoices.js';
 import { TillPage } from './pages/till/Till.js';
 import { Login } from './pages/Login.js';
+import { Onboarding } from './pages/Onboarding.js';
 import { Register } from './pages/Register.js';
 import { SessionProvider, useSession } from '@velnes/client';
 import { Shell } from './shell/Shell.js';
@@ -42,6 +43,7 @@ export function App() {
           <SessionProvider>
             <Routes>
               <Route path="/login" element={<Login />} />
+              <Route path="/onboarding" element={<Onboarding />} />
               <Route path="/register" element={<Register />} />
               <Route
                 element={

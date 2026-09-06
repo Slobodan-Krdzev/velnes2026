@@ -262,11 +262,17 @@ open + in-progress tickets across the platform, and each salon row shows
 its own count. Honest note: HQ role changes on tickets are not yet in
 the audit trail — the same deferral as the rest of the HQ role kit.
 
-## Import from your website — AI-onboarding, Phase 1 (2026-09-05)
+## AI-onboarding — a standalone screen, Phase 1 (2026-09-06)
 
-The registration wizard's first step now offers "Start faster — import
-from your website". The owner pastes their salon's own link and
-`POST /registrations/import` fetches it under strict SSRF guards —
+The prototype's AI-onboarding is its own screen, so ours is too: a
+standalone `/onboarding` route in the workspace app with the prototype's
+`.ob` design (badge, "One link. / A head start, ready.", the paste box
+with the sparkle button, source → reading → ready). "Create your salon"
+on the sign-in screen leads here; "Fill it in yourself" / "Step-by-step
+registration" drop through to the classic wizard.
+
+The owner pastes their salon's own link; `POST /registrations/import`
+fetches it under strict SSRF guards —
 http/https only, no credentials in the URL, the host resolved and every
 address rejected if private/loopback/link-local/CGNAT/metadata, redirects
 followed hop-by-hop with each host re-checked, an 8s timeout and a 2 MB
@@ -275,8 +281,9 @@ cap. It then reads the page's **structured data** — JSON-LD
 schema.org `PostalAddress`, `openingHoursSpecification` and
 `makesOffer`/`hasOfferCatalog` — into a partial draft: salon name and
 phone, legal name, street/city/zip, opening hours, and service names
-matched to the starter templates. The wizard pre-fills whatever was
-found and names it ("Found and filled: name, address, opening hours");
+matched to the starter templates. The reading screen shows honestly what
+it did and did not find (business details ✓, treatments, opening hours),
+and **Continue** hands that draft to the registration wizard pre-filled;
 the owner reviews every step and nothing is submitted automatically.
 
 This is the deterministic, honest slice — no model call and no scraping
