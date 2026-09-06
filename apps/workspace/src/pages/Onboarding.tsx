@@ -221,6 +221,15 @@ export function Onboarding() {
 
         {/* The mood pane — a decorative preview, not the salon's own data. */}
         <div className="obs-right">
+          <div className="obs-photos" aria-hidden="true">
+            {[1, 2, 3].map((n) => (
+              <div
+                key={n}
+                className={`obs-photo f${n}`}
+                style={{ backgroundImage: `url("/ob-faces/face${n}.webp")` }}
+              />
+            ))}
+          </div>
           <div className="obs-veil" aria-hidden="true" />
           <div className="obs-cards" aria-hidden="true">
             <div className="obs-card c1">
