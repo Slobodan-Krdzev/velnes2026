@@ -84,8 +84,9 @@ describe('the salon registration wizard', () => {
 
     await fill('Street', 'Partizanska');
     await fill('City', 'Bitola');
-    // The real map: geocode the address to drop the pin.
-    await userEvent.click(screen.getByRole('button', { name: 'Find address' }));
+    // The real map needs a real viewport; headless uses the fallback to
+    // drop the pin (the salon still types its address above).
+    await userEvent.click(screen.getByRole('button', { name: 'Place the pin at the city centre' }));
     await userEvent.click(screen.getByRole('button', { name: 'Next' }));
 
     // Services — the salon writes its own; category from the HQ list.

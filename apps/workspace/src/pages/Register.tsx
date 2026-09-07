@@ -350,7 +350,10 @@ export function Register() {
             </button>
           ))}
         </div>
-        <div className="card" style={{ padding: 22 }}>
+        <div
+          className="card"
+          style={{ padding: 22, display: 'flex', flexDirection: 'column', gap: 16 }}
+        >
           {step === 1 ? (
             <>
               <div className="grid2">
@@ -415,7 +418,6 @@ export function Register() {
               <LocationMap
                 lat={r.loc.lat}
                 lng={r.loc.lng}
-                query={`${r.loc.street} ${r.loc.no}, ${r.loc.zip} ${r.loc.city}`.trim()}
                 onPick={(lat, lng) => setR((d) => ({ ...d, loc: { ...d.loc, lat, lng, pinned: true } }))}
               />
               <div className="note">{t('reg.pinNote')}</div>
@@ -427,7 +429,7 @@ export function Register() {
               <div className="note">{t('reg.createServices')}</div>
               <div
                 className="card"
-                style={{ padding: 16, marginTop: 12, display: 'flex', flexDirection: 'column', gap: 12 }}
+                style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}
               >
                 <div className="grid2">
                   <label className="field span2">
@@ -490,7 +492,7 @@ export function Register() {
               </div>
 
               {r.services.length ? (
-                <table style={{ marginTop: 14 }}>
+                <table>
                   <tbody>
                     {r.services.map((s, i) => (
                       <tr key={i}>
@@ -516,7 +518,7 @@ export function Register() {
                   </tbody>
                 </table>
               ) : (
-                <p className="muted" style={{ fontWeight: 500, marginTop: 14 }}>
+                <p className="muted" style={{ fontWeight: 500 }}>
                   {t('reg.svcNoneYet')}
                 </p>
               )}

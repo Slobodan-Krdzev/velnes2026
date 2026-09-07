@@ -19,31 +19,29 @@ const PIN = L.icon({
 
 const SKOPJE: [number, number] = [41.9981, 21.4254];
 
-/** A real OpenStreetMap map. Click or drag the pin to set the exact
- *  spot; "Find address" geocodes the street + city through Nominatim
- *  and drops the pin there. Reports lat/lng up on every move. */
+/** A real OpenStreetMap. The salon types its address in the fields
+ *  above; here it drops a pin on the exact spot, which sharpens where
+ *  it shows up in searches. Click the map or drag the pin to move it. */
 export function LocationMap({
   lat,
   lng,
-  query,
   onPick,
 }: {
   lat: number | null;
   lng: number | null;
-  query: string;
   onPick: (lat: number, lng: number) => void;
 }) {
   const { t } = useTranslation();
   const boxRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<L.Map | null>(null);
   const markerRef = useRef<L.Marker | null>(null);
-  const [finding, setFinding] = useState(false);
-  const [note, setNote] = useState<string | null>(null);
+  const [ready, setReady] = useState(false);
 
-  // Init once. Guarded — a headless environment (tests) may not give
-  // Leaflet a real box; the address search still works without it.
   useEffect(() => {
     if (!boxRef.current || mapRef.current) return;
+    // No layout (headless tests) → skip the map; the fallback control
+    // below still lets the pin be set.
+    if (!boxRef.current.clientWidth) return;
     let map: L.Map;
     try {
       const start: [number, number] = lat != null && lng != null ? [lat, lng] : SKOPJE;
@@ -70,7 +68,7 @@ export function LocationMap({
     if (lat != null && lng != null) place(L.latLng(lat, lng));
     map.on('click', (e) => place(e.latlng));
     mapRef.current = map;
-    // Leaflet needs a size recalculation once it is actually on screen.
+    setReady(true);
     setTimeout(() => map.invalidateSize(), 0);
     return () => {
       map.remove();
@@ -79,69 +77,34 @@ export function LocationMap({
     };
   }, []);
 
-  const findAddress = async () => {
-    const q = query.trim();
-    if (!q) return;
-    setFinding(true);
-    setNote(null);
-    try {
-      const res = await fetch(
-        `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(q)}`,
-        { headers: { accept: 'application/json' } },
-      );
-      const hits = (await res.json()) as { lat: string; lon: string }[];
-      const hit = hits[0];
-      if (!hit) {
-        setNote(t('reg.mapNotFound'));
-        return;
-      }
-      const la = round(Number(hit.lat));
-      const lo = round(Number(hit.lon));
-      const map = mapRef.current;
-      if (map) {
-        map.setView([la, lo], 16);
-        if (markerRef.current) markerRef.current.setLatLng([la, lo]);
-        else markerRef.current = L.marker([la, lo], { icon: PIN, draggable: true }).addTo(map);
-      }
-      onPick(la, lo);
-    } catch {
-      setNote(t('reg.mapNotFound'));
-    } finally {
-      setFinding(false);
-    }
-  };
-
   return (
     <div className="field">
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-        <span>{t('reg.pinHint')}</span>
-        <button
-          type="button"
-          className="btn btn-subtle btn-sm"
-          disabled={finding || !query.trim()}
-          onClick={() => void findAddress()}
-        >
-          {finding ? t('reg.mapFinding') : t('reg.mapFind')}
-        </button>
-      </div>
+      <span>{t('reg.pinHint')}</span>
       <div
         ref={boxRef}
         role="application"
         aria-label={t('reg.pinHint')}
         style={{ height: 300, borderRadius: 14, overflow: 'hidden', border: '1px solid var(--line)' }}
       />
+      {!ready ? (
+        <button
+          type="button"
+          className="btn btn-subtle btn-sm"
+          style={{ marginTop: 8, alignSelf: 'flex-start' }}
+          onClick={() => onPick(SKOPJE[0], SKOPJE[1])}
+        >
+          {t('reg.pinFallback')}
+        </button>
+      ) : null}
       {lat != null && lng != null ? (
-        <span className="hint tnum">
+        <span className="hint tnum" style={{ marginTop: 6 }}>
           {lat}, {lng}
         </span>
       ) : (
-        <span className="hint">{t('reg.pinNone')}</span>
-      )}
-      {note ? (
-        <span className="hint" style={{ color: 'var(--danger)' }}>
-          {note}
+        <span className="hint" style={{ marginTop: 6 }}>
+          {t('reg.pinNone')}
         </span>
-      ) : null}
+      )}
     </div>
   );
 }
