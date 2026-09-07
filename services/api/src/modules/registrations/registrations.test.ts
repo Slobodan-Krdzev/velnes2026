@@ -28,7 +28,10 @@ const draft = (email: string, salon = 'Studio Nova') => ({
   salon: { name: salon, type: 'Physiotherapy', phone: '+389 70 123 456', langs: 'MK, EN' },
   legal: { name: 'Nova Health DOO', taxId: 'MK4032011501234', vat: '', currency: 'MKD' },
   loc: { street: 'Partizanska', no: '12', city: 'Bitola', zip: '7000', lat: 41.03, lng: 21.33 },
-  services: ['physio-session', 'sports-massage'],
+  services: [
+    { name: 'Physiotherapy session', category: 'Manual therapy', durationMin: 45, price: 1800 },
+    { name: 'Sports massage', category: 'Recovery', durationMin: 45, price: 1900 },
+  ],
   gallery: [],
   team: [],
   hours: {

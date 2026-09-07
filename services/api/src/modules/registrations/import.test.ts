@@ -32,10 +32,9 @@ describe('website import — structured-data parser and SSRF guards', () => {
     // Monday/Tuesday open, Sunday closed.
     expect(r.hours.find((h) => h.day === 'mon')?.open).toBe('09:00');
     expect(r.hours.find((h) => h.day === 'sun')?.closed).toBe(true);
-    // Both service names captured; matched to starter templates.
+    // Both service names captured as hints (the salon writes its own).
     expect(r.serviceNames).toContain('Physiotherapy session');
-    expect(r.serviceKeys).toContain('physio-session');
-    expect(r.serviceKeys).toContain('sports-massage');
+    expect(r.serviceNames.some((n) => n.startsWith('Sports massage'))).toBe(true);
     expect(r.found).toContain('opening hours');
   });
 

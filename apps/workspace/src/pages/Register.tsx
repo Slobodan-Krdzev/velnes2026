@@ -1,11 +1,12 @@
 import {
   BusinessCategoryListSchema,
-  REG_SERVICE_TEMPLATES,
+  PublicServiceCategoryListSchema,
   RegistrationCreateResponseSchema,
   RegistrationImportResultSchema,
   RegistrationStatusResponseSchema,
   RegistrationStatusSchema,
   type RegistrationDraft,
+  type RegService,
 } from '@velnes/contracts';
 import { API_PREFIX } from '@velnes/contracts';
 import { useQuery } from '@tanstack/react-query';
@@ -36,7 +37,7 @@ type Draft = {
   salon: { name: string; type: string; phone: string; langs: string };
   legal: { name: string; taxId: string; vat: string; currency: string };
   loc: { street: string; no: string; city: string; zip: string; px: number; py: number; pinned: boolean; lat: number | null; lng: number | null };
-  picks: Record<string, boolean>;
+  services: RegService[];
   gallery: { name: string; img: string | null }[];
   team: { name: string; email: string }[];
   hours: Record<(typeof DAYS)[number], Day>;
@@ -46,7 +47,7 @@ const newDraft = (): Draft => ({
   salon: { name: '', type: 'Physiotherapy', phone: '', langs: 'MK, EN' },
   legal: { name: '', taxId: '', vat: '', currency: 'MKD' },
   loc: { street: '', no: '', city: '', zip: '', px: 50, py: 50, pinned: false, lat: null, lng: null },
-  picks: {},
+  services: [],
   gallery: [],
   team: [{ name: '', email: '' }],
   hours: Object.fromEntries(
@@ -72,7 +73,6 @@ export function Register() {
   const [r, setR] = useState<Draft>(newDraft());
   const [step, setStep] = useState(1);
   const [err, setErr] = useState<string | null>(null);
-  const [q, setQ] = useState('');
   const [phase, setPhase] = useState<'wizard' | 'done' | 'changes' | 'approved' | 'declined'>('wizard');
   const [ref, setRef] = useState<string | null>(null);
   const [hqReason, setHqReason] = useState<string | null>(null);
@@ -84,6 +84,38 @@ export function Register() {
     queryFn: () => get(BusinessCategoryListSchema, '/business-categories'),
   });
   const catNames = bizCats.data?.categories.map((c) => c.name) ?? [];
+  // The service-category taxonomy the salon picks from when it writes
+  // its own services (a Velnes-owned list HQ curates).
+  const svcCats = useQuery({
+    queryKey: ['serviceCategories'],
+    queryFn: () => get(PublicServiceCategoryListSchema, '/service-categories'),
+  });
+  const svcCatNames = svcCats.data?.categories ?? [];
+  const [svc, setSvc] = useState<{ name: string; category: string; durationMin: string; price: string }>({
+    name: '',
+    category: '',
+    durationMin: '30',
+    price: '',
+  });
+  const addService = () => {
+    const cat = svc.category || svcCatNames[0] || '';
+    if (!svc.name.trim() || !cat) return;
+    setR((d) => ({
+      ...d,
+      services: [
+        ...d.services,
+        {
+          name: svc.name.trim(),
+          category: cat,
+          durationMin: Math.max(1, Number(svc.durationMin) || 30),
+          price: Math.max(0, Math.round(Number(svc.price) || 0)),
+        },
+      ],
+    }));
+    setSvc({ name: '', category: cat, durationMin: '30', price: '' });
+  };
+  const removeService = (i: number) =>
+    setR((d) => ({ ...d, services: d.services.filter((_, j) => j !== i) }));
 
   // The AI-onboarding screen may hand us a draft it read from a
   // website (router state); merge it once so the wizard opens filled.
@@ -102,7 +134,6 @@ export function Register() {
       if (found.loc.no) next.loc.no = found.loc.no;
       if (found.loc.city) next.loc.city = found.loc.city;
       if (found.loc.zip) next.loc.zip = found.loc.zip;
-      for (const k of found.serviceKeys) next.picks[k] = true;
       for (const h of found.hours)
         next.hours[h.day] = { ...next.hours[h.day], open: h.open, close: h.close, closed: h.closed, split: false };
       return next;
@@ -130,7 +161,7 @@ export function Register() {
               street: d.loc.street, no: d.loc.no, city: d.loc.city, zip: d.loc.zip,
               px: 50, py: 50, pinned: d.loc.lat != null, lat: d.loc.lat, lng: d.loc.lng,
             },
-            picks: Object.fromEntries(d.services.map((k) => [k, true])),
+            services: d.services,
             team: d.team.length ? d.team : [{ name: '', email: '' }],
             hours: d.hours as Draft['hours'],
           }));
@@ -157,7 +188,7 @@ export function Register() {
       if (!r.loc.street.trim() || !r.loc.city.trim()) return t('reg.vStreet');
       if (!r.loc.pinned) return t('reg.vPin');
     }
-    if (s === 5 && !Object.values(r.picks).some(Boolean)) return t('reg.vServices');
+    if (s === 5 && !r.services.length) return t('reg.vServices');
     if (s === 7) {
       const bad = r.team.find((x) => x.email.trim() && !EMAIL.test(x.email.trim()));
       if (bad) return t('reg.vTeam', { email: bad.email });
@@ -171,7 +202,7 @@ export function Register() {
     salon: r.salon,
     legal: r.legal,
     loc: { street: r.loc.street, no: r.loc.no, city: r.loc.city, zip: r.loc.zip, lat: r.loc.lat, lng: r.loc.lng },
-    services: Object.keys(r.picks).filter((k) => r.picks[k]),
+    services: r.services,
     gallery: r.gallery.map((g) => g.name),
     team: r.team.filter((x) => x.email.trim()).map((x) => ({ name: x.name, email: x.email })),
     hours: r.hours,
@@ -286,17 +317,7 @@ export function Register() {
       />
     </label>
   );
-  const groups = [...new Set(REG_SERVICE_TEMPLATES.map((s) => s.category))]
-    .map((cat) => ({
-      cat,
-      items: REG_SERVICE_TEMPLATES.filter(
-        (s) =>
-          s.category === cat &&
-          (!q || (s.name + s.category).toLowerCase().replace(/\s+/g, '').includes(q.toLowerCase().replace(/\s+/g, ''))),
-      ),
-    }))
-    .filter((g) => g.items.length);
-  const picked = Object.keys(r.picks).filter((k) => r.picks[k]).length;
+  const picked = r.services.length;
 
   return (
     <div
@@ -403,27 +424,102 @@ export function Register() {
 
           {step === 5 ? (
             <>
-              <div className="field">
-                <label>{t('common.search')}</label>
-                <input className="input" value={q} onChange={(e) => setQ(e.target.value)} />
-              </div>
-              {groups.map((g) => (
-                <div key={g.cat} style={{ marginBottom: 10 }}>
-                  <div className="stat-label" style={{ marginBottom: 6 }}>{g.cat}</div>
-                  {g.items.map((s) => (
-                    <label key={s.key} className="hstack" style={{ gap: 10, cursor: 'pointer', marginBottom: 4 }}>
-                      <input
-                        type="checkbox"
-                        checked={!!r.picks[s.key]}
-                        onChange={() => setR((d) => ({ ...d, picks: { ...d.picks, [s.key]: !d.picks[s.key] } }))}
-                      />
-                      <span style={{ fontWeight: 600 }}>{s.name}</span>
-                      <span className="muted tnum" style={{ marginLeft: 'auto' }}>{money(s.price)}</span>
-                    </label>
-                  ))}
+              <div className="note">{t('reg.createServices')}</div>
+              <div
+                className="card"
+                style={{ padding: 16, marginTop: 12, display: 'flex', flexDirection: 'column', gap: 12 }}
+              >
+                <div className="grid2">
+                  <label className="field span2">
+                    <span>{t('reg.svcName')}</span>
+                    <input
+                      className="input"
+                      value={svc.name}
+                      placeholder={t('reg.svcNamePh')}
+                      onChange={(e) => setSvc((s) => ({ ...s, name: e.target.value }))}
+                    />
+                  </label>
+                  <label className="field">
+                    <span>{t('reg.category')}</span>
+                    <select
+                      className="select"
+                      style={{ width: '100%' }}
+                      value={svc.category || svcCatNames[0] || ''}
+                      onChange={(e) => setSvc((s) => ({ ...s, category: e.target.value }))}
+                    >
+                      {svcCatNames.map((c) => (
+                        <option key={c} value={c}>
+                          {c}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="field">
+                    <span>{t('reg.svcDuration')}</span>
+                    <input
+                      className="input tnum"
+                      type="number"
+                      min={1}
+                      step={5}
+                      value={svc.durationMin}
+                      onChange={(e) => setSvc((s) => ({ ...s, durationMin: e.target.value }))}
+                    />
+                  </label>
+                  <label className="field">
+                    <span>{t('reg.svcPrice')}</span>
+                    <input
+                      className="input tnum"
+                      type="number"
+                      min={0}
+                      value={svc.price}
+                      placeholder="0"
+                      onChange={(e) => setSvc((s) => ({ ...s, price: e.target.value }))}
+                    />
+                  </label>
                 </div>
-              ))}
-              <div className="note">{t('reg.pickServices')}</div>
+                <div>
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    disabled={!svc.name.trim() || !svcCatNames.length}
+                    onClick={addService}
+                  >
+                    {t('reg.svcAdd')}
+                  </button>
+                </div>
+              </div>
+
+              {r.services.length ? (
+                <table style={{ marginTop: 14 }}>
+                  <tbody>
+                    {r.services.map((s, i) => (
+                      <tr key={i}>
+                        <td>
+                          <span className="bold">{s.name}</span>
+                          <span className="muted" style={{ display: 'block', fontSize: 12 }}>
+                            {s.category} · {s.durationMin} min
+                          </span>
+                        </td>
+                        <td className="right bold tnum">{money(s.price)}</td>
+                        <td className="right">
+                          <button
+                            type="button"
+                            className="btn btn-ghost btn-sm"
+                            aria-label={t('reg.svcRemove')}
+                            onClick={() => removeService(i)}
+                          >
+                            {t('reg.svcRemove')}
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : (
+                <p className="muted" style={{ fontWeight: 500, marginTop: 14 }}>
+                  {t('reg.svcNoneYet')}
+                </p>
+              )}
             </>
           ) : null}
 

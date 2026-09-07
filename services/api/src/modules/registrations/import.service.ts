@@ -1,6 +1,6 @@
 import { lookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
-import { REG_SERVICE_TEMPLATES, type REG_DAYS, type RegistrationImportResult } from '@velnes/contracts';
+import { type REG_DAYS, type RegistrationImportResult } from '@velnes/contracts';
 
 /**
  * Phase 1 of AI-onboarding: import a salon from its OWN website. The
@@ -166,18 +166,6 @@ function metaTag(html: string, key: string): string | undefined {
   return m?.[1]?.trim();
 }
 
-function matchServiceKeys(names: string[]): string[] {
-  const keys = new Set<string>();
-  for (const raw of names) {
-    const n = raw.toLowerCase();
-    for (const tpl of REG_SERVICE_TEMPLATES) {
-      const words = tpl.name.toLowerCase().split(/[\s,]+/).filter((w) => w.length > 3);
-      if (words.some((w) => n.includes(w))) keys.add(tpl.key);
-    }
-  }
-  return [...keys];
-}
-
 export function parseSalon(html: string, finalUrl: string): RegistrationImportResult {
   const found: string[] = [];
   const result: RegistrationImportResult = {
@@ -186,7 +174,6 @@ export function parseSalon(html: string, finalUrl: string): RegistrationImportRe
     salon: {},
     legal: {},
     loc: {},
-    serviceKeys: [],
     serviceNames: [],
     hours: [],
   };
@@ -264,7 +251,6 @@ export function parseSalon(html: string, finalUrl: string): RegistrationImportRe
   if (catalog?.itemListElement) catalog.itemListElement.forEach(grabOffer);
   if (names.size) {
     result.serviceNames = [...names].slice(0, 20);
-    result.serviceKeys = matchServiceKeys(result.serviceNames);
     found.push('services');
   }
 

@@ -1,7 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import {
   PERM_KEYS,
-  REG_SERVICE_TEMPLATES,
   scopeChoices,
   type PermMap,
   type RegistrationDraft,
@@ -295,27 +294,36 @@ export async function approveRegistration(id: string, reviewer: string) {
       .values({ tenantId: businessId, employeeId: ownerId, locationId })
       .execute();
 
-    // The picked starter services, on the Velnes taxonomy: the
-    // template categories are platform rows, never re-created.
-    const picked = REG_SERVICE_TEMPLATES.filter((t) => draft.services.includes(t.key));
+    // The salon's own services, each on the Velnes taxonomy: the
+    // category is a platform row (find-or-create under app.hq), the
+    // name/price/duration are the salon's.
     const catIds = new Map<string, string>();
-    for (const cat of [...new Set(picked.map((t) => t.category))]) {
-      const row = await trx
+    for (const cat of [...new Set(draft.services.map((s) => s.category))]) {
+      const found = await trx
         .selectFrom('serviceCategories')
         .select('id')
         .where('name', '=', cat)
-        .executeTakeFirstOrThrow();
-      catIds.set(cat, row.id);
+        .executeTakeFirst();
+      if (found) {
+        catIds.set(cat, found.id);
+      } else {
+        const made = await trx
+          .insertInto('serviceCategories')
+          .values({ name: cat })
+          .returning('id')
+          .executeTakeFirstOrThrow();
+        catIds.set(cat, made.id);
+      }
     }
-    for (const [i, t] of picked.entries())
+    for (const [i, s] of draft.services.entries())
       await trx
         .insertInto('services')
         .values({
           tenantId: businessId,
-          name: t.name,
-          categoryId: catIds.get(t.category)!,
-          durationMin: t.durationMin,
-          price: t.price,
+          name: s.name,
+          categoryId: catIds.get(s.category)!,
+          durationMin: s.durationMin,
+          price: s.price,
           vat: 18,
           status: 'active',
           pos: true,

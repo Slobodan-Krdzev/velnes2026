@@ -10,7 +10,6 @@ const importResult = {
   salon: { name: 'Skopje Physio', phone: '+389 2 123 456' },
   legal: { name: 'Skopje Physio DOOEL' },
   loc: { street: 'Bul. Partizanski 12', city: 'Skopje', zip: '1000' },
-  serviceKeys: ['physio-session'],
   serviceNames: ['Physiotherapy session'],
   hours: [{ day: 'mon', open: '09:00', close: '19:00', closed: false }],
 };

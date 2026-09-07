@@ -1,4 +1,5 @@
 import {
+  PublicServiceCategoryListSchema,
   RegistrationCreateResponseSchema,
   RegistrationDraftSchema,
   RegistrationImportRequestSchema,
@@ -10,6 +11,7 @@ import {
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
+import { db } from '../../db/index.js';
 import {
   createRegistration,
   registrationByToken,
@@ -53,6 +55,23 @@ export function registrationsRoutes(app: FastifyInstance) {
           return reply.code(422).send({ error: e.code, message: e.message });
         throw e;
       }
+    },
+  });
+
+  // The Velnes service taxonomy the salon picks its categories from —
+  // global, read-open, so the anonymous wizard can list it.
+  r.route({
+    method: 'GET',
+    url: '/service-categories',
+    schema: { response: { 200: PublicServiceCategoryListSchema } },
+    handler: async () => {
+      const rows = await db
+        .selectFrom('serviceCategories')
+        .select('name')
+        .orderBy('sort')
+        .orderBy('name')
+        .execute();
+      return { categories: rows.map((c) => c.name) };
     },
   });
 

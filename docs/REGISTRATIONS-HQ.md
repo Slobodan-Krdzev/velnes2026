@@ -316,3 +316,18 @@ Nominatim and drop the pin there — the lat/lng flow straight into the
 draft. Tiles and geocoding are public OSM services, called from the
 browser; the wizard stays anonymous. In headless tests the map init is
 guarded so the address search still sets the pin.
+
+## Services: the salon writes its own (2026-09-07)
+
+The Services step stopped offering starter templates to tick. The salon
+now **creates its own services** — name, duration and price — and picks a
+**category from the Velnes taxonomy HQ curates** (the global
+`service_categories`, read-open, listed for the anonymous wizard at
+`GET /service-categories`). "Knee massage" is the salon's name; "Massage"
+is the platform shelf it stands on. The draft's `services` became an
+array of `{name, category, durationMin, price}` (RegServiceSchema), and
+on approval each becomes a real service under its category (found on the
+taxonomy, or created there if new). The old `REG_SERVICE_TEMPLATES` pick
+list and the import's template-matching are gone; the website import
+still surfaces the service names it read as hints, but the owner writes
+the real services.

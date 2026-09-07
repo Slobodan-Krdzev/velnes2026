@@ -33,6 +33,8 @@ function mockApi(calls: { method: string; path: string; body?: unknown }[]) {
           }),
           { status: 200 },
         );
+      if (path.includes('/service-categories'))
+        return new Response(JSON.stringify({ categories: ['Manual therapy', 'Recovery'] }), { status: 200 });
       if (path.includes('nominatim.openstreetmap.org'))
         return new Response(JSON.stringify([{ lat: '41.0297', lon: '21.3292' }]), { status: 200 });
       return new Response('{}', { status: 404 });
@@ -86,10 +88,11 @@ describe('the salon registration wizard', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Find address' }));
     await userEvent.click(screen.getByRole('button', { name: 'Next' }));
 
-    // Services — the platform's starter templates, grouped.
-    await screen.findByText('Physiotherapy session');
-    await userEvent.click(screen.getByText('Physiotherapy session'));
-    await userEvent.click(screen.getByText('Sports massage'));
+    // Services — the salon writes its own; category from the HQ list.
+    await fill('Service name', 'Deep-tissue massage');
+    await fill('Price (MKD)', '1500');
+    await userEvent.click(screen.getByRole('button', { name: 'Add service' }));
+    await screen.findByText('Deep-tissue massage');
     await userEvent.click(screen.getByRole('button', { name: 'Next' }));
 
     // Gallery (optional) → Team & hours → Review.
@@ -97,7 +100,7 @@ describe('the salon registration wizard', () => {
     await screen.findByText('Invite your team');
     await userEvent.click(screen.getByRole('button', { name: 'Next' }));
 
-    await screen.findByText('2 selected');
+    await screen.findByText('1 selected');
     await userEvent.click(screen.getByRole('button', { name: 'Submit for review' }));
 
     await screen.findByText('Almost there');
@@ -105,12 +108,18 @@ describe('the salon registration wizard', () => {
     expect(sent).toBeDefined();
     const draft = sent!.body as {
       acct: { email: string };
-      services: string[];
+      services: { name: string; category: string; durationMin: number; price: number }[];
       loc: { lat: number | null };
       hours: Record<string, { closed: boolean }>;
     };
     expect(draft.acct.email).toBe('petra@studionova.mk');
-    expect(draft.services.sort()).toEqual(['physio-session', 'sports-massage']);
+    expect(draft.services).toHaveLength(1);
+    expect(draft.services[0]).toMatchObject({
+      name: 'Deep-tissue massage',
+      category: 'Manual therapy',
+      durationMin: 30,
+      price: 1500,
+    });
     expect(draft.loc.lat).not.toBeNull();
     expect(draft.hours.sun?.closed).toBe(true);
     // The applicant's key back in is kept client-side.

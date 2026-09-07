@@ -48,6 +48,21 @@ export const REG_SERVICE_TEMPLATES: {
   { key: 'sports-massage', name: 'Sports massage', category: 'Recovery', durationMin: 45, price: 1900 },
 ];
 
+/** One service the salon creates during registration. Name, price and
+ *  duration are its own; the category is a name from the HQ taxonomy. */
+export const RegServiceSchema = z.object({
+  name: z.string().min(1).max(80),
+  category: z.string().min(1),
+  durationMin: z.number().int().positive(),
+  price: z.number().int().nonnegative(),
+});
+export type RegService = z.infer<typeof RegServiceSchema>;
+
+/** The Velnes service taxonomy, for the anonymous registration wizard. */
+export const PublicServiceCategoryListSchema = z.object({
+  categories: z.array(z.string()),
+});
+
 export const RegistrationDraftSchema = z.object({
   acct: z.object({
     name: z.string().min(1),
@@ -74,7 +89,9 @@ export const RegistrationDraftSchema = z.object({
     lat: z.number().nullable().default(null),
     lng: z.number().nullable().default(null),
   }),
-  services: z.array(z.string()).min(1), // template keys
+  // The salon writes its own services; the category is picked from the
+  // Velnes taxonomy HQ curates (a name from /service-categories).
+  services: z.array(RegServiceSchema).min(1),
   gallery: z.array(z.string()).default([]),
   team: z.array(z.object({ name: z.string(), email: z.email() })).default([]),
   hours: z.record(z.enum(REG_DAYS), RegDayHoursSchema),
@@ -104,9 +121,7 @@ export const RegistrationImportResultSchema = z.object({
       zip: z.string().optional(),
     })
     .default({}),
-  /** Starter-template keys matched from the services named on the page. */
-  serviceKeys: z.array(z.string()).default([]),
-  /** Raw service names found, shown as hints. */
+  /** Raw service names found on the page, shown as hints. */
   serviceNames: z.array(z.string()).default([]),
   hours: z
     .array(
