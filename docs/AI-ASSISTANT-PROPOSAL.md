@@ -458,27 +458,77 @@ service extraction); (5) supplier surface. Each is one reviewable slice.
 
 ---
 
-## PART F — Decisions I need from you before implementation
+## PART F — Decisions (APPROVED 2026-09-14)
 
-1. **Draft storage** — server-side ephemeral `assistant_drafts` table (my
-   recommendation, tamper-proof + auditable) vs signed client-held drafts?
-2. **Concurrency** — Action-level *fingerprint* guard (pragmatic, my
-   recommendation) vs investing now in platform-wide version/`updatedAt` columns?
-3. **V1 action set** — confirm or trim Part E.
-4. **High-risk policy** — for legal/payments/roles/owner/delete: *navigate-only*
-   (my recommendation) or *fully excluded/hidden* from the Assistant?
-5. **Multi-action sets in V1** — ship the simple same-domain case (e.g. "close
-   Mon+Tue"), or single-action only for V1 and defer all sets?
-6. **Supplier-profile update** — build the missing door for V1, or exclude it?
-7. **Model & cost posture** — Sonnet (my default) vs Opus; token/cost ceiling;
-   and is the Assistant a paid, key-gated feature that degrades to quick-actions
-   when no key (matching onboarding), yes?
-8. **Audit** — approve the Assistant writing its own audit row for doors that don't
-   audit today, and do you want the richer *structured (jsonb) audit* now or later?
-9. **Where this lives** — this doc is at `docs/AI-ASSISTANT-PROPOSAL.md`; want it
-   iterated here, and should I follow with a thin **end-to-end spike** of one read
-   action + one write action (mocked planner) to de-risk before the full build?
-10. **Scope discipline** — confirm the deferred list (Part C-33) is acceptable for
-    V1, so we don't quietly grow it.
+1. **Draft storage** — ✅ server-side, tenant/supplier-scoped, short-TTL
+   `assistant_drafts` (jsonb, RLS). The client holds only the draft id + rendered
+   preview.
+2. **Concurrency** — ✅ Action-level *fingerprint* guard for V1. **No platform-wide
+   version columns** introduced solely for the Assistant.
+3. **V1 action set** — ✅ Part E as written.
+4. **High-risk actions** — ✅ **navigate-only, not hidden.** The Assistant
+   understands and explains legal-entity / payment / permission-role / owner /
+   destructive requests, but **must not execute them** in V1 — it routes the user
+   to the correct screen (or support) instead.
+5. **Multi-action** — ✅ simple **same-domain** ChangeSets in V1 (e.g. close
+   Monday + Tuesday). Cross-domain orchestration stays deferred.
+6. **Supplier profile** — ✅ **excluded from V1.** Do not create a new business
+   door solely for the Assistant.
+7. **Model & entitlement** — ✅ start with **Sonnet**, provider/model configurable
+   via the abstraction (§B.4). **Not hard-coded as a paid feature.** Architect an
+   **entitlement/usage seam** now (see F.1) so inclusion / limits / plan-gating is
+   a later config decision, not a rewrite.
+8. **Audit** — ✅ **every AI-assisted mutation produces an audit record**, and
+   because the `ChangeSet` is already structured we **preserve structured
+   before/after/change metadata for AI actions now** rather than flattening it into
+   prose — introduced **compatibly** (see F.2), with no migration of the historical
+   free-text `audit_log`.
+9. **Spike** — ✅ **build first.** Thin end-to-end spike with one READ
+   (`read_service_price`) + one WRITE (`update_price`), **mocked/stubbed planner**,
+   proving the whole path: intent → resolution → validation → draft → structured
+   preview → explicit approval → concurrency check → canonical door → audit → real
+   result. **Do not expand V1 scope while building the spike.**
+10. **Deferred list** — ✅ confirmed (Part C-33).
 
-*No code will be written until these are settled.*
+### F.1 Entitlement / usage seam (decision 7)
+
+The Assistant must not assume "always on and free." Introduce a single server-side
+gate, `assistantEntitlement(ctx) → { allowed, reason?, limits? }`, consulted at the
+top of `/assistant/message` and `/assistant/execute`. V1 returns `allowed:true`
+whenever a model key is configured (matching onboarding's honest-fallback), but the
+seam lets us later plug in plan-gating, per-tenant limits, or usage quotas **without
+touching action code**. Every turn already emits a telemetry event (§29) carrying
+token usage, so a quota can be enforced there later.
+
+### F.2 Structured AI-change audit, introduced compatibly (decision 8)
+
+The existing `audit_log` (append-only, free-text `before/after`) is **not migrated**.
+For AI-assisted mutations the Assistant writes **both**:
+- the normal `logAudit(trx, …, {source:'ai_assistant', reason:'approved by …'})`
+  row (human-readable, keeps the one audit stream intact), **and**
+- a companion **`assistant_actions`** row (jsonb) preserving the structured
+  `ChangeSet` (per-op before/after/impact), the resolved actionId, the approver, the
+  draft id, and the concurrency fingerprint — the machine-readable record.
+
+This is additive: nothing in the current audit system changes, and later we can
+back-fill a structured column onto `audit_log` if desired. "Who changed Maria's
+hours?" is answerable from `audit_log`; "exactly what did the Assistant change, as a
+diff?" is answerable from `assistant_actions`.
+
+### F.3 Draft continuation (added requirement)
+
+Closing the Assistant panel must **not** destroy an unfinished draft. While the
+draft is within its TTL:
+- Reopening the Assistant detects the open draft and offers to resume:
+  *"Continue adding John Smith? 4 of 6 required details completed. [Continue]
+  [Start over]"* — driven entirely by the structured `ActionDraft`
+  (`actionId` + `args`/`missing` counts), **not** by a stored transcript.
+- Explicit **Cancel** transitions the draft to `CANCELLED` (abandoned).
+- TTL expiry silently drops the draft; the next open starts fresh.
+- **No persistent PII transcript:** we store the structured draft (the user's own
+  field values, already destined for the mutation) — never the rolling chat log.
+  The panel reconstructs a minimal "here's what we have so far" summary from the
+  draft's fields, not from saved conversation. At most one *active* draft per user
+  per app surface at a time keeps the resume unambiguous.
+
+*Implementation begins with the spike (F.9); V1 scope is not expanded during it.*
