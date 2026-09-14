@@ -113,6 +113,33 @@ export interface Appointments {
   widgetId: string | null;
 }
 
+export interface AssistantActions {
+  actionId: string;
+  actorEmployeeId: string | null;
+  app: string;
+  change: Json;
+  draftId: string | null;
+  fingerprint: Json | null;
+  id: Generated<string>;
+  reason: string | null;
+  result: string;
+  tenantId: string;
+  ts: Generated<Timestamp>;
+}
+
+export interface AssistantDrafts {
+  actionId: string;
+  app: string;
+  createdAt: Generated<Timestamp>;
+  createdBy: string | null;
+  draft: Json;
+  expiresAt: Timestamp;
+  id: Generated<string>;
+  status: string;
+  tenantId: string;
+  updatedAt: Generated<Timestamp>;
+}
+
 export interface AuditLog {
   action: string;
   actorEmployeeId: string | null;
@@ -1010,6 +1037,8 @@ export interface Widgets {
 export interface DB {
   appointmentHistory: AppointmentHistory;
   appointments: Appointments;
+  assistantActions: AssistantActions;
+  assistantDrafts: AssistantDrafts;
   auditLog: AuditLog;
   brands: Brands;
   businessCategories: BusinessCategories;

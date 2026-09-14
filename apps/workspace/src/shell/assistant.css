@@ -1,0 +1,145 @@
+/* The AI Assistant — net-new UI with no prototype counterpart, so styled
+ * here (per tokens.css guidance) on the same design tokens the rest of the
+ * app uses. A floating launcher, bottom-right; a compact chat panel. */
+
+.asst-fab {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 55;
+  width: 52px;
+  height: 52px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  border: 1px solid var(--accent-strong);
+  background: var(--accent);
+  color: #fff;
+  cursor: pointer;
+  box-shadow: 0 14px 34px -12px rgba(0, 0, 0, 0.38), 0 2px 6px rgba(0, 0, 0, 0.08);
+  transition: transform 0.12s ease;
+}
+.asst-fab:hover {
+  transform: translateY(-1px);
+}
+
+.asst-panel {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 56;
+  width: min(400px, calc(100vw - 40px));
+  height: min(560px, calc(100vh - 40px));
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-tile);
+  box-shadow: 0 24px 60px -18px rgba(0, 0, 0, 0.42), 0 3px 10px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+}
+
+.asst-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 12px 12px 16px;
+  border-bottom: 1px solid var(--line);
+}
+.asst-title {
+  font-weight: 800;
+}
+.asst-sub {
+  font-size: 12px;
+  color: var(--ink-muted);
+}
+
+.asst-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.asst-msg {
+  max-width: 85%;
+  padding: 8px 12px;
+  border-radius: var(--r-control);
+  line-height: 1.4;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.asst-user {
+  align-self: flex-end;
+  background: var(--accent);
+  color: #fff;
+  border-bottom-right-radius: 3px;
+}
+.asst-assistant {
+  align-self: flex-start;
+  background: var(--sand, #f4f2ec);
+  color: var(--ink);
+  border-bottom-left-radius: 3px;
+}
+.asst-muted {
+  color: var(--ink-muted);
+}
+
+.asst-preview {
+  align-self: stretch;
+  border: 1px solid var(--line-strong, var(--line));
+  border-radius: var(--r-control);
+  padding: 12px;
+  background: var(--surface);
+}
+.asst-preview-h {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ink-muted);
+  margin-bottom: 8px;
+}
+.asst-op {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+}
+.asst-op-label {
+  font-weight: 700;
+}
+.asst-op-delta s {
+  color: var(--ink-muted);
+}
+.asst-op-delta b {
+  color: var(--accent-deep);
+}
+
+.asst-actions,
+.asst-input {
+  display: flex;
+  gap: 8px;
+  padding: 12px;
+  border-top: 1px solid var(--line);
+}
+.asst-actions {
+  justify-content: flex-end;
+}
+.asst-input input {
+  flex: 1;
+  min-width: 0;
+  padding: 9px 12px;
+  border: 1px solid var(--line-input, var(--line));
+  border-radius: var(--r-control);
+  font: inherit;
+  background: var(--surface);
+  color: var(--ink);
+}
+.asst-input input:focus {
+  outline: none;
+  border-color: var(--accent);
+}

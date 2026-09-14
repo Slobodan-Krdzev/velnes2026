@@ -34,6 +34,12 @@ export const env = {
   onboardingProvider: process.env.ONBOARDING_PROVIDER ?? 'rules',
   /** The Claude model the onboarding extractor calls when live. */
   onboardingModel: process.env.ONBOARDING_MODEL ?? 'claude-sonnet-5',
+  /** AI Assistant planner. 'stub' (default) = the deterministic pattern
+   *  matcher used by the V1 spike and the tests; 'claude' = the Messages
+   *  API planner (degrades to 'stub' with no key). Provider/model are
+   *  configurable so we are never coupled to one model. */
+  assistantProvider: process.env.ASSISTANT_PROVIDER ?? 'stub',
+  assistantModel: process.env.ASSISTANT_MODEL ?? 'claude-sonnet-5',
   /** Set when INSIGHT_PROVIDER or ONBOARDING_PROVIDER = 'claude'. Absent
    *  → the claude providers degrade to rules, never fake an answer. */
   anthropicApiKey: process.env.ANTHROPIC_API_KEY ?? '',

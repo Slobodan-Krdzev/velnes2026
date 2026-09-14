@@ -31,6 +31,7 @@ import { flightdeckRoutes } from './modules/flightdeck/flightdeck.routes.js';
 import { rankingRoutes } from './modules/ranking/ranking.routes.js';
 import { businessCategoriesRoutes } from './modules/business-categories/business-categories.routes.js';
 import { registrationsRoutes } from './modules/registrations/registrations.routes.js';
+import { assistantRoutes } from './modules/assistant/assistant.routes.js';
 import { authPlugin } from './plugins/auth.js';
 import { publicRoutes } from './public/public.routes.js';
 
@@ -78,6 +79,7 @@ export async function buildServer() {
       flightdeckRoutes(api);
       rankingRoutes(api);
       businessCategoriesRoutes(api);
+      assistantRoutes(api);
     },
     { prefix: API_PREFIX },
   );

@@ -12,6 +12,7 @@ import { useOutsideClose } from '../lib/pop.js';
 import { useToast } from '../lib/toast.js';
 import { useSession } from '@velnes/client';
 import { WA_SUPPORT, WhatsAppGlyph, WhatsAppPopup } from './WhatsAppSupport.js';
+import { Assistant } from './Assistant.js';
 
 /** Location scope — the prototype's loc-switch: chosen once in the
  *  topbar, honoured by every screen. 'all' = every assigned location. */
@@ -391,6 +392,8 @@ export function Shell() {
         open={waOpen && routerLoc.pathname.startsWith('/support')}
         onClose={() => setWaOpen(false)}
       />
+
+      <Assistant />
 
       {preview ? (
         <div className="supportbar previewbar" id="previewbar">

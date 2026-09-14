@@ -532,3 +532,47 @@ draft is within its TTL:
   per app surface at a time keeps the resume unambiguous.
 
 *Implementation begins with the spike (F.9); V1 scope is not expanded during it.*
+
+---
+
+## Part G — Spike delivered (2026-09-14)
+
+The thin end-to-end spike is built and green, proving the whole architecture with
+exactly two registered actions — one READ (`read_service_price`) and one WRITE
+(`update_price`) — and a **deterministic stub planner** (`ASSISTANT_PROVIDER=stub`,
+the default), so the entire flow runs and tests with no model key. The `claude`
+planner is a prepared, honest-null seam (`claudePlan` degrades to the stub until a
+key is wired), mirroring `extract.provider` / `insightProvider`.
+
+**Where it lives**
+- `packages/contracts/src/assistant.ts` — the ActionDraft / ChangeSet / message /
+  execute / resume zod contracts (one door, one contract).
+- `db/migrations/20260914120050_ai_assistant.sql` — `assistant_drafts`
+  (server-side, tenant-scoped, 30-min TTL, RLS on `tenant_id`) and `assistant_actions`
+  (append-only structured AI-mutation audit, jsonb `change` + `fingerprint`). Both
+  rely on the repo's default-privilege grant to `velnes_api`; every index leads with
+  `tenant_id`.
+- `services/api/src/modules/assistant/` — `registry.ts` (declarative actions over the
+  **canonical** `updateService` door — never a new mutation path), `planner.provider.ts`
+  (stub + claude seam), `assistant.service.ts` (the orchestration: load/merge draft →
+  permission (`permsFor`+`can`) → resolve → validate → structured preview + fingerprint
+  → **explicit approval** → re-check + concurrency fingerprint → canonical door →
+  dual audit → real result), `assistant.routes.ts` (`POST /assistant/message`,
+  `POST /assistant/execute`, `GET /assistant/draft`, `DELETE /assistant/draft/:id`).
+- `apps/workspace/src/shell/Assistant.tsx` (+ `assistant.css`) — a floating panel
+  (catalog-permitted users only) that renders the server's ChangeSet as a
+  before→after preview behind an explicit **Approve & apply** gate, and resumes an
+  open draft on reopen. Trilingual keys added to en/mk/sq.
+
+**Proven** by `assistant.test.ts` (7 tests, deterministic) and a live browser
+walk-through: read a price; preview→approve a change (mutating only via the canonical
+door, writing both the human `audit_log` row with `source='ai_assistant'` and the
+structured `assistant_actions` row); permission refusal (no draft, no collection);
+not-found surfaced as a collecting error (never a guess); multi-turn continuation; and
+the concurrency fingerprint catching a price edited after preview, re-baselining, then
+succeeding on re-approval. Scope was **not** expanded beyond the two actions.
+
+**Next (post-spike, not built here):** wire the real `claudePlan` Messages call
+(tools from the registry, forced `tool_choice`, zod-validated output); add the Part E
+action set behind the same machinery; the entitlement/usage seam (F.1); the supplier
+surface (excluded from V1).

@@ -1,4 +1,5 @@
 export { API_PREFIX } from './meta.js';
+export * from './assistant.js';
 export { HealthResponseSchema, type HealthResponse } from './health.js';
 export * from './permissions.js';
 export * from './auth.js';
