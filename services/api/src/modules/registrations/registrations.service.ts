@@ -9,6 +9,7 @@ import argon2 from 'argon2';
 import { sql } from 'kysely';
 import { db, withHq, type Trx } from '../../db/index.js';
 import { logAudit } from '../audit/audit.service.js';
+import { queueMail } from '../mail/mail.service.js';
 
 export class RegistrationError extends Error {
   constructor(
@@ -193,13 +194,43 @@ export async function approveRegistration(id: string, reviewer: string) {
     const businessId = randomUUID();
     await sql`select set_config('app.tenant_id', ${businessId}, true)`.execute(trx);
 
+    // A booking-page slug from the salon's name, made unique.
+    const base =
+      draft.salon.name
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        .slice(0, 40) || 'salon';
+    let slug = base;
+    for (let n = 2; ; n++) {
+      const taken = await trx
+        .selectFrom('businesses')
+        .select('id')
+        .where('slug', '=', slug)
+        .executeTakeFirst();
+      if (!taken) break;
+      slug = `${base}-${n}`;
+    }
+
     await trx
       .insertInto('businesses')
       .values({
         id: businessId,
         name: draft.salon.name,
+        slug,
+        city: draft.loc.city,
+        phone: draft.salon.phone || null,
         country: 'North Macedonia',
         since: new Date(),
+        // The photos the owner brought in (AI onboarding read them off the
+        // website, or they uploaded them) become the business gallery.
+        gallery: JSON.stringify(
+          draft.gallery.map((g, i) => ({
+            id: randomUUID(),
+            name: g.name || `Photo ${i + 1}`,
+            img: g.img,
+          })),
+        ),
       })
       .execute();
 
@@ -259,7 +290,7 @@ export async function approveRegistration(id: string, reviewer: string) {
         ownerType: 'salon',
         isDefault: true,
         name: draft.legal.name,
-        taxId: draft.legal.taxId,
+        taxId: draft.legal.taxId || null,
         vatReg: draft.legal.vat || null,
         currency: draft.legal.currency || 'MKD',
         status: 'verified',
@@ -331,6 +362,109 @@ export async function approveRegistration(id: string, reviewer: string) {
           sort: i,
         })
         .execute();
+
+    // The salon's own products, on the product taxonomy. Stock starts
+    // at 0 — a deliberate first count, never a guess.
+    const prodCatIds = new Map<string, string>();
+    for (const cat of [...new Set(draft.products.map((p) => p.category))]) {
+      const found = await trx
+        .selectFrom('productCategories')
+        .select('id')
+        .where('name', '=', cat)
+        .executeTakeFirst();
+      prodCatIds.set(
+        cat,
+        found?.id ??
+          (
+            await trx
+              .insertInto('productCategories')
+              .values({ name: cat })
+              .returning('id')
+              .executeTakeFirstOrThrow()
+          ).id,
+      );
+    }
+    for (const p of draft.products) {
+      const prod = await trx
+        .insertInto('products')
+        .values({
+          tenantId: businessId,
+          name: p.name,
+          categoryId: prodCatIds.get(p.category)!,
+          price: p.price,
+          vat: 18,
+          active: true,
+        })
+        .returning('id')
+        .executeTakeFirstOrThrow();
+      await trx
+        .insertInto('locationCatalogProducts')
+        .values({
+          tenantId: businessId,
+          locationId,
+          productId: prod.id,
+          active: true,
+          price: p.price,
+          pos: true,
+          stock: 0,
+        })
+        .execute();
+    }
+
+    // The colleagues invited in the wizard. Each becomes an invited,
+    // non-bookable staff member linked to the location (the prototype's
+    // "invited by e-mail" — bookable, hours and skills are the owner's
+    // to fill in under Settings › Team). Email is globally unique, so an
+    // address already in use anywhere — the owner's own included — is
+    // skipped rather than aborting the whole approval.
+    const PALETTE = ['clay', 'rose', 'sage', 'lilac', 'sky', 'sand', 'stone'];
+    const usedEmails = new Set([draft.acct.email.trim().toLowerCase()]);
+    let colorIdx = 0;
+    for (const member of draft.team) {
+      const email = member.email.trim();
+      const name = member.name.trim();
+      if (!email || !name) continue;
+      const lower = email.toLowerCase();
+      if (usedEmails.has(lower)) continue;
+      const taken = await trx
+        .selectFrom('employees')
+        .select('id')
+        .where(sql<boolean>`lower(email) = ${lower}`)
+        .executeTakeFirst();
+      if (taken) continue;
+      usedEmails.add(lower);
+      const memberId = randomUUID();
+      await trx
+        .insertInto('employees')
+        .values({
+          id: memberId,
+          tenantId: businessId,
+          name,
+          roleTitle: 'New user',
+          email,
+          phone: null,
+          access: 'staff',
+          roleId: null,
+          bookable: false,
+          status: 'invited',
+          color: PALETTE[colorIdx % PALETTE.length]!,
+          hours: JSON.stringify(hoursFromDraft(draft)),
+        })
+        .execute();
+      colorIdx += 1;
+      await trx
+        .insertInto('employeeLocations')
+        .values({ tenantId: businessId, employeeId: memberId, locationId })
+        .execute();
+      await queueMail(trx, {
+        tenantId: businessId,
+        to: email,
+        subject: 'You are invited to Velnes',
+        body: `${draft.salon.name} invited you to join their team on Velnes. The invite is valid for 7 days.`,
+        kind: 'employee_invite',
+        refId: memberId,
+      });
+    }
 
     await trx
       .updateTable('registrations')

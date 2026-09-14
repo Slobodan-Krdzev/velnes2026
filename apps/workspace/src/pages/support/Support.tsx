@@ -42,7 +42,9 @@ export function SupportPage() {
   });
   const rows = tickets.data?.tickets ?? [];
   const [selId, setSelId] = useState<string | null>(null);
-  const [composing, setComposing] = useState(false);
+  // The new-ticket form is the left pane's default — the salon lands
+  // ready to write to HQ; selecting a ticket swaps in its thread.
+  const [composing, setComposing] = useState(true);
   const sel = rows.find((r) => r.id === selId) ?? null;
 
   // A bell click lands here with the ticket it spoke of.
@@ -57,7 +59,23 @@ export function SupportPage() {
   const refresh = () => void qc.invalidateQueries({ queryKey: ['support'] });
 
   return (
-    <div className="support-grid" style={{ display: 'grid', gridTemplateColumns: '340px 1fr', gap: 20 }}>
+    <div className="support-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 20 }}>
+      <div className="card" style={{ minHeight: 320 }}>
+        {composing ? (
+          <NewTicket
+            onCreated={(id) => { refresh(); setComposing(false); setSelId(id); toast(t('support.sent')); }}
+            onCancel={() => { if (sel) setComposing(false); }}
+          />
+        ) : sel ? (
+          <Thread ticket={sel} onReplied={() => { refresh(); toast(t('support.replied')); }} />
+        ) : (
+          <div className="empty" style={{ padding: 40 }}>
+            <h3>{t('support.pickTitle')}</h3>
+            <p>{t('support.pickSub')}</p>
+          </div>
+        )}
+      </div>
+
       <div className="card" style={{ overflow: 'hidden' }}>
         <div className="card-header">
           <h2>{t('support.title')}</h2>
@@ -92,22 +110,6 @@ export function SupportPage() {
               </li>
             ))}
           </ul>
-        )}
-      </div>
-
-      <div className="card" style={{ minHeight: 320 }}>
-        {composing ? (
-          <NewTicket
-            onCreated={(id) => { refresh(); setComposing(false); setSelId(id); toast(t('support.sent')); }}
-            onCancel={() => setComposing(false)}
-          />
-        ) : sel ? (
-          <Thread ticket={sel} onReplied={() => { refresh(); toast(t('support.replied')); }} />
-        ) : (
-          <div className="empty" style={{ padding: 40 }}>
-            <h3>{t('support.pickTitle')}</h3>
-            <p>{t('support.pickSub')}</p>
-          </div>
         )}
       </div>
     </div>

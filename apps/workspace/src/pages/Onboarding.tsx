@@ -57,11 +57,12 @@ export function Onboarding() {
 
   const foundList = (loading: boolean) => {
     const r = result;
-    const treatN = r?.serviceNames.length ?? 0;
+    const treatN = (r ? r.services.length || r.serviceNames.length : 0) ?? 0;
     const rows = [
       { on: loading ? null : !!(r?.salon.name || r?.loc.city || r?.salon.phone), label: t('ob.rowDetails') },
       { on: loading ? null : treatN > 0, label: treatN ? t('ob.rowTreatmentsN', { n: treatN }) : t('ob.rowNoTreatments') },
       { on: loading ? null : (r?.hours.length ?? 0) > 0, label: (r?.hours.length ?? 0) > 0 ? t('ob.rowHours') : t('ob.rowNoHours') },
+      { on: loading ? null : (r?.gallery.length ?? 0) > 0, label: (r?.gallery.length ?? 0) > 0 ? t('ob.rowPhotosN', { n: r!.gallery.length }) : t('ob.rowNoPhotos') },
     ];
     return (
       <div className="ob-finds">
@@ -84,8 +85,9 @@ export function Onboarding() {
   const summary = (() => {
     const r = result;
     if (!r) return '';
+    const treatN = r.services.length || r.serviceNames.length;
     const bits = [
-      r.serviceNames.length ? t('ob.rowTreatmentsN', { n: r.serviceNames.length }) : null,
+      treatN ? t('ob.rowTreatmentsN', { n: treatN }) : null,
       r.hours.length ? t('ob.rowHours').toLowerCase() : null,
       r.loc.city ? t('ob.address') : null,
     ].filter(Boolean);
@@ -183,7 +185,12 @@ export function Onboarding() {
                   <br />
                   <em>{salonName}</em>
                 </h1>
-                <p className="lead">{t('ob.readBody', { salon: salonName })}</p>
+                {result?.provider === 'claude' ? (
+                  <span className="ob-urlok" style={{ marginBottom: 4 }}>
+                    <Icon d={I.sparkle} size={15} w={1.9} />
+                    <span className="grow">{t('ob.aiRead')}</span>
+                  </span>
+                ) : null}
                 {foundList(false)}
                 {summary ? <p className="ob-sum">{summary}</p> : null}
                 {missing.length ? (

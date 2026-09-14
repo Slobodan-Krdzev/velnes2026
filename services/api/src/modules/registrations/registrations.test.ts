@@ -32,8 +32,12 @@ const draft = (email: string, salon = 'Studio Nova') => ({
     { name: 'Physiotherapy session', category: 'Manual therapy', durationMin: 45, price: 1800 },
     { name: 'Sports massage', category: 'Recovery', durationMin: 45, price: 1900 },
   ],
-  gallery: [],
-  team: [],
+  products: [{ name: 'Kinesiology tape', category: 'Recovery aids', price: 550 }],
+  gallery: [{ name: 'Front room', img: 'data:image/png;base64,AAAA' }],
+  team: [
+    { name: 'Ana Trajkovska', email: 'ana@studionova.test' },
+    { name: 'Marko Ilievski', email: 'marko@studionova.test' },
+  ],
   hours: {
     mon: day(), tue: day(), wed: day(), thu: day(), fri: day(), sat: day(), sun: day(true),
   },
@@ -97,10 +101,10 @@ describe('registrations and the HQ intake table', () => {
       // service_categories are the global Velnes taxonomy now — a
       // tenant teardown never touches them.
       for (const t of [
-        'audit_log', 'refresh_tokens', 'user_credentials', 'employee_skills',
+        'audit_log', 'mail_outbox', 'refresh_tokens', 'user_credentials', 'employee_skills',
         'employee_locations', 'legal_entity_locations', 'legal_entities',
-        'location_lifecycle_log', 'locations', 'services',
-        'employees', 'roles',
+        'location_catalog_products', 'products', 'location_lifecycle_log',
+        'locations', 'services', 'employees', 'roles',
       ])
         await admin.query(`DELETE FROM ${t} WHERE tenant_id=$1`, [b]);
       await admin.query(`DELETE FROM businesses WHERE id=$1`, [b]);
@@ -266,11 +270,49 @@ describe('registrations and the HQ intake table', () => {
       'Physiotherapy session',
       'Sports massage',
     ]);
+    // The salon's own product, stocked at 0 at the created location.
+    const prod = await admin.query(
+      `SELECT p.name, lcp.stock FROM products p
+       JOIN location_catalog_products lcp ON lcp.product_id = p.id
+       WHERE p.tenant_id=$1`,
+      [newBusinessId],
+    );
+    expect(prod.rows[0]?.name).toBe('Kinesiology tape');
+    expect(Number(prod.rows[0]?.stock)).toBe(0);
+    // The business carries the city and a booking slug (the lost-city fix).
+    const biz = await admin.query(`SELECT city, slug, gallery FROM businesses WHERE id=$1`, [newBusinessId]);
+    expect(biz.rows[0].city).toBe('Bitola');
+    expect(biz.rows[0].slug).toBeTruthy();
+    // The wizard's photo lands in the business gallery, id-stamped.
+    const gal = biz.rows[0].gallery as { name: string; img: string; id: string }[];
+    expect(gal).toHaveLength(1);
+    expect(gal[0]!.name).toBe('Front room');
+    expect(gal[0]!.img).toBe('data:image/png;base64,AAAA');
+    expect(gal[0]!.id).toBeTruthy();
     const entity = await admin.query(
       `SELECT status FROM legal_entities WHERE tenant_id=$1`,
       [newBusinessId],
     );
     expect(entity.rows[0].status).toBe('verified');
+
+    // The two colleagues from the wizard are provisioned as invited,
+    // non-bookable staff, linked to the location and mailed an invite.
+    const team = await admin.query(
+      `SELECT e.name, e.access, e.status, e.bookable,
+              (SELECT count(*) FROM employee_locations el WHERE el.employee_id=e.id) AS locs
+         FROM employees e
+        WHERE e.tenant_id=$1 AND e.access='staff'
+        ORDER BY e.name`,
+      [newBusinessId],
+    );
+    expect(team.rows.map((r) => r.name)).toEqual(['Ana Trajkovska', 'Marko Ilievski']);
+    expect(team.rows.every((r) => r.status === 'invited' && r.bookable === false)).toBe(true);
+    expect(team.rows.every((r) => Number(r.locs) === 1)).toBe(true);
+    const invites = await admin.query(
+      `SELECT count(*)::int AS n FROM mail_outbox WHERE tenant_id=$1 AND kind='employee_invite'`,
+      [newBusinessId],
+    );
+    expect(invites.rows[0].n).toBe(2);
   });
 
   it('runs the New-locations queue: compound review verifies the entity in the same act', async () => {

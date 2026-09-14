@@ -25,8 +25,17 @@ export const env = {
    *  falls back to 'rules' rather than pretend. See the insights
    *  provider — one door, swappable like mailTransport. */
   insightProvider: process.env.INSIGHT_PROVIDER ?? 'rules',
-  /** Set when INSIGHT_PROVIDER='claude'. Absent → the claude provider
-   *  degrades to rules, never fakes an answer. */
+  /** AI-onboarding website import. 'rules' (default) reads only the
+   *  page's structured data — deterministic, honest, no external call.
+   *  'claude' additionally hands the page text to the Claude Messages
+   *  API to extract full services/products/hours; with no key it
+   *  degrades to 'rules' rather than fake a read. Same swappable shape
+   *  as insightProvider / mailTransport. */
+  onboardingProvider: process.env.ONBOARDING_PROVIDER ?? 'rules',
+  /** The Claude model the onboarding extractor calls when live. */
+  onboardingModel: process.env.ONBOARDING_MODEL ?? 'claude-sonnet-5',
+  /** Set when INSIGHT_PROVIDER or ONBOARDING_PROVIDER = 'claude'. Absent
+   *  → the claude providers degrade to rules, never fake an answer. */
   anthropicApiKey: process.env.ANTHROPIC_API_KEY ?? '',
   accessTtl: '15m',
   refreshTtlDays: 30,

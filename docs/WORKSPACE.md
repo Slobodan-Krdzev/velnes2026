@@ -317,3 +317,62 @@ key and a privacy sign-off; the flightdeck contract does not change.
 Deferred: the Velnes-specific timing-suggestions stack rides along in the
 "good to know" fold when present; opportunity copy is server-side English
 until the provider becomes the model.
+
+## Getting-started for a fresh salon (2026-09-07)
+
+A newly approved salon lands on an empty flightdeck. `/flightdeck` now
+carries an `onboarding` block computed from live data: one step each for
+services, products, team, opening hours and a connected supplier — each
+reporting `done` and a `count` from the tenant's own rows, plus the
+tenant's active `locationCount`. `show` is true only while the salon has
+**no sales history yet** (no invoices, no appointments, nothing booked
+today), so an established salon never sees it. The flightdeck renders the
+block as a checklist card above the pulse: done steps carry a green ✓,
+open ones a **Set up** button that deep-links to catalog/settings/
+suppliers. A one-time, per-device nudge (localStorage `velnes.fdSeen.<id>`)
+adds an "add another location" suggestion the very first time an owner
+reaches the deck while on a single location. The UI supplies all copy per
+step key; the server reports only the facts. Deferred: the checklist does
+not gate anything and there is no server-side "dismissed" state — it
+simply retires once real sales activity appears.
+
+For this to reach a brand-new salon at all, the `/flightdeck` route's
+"All locations" fallback had to widen: it prefers the busiest location,
+then the first **ACTIVE** one, and finally **any** location. A
+freshly-approved salon has no ACTIVE location yet — its only location is
+still `APPROVED` until the owner activates it — so the old ACTIVE-only
+fallback returned 404 and the page rendered blank. The checklist is
+precisely the pre-activation guide, so it must resolve that APPROVED
+location.
+
+## The logo is the flightdeck door (2026-09-07)
+
+The sidebar's flightdeck tile is gone. The **Velnes logo at the top of
+the sidebar** is now the flightdeck link across every workspace screen —
+a clickable `.applogo` button that navigates to `/` and carries the
+active state while the deck is showing. The `NAV` list dropped its `/`
+entry; the shell keeps the flightdeck's page title and the deck route
+itself unchanged. A deliberate deviation from the prototype (which had a
+home tile and a static logo), at Alex's request.
+
+## Support: layout swap + WhatsApp click-to-chat (2026-09-12)
+
+The support screen flipped: the **new-ticket form is the left pane's
+default** (the salon lands ready to write to HQ) and the **tickets
+listing sits on the right** (340px) with the "New ticket" button;
+selecting a ticket swaps its thread into the left pane. WhatsApp support
+lives in the shell, only on the Support screen (like the reference): a
+**"Chat on WhatsApp" pill floats bottom-left** and opens a **popup pinned
+bottom-right**
+— a QR of the `wa.me` deep link, a scan-with-your-phone instruction, and a
+green **Open WhatsApp** button, the link pre-filled with a message. The QR
+is generated client-side (`qrcode`, bundled, no network). Both the icon
+and the popup render **only when `VITE_SUPPORT_WHATSAPP` is set**
+(international format, digits extracted for wa.me) — no number, nothing
+shows, nothing faked. Set it in `apps/workspace/.env` (see `.env.example`).
+The popup footer is honest — "the conversation continues in WhatsApp".
+Deferral: this is a one-way hand-off into WhatsApp, not an in-app thread — a true two-way WhatsApp
+chat needs the WhatsApp Business Platform (Meta Cloud API or a BSP), a
+registered number, webhooks and message templates, the same undecided
+integration class as SMTP; it stays on the backlog until Alex picks a
+provider.

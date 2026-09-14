@@ -64,6 +64,7 @@ describe('AI-onboarding', () => {
     await userEvent.type(screen.getByLabelText('Your name'), 'Ana Owner');
     await userEvent.type(screen.getByLabelText('E-mail'), 'ana@skopjephysio.mk');
     await userEvent.type(screen.getByLabelText('Password'), 'sixchars');
+    await userEvent.type(screen.getByLabelText('Confirm password'), 'sixchars');
     await userEvent.click(screen.getByRole('button', { name: 'Next' }));
 
     // The salon name arrived pre-filled from the import.

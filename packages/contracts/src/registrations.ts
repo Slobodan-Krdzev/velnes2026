@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { GALLERY_IMG_MAX_CHARS, GALLERY_MAX_PHOTOS } from './business.js';
 
 /**
  * The classic salon registration (docs §4 Governance): one wizard,
@@ -58,7 +59,16 @@ export const RegServiceSchema = z.object({
 });
 export type RegService = z.infer<typeof RegServiceSchema>;
 
-/** The Velnes service taxonomy, for the anonymous registration wizard. */
+/** One product the salon creates during registration — its own name
+ *  and price, on a category from the HQ taxonomy. Stock starts at 0. */
+export const RegProductSchema = z.object({
+  name: z.string().min(1).max(80),
+  category: z.string().min(1),
+  price: z.number().int().nonnegative(),
+});
+export type RegProduct = z.infer<typeof RegProductSchema>;
+
+/** The Velnes service/product taxonomy, for the anonymous wizard. */
 export const PublicServiceCategoryListSchema = z.object({
   categories: z.array(z.string()),
 });
@@ -77,7 +87,9 @@ export const RegistrationDraftSchema = z.object({
   }),
   legal: z.object({
     name: z.string().min(1),
-    taxId: z.string().min(1),
+    // Tax number and VAT are optional at registration — the flightdeck
+    // reminds the owner to add them later.
+    taxId: z.string().default(''),
     vat: z.string().default(''),
     currency: z.string().default('MKD'),
   }),
@@ -92,7 +104,15 @@ export const RegistrationDraftSchema = z.object({
   // The salon writes its own services; the category is picked from the
   // Velnes taxonomy HQ curates (a name from /service-categories).
   services: z.array(RegServiceSchema).min(1),
-  gallery: z.array(z.string()).default([]),
+  // Products are optional — created the same way, on the product taxonomy.
+  products: z.array(RegProductSchema).default([]),
+  // Salon photos carried as data URLs (the AI onboarding reads them off
+  // the website; the owner can add/replace in the Gallery step). Each is
+  // size-capped like the business gallery, and there are at most twelve.
+  gallery: z
+    .array(z.object({ name: z.string().default(''), img: z.string().max(GALLERY_IMG_MAX_CHARS) }))
+    .max(GALLERY_MAX_PHOTOS)
+    .default([]),
   team: z.array(z.object({ name: z.string(), email: z.email() })).default([]),
   hours: z.record(z.enum(REG_DAYS), RegDayHoursSchema),
 });
@@ -121,8 +141,18 @@ export const RegistrationImportResultSchema = z.object({
       zip: z.string().optional(),
     })
     .default({}),
-  /** Raw service names found on the page, shown as hints. */
+  /** Raw service names found on the page, shown as hints. The
+   *  deterministic parser fills these; the AI provider fills the
+   *  richer `services` below (name + category + duration + price). */
   serviceNames: z.array(z.string()).default([]),
+  /** Full services the AI extractor read — each on a category snapped
+   *  to the HQ taxonomy. Empty when only the deterministic parser ran. */
+  services: z.array(RegServiceSchema).default([]),
+  /** Retail products the AI extractor read, on the product taxonomy. */
+  products: z.array(RegProductSchema).default([]),
+  /** Salon photos read off the page, as data URLs (og:image + gallery
+   *  images, size-gated). The wizard pre-fills the Gallery step with them. */
+  gallery: z.array(z.string()).default([]),
   hours: z
     .array(
       z.object({
@@ -133,6 +163,9 @@ export const RegistrationImportResultSchema = z.object({
       }),
     )
     .default([]),
+  /** Which engine produced this result — 'rules' (structured-data
+   *  parser, the honest default) or 'claude' (the AI extractor). */
+  provider: z.enum(['rules', 'claude']).default('rules'),
 });
 export type RegistrationImportResult = z.infer<typeof RegistrationImportResultSchema>;
 

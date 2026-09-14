@@ -21,6 +21,20 @@ const me = {
 
 const payload = {
   greetingName: 'Maria',
+  onboarding: {
+    show: false,
+    doneCount: 5,
+    totalCount: 5,
+    locationCount: 1,
+    steps: [
+      { key: 'services', done: true, count: 12, actionTarget: 'catalog' },
+      { key: 'products', done: true, count: 6, actionTarget: 'catalog' },
+      { key: 'team', done: true, count: 4, actionTarget: 'settings' },
+      { key: 'hours', done: true, count: 1, actionTarget: 'settings' },
+      { key: 'suppliers', done: true, count: 1, actionTarget: 'suppliers' },
+    ],
+  },
+  legalPending: { taxId: false, vat: false },
   pulse: {
     capacityPct: 62, bookedToday: 5, totalSlots: 8, revenueToday: 41800,
     revenueTarget: 40000, newCustomers: 14, newCustomersDeltaPct: 12,

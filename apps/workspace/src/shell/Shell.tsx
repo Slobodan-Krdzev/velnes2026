@@ -11,6 +11,7 @@ import { useLocations } from '../api/queries.js';
 import { useOutsideClose } from '../lib/pop.js';
 import { useToast } from '../lib/toast.js';
 import { useSession } from '@velnes/client';
+import { WA_SUPPORT, WhatsAppGlyph, WhatsAppPopup } from './WhatsAppSupport.js';
 
 /** Location scope — the prototype's loc-switch: chosen once in the
  *  topbar, honoured by every screen. 'all' = every assigned location. */
@@ -20,9 +21,10 @@ const ScopeContext = createContext<{ scope: string; setScope: (s: string) => voi
 });
 export const useScope = () => useContext(ScopeContext);
 
-/** Navigation exactly as the prototype's NAV/FOOT tiles. */
+/** Navigation as the prototype's NAV/FOOT tiles — minus the flightdeck
+ *  tile: the top Velnes logo is the flightdeck door instead (see the
+ *  clickable .applogo below). */
 const NAV: { to: string; key: string; icon: string; size: number; perm: PermKey | null }[] = [
-  { to: '/', key: 'nav.flightdeck', icon: I.home, size: 28, perm: null },
   { to: '/calendar', key: 'nav.calendar', icon: I.calendar, size: 30, perm: 'appointments.view_own' },
   { to: '/till', key: 'nav.till', icon: I.register, size: 26, perm: 'pos.checkout' },
   { to: '/catalog', key: 'nav.catalog', icon: I.products, size: 30, perm: 'catalog.view' },
@@ -63,6 +65,7 @@ export function Shell() {
   const [scopeMenu, setScopeMenu] = useState(false);
   const [envMenu, setEnvMenu] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
+  const [waOpen, setWaOpen] = useState(false);
   const notifRef = useOutsideClose(notifOpen, () => setNotifOpen(false));
   // Platform notices — HQ speaks, the bell listens. Seen-state is a
   // per-browser convenience, not business truth.
@@ -90,6 +93,8 @@ export function Shell() {
   useEffect(() => {
     document.body.classList.toggle('till-mode', routerLoc.pathname === '/till');
     document.body.classList.toggle('cal-mode', routerLoc.pathname === '/calendar');
+    // The WhatsApp button lives only on Support — leaving closes its popup.
+    if (!routerLoc.pathname.startsWith('/support')) setWaOpen(false);
     return () => {
       document.body.classList.remove('till-mode', 'cal-mode');
     };
@@ -107,10 +112,11 @@ export function Shell() {
   const myLocs = (locations.data?.locations ?? []).filter(
     (l) => !me.locationIds.length || me.locationIds.includes(l.id),
   );
-  const current = [...NAV, ...FOOT].find((n) =>
-    n.to === '/' ? routerLoc.pathname === '/' : routerLoc.pathname.startsWith(n.to),
-  );
-  const title = current ? t(current.key) : t('app.workspace');
+  const onDeck = routerLoc.pathname === '/';
+  const current = [...NAV, ...FOOT].find((n) => routerLoc.pathname.startsWith(n.to));
+  // The flightdeck has no tile now — the logo is its door — but it still
+  // owns the page title when the deck is showing.
+  const title = onDeck ? t('nav.flightdeck') : current ? t(current.key) : t('app.workspace');
   const scopeWord = SCOPE_WORD[current?.to ?? ''] ?? '';
   const scopeLabel =
     scope === 'all'
@@ -121,7 +127,7 @@ export function Shell() {
   const tile = (n: (typeof NAV)[number]) => (
     <button
       key={n.to}
-      className={`tile${(n.to === '/' ? routerLoc.pathname === '/' : routerLoc.pathname.startsWith(n.to)) ? ' active' : ''}`}
+      className={`tile${routerLoc.pathname.startsWith(n.to) ? ' active' : ''}`}
       title={t(n.key)}
       aria-label={t(n.key)}
       onClick={() => navigate(n.to)}
@@ -134,9 +140,15 @@ export function Shell() {
     <>
       <aside className="sidebar">
         <div className="sidebar-group">
-          <div className="applogo" title="Velnes">
+          <button
+            className={`applogo${onDeck ? ' active' : ''}`}
+            title={t('nav.flightdeck')}
+            aria-label={t('nav.flightdeck')}
+            aria-current={onDeck ? 'page' : undefined}
+            onClick={() => navigate('/')}
+          >
             <VelnesMark size={34} />
-          </div>
+          </button>
           <nav id="nav-main" className="sidebar-group">
             {NAV.filter((n) => !n.perm || can(n.perm)).map(tile)}
           </nav>
@@ -355,6 +367,30 @@ export function Shell() {
           </ScopeContext.Provider>
         </main>
       </div>
+
+      {WA_SUPPORT && routerLoc.pathname.startsWith('/support') ? (
+        <button
+          aria-label={t('support.waButton')}
+          aria-expanded={waOpen}
+          onClick={() => setWaOpen((v) => !v)}
+          style={{
+            position: 'fixed', left: 'calc(var(--sidebar) + 20px)', bottom: 20, zIndex: 55,
+            display: 'flex', alignItems: 'center', gap: 10, padding: '7px 16px 7px 7px',
+            background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 'var(--r-control)',
+            boxShadow: '0 14px 34px -12px rgba(0,0,0,.38), 0 2px 6px rgba(0,0,0,.08)', cursor: 'pointer',
+          }}
+        >
+          <span style={{ display: 'grid', placeItems: 'center', width: 36, height: 36, borderRadius: 999, background: '#25D366', color: '#fff', flex: 'none' }}>
+            <WhatsAppGlyph size={22} />
+          </span>
+          <span style={{ fontWeight: 700 }}>{t('support.waButton')}</span>
+          <span className="muted" style={{ transform: waOpen ? 'rotate(90deg)' : 'none', transition: 'transform .15s', fontSize: 18 }}>›</span>
+        </button>
+      ) : null}
+      <WhatsAppPopup
+        open={waOpen && routerLoc.pathname.startsWith('/support')}
+        onClose={() => setWaOpen(false)}
+      />
 
       {preview ? (
         <div className="supportbar previewbar" id="previewbar">

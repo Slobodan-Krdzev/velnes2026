@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { FlightdeckSchema, TimingSuggestionsResponseSchema } from '@velnes/contracts';
 import { I, Icon } from '@velnes/ui';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { z } from 'zod';
@@ -12,6 +12,13 @@ import { useSession } from '@velnes/client';
 import { useScope } from '../../shell/Shell.js';
 
 const OPP_ICON: Record<string, string> = { users: I.users, pulse: I.pulse, bottle: I.bottle };
+const OB_ICON: Record<string, string> = {
+  services: I.sparkle,
+  products: I.bottle,
+  team: I.users,
+  hours: I.clock,
+  suppliers: I.bottle,
+};
 
 /** The salon flightdeck — the prototype's viewFlightdeck, composed from
  *  live data by the one /flightdeck door. Above the fold: the pulse,
@@ -27,6 +34,21 @@ export function FlightdeckPage() {
   const { me, can } = useSession();
   const { scope } = useScope();
   const [why, setWhy] = useState(false);
+  // First-login-only nudge (per device): the very first time this owner
+  // reaches the flightdeck we also suggest adding a second location.
+  const [firstLogin, setFirstLogin] = useState(false);
+  useEffect(() => {
+    if (!me) return;
+    const k = `velnes.fdSeen.${me.id}`;
+    try {
+      if (!localStorage.getItem(k)) {
+        setFirstLogin(true);
+        localStorage.setItem(k, '1');
+      }
+    } catch {
+      /* storage unavailable — skip the one-time nudge */
+    }
+  }, [me]);
 
   // A specific scope views that location; "All locations" lets the
   // server show the primary operating location.
@@ -78,6 +100,64 @@ export function FlightdeckPage() {
         </div>
         <div className="fd-main">
           <div className="fd-left">
+            {d.legalPending.taxId || d.legalPending.vat ? (
+              <div
+                className="note"
+                style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}
+              >
+                <Icon d={I.info} size={18} w={2} />
+                <span className="grow" style={{ fontWeight: 500 }}>
+                  {d.legalPending.taxId && d.legalPending.vat
+                    ? t('fd.legalBoth')
+                    : d.legalPending.taxId
+                      ? t('fd.legalTax')
+                      : t('fd.legalVat')}
+                </span>
+                <button className="btn btn-secondary btn-sm" onClick={() => navigate('/settings')}>
+                  {t('fd.legalOpen')}
+                </button>
+              </div>
+            ) : null}
+            {d.onboarding.show ? (
+              <div className="card fd-card fd-onboard" style={{ marginBottom: 14 }}>
+                <div className="hstack" style={{ justifyContent: 'space-between', alignItems: 'baseline' }}>
+                  <h3 style={{ margin: 0 }}>{t('fd.obTitle')}</h3>
+                  <span className="muted" style={{ fontWeight: 600 }}>
+                    {t('fd.obProgress', { done: d.onboarding.doneCount, total: d.onboarding.totalCount })}
+                  </span>
+                </div>
+                <p className="muted" style={{ fontWeight: 500, marginTop: 4 }}>
+                  {t('fd.obSub')}
+                </p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 10 }}>
+                  {d.onboarding.steps.map((s) => (
+                    <div key={s.key} className="fd-emp">
+                      <span
+                        className="pthumb ph fd-shot"
+                        style={s.done ? { background: '#e6ecdc', color: '#4f5a33' } : undefined}
+                      >
+                        {s.done ? '✓' : <Icon d={OB_ICON[s.key] ?? I.pulse} size={18} w={2} />}
+                      </span>
+                      <span className="fd-emp-body">
+                        <span className="n">{t(`fd.ob_${s.key}_t`)}</span>
+                        <span className="x">{t(`fd.ob_${s.key}_x`)}</span>
+                      </span>
+                      <button className="btn btn-secondary btn-sm" onClick={() => navigate(`/${s.actionTarget}`)}>
+                        {s.done ? t('fd.obReview') : t('fd.obSetUp')}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                {firstLogin && d.onboarding.locationCount <= 1 ? (
+                  <div className="note" style={{ marginTop: 12 }}>
+                    {t('fd.obLocationNudge')}{' '}
+                    <button className="btn btn-subtle btn-sm" onClick={() => navigate('/settings')}>
+                      {t('fd.obAddLocation')}
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
             <div className="grid4 fd-pulse">
               <div className="stat">
                 <span className="stat-label">{t('fd.capacityToday')}</span>

@@ -34,16 +34,18 @@ export function flightdeckRoutes(app: FastifyInstance) {
             .groupBy('locationId')
             .orderBy('n', 'desc')
             .executeTakeFirst();
+          // Prefer the busiest, then the first ACTIVE location. A
+          // freshly-approved salon has neither — its only location is
+          // still APPROVED (activation is the owner's step) — so fall
+          // back to any location, otherwise the flightdeck 404s and the
+          // owner never sees their getting-started checklist.
+          const activeOrAny = async (activeOnly: boolean) => {
+            let q = trx.selectFrom('locations').select('id');
+            if (activeOnly) q = q.where('lifecycle', '=', 'ACTIVE');
+            return (await q.orderBy('createdAt').executeTakeFirst())?.id;
+          };
           locId =
-            busiest?.locationId ??
-            (
-              await trx
-                .selectFrom('locations')
-                .select('id')
-                .where('lifecycle', '=', 'ACTIVE')
-                .orderBy('createdAt')
-                .executeTakeFirst()
-            )?.id;
+            busiest?.locationId ?? (await activeOrAny(true)) ?? (await activeOrAny(false));
         }
         if (!locId) return reply.code(404).send({ error: 'NO_LOCATION', message: 'No location to view' });
         const me = await trx

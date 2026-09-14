@@ -295,6 +295,89 @@ Places / Instagram Graph / booking-platform partner APIs), each with its
 own auth and approval. The endpoint is anonymous but tightly rate-limited
 (8 requests / 5 minutes) because it fetches a URL on the caller's behalf.
 
+## AI-onboarding — Phase 2, the Claude extractor (2026-09-07)
+
+The `LLM extraction` deferral above is now built. `/registrations/import`
+still runs the deterministic parser as its baseline, then — when
+`ONBOARDING_PROVIDER=claude` and an `ANTHROPIC_API_KEY` is set — hands the
+page's visible text to the **Claude Messages API** and merges the two.
+Where the parser found structured data it stays authoritative; the model
+fills the gaps and, crucially, supplies **full services and products with
+prices, durations and a category snapped to the HQ taxonomy** — the part
+JSON-LD almost never carries. The wizard's Catalog step opens pre-filled
+with real, editable rows instead of bare name hints.
+
+One door, one swappable seam — the same shape as the insights provider
+and `mailTransport`. No SDK dependency: a single guarded `fetch` to
+`api.anthropic.com`, forced through a `salon_profile` tool whose category
+fields are **enums of the live taxonomy**, so the model can only choose
+existing categories and never coins a new global one (a stray value snaps
+to the nearest allowed). Extraction runs automatically on every import;
+with no key, or on any network/timeout/parse miss, `claudeExtract` returns
+null and the endpoint degrades to the deterministic result — it never
+fakes a read. Prices are **currency-converted to MKD**: the model reports
+each price as shown plus the ISO currency it saw (€7 → 7 + EUR), and the
+server converts with reference rates — the denar is pegged to the euro
+(~61.5, so EUR is exact), regional/tourist currencies are approximate,
+an unidentified currency is taken as already-MKD, and the owner reviews
+every price before saving. Mixed-currency pages convert per line.
+
+## AI onboarding reads deeper — price-list PDFs & sub-pages (2026-09-14)
+
+Many salons show only category tiles on the homepage and keep the real
+services (with prices) in a linked **price-list PDF** or a `/services`
+sub-page — so the extractor was returning the category names as services.
+Now `importSalon` follows same-host links: **price-list PDFs** (named
+ones like `cenovnik.pdf` first, read with `unpdf`/pdf.js, line breaks
+kept so each "service … price" row stays paired) and a few
+**service/price sub-pages** (`htmlToText`), all under the same SSRF
+guards, size-gated, best-effort. Their text is appended to the page text
+(to a 30k-char budget) and handed to the model, which is told to extract
+**individual services, never the category headings** that group them, and
+that a bare number on a `.mk` price list is MKD. The model is capped at
+40 services / 20 products so a long list can't blow past the output-token
+limit (that truncation silently emptied the result before the cap).
+Verified on afrodita-s.com.mk: 8 category "services" → **40 real services
+with real MKD prices** across Skin care / Nails / Massage. Deferrals:
+scanned (image-only) PDFs need OCR we do not do; the 40-service cap keeps
+very long menus representative rather than exhaustive.
+
+Booking platforms (Fresha etc.) render only the **first category tab** as
+text and load the rest with JavaScript — so the extractor was seeing one
+service. `extractStructuredServices` now reads the page's **structured
+data**: schema.org JSON-LD `Service` entries (name + category) and the
+embedded Next.js/JSON blob (name + `retailPrice`/`price`, as an object
+`{value,currency}` or a number, + duration from `minInSeconds`), merged
+into a compact list prepended to the model text. That turned a Sarajevo
+spa's **1 service into 40**, with categories mapped and **BAM** (Bosnian
+mark, EUR-pegged) prices converted to MKD. `BAM`/`HRK`/`RON` joined the
+currency table (with `KM`/`kn`/`lei` symbol aliases). Deferral: this
+reads the data the page already embeds — it does not drive the site's
+JavaScript, so a platform that ships nothing structured still yields only
+its server-rendered services.
+
+The import now also brings in the salon's **photos**. `collectImages`
+gathers candidates from the page — the social hero (`og:image`) first,
+then JSON-LD images, then inline `<img>` — resolved to absolute URLs
+with the obvious chrome (logos, icons, SVG, tracking pixels, data URLs)
+dropped; `safeFetchImage` fetches each under the same SSRF guards, keeps
+only real images, and encodes them as data URLs, size-gated to the
+gallery's per-photo cap (`GALLERY_IMG_MAX_CHARS`) and capped at
+`GALLERY_MAX_PHOTOS`. Photos are best-effort — an empty result never
+blocks an import. This changed the registration draft's `gallery` from
+bare names to real `{name, img}` data URLs that persist: on approval the
+photos become the `businesses.gallery`, so a salon that registered with a
+website arrives with its pictures already in place. The onboarding screen
+counts them ("11 photos"), and the wizard's Gallery step opens with the
+thumbnails, each removable. The model only ever sees the salon's own **public** page;
+no Velnes data is sent. The import result gained `services`, `products`
+and a `provider` tag ('rules' | 'claude'); the onboarding screen honestly
+labels an AI read "Read by Claude". Guardrails: page text truncated to
+14k chars, a 25s timeout, a single low-token call, all under the existing
+8/5-min rate limit. Deferrals: no per-day spend cap beyond that rate
+limit yet, and the **real third-party integrations** (Google Places /
+Instagram / booking-platform APIs) remain the next slice.
+
 ## The registration wizard, redesigned (2026-09-06)
 
 The classic wizard now sits on the same flower-pattern sand ground as
@@ -331,3 +414,36 @@ taxonomy, or created there if new). The old `REG_SERVICE_TEMPLATES` pick
 list and the import's template-matching are gone; the website import
 still surfaces the service names it read as hints, but the owner writes
 the real services.
+
+## Products in the wizard, and a lost-city fix (2026-09-07)
+
+The renamed **Catalog** step (5) now also lets the salon add **products**
+the same way services are added — name, a category from the global
+`product_categories` taxonomy (`GET /product-categories`), and a price.
+`RegistrationDraftSchema` gained `products: RegProduct[]` (optional;
+services still required to advance). On approval each product becomes a
+`products` master row plus a `location_catalog_products` row at the new
+location (`stock: 0`, `pos: true`), so it is immediately sellable at the
+till. The step chips are now navigable: a finished step (it and every
+prior step validate) shows a **green-tinted chip with a ✓** and jumps
+back to it on click; an unfinished step stays disabled.
+
+While here we closed a data-loss bug: `approveRegistration` wrote the
+`businesses` row with only id/name/country/since, so the **city** the
+owner entered never reached the businesses list HQ reads — a salon
+registered in Skopje showed a blank city. The insert now also sets
+`city`, `phone`, and a unique booking **slug** derived from the salon
+name. Deferral: product stock still starts at 0 — the wizard captures no
+opening inventory, and there is no first purchase order.
+
+## Optional legal details + confirm password (2026-09-14)
+
+Tax number and VAT registration are no longer required at registration —
+`RegistrationDraftSchema.legal.taxId` dropped its `min(1)`, and approval
+stores an empty one as NULL. The flightdeck reminds the owner until they
+are entered: `/flightdeck` now returns `legalPending: {taxId, vat}`
+(computed from the tenant's default legal entity), and the deck shows a
+persistent "Your tax number / VAT registration isn't set yet" note with a
+Settings link, regardless of sales activity. Registration step 1 also
+gained a **Confirm password** field — a wizard-only value (never sent to
+the API) validated to match before advancing.

@@ -49,7 +49,16 @@ export function registrationsRoutes(app: FastifyInstance) {
     },
     handler: async (req, reply) => {
       try {
-        return await importSalon(req.body.url);
+        // The AI extractor snaps categories to the HQ taxonomy, so it
+        // needs the allowed lists (global, read-open).
+        const [svcCats, prodCats] = await Promise.all([
+          db.selectFrom('serviceCategories').select('name').orderBy('sort').orderBy('name').execute(),
+          db.selectFrom('productCategories').select('name').orderBy('sort').orderBy('name').execute(),
+        ]);
+        return await importSalon(req.body.url, {
+          serviceCategories: svcCats.map((c) => c.name),
+          productCategories: prodCats.map((c) => c.name),
+        });
       } catch (e) {
         if (e instanceof ImportError)
           return reply.code(422).send({ error: e.code, message: e.message });
@@ -58,8 +67,8 @@ export function registrationsRoutes(app: FastifyInstance) {
     },
   });
 
-  // The Velnes service taxonomy the salon picks its categories from —
-  // global, read-open, so the anonymous wizard can list it.
+  // The Velnes taxonomies the salon picks categories from — global,
+  // read-open, so the anonymous wizard can list them.
   r.route({
     method: 'GET',
     url: '/service-categories',
@@ -67,6 +76,21 @@ export function registrationsRoutes(app: FastifyInstance) {
     handler: async () => {
       const rows = await db
         .selectFrom('serviceCategories')
+        .select('name')
+        .orderBy('sort')
+        .orderBy('name')
+        .execute();
+      return { categories: rows.map((c) => c.name) };
+    },
+  });
+
+  r.route({
+    method: 'GET',
+    url: '/product-categories',
+    schema: { response: { 200: PublicServiceCategoryListSchema } },
+    handler: async () => {
+      const rows = await db
+        .selectFrom('productCategories')
         .select('name')
         .orderBy('sort')
         .orderBy('name')

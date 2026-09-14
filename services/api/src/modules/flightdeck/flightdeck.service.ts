@@ -191,6 +191,55 @@ export async function flightdeck(
     .execute();
   const memberRecs = { count: recs.length, value: recs.reduce((s, r) => s + r.recPrice, 0) };
 
+  // ── Getting-started checklist. Shown only while the salon has no
+  //    sales history yet — the "empty flightdeck" of a first login. ──
+  const svcRows = await trx
+    .selectFrom('services')
+    .select('id')
+    .where('tenantId', '=', opts.tenantId)
+    .execute();
+  const supplierConn = await trx
+    .selectFrom('supplierConnections')
+    .select('supplierId')
+    .where('tenantId', '=', opts.tenantId)
+    .where('status', '=', 'connected')
+    .executeTakeFirst();
+  const locRows = await trx
+    .selectFrom('locations')
+    .select(['hours', 'lifecycle'])
+    .where('tenantId', '=', opts.tenantId)
+    .execute();
+  const thisLoc = locRows.find(() => true) ?? null;
+  const activeLocations = locRows.filter((l) => l.lifecycle === 'ACTIVE').length;
+
+  // Legal details are optional at registration; remind until entered.
+  const entity = await trx
+    .selectFrom('legalEntities')
+    .select(['taxId', 'vatReg'])
+    .where('tenantId', '=', opts.tenantId)
+    .orderBy('isDefault', 'desc')
+    .executeTakeFirst();
+  const legalPending = {
+    taxId: !entity?.taxId?.trim(),
+    vat: !entity?.vatReg?.trim(),
+  };
+  const obSteps: Flightdeck['onboarding']['steps'] = [
+    { key: 'services', done: svcRows.length > 0, count: svcRows.length, actionTarget: 'catalog' },
+    { key: 'products', done: products.length > 0, count: products.length, actionTarget: 'catalog' },
+    { key: 'team', done: emps.length > 1, count: emps.length, actionTarget: 'settings' },
+    { key: 'hours', done: thisLoc?.hours != null, count: thisLoc?.hours != null ? 1 : 0, actionTarget: 'settings' },
+    { key: 'suppliers', done: !!supplierConn, count: supplierConn ? 1 : 0, actionTarget: 'suppliers' },
+  ];
+  const obDone = obSteps.filter((s) => s.done).length;
+  const fresh = invoices.length === 0 && history.length === 0 && bookedToday === 0;
+  const onboarding: Flightdeck['onboarding'] = {
+    show: fresh,
+    doneCount: obDone,
+    totalCount: obSteps.length,
+    locationCount: activeLocations || locRows.length,
+    steps: obSteps,
+  };
+
   // ── The hero: fill tomorrow's gaps, else today's, else quiet. ──
   const heroCaps = capsTmw.length ? capsTmw : capsToday.length ? capsToday : null;
   const heroWhen = capsTmw.length ? 'tomorrow' : 'today';
@@ -220,6 +269,8 @@ export async function flightdeck(
 
   return {
     greetingName,
+    onboarding,
+    legalPending,
     pulse: {
       capacityPct,
       bookedToday,

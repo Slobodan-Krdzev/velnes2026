@@ -43,8 +43,35 @@ export const FlightdeckHeroSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('quiet') }),
 ]);
 
+/** One getting-started step for a fresh salon. The server reports the
+ *  raw fact (done + how many exist); the UI supplies the copy per key. */
+export const FlightdeckOnboardingStepSchema = z.object({
+  key: z.enum(['services', 'products', 'team', 'suppliers', 'hours', 'location']),
+  done: z.boolean(),
+  count: z.number().int(),
+  actionTarget: z.string(),
+});
+export type FlightdeckOnboardingStep = z.infer<typeof FlightdeckOnboardingStepSchema>;
+
+/** The getting-started panel — shown only while the salon has no sales
+ *  activity yet (first login). Empty steps guide the owner to set up. */
+export const FlightdeckOnboardingSchema = z.object({
+  show: z.boolean(),
+  doneCount: z.number().int(),
+  totalCount: z.number().int(),
+  /** How many active locations the tenant has. The UI pairs a single
+   *  location with a one-time (first-login) "add another" nudge. */
+  locationCount: z.number().int(),
+  steps: z.array(FlightdeckOnboardingStepSchema),
+});
+export type FlightdeckOnboarding = z.infer<typeof FlightdeckOnboardingSchema>;
+
 export const FlightdeckSchema = z.object({
   greetingName: z.string(),
+  onboarding: FlightdeckOnboardingSchema,
+  /** Legal details the owner can skip at registration — the flightdeck
+   *  reminds them until entered. `true` means still missing. */
+  legalPending: z.object({ taxId: z.boolean(), vat: z.boolean() }),
   pulse: z.object({
     capacityPct: z.number().int(),
     bookedToday: z.number().int(),

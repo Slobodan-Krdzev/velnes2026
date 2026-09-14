@@ -7,6 +7,7 @@ import {
   RegistrationStatusSchema,
   type RegistrationDraft,
   type RegService,
+  type RegProduct,
 } from '@velnes/contracts';
 import { API_PREFIX } from '@velnes/contracts';
 import { useQuery } from '@tanstack/react-query';
@@ -38,6 +39,7 @@ type Draft = {
   legal: { name: string; taxId: string; vat: string; currency: string };
   loc: { street: string; no: string; city: string; zip: string; px: number; py: number; pinned: boolean; lat: number | null; lng: number | null };
   services: RegService[];
+  products: RegProduct[];
   gallery: { name: string; img: string | null }[];
   team: { name: string; email: string }[];
   hours: Record<(typeof DAYS)[number], Day>;
@@ -48,6 +50,7 @@ const newDraft = (): Draft => ({
   legal: { name: '', taxId: '', vat: '', currency: 'MKD' },
   loc: { street: '', no: '', city: '', zip: '', px: 50, py: 50, pinned: false, lat: null, lng: null },
   services: [],
+  products: [],
   gallery: [],
   team: [{ name: '', email: '' }],
   hours: Object.fromEntries(
@@ -72,6 +75,8 @@ export function Register() {
   const navigate = useNavigate();
   const [r, setR] = useState<Draft>(newDraft());
   const [step, setStep] = useState(1);
+  // Confirm-password lives outside the draft — it never leaves the wizard.
+  const [pass2, setPass2] = useState('');
   const [err, setErr] = useState<string | null>(null);
   const [phase, setPhase] = useState<'wizard' | 'done' | 'changes' | 'approved' | 'declined'>('wizard');
   const [ref, setRef] = useState<string | null>(null);
@@ -117,6 +122,32 @@ export function Register() {
   const removeService = (i: number) =>
     setR((d) => ({ ...d, services: d.services.filter((_, j) => j !== i) }));
 
+  // Products, optional, created the same way on the product taxonomy.
+  const prodCats = useQuery({
+    queryKey: ['productCategories'],
+    queryFn: () => get(PublicServiceCategoryListSchema, '/product-categories'),
+  });
+  const prodCatNames = prodCats.data?.categories ?? [];
+  const [prod, setProd] = useState<{ name: string; category: string; price: string }>({
+    name: '',
+    category: '',
+    price: '',
+  });
+  const addProduct = () => {
+    const cat = prod.category || prodCatNames[0] || '';
+    if (!prod.name.trim() || !cat) return;
+    setR((d) => ({
+      ...d,
+      products: [
+        ...d.products,
+        { name: prod.name.trim(), category: cat, price: Math.max(0, Math.round(Number(prod.price) || 0)) },
+      ],
+    }));
+    setProd({ name: '', category: cat, price: '' });
+  };
+  const removeProduct = (i: number) =>
+    setR((d) => ({ ...d, products: d.products.filter((_, j) => j !== i) }));
+
   // The AI-onboarding screen may hand us a draft it read from a
   // website (router state); merge it once so the wizard opens filled.
   const location = useLocation();
@@ -136,12 +167,23 @@ export function Register() {
       if (found.loc.zip) next.loc.zip = found.loc.zip;
       for (const h of found.hours)
         next.hours[h.day] = { ...next.hours[h.day], open: h.open, close: h.close, closed: h.closed, split: false };
+      // The AI extractor hands over full services/products; pre-fill the
+      // catalog so the owner reviews and edits rather than retypes.
+      if (found.services.length) next.services = found.services;
+      if (found.products.length) next.products = found.products;
+      // Photos read off the website land in the gallery, ready to keep or drop.
+      if (found.gallery.length)
+        next.gallery = found.gallery.map((img, i) => ({ name: `Photo ${i + 1}`, img }));
       return next;
     });
   }, []);
 
   // A returning applicant: their token shows where the machine stands.
+  // But arriving from AI onboarding means starting a NEW salon — don't
+  // resume (and thus don't flash "your salon is live") over a stale token
+  // from a registration this browser finished earlier.
   useEffect(() => {
+    if (imported) return;
     const s = stored();
     if (!s) return;
     fetch(`${API_PREFIX}/registrations/${s.id}?token=${s.token}`)
@@ -162,6 +204,7 @@ export function Register() {
               px: 50, py: 50, pinned: d.loc.lat != null, lat: d.loc.lat, lng: d.loc.lng,
             },
             services: d.services,
+            products: d.products,
             team: d.team.length ? d.team : [{ name: '', email: '' }],
             hours: d.hours as Draft['hours'],
           }));
@@ -178,12 +221,10 @@ export function Register() {
       if (!r.acct.name.trim()) return t('reg.vName');
       if (!EMAIL.test(r.acct.email)) return t('reg.vEmail');
       if (r.acct.pass.length < 6) return t('reg.vPass');
+      if (r.acct.pass !== pass2) return t('reg.vPassMatch');
     }
     if (s === 2 && !r.salon.name.trim()) return t('reg.vSalon');
-    if (s === 3) {
-      if (!r.legal.name.trim()) return t('reg.vLegal');
-      if (!r.legal.taxId.trim()) return t('reg.vTax');
-    }
+    if (s === 3 && !r.legal.name.trim()) return t('reg.vLegal');
     if (s === 4) {
       if (!r.loc.street.trim() || !r.loc.city.trim()) return t('reg.vStreet');
       if (!r.loc.pinned) return t('reg.vPin');
@@ -203,7 +244,10 @@ export function Register() {
     legal: r.legal,
     loc: { street: r.loc.street, no: r.loc.no, city: r.loc.city, zip: r.loc.zip, lat: r.loc.lat, lng: r.loc.lng },
     services: r.services,
-    gallery: r.gallery.map((g) => g.name),
+    products: r.products,
+    gallery: r.gallery
+      .filter((g): g is { name: string; img: string } => !!g.img)
+      .map((g) => ({ name: g.name, img: g.img })),
     team: r.team.filter((x) => x.email.trim()).map((x) => ({ name: x.name, email: x.email })),
     hours: r.hours,
   });
@@ -322,16 +366,19 @@ export function Register() {
   return (
     <div
       style={{
-        minHeight: '100vh',
+        height: '100vh',
+        boxSizing: 'border-box',
+        overflow: 'hidden',
         background: '#f1ece2',
         backgroundImage: `url("${OB_PATTERN}")`,
         backgroundSize: '132px 132px',
-        padding: '24px 12px',
+        padding: '20px 12px',
         display: 'flex',
         justifyContent: 'center',
+        alignItems: 'stretch',
       }}
     >
-      <div style={{ width: 'min(680px,96vw)' }}>
+      <div style={{ width: 'min(1000px,96vw)', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
         <div className="hstack" style={{ justifyContent: 'space-between', marginBottom: 12 }}>
           <h1 style={{ margin: 0 }}>{t('reg.title')}</h1>
           <button className="btn btn-ghost btn-sm" onClick={() => navigate('/login')}>
@@ -339,27 +386,50 @@ export function Register() {
           </button>
         </div>
         <div className="chips" style={{ marginBottom: 14 }}>
-          {steps.map((s, i) => (
-            <button
-              key={s}
-              className={`chip ${step === i + 1 ? 'on' : ''}`}
-              disabled={i + 1 > step}
-              onClick={() => setStep(i + 1)}
-            >
-              {i + 1} · {s}
-            </button>
-          ))}
+          {steps.map((s, i) => {
+            const n = i + 1;
+            const done = n < step && valid(n) === null;
+            return (
+              <button
+                key={s}
+                className={`chip ${step === n ? 'on' : ''}`}
+                disabled={n > step}
+                onClick={() => setStep(n)}
+                style={
+                  done && step !== n
+                    ? { background: '#e6ecdc', borderColor: '#7d8a5b', color: '#4f5a33', fontWeight: 600 }
+                    : undefined
+                }
+              >
+                {done ? '✓' : n} · {s}
+              </button>
+            );
+          })}
         </div>
         <div
           className="card"
-          style={{ padding: 22, display: 'flex', flexDirection: 'column', gap: 16 }}
+          style={{ padding: 22, display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}
         >
+          <div
+            className="reg-scroll"
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 16,
+              flex: 1,
+              minHeight: 0,
+              overflowY: 'auto',
+              paddingRight: 6,
+              marginRight: -6,
+            }}
+          >
           {step === 1 ? (
             <>
               <div className="grid2">
                 {F(t('reg.yourName'), r.acct.name, (v) => setR((d) => ({ ...d, acct: { ...d.acct, name: v } })))}
                 {F(t('reg.email'), r.acct.email, (v) => setR((d) => ({ ...d, acct: { ...d.acct, email: v } })), { ph: 'you@salon.mk' })}
                 {F(t('reg.password'), r.acct.pass, (v) => setR((d) => ({ ...d, acct: { ...d.acct, pass: v } })), { type: 'password' })}
+                {F(t('reg.passwordConfirm'), pass2, setPass2, { type: 'password' })}
               </div>
               <div className="note">{t('reg.emailNote')}</div>
             </>
@@ -520,6 +590,93 @@ export function Register() {
               ) : (
                 <p className="muted" style={{ fontWeight: 500 }}>
                   {t('reg.svcNoneYet')}
+                </p>
+              )}
+
+              <h3 style={{ margin: 0 }}>{t('reg.productsTitle')}</h3>
+              <div className="note">{t('reg.createProducts')}</div>
+              <div
+                className="card"
+                style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}
+              >
+                <div className="grid2">
+                  <label className="field span2">
+                    <span>{t('reg.prodName')}</span>
+                    <input
+                      className="input"
+                      value={prod.name}
+                      placeholder={t('reg.prodNamePh')}
+                      onChange={(e) => setProd((s) => ({ ...s, name: e.target.value }))}
+                    />
+                  </label>
+                  <label className="field">
+                    <span>{t('reg.category')}</span>
+                    <select
+                      className="select"
+                      style={{ width: '100%' }}
+                      value={prod.category || prodCatNames[0] || ''}
+                      onChange={(e) => setProd((s) => ({ ...s, category: e.target.value }))}
+                    >
+                      {prodCatNames.map((c) => (
+                        <option key={c} value={c}>
+                          {c}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="field">
+                    <span>{t('reg.svcPrice')}</span>
+                    <input
+                      className="input tnum"
+                      type="number"
+                      min={0}
+                      value={prod.price}
+                      placeholder="0"
+                      onChange={(e) => setProd((s) => ({ ...s, price: e.target.value }))}
+                    />
+                  </label>
+                </div>
+                <div>
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    disabled={!prod.name.trim() || !prodCatNames.length}
+                    onClick={addProduct}
+                  >
+                    {t('reg.prodAdd')}
+                  </button>
+                </div>
+              </div>
+
+              {r.products.length ? (
+                <table>
+                  <tbody>
+                    {r.products.map((p, i) => (
+                      <tr key={i}>
+                        <td>
+                          <span className="bold">{p.name}</span>
+                          <span className="muted" style={{ display: 'block', fontSize: 12 }}>
+                            {p.category}
+                          </span>
+                        </td>
+                        <td className="right bold tnum">{money(p.price)}</td>
+                        <td className="right">
+                          <button
+                            type="button"
+                            className="btn btn-ghost btn-sm"
+                            aria-label={t('reg.svcRemove')}
+                            onClick={() => removeProduct(i)}
+                          >
+                            {t('reg.svcRemove')}
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : (
+                <p className="muted" style={{ fontWeight: 500 }}>
+                  {t('reg.prodNoneYet')}
                 </p>
               )}
             </>
@@ -685,6 +842,7 @@ export function Register() {
             </div>
           ) : null}
 
+          </div>
           {err ? (
             <div className="note" style={{ borderColor: 'var(--danger)', color: 'var(--danger)', marginTop: 12 }}>
               {err}

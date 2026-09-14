@@ -73,6 +73,7 @@ describe('the salon registration wizard', () => {
     await fill('Your name', 'Petra Novak');
     await fill('E-mail', 'petra@studionova.mk');
     await fill('Password', 'super-secret');
+    await fill('Confirm password', 'super-secret');
     await userEvent.click(screen.getByRole('button', { name: 'Next' }));
 
     await fill('Salon name', 'Studio Nova');
@@ -91,7 +92,9 @@ describe('the salon registration wizard', () => {
 
     // Services — the salon writes its own; category from the HQ list.
     await fill('Service name', 'Deep-tissue massage');
-    await fill('Price (MKD)', '1500');
+    // Both the service and product rows expose a "Price (MKD)" field;
+    // the service form is the first one.
+    await userEvent.type(screen.getAllByLabelText('Price (MKD)')[0]!, '1500');
     await userEvent.click(screen.getByRole('button', { name: 'Add service' }));
     await screen.findByText('Deep-tissue massage');
     await userEvent.click(screen.getByRole('button', { name: 'Next' }));
