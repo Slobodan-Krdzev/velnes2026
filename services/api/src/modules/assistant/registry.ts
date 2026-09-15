@@ -75,7 +75,14 @@ export interface ActionDef {
 }
 
 const mkd = (n: number) => `${Number(n).toLocaleString('en-US')} MKD`;
-const str = (v: unknown) => (typeof v === 'string' ? v.trim() : '');
+/** A model may fill a required field with a placeholder instead of leaving
+ *  it out ("<UNKNOWN>", "n/a", "?"). Treat those as absent, not as a value. */
+const PLACEHOLDER = /^(?:<.*>|unknown|n\/?a|tbd|none given|not specified|\?+|-+)$/i;
+const str = (v: unknown) => {
+  if (typeof v !== 'string') return '';
+  const s = v.trim();
+  return PLACEHOLDER.test(s) ? '' : s;
+};
 /** Parse a price/amount from a string or number → whole MKD, or undefined. */
 function num(v: unknown): number | undefined {
   if (typeof v === 'number') return Number.isFinite(v) ? v : undefined;
@@ -228,15 +235,15 @@ const createServiceAction: ActionDef = {
   kind: 'write',
   risk: 'medium',
   permission: 'catalog.edit',
-  required: ['name', 'price', 'durationMin'],
+  required: ['name', 'price', 'durationMin', 'category'],
   title: 'Create a service',
   description:
-    'Create a new bookable service. Needs a name, a price in MKD, and a duration in minutes; category is optional but must be one that already exists.',
+    'Create a new bookable service. Needs a name, a price in MKD, a duration in minutes, and a category it belongs to (which must already exist — every service must be filed under a category to appear in the catalog).',
   params: [
     { name: 'name', type: 'string', description: 'The new service name', required: true },
     { name: 'price', type: 'number', description: 'Price in MKD', required: true },
     { name: 'durationMin', type: 'number', description: 'Duration in minutes', required: true },
-    { name: 'category', type: 'string', description: 'An existing service category (optional)' },
+    { name: 'category', type: 'string', description: 'An existing service category the service is filed under', required: true },
     { name: 'vat', type: 'number', description: 'VAT percent (optional, defaults to 18)' },
   ],
   async resolve(trx, _claims, raw) {
@@ -257,16 +264,28 @@ const createServiceAction: ActionDef = {
     if (price !== undefined) args.price = Math.round(price);
     if (durationMin !== undefined) args.durationMin = Math.round(durationMin);
     if (raw.vat !== undefined && num(raw.vat) !== undefined) args.vat = Math.round(num(raw.vat)!);
-    // Category is optional, but if named it must already exist.
+    // Category is required — a service with no category is invisible in the
+    // catalog (it groups by category), and must be one that already exists.
     const category = str(raw.category);
-    if (category) {
+    if (!category) {
+      missing.push('category');
+      // Once we know the service, ask for its shelf and list the options.
+      if (name) {
+        const cats = await serviceCategoryNames(trx);
+        errors.push({
+          field: 'category',
+          code: 'NEEDED',
+          message: `Which category should "${name}" go under? You have: ${cats.join(', ') || '(none yet — create one in the catalog first)'}.`,
+        });
+      }
+    } else {
       const cats = await serviceCategoryNames(trx);
       const hit = cats.find((c) => c.toLowerCase() === category.toLowerCase());
       if (!hit)
         errors.push({
           field: 'category',
           code: 'BAD_CATEGORY',
-          message: `"${category}" isn't one of your categories: ${cats.join(', ') || '(none yet)'}. Leave it out or pick one.`,
+          message: `"${category}" isn't one of your categories: ${cats.join(', ') || '(none yet — create one in the catalog first)'}. Which category should it go under?`,
         });
       else args.category = hit;
     }

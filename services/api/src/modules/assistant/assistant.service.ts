@@ -45,7 +45,12 @@ interface Stored {
  *  own richer messages for not-found / ambiguous). */
 const PROMPTS: Record<string, string> = {
   serviceName: 'Which service?',
-  price: "What's the new price (in MKD)?",
+  name: "What should the service be called?",
+  price: "What's the price (in MKD)?",
+  durationMin: 'How long does it take, in minutes?',
+  category: 'Which category should it go under?',
+  date: 'Which date? (yyyy-mm-dd)',
+  location: 'Which location?',
 };
 
 function intentOf(action: ActionDef, args: Record<string, unknown>): string {

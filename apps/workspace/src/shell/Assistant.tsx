@@ -6,6 +6,7 @@ import {
 } from '@velnes/contracts';
 import { api, get, post, useSession } from '@velnes/client';
 import { Icon, I } from '@velnes/ui';
+import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
@@ -86,6 +87,7 @@ export function Assistant() {
   const { t } = useTranslation();
   const { me, can } = useSession();
   const navigate = useNavigate();
+  const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [turns, setTurns] = useState<Turn[]>([]);
   const [draft, setDraft] = useState<AssistantDraft | null>(null);
@@ -162,6 +164,12 @@ export function Assistant() {
       setTurns((v) => [...v, { role: 'assistant', text: res.message }]);
       if (res.status === 'COMPLETED') {
         setDraft(null);
+        // The change landed out-of-band from any open screen — refresh the
+        // catalog/categories/schedule views so it appears without a reload.
+        void qc.invalidateQueries({ queryKey: ['catalog'] });
+        void qc.invalidateQueries({ queryKey: ['categories'] });
+        void qc.invalidateQueries({ queryKey: ['combos'] });
+        void qc.invalidateQueries({ queryKey: ['schedule'] });
       } else if (res.conflict && draft.preview) {
         // Re-baselined server-side; reflect the fresh "before" and let the
         // user approve again.

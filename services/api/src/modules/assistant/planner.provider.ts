@@ -47,12 +47,14 @@ export function stubPlan(input: PlanInput): Plan {
     const iso = msg.match(ISO);
     const numM = msg.match(NUM);
     const miss = input.current.missing;
+    const word = msg.replace(/[?.]+$/, '').trim();
     if (miss.includes('date') && iso) args.date = iso[1]!;
     else if (miss.includes('price') && numM) args.price = cleanNum(numM[1]!);
     else if (miss.includes('durationMin') && numM) args.durationMin = cleanNum(numM[1]!);
-    else if (miss.includes('name') && !numM) args.name = msg.replace(/[?.]+$/, '').trim();
-    else if (miss.includes('serviceName') && !numM) args.serviceName = msg.replace(/[?.]+$/, '').trim();
-    else if (miss.includes('location')) args.location = msg.replace(/[?.]+$/, '').trim();
+    else if (miss.includes('name') && !numM) args.name = word;
+    else if (miss.includes('serviceName') && !numM) args.serviceName = word;
+    else if (miss.includes('category') && !numM) args.category = word;
+    else if (miss.includes('location')) args.location = word;
     return { actionId: input.current.actionId, args };
   }
 
@@ -163,7 +165,9 @@ function systemPrompt(input: PlanInput): string {
     'You are the planner for the Velnes salon assistant. You do NOT act; you only choose ONE tool that matches the',
     "user's request and fill its arguments from their words. Velnes itself checks permissions, resolves names, shows a",
     'preview and asks the user to approve before anything changes — so never worry about those, and never refuse for',
-    'permission reasons. Extract only what the user actually said; do not invent names, prices or dates. Express any',
+    'permission reasons. Extract only what the user actually said; do not invent names, prices or dates. If you do',
+    "not know a value, OMIT that argument entirely — never fill it with a placeholder like \"<UNKNOWN>\", \"n/a\" or a",
+    'guess; Velnes will ask the user for anything missing. Express any',
     'date as ISO yyyy-mm-dd (today is ' + '{{today}}' + '). If nothing fits, call clarify.',
   ];
   if (input.current) {

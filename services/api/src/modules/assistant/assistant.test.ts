@@ -166,13 +166,20 @@ describe('the AI Assistant: plans, previews, approves, executes, audits', () => 
     expect(body.reply).toContain('Rehab training');
   });
 
-  it('creates a service: collect → preview → approve → real row', async () => {
-    const prep = await msg('Add a new service called Womens Hair Colouring for 1500 30 min', undefined);
+  it('creates a service: requires a category, then previews → approves → real filed row', async () => {
+    // Name + price + duration given, but no category → must ask for it.
+    const t1 = await msg('Add a new service called Womens Hair Colouring for 1500 30 min', undefined);
+    const d1 = t1.json().draft;
+    expect(d1.status).toBe('COLLECTING');
+    expect(d1.missing).toContain('category');
+    expect(t1.json().reply.toLowerCase()).toContain('category');
+
+    const prep = await msg('Rehab', d1.id); // an existing category
     const d = prep.json().draft;
     expect(d.status).toBe('READY_FOR_REVIEW');
     expect(d.preview.ops[0]).toMatchObject({
       kind: 'create',
-      after: { name: 'Womens Hair Colouring', price: 1500, durationMin: 30 },
+      after: { name: 'Womens Hair Colouring', price: 1500, durationMin: 30, category: 'Rehab' },
     });
     // Nothing written on preview.
     const pre = await admin.query(`SELECT id FROM services WHERE tenant_id=$1 AND name='Womens Hair Colouring'`, [
@@ -182,13 +189,17 @@ describe('the AI Assistant: plans, previews, approves, executes, audits', () => 
 
     const done = await exec(d.id);
     expect(done.json().status).toBe('COMPLETED');
+    // The real row exists AND is filed under the category (so it shows in the catalog).
     const post = await admin.query(
-      `SELECT price, duration_min FROM services WHERE tenant_id=$1 AND name='Womens Hair Colouring'`,
+      `SELECT s.price, s.duration_min, c.name AS category
+         FROM services s JOIN service_categories c ON c.id = s.category_id
+        WHERE s.tenant_id=$1 AND s.name='Womens Hair Colouring'`,
       [demo.business],
     );
     expect(post.rowCount).toBe(1);
     expect(Number(post.rows[0].price)).toBe(1500);
     expect(Number(post.rows[0].duration_min)).toBe(30);
+    expect(post.rows[0].category).toBe('Rehab');
   });
 
   it('closes a location on a date across two turns, then writes the closure', async () => {
