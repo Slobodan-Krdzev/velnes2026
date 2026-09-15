@@ -58,6 +58,10 @@ export const MeResponseSchema = SessionEmployeeSchema.extend({
   // The role's display name — the preview bar shows it without
   // needing a roles listing the previewed user may not be allowed.
   roleName: z.string().nullable().default(null),
+  // Whether RevelApps HQ has switched the AI Assistant on for this
+  // salon. The workspace shows the launcher only when true; the server
+  // also enforces it at every assistant endpoint.
+  assistantEnabled: z.boolean().default(false),
 });
 export type MeResponse = z.infer<typeof MeResponseSchema>;
 

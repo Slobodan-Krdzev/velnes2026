@@ -576,3 +576,46 @@ succeeding on re-approval. Scope was **not** expanded beyond the two actions.
 (tools from the registry, forced `tool_choice`, zod-validated output); add the Part E
 action set behind the same machinery; the entitlement/usage seam (F.1); the supplier
 surface (excluded from V1).
+
+---
+
+## Part H — Phase 1 delivered (2026-09-15)
+
+Alex's three calls: **live planner on**, **destructive/role/owner stays navigate-only**,
+**services + closures first**, HQ switch **off by default, enabled for Velnes Fizio Centar**.
+
+**Free language is live.** `claudePlan` now builds one Anthropic tool per registered
+action from its `params`, forces a tool call (`tool_choice: any`) plus a `clarify`
+escape, and reads the chosen action + args back — same honest-null anatomy as
+`extract.provider` (no key / any miss → the deterministic `stubPlan`, never fake).
+`ASSISTANT_PROVIDER=claude` turns it on; tests pin `stub` for determinism. Verified in
+the browser: "I'd like to introduce a new treatment called Deep Tissue Massage, priced
+at 2000 denars, lasting 50 minutes" — which the stub cannot parse — became a
+`create_service` preview and, on approval, a real row through the canonical door with a
+`create_service` audit.
+
+**The action set** (each a thin wrapper over an existing door, behind the same
+resolve → validate → preview → approve → canonical-door → dual-audit path):
+- reads: `list_services`, `read_service_price`
+- writes: `create_service`, `edit_service` (price/rename/category/duration/VAT/visibility,
+  one field or several — it replaces the spike's `update_price`), `add_closure`,
+  `remove_closure` (location working-hours exceptions)
+- navigate-only (decision 4): `delete_service` and `manage_access` (roles/permissions/
+  owner) — the Assistant explains and deep-links (`/catalog`, `/settings` team), never
+  executes. A new `navigate` action kind + `AssistantDraft.navigate` carry the target.
+
+**The HQ switch.** `businesses.assistant_enabled` (migration
+`20260915120100`, off by default, mirrors `timing_enabled`) is surfaced on `/auth/me`
+(the workspace hides the launcher when off) AND enforced at every assistant endpoint
+(403 when off — a hidden button is not security). HQ flips it per salon from the
+business detail drawer (`PATCH /hq/businesses/:id/assistant`, audited into the salon's
+trail); the businesses list carries `assistantEnabled`. Seed enables it for Velnes
+Fizio Centar.
+
+**Proven** by the API suite (now 175 green, incl. list/create/two-turn-closure/
+navigate-delete/entitlement-gate) and the live browser run above. Full gate green
+(typecheck, lint, i18n completeness, workspace + HQ suites).
+
+**Phase 2 (next, not built here):** extract real `createEmployee`/`updateEmployee`/
+hours doors from the team route handlers (with parity tests), then add team-member,
+working-hours and split-shift actions on top; roles stay navigate-only.

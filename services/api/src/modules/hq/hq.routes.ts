@@ -1,6 +1,8 @@
 import {
   HqApproveResponseSchema,
   HqAuditListSchema,
+  HqAssistantToggleResponseSchema,
+  HqAssistantToggleSchema,
   HqBusinessCreateResponseSchema,
   HqBusinessCreateSchema,
   HqBusinessListSchema,
@@ -54,6 +56,7 @@ import {
   hqBusinessList,
   hqCreateBusiness,
   hqLogin,
+  hqSetAssistant,
   hqUserById,
 } from '../hq/hq.service.js';
 import { queueMail } from '../mail/mail.service.js';
@@ -451,6 +454,33 @@ export function hqRoutes(app: FastifyInstance) {
         });
         return { ok: true as const };
       }),
+  });
+
+  // The businesses list's per-salon AI Assistant switch. Off by default;
+  // HQ flips it per salon for a controlled pilot. Server-enforced: the
+  // workspace's assistant endpoints refuse when this is off.
+  r.route({
+    method: 'PATCH',
+    url: '/hq/businesses/:id/assistant',
+    preHandler: [app.authenticateHq],
+    schema: {
+      params: z.object({ id: z.uuid() }),
+      body: HqAssistantToggleSchema,
+      response: { 200: HqAssistantToggleResponseSchema, 403: Err, 404: Err },
+    },
+    handler: async (req, reply) => {
+      if (!reviewGate(reply, req.hqClaims.rol)) return reply;
+      try {
+        return await hqSetAssistant(req.params.id, req.body.enabled, {
+          name: req.hqClaims.name,
+          role: req.hqClaims.rol,
+        });
+      } catch (e) {
+        if (e instanceof RegistrationError && e.code === 'NOT_FOUND')
+          return reply.code(404).send({ error: e.code, message: e.message });
+        return sendErr(reply, e);
+      }
+    },
   });
 
   r.route({

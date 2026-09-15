@@ -104,6 +104,11 @@ async function sessionEmployee(
       .select('locationId')
       .where('employeeId', '=', employeeId)
       .execute();
+    const biz = await trx
+      .selectFrom('businesses')
+      .select('assistantEnabled')
+      .where('id', '=', tenantId)
+      .executeTakeFirst();
     const perms = await permsFor(trx, {
       sub: e.id,
       ten: tenantId,
@@ -129,6 +134,7 @@ async function sessionEmployee(
       locationIds: locs.map((l) => l.locationId),
       perms,
       roleName: role?.name ?? null,
+      assistantEnabled: biz?.assistantEnabled ?? false,
     };
   });
 }

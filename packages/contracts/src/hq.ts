@@ -121,6 +121,9 @@ export const HqBusinessRowSchema = z.object({
   employees: z.number().int(),
   status: HqBusinessStatusSchema,
   steps: HqOnboardStepsSchema,
+  // HQ's per-salon AI Assistant switch (default off). Toggled from the
+  // businesses list; the workspace + server both honour it.
+  assistantEnabled: z.boolean().default(false),
   mrr: z.number(),
   syncErrors7d: z.number().int(),
   // Support tickets aren't built yet — honest zeros/nulls from the
@@ -128,6 +131,10 @@ export const HqBusinessRowSchema = z.object({
   openTickets: z.number().int(),
   lastSupportAccess: z.string().nullable(),
 });
+/** HQ toggling a salon's AI Assistant entitlement. */
+export const HqAssistantToggleSchema = z.object({ enabled: z.boolean() });
+export const HqAssistantToggleResponseSchema = z.object({ id: z.uuid(), assistantEnabled: z.boolean() });
+
 export const HqBusinessListSchema = z.object({
   businesses: z.array(HqBusinessRowSchema),
   stats: z.object({

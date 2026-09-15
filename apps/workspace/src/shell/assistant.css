@@ -118,6 +118,15 @@
 .asst-op-delta b {
   color: var(--accent-deep);
 }
+.asst-op-field {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--ink-muted);
+}
+.asst-navbtn {
+  align-self: flex-start;
+}
 
 .asst-actions,
 .asst-input {

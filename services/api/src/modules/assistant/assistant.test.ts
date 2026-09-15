@@ -78,6 +78,11 @@ describe('the AI Assistant: plans, previews, approves, executes, audits', () => 
   afterAll(async () => {
     await admin.query(`UPDATE services SET price=1200 WHERE id=$1`, [demo.s3]);
     await admin.query(`UPDATE services SET price=1500 WHERE id=$1`, [demo.s4]);
+    await admin.query(`DELETE FROM services WHERE tenant_id=$1 AND name='Womens Hair Colouring'`, [demo.business]);
+    await admin.query(
+      `DELETE FROM schedule_exceptions WHERE tenant_id=$1 AND start_date='2026-12-25'`,
+      [demo.business],
+    );
     await admin.query(`DELETE FROM assistant_actions WHERE tenant_id=$1`, [demo.business]);
     await admin.query(`DELETE FROM assistant_drafts WHERE tenant_id=$1`, [demo.business]);
     await admin.query(`UPDATE employees SET role_id=$2 WHERE id=$1`, [demo.empAna, demo.roleEmployee]);
@@ -109,7 +114,7 @@ describe('the AI Assistant: plans, previews, approves, executes, audits', () => 
     const done = await exec(d.id);
     const out = done.json();
     expect(out.status).toBe('COMPLETED');
-    expect(out.message).toContain('1,300 MKD');
+    expect(out.message).toContain('Updated');
     expect(await priceOf(demo.s3)).toBe(1300);
 
     // Both audit trails were written.
@@ -117,12 +122,12 @@ describe('the AI Assistant: plans, previews, approves, executes, audits', () => 
       `SELECT action, source FROM audit_log WHERE tenant_id=$1 AND source='ai_assistant' ORDER BY ts DESC LIMIT 1`,
       [demo.business],
     );
-    expect(human.rows[0].action).toContain('Update a service price');
+    expect(human.rows[0].action).toContain('Edit a service');
     const structured = await admin.query(
       `SELECT action_id, result FROM assistant_actions WHERE tenant_id=$1 ORDER BY ts DESC LIMIT 1`,
       [demo.business],
     );
-    expect(structured.rows[0]).toMatchObject({ action_id: 'update_price', result: 'success' });
+    expect(structured.rows[0]).toMatchObject({ action_id: 'edit_service', result: 'success' });
   });
 
   it('refuses when the user lacks the permission — no draft, no collection', async () => {
@@ -144,14 +149,89 @@ describe('the AI Assistant: plans, previews, approves, executes, audits', () => 
     const d1 = t1.json().draft;
     expect(d1.status).toBe('COLLECTING');
     expect(d1.missing).toContain('serviceName');
-    expect(d1.filledCount).toBe(1);
-    expect(d1.requiredCount).toBe(2);
+    expect(d1.requiredCount).toBe(1);
 
     const t2 = await msg('Follow-up session', d1.id);
     const d2 = t2.json().draft;
     expect(d2.id).toBe(d1.id); // same draft, continued
     expect(d2.status).toBe('READY_FOR_REVIEW');
     expect(d2.preview.ops[0].after).toMatchObject({ price: 1400 });
+  });
+
+  it('lists the salon services on request', async () => {
+    const res = await msg('What are my services?', undefined);
+    const body = res.json();
+    expect(body.draft.kind).toBe('read');
+    expect(body.reply.toLowerCase()).toContain('service');
+    expect(body.reply).toContain('Rehab training');
+  });
+
+  it('creates a service: collect → preview → approve → real row', async () => {
+    const prep = await msg('Add a new service called Womens Hair Colouring for 1500 30 min', undefined);
+    const d = prep.json().draft;
+    expect(d.status).toBe('READY_FOR_REVIEW');
+    expect(d.preview.ops[0]).toMatchObject({
+      kind: 'create',
+      after: { name: 'Womens Hair Colouring', price: 1500, durationMin: 30 },
+    });
+    // Nothing written on preview.
+    const pre = await admin.query(`SELECT id FROM services WHERE tenant_id=$1 AND name='Womens Hair Colouring'`, [
+      demo.business,
+    ]);
+    expect(pre.rowCount).toBe(0);
+
+    const done = await exec(d.id);
+    expect(done.json().status).toBe('COMPLETED');
+    const post = await admin.query(
+      `SELECT price, duration_min FROM services WHERE tenant_id=$1 AND name='Womens Hair Colouring'`,
+      [demo.business],
+    );
+    expect(post.rowCount).toBe(1);
+    expect(Number(post.rows[0].price)).toBe(1500);
+    expect(Number(post.rows[0].duration_min)).toBe(30);
+  });
+
+  it('closes a location on a date across two turns, then writes the closure', async () => {
+    const t1 = await msg('Close the salon on 2026-12-25', undefined);
+    const d1 = t1.json().draft;
+    expect(d1.status).toBe('COLLECTING'); // two locations → asks which
+    expect(d1.errors.some((e: { field: string }) => e.field === 'location')).toBe(true);
+
+    const t2 = await msg('Centar', d1.id);
+    const d2 = t2.json().draft;
+    expect(d2.status).toBe('READY_FOR_REVIEW');
+    expect(d2.preview.ops[0].kind).toBe('create');
+
+    const done = await exec(d2.id);
+    expect(done.json().status).toBe('COMPLETED');
+    const ex = await admin.query(
+      `SELECT type FROM schedule_exceptions WHERE location_id=$1 AND start_date='2026-12-25'`,
+      [demo.locCentar],
+    );
+    expect(ex.rowCount).toBe(1);
+    expect(ex.rows[0].type).toBe('CLOSED');
+  });
+
+  it('treats "delete a service" as navigate-only — explains and deep-links, never executes', async () => {
+    const res = await msg('Delete the Rehab training service', undefined);
+    const body = res.json();
+    expect(body.draft.kind).toBe('navigate');
+    expect(body.draft.navigate).toMatchObject({ screen: '/catalog', entityId: demo.s4 });
+    expect(body.reply.toLowerCase()).toMatch(/catalog|won.t|permanent/);
+    // The service is untouched.
+    const still = await admin.query(`SELECT id FROM services WHERE id=$1`, [demo.s4]);
+    expect(still.rowCount).toBe(1);
+  });
+
+  it('refuses every assistant call when HQ has the salon switched off', async () => {
+    await admin.query(`UPDATE businesses SET assistant_enabled=false WHERE id=$1`, [demo.business]);
+    try {
+      const res = await msg("What's the price of Follow-up session?", undefined);
+      expect(res.statusCode).toBe(403);
+      expect(res.json().error).toBe('FORBIDDEN');
+    } finally {
+      await admin.query(`UPDATE businesses SET assistant_enabled=true WHERE id=$1`, [demo.business]);
+    }
   });
 
   it('catches a stale price at execute, re-baselines, then succeeds on re-approval', async () => {

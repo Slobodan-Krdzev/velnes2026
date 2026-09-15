@@ -43,12 +43,21 @@ export const AssistantFieldErrorSchema = z.object({
   message: z.string(),
 });
 
+/** Where a navigate-only (high-risk) action would send the user. The
+ *  Assistant explains and deep-links but never executes these itself. */
+export const AssistantNavigateSchema = z.object({
+  screen: z.string(), // a workspace route, e.g. '/catalog'
+  entityId: z.string().optional(),
+  tab: z.string().optional(),
+});
+export type AssistantNavigate = z.infer<typeof AssistantNavigateSchema>;
+
 /** The pending mutation, structured. The UI renders from this, not the chat. */
 export const AssistantDraftSchema = z.object({
   id: z.string(),
   app: z.enum(['workspace', 'supplier']),
   actionId: z.string(),
-  kind: z.enum(['read', 'write']),
+  kind: z.enum(['read', 'write', 'navigate']),
   intent: z.string(), // the assistant's paraphrase, for the user to confirm
   status: AssistantDraftStatusSchema,
   args: z.record(z.string(), z.unknown()),
@@ -57,6 +66,8 @@ export const AssistantDraftSchema = z.object({
   preview: AssistantChangeSetSchema.nullable(),
   /** For a READ action, the plain answer; otherwise null. */
   answer: z.string().nullable().default(null),
+  /** For a NAVIGATE action, where to deep-link; otherwise null. */
+  navigate: AssistantNavigateSchema.nullable().default(null),
   /** Continuation UX: "4 of 6 required details completed". */
   requiredCount: z.number().int(),
   filledCount: z.number().int(),

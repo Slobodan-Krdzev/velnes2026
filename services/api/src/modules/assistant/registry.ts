@@ -1,11 +1,12 @@
-import type { AssistantChangeSet, PermKey } from '@velnes/contracts';
+import type { AssistantChangeSet, AssistantNavigate, PermKey } from '@velnes/contracts';
 import type { AccessClaims } from '@velnes/contracts';
 import { sql } from 'kysely';
 import type { Trx } from '../../db/index.js';
-import { updateService } from '../catalog/catalog.crud.service.js';
+import { createService, updateService } from '../catalog/catalog.crud.service.js';
+import { createException, deleteException, listExceptions } from '../scheduling/scheduling.service.js';
 
 /**
- * The AI Assistant Action Registry (V1 spike — workspace surface only).
+ * The AI Assistant Action Registry (V1 — workspace surface).
  *
  * Each action is a thin, declarative wrapper over an EXISTING canonical
  * door. The Assistant never mutates directly: it resolves references to
@@ -13,10 +14,19 @@ import { updateService } from '../catalog/catalog.crud.service.js';
  * and — only on explicit approval — calls the same service function the
  * normal UI calls, inside the caller's tenant transaction.
  *
- * Spike scope is deliberately two actions: one READ, one WRITE. New
- * capabilities register here without touching the Assistant machinery.
+ * `params` describe each action's arguments to the planner (they become
+ * the tool's JSON schema). Destructive and role/permission/owner actions
+ * are `navigate`-only in V1 (decision 4): the Assistant explains and
+ * deep-links but never executes them.
  */
 
+export interface PlannerParam {
+  name: string;
+  type: 'string' | 'number' | 'boolean';
+  description: string;
+  required?: boolean;
+  enum?: string[];
+}
 export interface ResolveResult {
   args: Record<string, unknown>;
   missing: string[];
@@ -37,18 +47,23 @@ export interface ExecResult {
   message: string;
   change: AssistantChangeSet;
 }
+export interface NavigateResult extends AssistantNavigate {
+  message: string;
+}
 
 export interface ActionDef {
   id: string;
   app: 'workspace' | 'supplier';
-  kind: 'read' | 'write';
+  kind: 'read' | 'write' | 'navigate';
   risk: 'low' | 'medium' | 'high';
   permission: PermKey;
   required: string[];
   title: string;
   description: string; // handed to the planner
+  params: PlannerParam[];
   resolve(trx: Trx, claims: AccessClaims, raw: Record<string, unknown>): Promise<ResolveResult>;
   read?(trx: Trx, claims: AccessClaims, args: Record<string, unknown>): Promise<string>;
+  navigate?(trx: Trx, claims: AccessClaims, args: Record<string, unknown>): Promise<NavigateResult>;
   preview?(trx: Trx, claims: AccessClaims, args: Record<string, unknown>): Promise<PreviewResult>;
   checkFingerprint?(
     trx: Trx,
@@ -60,9 +75,20 @@ export interface ActionDef {
 }
 
 const mkd = (n: number) => `${Number(n).toLocaleString('en-US')} MKD`;
+const str = (v: unknown) => (typeof v === 'string' ? v.trim() : '');
+/** Parse a price/amount from a string or number → whole MKD, or undefined. */
+function num(v: unknown): number | undefined {
+  if (typeof v === 'number') return Number.isFinite(v) ? v : undefined;
+  if (typeof v === 'string' && v.trim()) {
+    const n = Number(v.replace(/[^\d.]/g, ''));
+    return Number.isFinite(n) ? n : undefined;
+  }
+  return undefined;
+}
+const bool = (v: unknown): boolean | undefined =>
+  typeof v === 'boolean' ? v : typeof v === 'string' ? /^(true|yes|on|1)$/i.test(v.trim()) : undefined;
 
-/** Resolve a service by name under the caller's tenant (RLS). Returns a
- *  discriminated outcome so the caller can ask / disambiguate / proceed. */
+// ── shared resolvers ─────────────────────────────────────────────────
 type SvcRow = { id: string; name: string; price: number; category: string | null };
 async function resolveService(
   trx: Trx,
@@ -83,10 +109,39 @@ async function resolveService(
   return { ok: false, code: 'NOT_FOUND', options: all.map((a) => a.name) };
 }
 
+async function serviceCategoryNames(trx: Trx): Promise<string[]> {
+  const rows = await trx.selectFrom('serviceCategories').select('name').orderBy('name').execute();
+  return rows.map((r) => r.name);
+}
+
+type LocRow = { id: string; name: string };
+async function resolveLocation(
+  trx: Trx,
+  raw: string,
+): Promise<
+  { ok: true; loc: LocRow } | { ok: false; code: 'AMBIGUOUS' | 'NOT_FOUND' | 'NEEDED'; options: string[] }
+> {
+  const all = (await trx
+    .selectFrom('locations')
+    .select(['id', 'name'])
+    .where('lifecycle', '<>', 'DRAFT')
+    .orderBy('name')
+    .execute()) as LocRow[];
+  if (!raw) {
+    if (all.length === 1) return { ok: true, loc: all[0]! };
+    return { ok: false, code: 'NEEDED', options: all.map((l) => l.name) };
+  }
+  const low = raw.toLowerCase();
+  const hits = all.filter((l) => l.name.toLowerCase().includes(low));
+  if (hits.length === 1) return { ok: true, loc: hits[0]! };
+  if (hits.length > 1) return { ok: false, code: 'AMBIGUOUS', options: hits.map((l) => l.name) };
+  return { ok: false, code: 'NOT_FOUND', options: all.map((l) => l.name) };
+}
+
 /** Read the current base service into the fields a canonical PUT needs.
  *  Variants/modifiers/performers are omitted → updateService leaves them
- *  untouched, so a price change never disturbs the rest of the service. */
-async function serviceBaseWrite(trx: Trx, serviceId: string, newPrice: number) {
+ *  untouched, so an edit never disturbs the rest of the service. */
+async function currentServiceWrite(trx: Trx, serviceId: string) {
   const s = await trx
     .selectFrom('services as s')
     .leftJoin('serviceCategories as c', 'c.id', 's.categoryId')
@@ -94,6 +149,7 @@ async function serviceBaseWrite(trx: Trx, serviceId: string, newPrice: number) {
       's.name',
       'c.name as category',
       's.durationMin',
+      's.price',
       's.vat',
       's.status',
       's.pos',
@@ -103,21 +159,46 @@ async function serviceBaseWrite(trx: Trx, serviceId: string, newPrice: number) {
     ])
     .where('s.id', '=', serviceId)
     .executeTakeFirstOrThrow();
-  return {
-    name: s.name,
-    category: s.category,
-    durationMin: s.durationMin,
-    price: newPrice,
-    vat: s.vat,
-    status: s.status,
-    pos: s.pos,
-    online: s.online,
-    prepMin: s.prepMin,
-    resetMin: s.resetMin,
-  };
+  return s;
 }
 
-// ── read_service_price ───────────────────────────────────────────────
+const svcErr = (field: string, r: { code: string; options: string[] }, name: string) => ({
+  field,
+  code: r.code,
+  message:
+    r.code === 'AMBIGUOUS'
+      ? `Several services match "${name}": ${r.options.join(', ')}. Which one?`
+      : `I couldn't find "${name}". Services: ${r.options.join(', ')}.`,
+});
+
+// ── read: list_services ──────────────────────────────────────────────
+const listServices: ActionDef = {
+  id: 'list_services',
+  app: 'workspace',
+  kind: 'read',
+  risk: 'low',
+  permission: 'catalog.view',
+  required: [],
+  title: 'List services',
+  description: "List the salon's services with their prices.",
+  params: [],
+  async resolve() {
+    return { args: {}, missing: [], errors: [] };
+  },
+  async read(trx) {
+    const rows = await trx
+      .selectFrom('services')
+      .select(['name', 'price'])
+      .where('status', '=', 'active')
+      .orderBy('name')
+      .execute();
+    if (!rows.length) return 'There are no active services yet.';
+    const list = rows.map((r) => `${r.name} (${mkd(r.price)})`).join(', ');
+    return `You have ${rows.length} active service${rows.length === 1 ? '' : 's'}: ${list}.`;
+  },
+};
+
+// ── read: read_service_price ─────────────────────────────────────────
 const readServicePrice: ActionDef = {
   id: 'read_service_price',
   app: 'workspace',
@@ -127,125 +208,497 @@ const readServicePrice: ActionDef = {
   required: ['serviceName'],
   title: 'Read a service price',
   description: 'Tell the user the current price of a named service.',
+  params: [{ name: 'serviceName', type: 'string', description: 'The service to look up', required: true }],
   async resolve(trx, _claims, raw) {
-    const serviceName = typeof raw.serviceName === 'string' ? raw.serviceName.trim() : '';
+    const serviceName = str(raw.serviceName);
     if (!serviceName) return { args: {}, missing: ['serviceName'], errors: [] };
     const r = await resolveService(trx, serviceName);
-    if (!r.ok)
-      return {
-        args: { serviceName },
-        missing: [],
-        errors: [
-          {
-            field: 'serviceName',
-            code: r.code,
-            message:
-              r.code === 'AMBIGUOUS'
-                ? `Several services match "${serviceName}": ${r.options.join(', ')}. Which one?`
-                : `I couldn't find "${serviceName}". Services: ${r.options.join(', ')}.`,
-          },
-        ],
-      };
+    if (!r.ok) return { args: { serviceName }, missing: [], errors: [svcErr('serviceName', r, serviceName)] };
     return { args: { serviceId: r.svc.id, serviceName: r.svc.name, price: r.svc.price }, missing: [], errors: [] };
   },
   async read(_trx, _claims, args) {
-    return `${String(args.serviceName)} is ${mkd(Number(args.price))}.`;
+    return `${str(args.serviceName)} is ${mkd(Number(args.price))}.`;
   },
 };
 
-// ── update_price ─────────────────────────────────────────────────────
-const updatePrice: ActionDef = {
-  id: 'update_price',
+// ── write: create_service ────────────────────────────────────────────
+const createServiceAction: ActionDef = {
+  id: 'create_service',
   app: 'workspace',
   kind: 'write',
   risk: 'medium',
   permission: 'catalog.edit',
-  required: ['serviceName', 'price'],
-  title: 'Update a service price',
-  description: 'Change the price of a named service to a new amount in MKD.',
+  required: ['name', 'price', 'durationMin'],
+  title: 'Create a service',
+  description:
+    'Create a new bookable service. Needs a name, a price in MKD, and a duration in minutes; category is optional but must be one that already exists.',
+  params: [
+    { name: 'name', type: 'string', description: 'The new service name', required: true },
+    { name: 'price', type: 'number', description: 'Price in MKD', required: true },
+    { name: 'durationMin', type: 'number', description: 'Duration in minutes', required: true },
+    { name: 'category', type: 'string', description: 'An existing service category (optional)' },
+    { name: 'vat', type: 'number', description: 'VAT percent (optional, defaults to 18)' },
+  ],
   async resolve(trx, _claims, raw) {
-    const serviceName = typeof raw.serviceName === 'string' ? raw.serviceName.trim() : '';
-    const rawPrice = raw.price;
-    const price =
-      typeof rawPrice === 'number'
-        ? rawPrice
-        : typeof rawPrice === 'string' && rawPrice.trim()
-          ? Number(rawPrice.replace(/[^\d.]/g, ''))
-          : undefined;
+    const name = str(raw.name);
+    const price = num(raw.price);
+    const durationMin = num(raw.durationMin);
     const missing: string[] = [];
-    if (!serviceName) missing.push('serviceName');
+    if (!name) missing.push('name');
     if (price === undefined) missing.push('price');
+    if (durationMin === undefined) missing.push('durationMin');
     const errors: ResolveResult['errors'] = [];
-    if (price !== undefined && (!Number.isFinite(price) || price < 0))
+    if (price !== undefined && price < 0)
       errors.push({ field: 'price', code: 'BAD_PRICE', message: 'The price must be a positive number.' });
+    if (durationMin !== undefined && (durationMin < 1 || durationMin > 24 * 60))
+      errors.push({ field: 'durationMin', code: 'BAD_DURATION', message: 'Duration must be between 1 and 1440 minutes.' });
     const args: Record<string, unknown> = {};
+    if (name) args.name = name;
     if (price !== undefined) args.price = Math.round(price);
-    if (!serviceName) return { args, missing, errors };
-    const r = await resolveService(trx, serviceName);
-    if (!r.ok) {
-      errors.push({
-        field: 'serviceName',
-        code: r.code,
-        message:
-          r.code === 'AMBIGUOUS'
-            ? `Several services match "${serviceName}": ${r.options.join(', ')}. Which one?`
-            : `I couldn't find "${serviceName}". Services: ${r.options.join(', ')}.`,
-      });
-      return { args: { ...args, serviceName }, missing, errors };
+    if (durationMin !== undefined) args.durationMin = Math.round(durationMin);
+    if (raw.vat !== undefined && num(raw.vat) !== undefined) args.vat = Math.round(num(raw.vat)!);
+    // Category is optional, but if named it must already exist.
+    const category = str(raw.category);
+    if (category) {
+      const cats = await serviceCategoryNames(trx);
+      const hit = cats.find((c) => c.toLowerCase() === category.toLowerCase());
+      if (!hit)
+        errors.push({
+          field: 'category',
+          code: 'BAD_CATEGORY',
+          message: `"${category}" isn't one of your categories: ${cats.join(', ') || '(none yet)'}. Leave it out or pick one.`,
+        });
+      else args.category = hit;
     }
-    return {
-      args: { ...args, serviceId: r.svc.id, serviceName: r.svc.name, currentPrice: r.svc.price },
-      missing,
-      errors,
-    };
+    // Refuse an exact-name duplicate.
+    if (name) {
+      const dup = await trx
+        .selectFrom('services')
+        .select('id')
+        .where(sql<boolean>`lower(name) = ${name.toLowerCase()}`)
+        .executeTakeFirst();
+      if (dup)
+        errors.push({
+          field: 'name',
+          code: 'DUPLICATE',
+          message: `A service called "${name}" already exists. Try editing it instead.`,
+        });
+    }
+    return { args, missing, errors };
   },
   async preview(_trx, _claims, args) {
-    const before = Number(args.currentPrice);
-    const after = Number(args.price);
+    const after: Record<string, unknown> = {
+      name: str(args.name),
+      price: Number(args.price),
+      durationMin: Number(args.durationMin),
+    };
+    if (args.category) after.category = str(args.category);
+    if (args.vat !== undefined) after.vat = Number(args.vat);
+    return {
+      changeSet: { ops: [{ kind: 'create', entity: { type: 'service', label: str(args.name) }, after }] },
+      fingerprint: { name: str(args.name).toLowerCase() },
+    };
+  },
+  async checkFingerprint(trx, _claims, args) {
+    // A create conflicts only if the name got taken meanwhile.
+    const dup = await trx
+      .selectFrom('services')
+      .select('id')
+      .where(sql<boolean>`lower(name) = ${str(args.name).toLowerCase()}`)
+      .executeTakeFirst();
+    if (dup)
+      return { field: 'name', was: '—', now: 'already exists', proposed: str(args.name) };
+    return null;
+  },
+  async execute(trx, claims, args) {
+    const id = await createService(trx, claims, {
+      name: str(args.name),
+      category: args.category ? str(args.category) : null,
+      durationMin: Number(args.durationMin),
+      price: Number(args.price),
+      ...(args.vat !== undefined ? { vat: Number(args.vat) } : {}),
+    });
+    const after: Record<string, unknown> = {
+      name: str(args.name),
+      price: Number(args.price),
+      durationMin: Number(args.durationMin),
+    };
+    if (args.category) after.category = str(args.category);
+    return {
+      message: `Created "${str(args.name)}" at ${mkd(Number(args.price))}.`,
+      change: { ops: [{ kind: 'create', entity: { type: 'service', id, label: str(args.name) }, after }] },
+    };
+  },
+};
+
+// ── write: edit_service (rename, recategorise, price, duration, tax, visibility) ──
+const EDIT_FIELDS = ['newName', 'price', 'durationMin', 'category', 'vat', 'online', 'pos'] as const;
+const editService: ActionDef = {
+  id: 'edit_service',
+  app: 'workspace',
+  kind: 'write',
+  risk: 'medium',
+  permission: 'catalog.edit',
+  required: ['serviceName'],
+  title: 'Edit a service',
+  description:
+    'Change an existing service: its price, name, category, duration, VAT, or online/POS visibility — one field or several at once.',
+  params: [
+    { name: 'serviceName', type: 'string', description: 'The service to edit', required: true },
+    { name: 'price', type: 'number', description: 'New price in MKD' },
+    { name: 'newName', type: 'string', description: 'A new name for the service' },
+    { name: 'category', type: 'string', description: 'An existing category to move it to' },
+    { name: 'durationMin', type: 'number', description: 'New duration in minutes' },
+    { name: 'vat', type: 'number', description: 'New VAT percent' },
+    { name: 'online', type: 'boolean', description: 'Whether it is bookable online' },
+    { name: 'pos', type: 'boolean', description: 'Whether it is sold at the till' },
+  ],
+  async resolve(trx, _claims, raw) {
+    const serviceName = str(raw.serviceName);
+    const errors: ResolveResult['errors'] = [];
+    // Gather the requested edits.
+    const edits: Record<string, unknown> = {};
+    const price = num(raw.price);
+    if (raw.price !== undefined) {
+      if (price === undefined || price < 0)
+        errors.push({ field: 'price', code: 'BAD_PRICE', message: 'The price must be a positive number.' });
+      else edits.price = Math.round(price);
+    }
+    if (str(raw.newName)) edits.newName = str(raw.newName);
+    if (raw.durationMin !== undefined) {
+      const d = num(raw.durationMin);
+      if (d === undefined || d < 1 || d > 24 * 60)
+        errors.push({ field: 'durationMin', code: 'BAD_DURATION', message: 'Duration must be 1–1440 minutes.' });
+      else edits.durationMin = Math.round(d);
+    }
+    if (raw.vat !== undefined && num(raw.vat) !== undefined) edits.vat = Math.round(num(raw.vat)!);
+    if (raw.online !== undefined && bool(raw.online) !== undefined) edits.online = bool(raw.online);
+    if (raw.pos !== undefined && bool(raw.pos) !== undefined) edits.pos = bool(raw.pos);
+    const category = str(raw.category);
+    if (category) {
+      const cats = await serviceCategoryNames(trx);
+      const hit = cats.find((c) => c.toLowerCase() === category.toLowerCase());
+      if (!hit)
+        errors.push({
+          field: 'category',
+          code: 'BAD_CATEGORY',
+          message: `"${category}" isn't one of your categories: ${cats.join(', ') || '(none)'}.`,
+        });
+      else edits.category = hit;
+    }
+    if (!serviceName) return { args: { ...edits }, missing: ['serviceName'], errors };
+
+    const r = await resolveService(trx, serviceName);
+    if (!r.ok) return { args: { ...edits, serviceName }, missing: [], errors: [...errors, svcErr('serviceName', r, serviceName)] };
+
+    // Need at least one field to change.
+    const changed = EDIT_FIELDS.some((f) => edits[f] !== undefined);
+    if (!changed && !errors.length)
+      errors.push({
+        field: 'change',
+        code: 'NOTHING',
+        message: `What would you like to change about "${r.svc.name}"? (price, name, category, duration, tax, or visibility)`,
+      });
+    return { args: { ...edits, serviceId: r.svc.id, serviceName: r.svc.name }, missing: [], errors };
+  },
+  async preview(trx, _claims, args) {
+    const cur = await currentServiceWrite(trx, String(args.serviceId));
+    const before: Record<string, unknown> = {};
+    const after: Record<string, unknown> = {};
+    const fp: Fingerprint = {};
+    const put = (field: string, curVal: unknown, nextVal: unknown) => {
+      before[field] = curVal;
+      after[field] = nextVal;
+      fp[field] = curVal;
+    };
+    if (args.price !== undefined) put('price', cur.price, Number(args.price));
+    if (args.newName !== undefined) put('name', cur.name, str(args.newName));
+    if (args.category !== undefined) put('category', cur.category, str(args.category));
+    if (args.durationMin !== undefined) put('durationMin', cur.durationMin, Number(args.durationMin));
+    if (args.vat !== undefined) put('vat', cur.vat, Number(args.vat));
+    if (args.online !== undefined) put('online', cur.online, Boolean(args.online));
+    if (args.pos !== undefined) put('pos', cur.pos, Boolean(args.pos));
+    return {
+      changeSet: {
+        ops: [
+          { kind: 'update', entity: { type: 'service', id: String(args.serviceId), label: str(args.serviceName) }, before, after },
+        ],
+      },
+      fingerprint: fp,
+    };
+  },
+  async checkFingerprint(trx, _claims, args, fp) {
+    const cur = await currentServiceWrite(trx, String(args.serviceId));
+    const map: Record<string, unknown> = {
+      price: cur.price,
+      name: cur.name,
+      category: cur.category,
+      durationMin: cur.durationMin,
+      vat: cur.vat,
+      online: cur.online,
+      pos: cur.pos,
+    };
+    for (const [field, was] of Object.entries(fp)) {
+      const now = map[field];
+      if (now !== was)
+        return {
+          field: field === 'name' ? 'name' : field,
+          was: field === 'price' ? mkd(Number(was)) : String(was),
+          now: field === 'price' ? mkd(Number(now)) : String(now),
+          proposed: field === 'price' && args.price !== undefined ? mkd(Number(args.price)) : '(your change)',
+        };
+    }
+    return null;
+  },
+  async execute(trx, claims, args) {
+    const cur = await currentServiceWrite(trx, String(args.serviceId));
+    const write = {
+      name: args.newName !== undefined ? str(args.newName) : cur.name,
+      category: args.category !== undefined ? str(args.category) : cur.category,
+      durationMin: args.durationMin !== undefined ? Number(args.durationMin) : cur.durationMin,
+      price: args.price !== undefined ? Number(args.price) : cur.price,
+      vat: args.vat !== undefined ? Number(args.vat) : cur.vat,
+      status: cur.status,
+      pos: args.pos !== undefined ? Boolean(args.pos) : cur.pos,
+      online: args.online !== undefined ? Boolean(args.online) : cur.online,
+      prepMin: cur.prepMin,
+      resetMin: cur.resetMin,
+    };
+    await updateService(trx, claims, String(args.serviceId), write); // the canonical door
+    const before: Record<string, unknown> = {};
+    const after: Record<string, unknown> = {};
+    if (args.price !== undefined) { before.price = cur.price; after.price = Number(args.price); }
+    if (args.newName !== undefined) { before.name = cur.name; after.name = str(args.newName); }
+    if (args.category !== undefined) { before.category = cur.category; after.category = str(args.category); }
+    if (args.durationMin !== undefined) { before.durationMin = cur.durationMin; after.durationMin = Number(args.durationMin); }
+    if (args.vat !== undefined) { before.vat = cur.vat; after.vat = Number(args.vat); }
+    if (args.online !== undefined) { before.online = cur.online; after.online = Boolean(args.online); }
+    if (args.pos !== undefined) { before.pos = cur.pos; after.pos = Boolean(args.pos); }
+    const label = args.newName !== undefined ? str(args.newName) : str(args.serviceName);
+    return {
+      message: `Updated "${label}".`,
+      change: { ops: [{ kind: 'update', entity: { type: 'service', id: String(args.serviceId), label }, before, after }] },
+    };
+  },
+};
+
+// ── write: add_closure (a CLOSED day/range on a location) ────────────
+const addClosure: ActionDef = {
+  id: 'add_closure',
+  app: 'workspace',
+  kind: 'write',
+  risk: 'medium',
+  permission: 'locations.manage',
+  required: ['date'],
+  title: 'Close the salon on a date',
+  description:
+    'Mark a location closed on a date (or a date range). Dates must be ISO yyyy-mm-dd. Give a location name when the salon has more than one.',
+  params: [
+    { name: 'date', type: 'string', description: 'The (start) date, ISO yyyy-mm-dd', required: true },
+    { name: 'endDate', type: 'string', description: 'End date for a range, ISO yyyy-mm-dd (optional)' },
+    { name: 'location', type: 'string', description: 'Which location, if more than one' },
+    { name: 'reason', type: 'string', description: 'A short reason (optional), e.g. "Public holiday"' },
+  ],
+  async resolve(trx, _claims, raw) {
+    const errors: ResolveResult['errors'] = [];
+    const isDate = (s: string) => /^\d{4}-\d{2}-\d{2}$/.test(s);
+    const date = str(raw.date);
+    const endDate = str(raw.endDate);
+    const args: Record<string, unknown> = {};
+    if (date) {
+      if (!isDate(date)) errors.push({ field: 'date', code: 'BAD_DATE', message: 'Give the date as yyyy-mm-dd.' });
+      else args.date = date;
+    }
+    if (endDate) {
+      if (!isDate(endDate)) errors.push({ field: 'endDate', code: 'BAD_DATE', message: 'Give the end date as yyyy-mm-dd.' });
+      else if (date && endDate < date) errors.push({ field: 'endDate', code: 'BAD_RANGE', message: 'The end date is before the start.' });
+      else args.endDate = endDate;
+    }
+    if (str(raw.reason)) args.reason = str(raw.reason);
+    const missing: string[] = [];
+    if (!date) missing.push('date');
+    const loc = await resolveLocation(trx, str(raw.location));
+    if (!loc.ok) {
+      const msg =
+        loc.code === 'NEEDED'
+          ? `Which location? ${loc.options.join(', ')}.`
+          : loc.code === 'AMBIGUOUS'
+            ? `Several locations match: ${loc.options.join(', ')}. Which one?`
+            : `I couldn't find that location. You have: ${loc.options.join(', ')}.`;
+      errors.push({ field: 'location', code: loc.code, message: msg });
+      missing.push('location'); // so continuation knows the next answer is a location
+    } else {
+      args.locationId = loc.loc.id;
+      args.locationName = loc.loc.name;
+    }
+    return { args, missing, errors };
+  },
+  async preview(_trx, _claims, args) {
+    const range = args.endDate ? `${str(args.date)} → ${str(args.endDate)}` : str(args.date);
     return {
       changeSet: {
         ops: [
           {
-            kind: 'update',
-            entity: { type: 'service', id: String(args.serviceId), label: String(args.serviceName) },
-            before: { price: before },
-            after: { price: after },
+            kind: 'create',
+            entity: { type: 'closure', label: `${str(args.locationName)} — ${range}` },
+            after: { closed: range, ...(args.reason ? { reason: str(args.reason) } : {}) },
           },
         ],
       },
-      fingerprint: { serviceId: args.serviceId, price: before },
+      fingerprint: { locationId: args.locationId, date: args.date },
     };
   },
-  async checkFingerprint(trx, _claims, args, fp) {
-    const cur = await trx
-      .selectFrom('services')
-      .select('price')
-      .where('id', '=', String(args.serviceId))
-      .executeTakeFirst();
-    const now = cur?.price;
-    if (now === undefined || now === Number(fp.price)) return null;
-    return { field: 'price', was: mkd(Number(fp.price)), now: mkd(Number(now)), proposed: mkd(Number(args.price)) };
-  },
-  async execute(trx, claims, args) {
-    const write = await serviceBaseWrite(trx, String(args.serviceId), Number(args.price));
-    await updateService(trx, claims, String(args.serviceId), write); // the canonical door
+  async execute(trx, _claims, args) {
+    const ex = await createException(trx, String(args.locationId), {
+      startDate: str(args.date),
+      endDate: args.endDate ? str(args.endDate) : null,
+      type: 'CLOSED',
+      ...(args.reason ? { reason: str(args.reason) } : {}),
+    });
+    const range = args.endDate ? `${str(args.date)} → ${str(args.endDate)}` : str(args.date);
     return {
-      message: `${String(args.serviceName)} is now ${mkd(Number(args.price))}.`,
+      message: `${str(args.locationName)} is now closed on ${range}.`,
       change: {
-        ops: [
-          {
-            kind: 'update',
-            entity: { type: 'service', id: String(args.serviceId), label: String(args.serviceName) },
-            before: { price: Number(args.currentPrice) },
-            after: { price: Number(args.price) },
-          },
-        ],
+        ops: [{ kind: 'create', entity: { type: 'closure', id: ex.id, label: `${str(args.locationName)} — ${range}` }, after: { closed: range } }],
       },
     };
   },
 };
 
-const ALL: ActionDef[] = [readServicePrice, updatePrice];
+// ── write: remove_closure (reopen a closed date) ─────────────────────
+const removeClosure: ActionDef = {
+  id: 'remove_closure',
+  app: 'workspace',
+  kind: 'write',
+  risk: 'medium',
+  permission: 'locations.manage',
+  required: ['date'],
+  title: 'Reopen a closed date',
+  description: 'Remove a closure so the location opens again on that date. Date is ISO yyyy-mm-dd.',
+  params: [
+    { name: 'date', type: 'string', description: 'The closed date to reopen, ISO yyyy-mm-dd', required: true },
+    { name: 'location', type: 'string', description: 'Which location, if more than one' },
+  ],
+  async resolve(trx, _claims, raw) {
+    const errors: ResolveResult['errors'] = [];
+    const isDate = (s: string) => /^\d{4}-\d{2}-\d{2}$/.test(s);
+    const date = str(raw.date);
+    const args: Record<string, unknown> = {};
+    const missing: string[] = [];
+    if (!date) missing.push('date');
+    else if (!isDate(date)) errors.push({ field: 'date', code: 'BAD_DATE', message: 'Give the date as yyyy-mm-dd.' });
+    else args.date = date;
+    const loc = await resolveLocation(trx, str(raw.location));
+    if (!loc.ok) {
+      errors.push({
+        field: 'location',
+        code: loc.code,
+        message:
+          loc.code === 'NEEDED'
+            ? `Which location? ${loc.options.join(', ')}.`
+            : `Which location? You have: ${loc.options.join(', ')}.`,
+      });
+      missing.push('location');
+    } else if (date && isDate(date)) {
+      const exs = await listExceptions(trx, loc.loc.id);
+      const hit = exs.find((e) => e.startDate <= date && (e.endDate ?? e.startDate) >= date);
+      if (!hit)
+        errors.push({ field: 'date', code: 'NONE', message: `${loc.loc.name} has no closure on ${date}.` });
+      else {
+        args.exceptionId = hit.id;
+        args.locationId = loc.loc.id;
+        args.locationName = loc.loc.name;
+      }
+    }
+    return { args, missing, errors };
+  },
+  async preview(_trx, _claims, args) {
+    return {
+      changeSet: {
+        ops: [
+          {
+            kind: 'delete',
+            entity: { type: 'closure', id: String(args.exceptionId), label: `${str(args.locationName)} — ${str(args.date)}` },
+            before: { closed: str(args.date) },
+          },
+        ],
+      },
+      fingerprint: { exceptionId: args.exceptionId },
+    };
+  },
+  async execute(trx, _claims, args) {
+    await deleteException(trx, String(args.locationId), String(args.exceptionId));
+    return {
+      message: `${str(args.locationName)} is open again on ${str(args.date)}.`,
+      change: {
+        ops: [{ kind: 'delete', entity: { type: 'closure', id: String(args.exceptionId), label: `${str(args.locationName)} — ${str(args.date)}` }, before: { closed: str(args.date) } }],
+      },
+    };
+  },
+};
+
+// ── navigate-only: delete a service (destructive → decision 4) ───────
+const deleteServiceNav: ActionDef = {
+  id: 'delete_service',
+  app: 'workspace',
+  kind: 'navigate',
+  risk: 'high',
+  permission: 'catalog.edit',
+  required: ['serviceName'],
+  title: 'Delete a service',
+  description: 'Understand a request to delete/remove a service, but do NOT delete it — open it in the catalog instead.',
+  params: [{ name: 'serviceName', type: 'string', description: 'The service the user wants to delete', required: true }],
+  async resolve(trx, _claims, raw) {
+    const serviceName = str(raw.serviceName);
+    if (!serviceName) return { args: {}, missing: ['serviceName'], errors: [] };
+    const r = await resolveService(trx, serviceName);
+    if (!r.ok) return { args: { serviceName }, missing: [], errors: [svcErr('serviceName', r, serviceName)] };
+    return { args: { serviceId: r.svc.id, serviceName: r.svc.name }, missing: [], errors: [] };
+  },
+  async navigate(_trx, _claims, args) {
+    return {
+      screen: '/catalog',
+      entityId: String(args.serviceId),
+      message: `Deleting a service is permanent and can affect past bookings, so I won't do it from here. I've opened "${str(args.serviceName)}" in the catalog — you can remove it there.`,
+    };
+  },
+};
+
+// ── navigate-only: roles / permissions / owner / team access ─────────
+const manageAccessNav: ActionDef = {
+  id: 'manage_access',
+  app: 'workspace',
+  kind: 'navigate',
+  risk: 'high',
+  permission: 'users.manage',
+  required: [],
+  title: 'Manage team access',
+  description:
+    "Understand a request to change someone's role, permissions or ownership, but do NOT change them — open Team & access instead.",
+  params: [{ name: 'who', type: 'string', description: 'The person or role mentioned (optional)' }],
+  async resolve(_trx, _claims, raw) {
+    return { args: str(raw.who) ? { who: str(raw.who) } : {}, missing: [], errors: [] };
+  },
+  async navigate() {
+    return {
+      screen: '/settings',
+      tab: 'team',
+      message:
+        "Roles and permissions decide what everyone can do, so I don't change them from chat. I've opened Team & access — you can manage roles and members there.",
+    };
+  },
+};
+
+const ALL: ActionDef[] = [
+  listServices,
+  readServicePrice,
+  createServiceAction,
+  editService,
+  addClosure,
+  removeClosure,
+  deleteServiceNav,
+  manageAccessNav,
+];
 
 export function registryFor(app: 'workspace' | 'supplier'): ActionDef[] {
   return ALL.filter((a) => a.app === app);

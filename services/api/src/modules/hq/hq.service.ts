@@ -74,6 +74,7 @@ export async function hqBusinessList() {
         'b.city',
         'b.plan',
         'b.since',
+        'b.assistantEnabled',
         'o.name as ownerName',
         'o.email as ownerEmail',
         'o.status as ownerStatus',
@@ -138,6 +139,7 @@ export async function hqBusinessList() {
         employees: empCount.get(b.id) ?? 0,
         status: status as 'live' | 'invited' | 'onboarding',
         steps,
+        assistantEnabled: b.assistantEnabled,
         mrr: status === 'invited' ? 0 : (PLAN_PRICES[b.plan] ?? 0),
         syncErrors7d: errCount.get(b.id) ?? 0,
         openTickets: openTicketCount.get(b.id) ?? 0,
@@ -267,5 +269,43 @@ export async function hqCreateBusiness(
       source: 'HQ portal',
     });
     return { id: businessId };
+  });
+}
+
+/** HQ flips the AI Assistant on or off for one salon. Off by default;
+ *  this is the pilot's control. Audited into the salon's own trail so
+ *  the owner can see HQ turned it on. */
+export async function hqSetAssistant(
+  businessId: string,
+  enabled: boolean,
+  actor: { name: string; role: string },
+): Promise<{ id: string; assistantEnabled: boolean }> {
+  return db.transaction().execute(async (trx) => {
+    await sql`select set_config('app.hq', '1', true)`.execute(trx);
+    await sql`select set_config('app.tenant_id', ${businessId}, true)`.execute(trx);
+    const biz = await trx
+      .selectFrom('businesses')
+      .select(['name', 'assistantEnabled'])
+      .where('id', '=', businessId)
+      .executeTakeFirst();
+    if (!biz) throw new RegistrationError('NOT_FOUND', 'No such business');
+    if (biz.assistantEnabled !== enabled) {
+      await trx
+        .updateTable('businesses')
+        .set({ assistantEnabled: enabled })
+        .where('id', '=', businessId)
+        .execute();
+      await logAudit(trx, businessId, {
+        actorName: actor.name,
+        roleName: `HQ ${actor.role}`,
+        businessName: biz.name,
+        action: enabled ? 'AI Assistant enabled' : 'AI Assistant disabled',
+        object: `Business · ${biz.name}`,
+        before: biz.assistantEnabled ? 'Enabled' : 'Disabled',
+        after: enabled ? 'Enabled' : 'Disabled',
+        source: 'HQ portal',
+      });
+    }
+    return { id: businessId, assistantEnabled: enabled };
   });
 }

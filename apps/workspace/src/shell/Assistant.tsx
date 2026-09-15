@@ -8,6 +8,7 @@ import { api, get, post, useSession } from '@velnes/client';
 import { Icon, I } from '@velnes/ui';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
 import { z } from 'zod';
 import './assistant.css';
 
@@ -15,10 +16,37 @@ const OkSchema = z.object({ ok: z.boolean() });
 
 type Turn = { role: 'user' | 'assistant'; text: string };
 
-const money = (n: unknown) => (typeof n === 'number' ? `${n.toLocaleString('en-US')} MKD` : String(n));
+/** Human labels for the preview field keys the server sends. */
+const FIELD_LABEL: Record<string, string> = {
+  price: 'Price',
+  name: 'Name',
+  category: 'Category',
+  durationMin: 'Duration',
+  vat: 'VAT',
+  online: 'Online',
+  pos: 'Till',
+  closed: 'Closed',
+  reason: 'Reason',
+};
+const label = (k: string) => FIELD_LABEL[k] ?? k;
 
-/** Render the structured preview a write draft carries — before → after,
- *  field by field. Never computed here; it's the server's ChangeSet. */
+/** Field-aware formatting for a preview value — prices in MKD, durations
+ *  in minutes, flags as on/off, everything else as text. */
+function fmt(key: string, v: unknown): string {
+  if (v === null || v === undefined) return '—';
+  if (typeof v === 'boolean') return v ? 'on' : 'off';
+  if (typeof v === 'number') {
+    if (key === 'price') return `${v.toLocaleString('en-US')} MKD`;
+    if (key === 'durationMin') return `${v} min`;
+    if (key === 'vat') return `${v}%`;
+    return String(v);
+  }
+  return String(v);
+}
+
+/** Render the structured preview a write draft carries — field by field,
+ *  before → after for edits, just the new value for creates. Never
+ *  computed here; it's the server's ChangeSet. */
 function Preview({ draft }: { draft: AssistantDraft }) {
   const { t } = useTranslation();
   if (!draft.preview) return null;
@@ -28,12 +56,23 @@ function Preview({ draft }: { draft: AssistantDraft }) {
       {draft.preview.ops.map((op, i) => {
         const after = (op.after ?? {}) as Record<string, unknown>;
         const before = (op.before ?? {}) as Record<string, unknown>;
+        const keys = Object.keys({ ...before, ...after });
         return (
           <div key={i} className="asst-op">
-            <span className="asst-op-label">{op.entity.label}</span>
-            {Object.keys(after).map((k) => (
+            <span className="asst-op-label">
+              {op.kind === 'create' ? '+ ' : op.kind === 'delete' ? '− ' : ''}
+              {op.entity.label}
+            </span>
+            {keys.map((k) => (
               <span key={k} className="asst-op-delta">
-                <s>{money(before[k])}</s> <span aria-hidden>→</span> <b>{money(after[k])}</b>
+                <span className="asst-op-field">{label(k)}</span>{' '}
+                {k in before && op.kind !== 'create' ? (
+                  <>
+                    <s>{fmt(k, before[k])}</s> <span aria-hidden>→</span> <b>{fmt(k, after[k])}</b>
+                  </>
+                ) : (
+                  <b>{fmt(k, after[k] ?? before[k])}</b>
+                )}
               </span>
             ))}
           </div>
@@ -46,6 +85,7 @@ function Preview({ draft }: { draft: AssistantDraft }) {
 export function Assistant() {
   const { t } = useTranslation();
   const { me, can } = useSession();
+  const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [turns, setTurns] = useState<Turn[]>([]);
   const [draft, setDraft] = useState<AssistantDraft | null>(null);
@@ -54,8 +94,10 @@ export function Assistant() {
   const [loaded, setLoaded] = useState(false);
   const scroller = useRef<HTMLDivElement>(null);
 
-  // Only the catalog-capable see the spike's assistant.
-  const visible = can('catalog.view');
+  // The launcher shows only when HQ has enabled the Assistant for this
+  // salon AND the user can use at least the catalog. The server enforces
+  // the entitlement too — this is just the visible half.
+  const visible = !!me?.assistantEnabled && can('catalog.view');
 
   useEffect(() => {
     scroller.current?.scrollTo({ top: scroller.current.scrollHeight });
@@ -138,6 +180,14 @@ export function Assistant() {
   }
 
   const reviewing = draft?.status === 'READY_FOR_REVIEW' && !!draft.preview;
+  const nav = draft?.kind === 'navigate' ? draft.navigate : null;
+
+  function goTo() {
+    if (!nav) return;
+    navigate(nav.screen, { state: { tab: nav.tab, entityId: nav.entityId } });
+    setOpen(false);
+    setDraft(null);
+  }
 
   return (
     <>
@@ -166,6 +216,11 @@ export function Assistant() {
               </div>
             ))}
             {reviewing ? <Preview draft={draft!} /> : null}
+            {nav ? (
+              <button className="btn btn-primary asst-navbtn" onClick={goTo}>
+                {t('assistant.openScreen')}
+              </button>
+            ) : null}
             {busy ? <div className="asst-msg asst-assistant asst-muted">{t('assistant.thinking')}</div> : null}
           </div>
 

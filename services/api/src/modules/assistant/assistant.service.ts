@@ -16,6 +16,18 @@ import { actionById, registryFor, type ActionDef, type Fingerprint, type Resolve
 const TTL_MIN = 30;
 type App = 'workspace' | 'supplier';
 
+/** The HQ-owned entitlement gate. The workspace hides the launcher when
+ *  this is false, but the server must refuse too — a hidden button is not
+ *  security. Every assistant endpoint checks this first. */
+export async function assistantEnabled(trx: Trx, tenantId: string): Promise<boolean> {
+  const b = await trx
+    .selectFrom('businesses')
+    .select('assistantEnabled')
+    .where('id', '=', tenantId)
+    .executeTakeFirst();
+  return b?.assistantEnabled ?? false;
+}
+
 async function actorName(trx: Trx, claims: AccessClaims): Promise<string> {
   const e = await trx.selectFrom('employees').select('name').where('id', '=', claims.sub).executeTakeFirst();
   return e?.name ?? 'Unknown';
@@ -49,6 +61,7 @@ function buildDraft(
   resolved: ResolveResult,
   preview: AssistantDraft['preview'],
   answer: string | null,
+  navigate: AssistantDraft['navigate'] = null,
 ): AssistantDraft {
   return {
     id,
@@ -62,6 +75,7 @@ function buildDraft(
     errors: resolved.errors,
     preview: preview ?? null,
     answer,
+    navigate,
     requiredCount: action.required.length,
     filledCount: action.required.length - resolved.missing.length,
   };
@@ -134,6 +148,21 @@ export async function handleMessage(
   const raw = { ...(prior?.raw ?? {}), ...p.args };
   const resolved = await action.resolve(trx, claims, raw);
   const id = prior?.v.id ?? randomUUID();
+
+  // NAVIGATE: high-risk actions the Assistant explains but never executes
+  // (decision 4). Resolve enough to deep-link, then hand off to the screen.
+  if (action.kind === 'navigate') {
+    if (resolved.missing.length || resolved.errors.length) {
+      const draft = buildDraft(id, app, action, 'COLLECTING', resolved, null, null);
+      await saveStored(trx, claims, app, { v: draft, raw, fp: null });
+      return { reply: nextQuestion(resolved), draft };
+    }
+    const nav = await action.navigate!(trx, claims, resolved.args);
+    if (prior) await trx.deleteFrom('assistantDrafts').where('id', '=', id).execute();
+    const { message, ...target } = nav;
+    const draft = buildDraft(id, app, action, 'COMPLETED', resolved, null, null, target);
+    return { reply: message, draft };
+  }
 
   // READ: answer directly when resolved; no persistent draft.
   if (action.kind === 'read') {

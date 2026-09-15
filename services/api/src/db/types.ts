@@ -174,6 +174,7 @@ export interface BusinessCategories {
 
 export interface Businesses {
   address: string | null;
+  assistantEnabled: Generated<boolean>;
   city: string | null;
   country: string;
   createdAt: Generated<Timestamp>;

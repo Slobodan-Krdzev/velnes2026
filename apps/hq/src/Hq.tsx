@@ -1216,12 +1216,32 @@ function BusinessDetail({
   say: (m: string) => void;
 }) {
   const { t } = useTranslation();
+  const [assistantOn, setAssistantOn] = useState(b.assistantEnabled);
+  const [assistantBusy, setAssistantBusy] = useState(false);
   const remind = async () => {
     try {
       await hqPost(z.object({ ok: z.literal(true) }), `/hq/businesses/${b.id}/reminder`);
       say(t('hq.reminderSent'));
     } catch (e) {
       say(e instanceof HqApiError ? e.message : 'failed');
+    }
+  };
+  const toggleAssistant = async () => {
+    if (access !== 'write' || assistantBusy) return;
+    const next = !assistantOn;
+    setAssistantBusy(true);
+    try {
+      const r = await hqPatch(
+        z.object({ id: z.string(), assistantEnabled: z.boolean() }),
+        `/hq/businesses/${b.id}/assistant`,
+        { enabled: next },
+      );
+      setAssistantOn(r.assistantEnabled);
+      say(r.assistantEnabled ? t('hq.assistantOnDone') : t('hq.assistantOffDone'));
+    } catch (e) {
+      say(e instanceof HqApiError ? e.message : 'failed');
+    } finally {
+      setAssistantBusy(false);
     }
   };
   return (
@@ -1264,6 +1284,26 @@ function BusinessDetail({
             <span className="stat-hint">
               {b.openTickets ? t('hq.ticketsNeedReply') : t('hq.ticketsNone')}
             </span>
+          </div>
+        </div>
+        <div className="card">
+          <div className="rowcard" style={{ padding: '16px 20px', alignItems: 'center' }}>
+            <span className="grow">
+              <span className="t">{t('hq.assistantTitle')}</span>
+              <span className="muted" style={{ display: 'block', fontWeight: 500 }}>
+                {t('hq.assistantSub')}
+              </span>
+            </span>
+            <button
+              className={`toggle${assistantOn ? ' on' : ''}`}
+              role="switch"
+              aria-checked={assistantOn}
+              aria-label={t('hq.assistantTitle')}
+              disabled={access !== 'write' || assistantBusy}
+              onClick={() => void toggleAssistant()}
+            >
+              <span className="knob" />
+            </button>
           </div>
         </div>
         <div className="card">

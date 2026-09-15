@@ -203,9 +203,9 @@ export async function seedDemo(adminUrl: string) {
       location_lifecycle_log, locations, employees, roles, businesses CASCADE`);
 
     await q(
-      `INSERT INTO businesses (id, name, country, vat, plan, since, timing_enabled, slug,
+      `INSERT INTO businesses (id, name, country, vat, plan, since, timing_enabled, assistant_enabled, slug,
          address, city, phone, description, gallery, settings)
-       VALUES ($1,'Velnes Fizio Centar','North Macedonia','MK4080012345678','Business','2026-02-14',true,'velnes-fizio',
+       VALUES ($1,'Velnes Fizio Centar','North Macedonia','MK4080012345678','Business','2026-02-14',true,true,'velnes-fizio',
          'Partizanski Odredi 14','Skopje','+389 2 3112 940',
          'Physiotherapy, rehab and recovery in the centre of Skopje.',$2,$3)`,
       [
