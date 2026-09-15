@@ -28,6 +28,7 @@ const FIELD_LABEL: Record<string, string> = {
   pos: 'Till',
   closed: 'Closed',
   reason: 'Reason',
+  performers: 'Performed by',
 };
 const label = (k: string) => FIELD_LABEL[k] ?? k;
 

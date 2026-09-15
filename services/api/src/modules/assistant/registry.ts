@@ -121,6 +121,52 @@ async function serviceCategoryNames(trx: Trx): Promise<string[]> {
   return rows.map((r) => r.name);
 }
 
+const EVERYONE = /^(?:everyone|everybody|every one|all|all staff|anyone|any|any staff|whole team|the team)$/i;
+/** Resolve "who performs this service" — a name list, or "everyone". Returns
+ *  performerIds the canonical door understands: null = every worker; an array
+ *  = exactly those employees. */
+async function resolvePerformers(
+  trx: Trx,
+  raw: string,
+): Promise<
+  | { ok: true; ids: string[] | null; label: string }
+  | { ok: false; code: 'NOT_FOUND' | 'AMBIGUOUS'; message: string }
+> {
+  const text = raw.trim();
+  if (EVERYONE.test(text)) return { ok: true, ids: null, label: 'Everyone' };
+  const staff = await trx
+    .selectFrom('employees')
+    .select(['id', 'name'])
+    .where('status', '=', 'active')
+    .orderBy('name')
+    .execute();
+  const names = text
+    .split(/,|&|\band\b/i)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const ids: string[] = [];
+  const labels: string[] = [];
+  for (const n of names) {
+    const low = n.toLowerCase();
+    const hits = staff.filter((e) => e.name.toLowerCase().includes(low));
+    if (hits.length === 1) {
+      ids.push(hits[0]!.id);
+      labels.push(hits[0]!.name);
+    } else if (hits.length > 1) {
+      return { ok: false, code: 'AMBIGUOUS', message: `Several people match "${n}": ${hits.map((h) => h.name).join(', ')}. Which one?` };
+    } else {
+      return {
+        ok: false,
+        code: 'NOT_FOUND',
+        message: `I couldn't find "${n}". Your team: ${staff.map((e) => e.name).join(', ')}. Or say "everyone".`,
+      };
+    }
+  }
+  if (!ids.length)
+    return { ok: false, code: 'NOT_FOUND', message: `Who performs it? Your team: ${staff.map((e) => e.name).join(', ')}. Or say "everyone".` };
+  return { ok: true, ids, label: labels.join(', ') };
+}
+
 type LocRow = { id: string; name: string };
 async function resolveLocation(
   trx: Trx,
@@ -235,15 +281,16 @@ const createServiceAction: ActionDef = {
   kind: 'write',
   risk: 'medium',
   permission: 'catalog.edit',
-  required: ['name', 'price', 'durationMin', 'category'],
+  required: ['name', 'price', 'durationMin', 'category', 'performers'],
   title: 'Create a service',
   description:
-    'Create a new bookable service. Needs a name, a price in MKD, a duration in minutes, and a category it belongs to (which must already exist — every service must be filed under a category to appear in the catalog).',
+    'Create a new bookable service. Needs a name, a price in MKD, a duration in minutes, a category it belongs to (which must already exist), and who performs it (employee name(s), or "everyone").',
   params: [
     { name: 'name', type: 'string', description: 'The new service name', required: true },
     { name: 'price', type: 'number', description: 'Price in MKD', required: true },
     { name: 'durationMin', type: 'number', description: 'Duration in minutes', required: true },
     { name: 'category', type: 'string', description: 'An existing service category the service is filed under', required: true },
+    { name: 'performers', type: 'string', description: 'Who performs this service — employee name(s), or "everyone"', required: true },
     { name: 'vat', type: 'number', description: 'VAT percent (optional, defaults to 18)' },
   ],
   async resolve(trx, _claims, raw) {
@@ -289,6 +336,31 @@ const createServiceAction: ActionDef = {
         });
       else args.category = hit;
     }
+    // Who performs it — required (name list, or "everyone").
+    const performers = str(raw.performers);
+    if (!performers) {
+      missing.push('performers');
+      if (name) {
+        const staff = await trx
+          .selectFrom('employees')
+          .select('name')
+          .where('status', '=', 'active')
+          .orderBy('name')
+          .execute();
+        errors.push({
+          field: 'performers',
+          code: 'NEEDED',
+          message: `Who performs "${name}"? Your team: ${staff.map((e) => e.name).join(', ')}. Or say "everyone".`,
+        });
+      }
+    } else {
+      const r = await resolvePerformers(trx, performers);
+      if (!r.ok) errors.push({ field: 'performers', code: r.code, message: r.message });
+      else {
+        args.performerIds = r.ids; // null = everyone; array = specific
+        args.performersLabel = r.label;
+      }
+    }
     // Refuse an exact-name duplicate.
     if (name) {
       const dup = await trx
@@ -313,6 +385,7 @@ const createServiceAction: ActionDef = {
     };
     if (args.category) after.category = str(args.category);
     if (args.vat !== undefined) after.vat = Number(args.vat);
+    if (args.performersLabel) after.performers = str(args.performersLabel);
     return {
       changeSet: { ops: [{ kind: 'create', entity: { type: 'service', label: str(args.name) }, after }] },
       fingerprint: { name: str(args.name).toLowerCase() },
@@ -330,11 +403,13 @@ const createServiceAction: ActionDef = {
     return null;
   },
   async execute(trx, claims, args) {
+    const performerIds = (args.performerIds ?? null) as string[] | null;
     const id = await createService(trx, claims, {
       name: str(args.name),
       category: args.category ? str(args.category) : null,
       durationMin: Number(args.durationMin),
       price: Number(args.price),
+      performerIds,
       ...(args.vat !== undefined ? { vat: Number(args.vat) } : {}),
     });
     const after: Record<string, unknown> = {
@@ -343,8 +418,9 @@ const createServiceAction: ActionDef = {
       durationMin: Number(args.durationMin),
     };
     if (args.category) after.category = str(args.category);
+    if (args.performersLabel) after.performers = str(args.performersLabel);
     return {
-      message: `Created "${str(args.name)}" at ${mkd(Number(args.price))}.`,
+      message: `Created "${str(args.name)}" at ${mkd(Number(args.price))}${args.performersLabel ? `, performed by ${str(args.performersLabel)}` : ''}.`,
       change: { ops: [{ kind: 'create', entity: { type: 'service', id, label: str(args.name) }, after }] },
     };
   },

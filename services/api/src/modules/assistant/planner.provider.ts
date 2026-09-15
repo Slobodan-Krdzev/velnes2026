@@ -54,6 +54,7 @@ export function stubPlan(input: PlanInput): Plan {
     else if (miss.includes('name') && !numM) args.name = word;
     else if (miss.includes('serviceName') && !numM) args.serviceName = word;
     else if (miss.includes('category') && !numM) args.category = word;
+    else if (miss.includes('performers')) args.performers = word;
     else if (miss.includes('location')) args.location = word;
     return { actionId: input.current.actionId, args };
   }

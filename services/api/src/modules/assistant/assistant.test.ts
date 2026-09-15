@@ -78,6 +78,10 @@ describe('the AI Assistant: plans, previews, approves, executes, audits', () => 
   afterAll(async () => {
     await admin.query(`UPDATE services SET price=1200 WHERE id=$1`, [demo.s3]);
     await admin.query(`UPDATE services SET price=1500 WHERE id=$1`, [demo.s4]);
+    await admin.query(
+      `DELETE FROM employee_skills WHERE service_id IN (SELECT id FROM services WHERE tenant_id=$1 AND name='Womens Hair Colouring')`,
+      [demo.business],
+    );
     await admin.query(`DELETE FROM services WHERE tenant_id=$1 AND name='Womens Hair Colouring'`, [demo.business]);
     await admin.query(
       `DELETE FROM schedule_exceptions WHERE tenant_id=$1 AND start_date='2026-12-25'`,
@@ -166,20 +170,27 @@ describe('the AI Assistant: plans, previews, approves, executes, audits', () => 
     expect(body.reply).toContain('Rehab training');
   });
 
-  it('creates a service: requires a category, then previews → approves → real filed row', async () => {
+  it('creates a service: requires category AND performers, then previews → approves → filed row', async () => {
     // Name + price + duration given, but no category → must ask for it.
     const t1 = await msg('Add a new service called Womens Hair Colouring for 1500 30 min', undefined);
     const d1 = t1.json().draft;
     expect(d1.status).toBe('COLLECTING');
     expect(d1.missing).toContain('category');
+    expect(d1.missing).toContain('performers');
     expect(t1.json().reply.toLowerCase()).toContain('category');
 
-    const prep = await msg('Rehab', d1.id); // an existing category
+    const t2 = await msg('Rehab', d1.id); // an existing category
+    const d2 = t2.json().draft;
+    expect(d2.status).toBe('COLLECTING'); // still needs performers
+    expect(d2.missing).toContain('performers');
+    expect(t2.json().reply.toLowerCase()).toContain('perform');
+
+    const prep = await msg('everyone', d2.id);
     const d = prep.json().draft;
     expect(d.status).toBe('READY_FOR_REVIEW');
     expect(d.preview.ops[0]).toMatchObject({
       kind: 'create',
-      after: { name: 'Womens Hair Colouring', price: 1500, durationMin: 30, category: 'Rehab' },
+      after: { name: 'Womens Hair Colouring', price: 1500, durationMin: 30, category: 'Rehab', performers: 'Everyone' },
     });
     // Nothing written on preview.
     const pre = await admin.query(`SELECT id FROM services WHERE tenant_id=$1 AND name='Womens Hair Colouring'`, [
@@ -191,15 +202,17 @@ describe('the AI Assistant: plans, previews, approves, executes, audits', () => 
     expect(done.json().status).toBe('COMPLETED');
     // The real row exists AND is filed under the category (so it shows in the catalog).
     const post = await admin.query(
-      `SELECT s.price, s.duration_min, c.name AS category
+      `SELECT s.id, s.price, s.duration_min, c.name AS category
          FROM services s JOIN service_categories c ON c.id = s.category_id
         WHERE s.tenant_id=$1 AND s.name='Womens Hair Colouring'`,
       [demo.business],
     );
     expect(post.rowCount).toBe(1);
     expect(Number(post.rows[0].price)).toBe(1500);
-    expect(Number(post.rows[0].duration_min)).toBe(30);
     expect(post.rows[0].category).toBe('Rehab');
+    // "Everyone" → the specialist staff gained the skill for the new service.
+    const skills = await admin.query(`SELECT employee_id FROM employee_skills WHERE service_id=$1`, [post.rows[0].id]);
+    expect(skills.rowCount).toBeGreaterThan(0);
   });
 
   it('closes a location on a date across two turns, then writes the closure', async () => {

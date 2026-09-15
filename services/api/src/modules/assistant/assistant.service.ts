@@ -49,6 +49,7 @@ const PROMPTS: Record<string, string> = {
   price: "What's the price (in MKD)?",
   durationMin: 'How long does it take, in minutes?',
   category: 'Which category should it go under?',
+  performers: 'Who performs it — which employee(s), or "everyone"?',
   date: 'Which date? (yyyy-mm-dd)',
   location: 'Which location?',
 };
