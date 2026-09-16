@@ -65,6 +65,15 @@ export function stubPlan(input: PlanInput): Plan {
     return { actionId: input.current.actionId, args };
   }
 
+  // Business status: "how am I doing", "what's my status/today", "summary".
+  if (
+    has('business_status') &&
+    /\bhow(?:'?s| is| am i| are we| are things| is business).{0,20}\b(doing|going|today|business|salon)?\b|\b(status|summary|overview|how.?s business)\b|how.?s my day/.test(
+      low,
+    )
+  )
+    return { actionId: 'business_status', args: {} };
+
   // List services.
   if (has('list_services') && /\b(list|show|what).{0,20}\bservices?\b/.test(low))
     return { actionId: 'list_services', args: {} };
@@ -165,7 +174,7 @@ export function stubPlan(input: PlanInput): Plan {
     actionId: null,
     args: {},
     clarify:
-      "I can list, create, edit or price your services, close/reopen a date, and point you to deletes or team access. Try “add a new service”, “what are my services?”, or “change Massage to 1800”.",
+      "I can tell you how business is doing, list/create/edit/price services, invite and edit team members, set working hours and split shifts, close/reopen a date, and point you to deletes or team access. Try “how am I doing today?”, “add a new service”, or “change Massage to 1800”.",
   };
 }
 

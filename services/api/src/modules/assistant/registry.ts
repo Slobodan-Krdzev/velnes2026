@@ -5,6 +5,7 @@ import type { Trx } from '../../db/index.js';
 import { createService, updateService } from '../catalog/catalog.crud.service.js';
 import { createException, deleteException, listExceptions } from '../scheduling/scheduling.service.js';
 import { createEmployee, updateEmployee } from '../team/team.service.js';
+import { flightdeck } from '../flightdeck/flightdeck.service.js';
 
 /**
  * The AI Assistant Action Registry (V1 — workspace surface).
@@ -242,6 +243,23 @@ async function currentWeek(trx: Trx, employeeId: string): Promise<Week> {
   return ((e?.hours as Week | null) ?? {}) as Week;
 }
 
+/** The flightdeck's own location pick: busiest by appointments, else the
+ *  first active, else any — so a fresh salon still gets a status. */
+async function primaryLocationId(trx: Trx): Promise<string | null> {
+  const busiest = await trx
+    .selectFrom('appointments')
+    .select('locationId')
+    .select((eb) => eb.fn.countAll<string>().as('n'))
+    .where('kind', '=', 'appointment')
+    .groupBy('locationId')
+    .orderBy('n', 'desc')
+    .executeTakeFirst();
+  if (busiest?.locationId) return busiest.locationId;
+  const active = await trx.selectFrom('locations').select('id').where('lifecycle', '=', 'ACTIVE').orderBy('createdAt').executeTakeFirst();
+  if (active?.id) return active.id;
+  return (await trx.selectFrom('locations').select('id').orderBy('createdAt').executeTakeFirst())?.id ?? null;
+}
+
 type LocRow = { id: string; name: string };
 async function resolveLocation(
   trx: Trx,
@@ -346,6 +364,56 @@ const readServicePrice: ActionDef = {
   },
   async read(_trx, _claims, args) {
     return `${str(args.serviceName)} is ${mkd(Number(args.price))}.`;
+  },
+};
+
+// ── read: business_status ("how am I doing today?") ─────────────────
+const businessStatus: ActionDef = {
+  id: 'business_status',
+  app: 'workspace',
+  kind: 'read',
+  risk: 'low',
+  permission: 'reports.view_own',
+  required: [],
+  title: 'Business status',
+  description:
+    "Summarise how the salon is doing right now in words — today's appointments and capacity, revenue, new customers, average spend, Velnes Premium member opportunities, and stock that needs attention. Use for questions like \"how am I doing today?\".",
+  params: [],
+  async resolve() {
+    return { args: {}, missing: [], errors: [] };
+  },
+  async read(trx, claims) {
+    const locId = await primaryLocationId(trx);
+    if (!locId) return "You don't have an operating location yet, so there's nothing to report.";
+    const f = await flightdeck(trx, { tenantId: claims.ten, locId, greetingName: '' });
+    const p = f.pulse;
+    const lines: string[] = [];
+    const delta = (d: number | null) => (d === null ? '' : d === 0 ? ' (flat)' : d > 0 ? ` (up ${d}%)` : ` (down ${Math.abs(d)}%)`);
+
+    lines.push(
+      `Appointments: ${p.bookedToday} of ${p.totalSlots} slot${p.totalSlots === 1 ? '' : 's'} booked today — ${p.capacityPct}% capacity.`,
+    );
+    lines.push(
+      `Revenue today: ${mkd(p.revenueToday)}${p.revenueTarget ? ` (recent daily average ~${mkd(p.revenueTarget)})` : ''}.`,
+    );
+    lines.push(`New customers this month: ${p.newCustomers}${delta(p.newCustomersDeltaPct)}.`);
+    lines.push(`Average spend: ${mkd(p.avgSpend)}${delta(p.avgSpendDeltaPct)}.`);
+    if (f.snapshot.noShows > 0) lines.push(`No-shows today: ${f.snapshot.noShows} (${f.snapshot.noShowPct}%).`);
+    if (f.memberRecs.count > 0)
+      lines.push(
+        `Velnes Premium: ${f.memberRecs.count} member opportunit${f.memberRecs.count === 1 ? 'y' : 'ies'} waiting, worth about ${mkd(f.memberRecs.value)}.`,
+      );
+    if (f.inventory.length) {
+      const items = f.inventory
+        .map((i) => `${i.name} (${i.soldOut ? 'sold out' : `${i.stock} left`})`)
+        .join(', ');
+      lines.push(`Stock to watch: ${items}.`);
+    }
+    if (f.opportunities.length) {
+      const o = f.opportunities[0]!;
+      lines.push(`Top opportunity: ${o.title}${o.value ? ` (about ${mkd(o.value)})` : ''} — ${o.detail}`);
+    }
+    return lines.join('\n');
   },
 };
 
@@ -1209,6 +1277,7 @@ const addSplitShift: ActionDef = {
 };
 
 const ALL: ActionDef[] = [
+  businessStatus,
   listServices,
   readServicePrice,
   createServiceAction,

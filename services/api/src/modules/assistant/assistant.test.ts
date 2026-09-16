@@ -174,6 +174,15 @@ describe('the AI Assistant: plans, previews, approves, executes, audits', () => 
     expect(d2.preview.ops[0].after).toMatchObject({ price: 1400 });
   });
 
+  it('summarises how the business is doing, in words', async () => {
+    const res = await msg('How am I doing today?', undefined);
+    const body = res.json();
+    expect(body.draft.kind).toBe('read');
+    expect(body.draft.status).toBe('COMPLETED');
+    expect(body.reply).toContain('Appointments:');
+    expect(body.reply).toContain('Revenue today:');
+  });
+
   it('lists the salon services on request', async () => {
     const res = await msg('What are my services?', undefined);
     const body = res.json();
