@@ -183,6 +183,15 @@ describe('the AI Assistant: plans, previews, approves, executes, audits', () => 
     expect(body.reply).toContain('Revenue today:');
   });
 
+  it("answers a question about today's appointments with detail, not the status summary", async () => {
+    const res = await msg('what is the one booked slot', undefined);
+    const body = res.json();
+    expect(body.draft.actionId).toBe('list_appointments');
+    expect(body.draft.kind).toBe('read');
+    expect(body.reply).toMatch(/appointment/i);
+    expect(body.reply).not.toContain('Revenue today:'); // not the status summary
+  });
+
   it('lists the salon services on request', async () => {
     const res = await msg('What are my services?', undefined);
     const body = res.json();

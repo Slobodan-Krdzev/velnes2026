@@ -367,6 +367,49 @@ const readServicePrice: ActionDef = {
   },
 };
 
+// ── read: list_appointments (today's schedule, in detail) ───────────
+const listAppointments: ActionDef = {
+  id: 'list_appointments',
+  app: 'workspace',
+  kind: 'read',
+  risk: 'low',
+  permission: 'appointments.view_location',
+  required: [],
+  title: "Today's appointments",
+  description:
+    "List today's booked appointments in detail — time, customer, service, staff and location. Use for \"what's booked today?\", \"what is the booked slot?\", \"who's coming in?\", \"today's schedule\".",
+  params: [],
+  async resolve() {
+    return { args: {}, missing: [], errors: [] };
+  },
+  async read(trx) {
+    const rows = await trx
+      .selectFrom('appointments as a')
+      .leftJoin('customers as c', 'c.id', 'a.customerId')
+      .leftJoin('services as s', 's.id', 'a.serviceId')
+      .leftJoin('employees as e', 'e.id', 'a.employeeId')
+      .leftJoin('locations as l', 'l.id', 'a.locationId')
+      .select(['a.startMin', 'a.durationMin', 'a.title', 'a.status', 'c.name as customer', 's.name as service', 'e.name as staff', 'l.name as location'])
+      .where('a.kind', '=', 'appointment')
+      .where('a.status', '<>', 'cancelled')
+      .where(sql<boolean>`a.date::date = current_date`)
+      .orderBy('a.startMin')
+      .execute();
+    if (!rows.length) return 'No appointments are booked today.';
+    const hhmm = (m: number) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+    const lines = rows.map((r) => {
+      const svc = r.service ?? r.title ?? 'Appointment';
+      const who = r.customer ? ` · ${r.customer}` : '';
+      const by = r.staff ? ` with ${r.staff}` : '';
+      const loc = r.location ? ` (${r.location})` : '';
+      return `${hhmm(r.startMin)}–${hhmm(r.startMin + r.durationMin)} — ${svc}${who}${by}${loc}`;
+    });
+    const head =
+      rows.length === 1 ? 'There is 1 appointment today:' : `There are ${rows.length} appointments today:`;
+    return `${head}\n${lines.join('\n')}`;
+  },
+};
+
 // ── read: business_status ("how am I doing today?") ─────────────────
 const businessStatus: ActionDef = {
   id: 'business_status',
@@ -1310,6 +1353,7 @@ const addSplitShift: ActionDef = {
 
 const ALL: ActionDef[] = [
   businessStatus,
+  listAppointments,
   listServices,
   readServicePrice,
   createServiceAction,

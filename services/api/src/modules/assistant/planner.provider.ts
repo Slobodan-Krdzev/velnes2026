@@ -74,6 +74,15 @@ export function stubPlan(input: PlanInput): Plan {
   )
     return { actionId: 'business_status', args: {} };
 
+  // Today's appointments: "what's booked today", "the booked slot", "schedule".
+  if (
+    has('list_appointments') &&
+    /\b(appointments?|schedule|booked slots?|booked slot|the booked|slots? booked|who.?s (?:coming|in|booked)|what.?s booked|booked today|on today)\b/.test(
+      low,
+    )
+  )
+    return { actionId: 'list_appointments', args: {} };
+
   // List services.
   if (has('list_services') && /\b(list|show|what).{0,20}\bservices?\b/.test(low))
     return { actionId: 'list_services', args: {} };
