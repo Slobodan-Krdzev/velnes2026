@@ -41,6 +41,8 @@ export const EmployeeInviteSchema = z.object({
   bookable: z.boolean().default(false),
 });
 
+export type EmployeeInvite = z.infer<typeof EmployeeInviteSchema>;
+
 export const EmployeeListResponseSchema = z.object({
   employees: z.array(EmployeeSchema),
 });

@@ -18,52 +18,10 @@ import { sql } from 'kysely';
 import { z } from 'zod';
 import { withTenant } from '../../db/index.js';
 import { logAudit } from '../audit/audit.service.js';
-import { queueMail } from '../mail/mail.service.js';
 import { effTreatment } from '../timing/timing.service.js';
 import { can, permsFor } from '../auth/authz.service.js';
+import { createEmployee, TeamError, updateEmployee } from './team.service.js';
 
-const WEEK = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-const mins = (t: string) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5));
-
-/** The prototype's whProblem + whSort: every period runs forward and
- *  none overlap. Returns the sorted week, or the refusal naming the
- *  weekday. Bookable people need at least one skill and one working
- *  day — the door refuses the state instead of warning about it. */
-function checkEmployeeState(
-  hours: Record<string, [string, string][] | null> | null,
-  skills: string[],
-  bookable: boolean,
-): { hours: Record<string, [string, string][] | null> | null; error?: string } {
-  let sorted: Record<string, [string, string][] | null> | null = null;
-  if (hours) {
-    sorted = {};
-    for (let i = 0; i < 7; i++) {
-      const list = hours[String(i)] ?? null;
-      if (!list || !list.length) {
-        sorted[String(i)] = null;
-        continue;
-      }
-      for (const [a, b] of list) {
-        if (!a || !b) return { hours, error: `${WEEK[i]}: Fill in both times of every period` };
-        if (mins(b) <= mins(a)) return { hours, error: `${WEEK[i]}: ${a}–${b} ends before it starts` };
-      }
-      const st = [...list].sort((x, y) => mins(x[0]) - mins(y[0]));
-      for (let j = 1; j < st.length; j++)
-        if (mins(st[j]![0]) < mins(st[j - 1]![1]))
-          return {
-            hours,
-            error: `${WEEK[i]}: ${st[j - 1]![0]}–${st[j - 1]![1]} and ${st[j]![0]}–${st[j]![1]} overlap`,
-          };
-      sorted[String(i)] = st;
-    }
-  }
-  if (bookable && !skills.length)
-    return { hours: sorted ?? hours, error: 'Pick at least one service, or switch off bookable' };
-  const week = sorted ?? hours;
-  if (bookable && (!week || !Object.values(week).some(Boolean)))
-    return { hours: week, error: 'Set at least one working day, or switch off bookable' };
-  return { hours: sorted ?? hours };
-}
 
 export function teamRoutes(app: FastifyInstance) {
   const r = app.withTypeProvider<ZodTypeProvider>();
@@ -258,150 +216,15 @@ export function teamRoutes(app: FastifyInstance) {
           return reply
             .code(403)
             .send({ error: 'FORBIDDEN', message: 'Missing permission: users.manage' });
-        const before = await trx
-          .selectFrom('employees')
-          .selectAll()
-          .where('id', '=', req.params.id)
-          .executeTakeFirst();
-        if (!before)
-          return reply.code(404).send({ error: 'NOT_FOUND', message: 'Unknown employee' });
-        // The last-owner safeguard: without an owner nobody can reach
-        // company settings, so the door refuses the state.
-        if (
-          req.body.access !== undefined &&
-          req.body.access !== 'owner' &&
-          before.access === 'owner'
-        ) {
-          const owners = await trx
-            .selectFrom('employees')
-            .select(sql<number>`count(*)::int`.as('n'))
-            .where('access', '=', 'owner')
-            .where('status', '=', 'active')
-            .executeTakeFirstOrThrow();
-          if (owners.n <= 1)
-            return reply.code(409).send({
-              error: 'LAST_OWNER',
-              message: 'Make someone else owner first — a salon needs one',
-            });
+        try {
+          return await updateEmployee(trx, req.claims, req.params.id, req.body);
+        } catch (e) {
+          if (e instanceof TeamError) {
+            const status = { NOT_FOUND: 404, LAST_OWNER: 409, REFUSED_STATE: 422 } as const;
+            return reply.code(status[e.code]).send({ error: e.code, message: e.message });
+          }
+          throw e;
         }
-        // The save door refuses bad weeks and unbookable states.
-        const nextSkills =
-          req.body.skillServiceIds ??
-          (
-            await trx
-              .selectFrom('employeeSkills')
-              .select('serviceId')
-              .where('employeeId', '=', req.params.id)
-              .execute()
-          ).map((s) => s.serviceId);
-        const nextHours =
-          req.body.hours !== undefined
-            ? req.body.hours
-            : ((before.hours ?? null) as Record<string, [string, string][] | null> | null);
-        const nextBookable = req.body.bookable ?? before.bookable;
-        const checked = checkEmployeeState(nextHours, nextSkills, nextBookable);
-        if (checked.error)
-          return reply.code(422).send({ error: 'REFUSED_STATE', message: checked.error });
-        if (req.body.hours !== undefined && checked.hours) req.body.hours = checked.hours;
-        await trx
-          .updateTable('employees')
-          .set({
-            ...(req.body.name !== undefined ? { name: req.body.name } : {}),
-            ...(req.body.email !== undefined ? { email: req.body.email } : {}),
-            ...(req.body.phone !== undefined ? { phone: req.body.phone } : {}),
-            ...(req.body.bookable !== undefined ? { bookable: req.body.bookable } : {}),
-            ...(req.body.color !== undefined ? { color: req.body.color } : {}),
-            ...(req.body.access !== undefined ? { access: req.body.access } : {}),
-            ...(req.body.roleId !== undefined ? { roleId: req.body.roleId } : {}),
-            ...(req.body.roleTitle !== undefined ? { roleTitle: req.body.roleTitle } : {}),
-            ...(req.body.hours !== undefined ? { hours: JSON.stringify(req.body.hours) } : {}),
-          })
-          .where('id', '=', req.params.id)
-          .execute();
-        // Locations: replace whole — where the role applies.
-        if (req.body.locationIds !== undefined) {
-          await trx
-            .deleteFrom('employeeLocations')
-            .where('employeeId', '=', req.params.id)
-            .execute();
-          for (const lid of req.body.locationIds)
-            await trx
-              .insertInto('employeeLocations')
-              .values({ tenantId: req.claims.ten, employeeId: req.params.id, locationId: lid })
-              .execute();
-        }
-        // Skills: replace whole — empty means "does everything".
-        if (req.body.skillServiceIds !== undefined) {
-          await trx
-            .deleteFrom('employeeSkills')
-            .where('employeeId', '=', req.params.id)
-            .execute();
-          for (const sid of req.body.skillServiceIds)
-            await trx
-              .insertInto('employeeSkills')
-              .values({ tenantId: req.claims.ten, employeeId: req.params.id, serviceId: sid })
-              .execute();
-        }
-        if (req.body.roleId !== undefined && req.body.roleId !== before.roleId) {
-          const actor = await trx
-            .selectFrom('employees')
-            .select('name')
-            .where('id', '=', req.claims.sub)
-            .executeTakeFirst();
-          const roleName = async (id: string | null) =>
-            id
-              ? ((await trx.selectFrom('roles').select('name').where('id', '=', id).executeTakeFirst())?.name ?? '—')
-              : '—';
-          await logAudit(trx, req.claims.ten, {
-            actorEmployeeId: req.claims.sub,
-            actorName: actor?.name ?? '',
-            action: 'Role changed',
-            object: `User · ${before.name}`,
-            before: await roleName(before.roleId),
-            after: await roleName(req.body.roleId),
-          });
-        }
-        const e = await trx
-          .selectFrom('employees')
-          .selectAll()
-          .where('id', '=', req.params.id)
-          .executeTakeFirstOrThrow();
-        const locs = await trx
-          .selectFrom('employeeLocations')
-          .select('locationId')
-          .where('employeeId', '=', e.id)
-          .execute();
-        const skills = await trx
-          .selectFrom('employeeSkills')
-          .select('serviceId')
-          .where('employeeId', '=', e.id)
-          .execute();
-        return {
-          id: e.id,
-          name: e.name,
-          roleTitle: e.roleTitle,
-          email: e.email,
-          phone: e.phone,
-          access: e.access,
-          roleId: e.roleId,
-          bookable: e.bookable,
-          status: e.status,
-          color: e.color,
-          locationIds: locs.map((l) => l.locationId),
-          skillServiceIds: skills.map((s) => s.serviceId),
-          hours: (e.hours ?? null) as Employee['hours'],
-          twofaEnabled: e.twofaEnabled,
-          lastActive:
-            (
-              await trx
-                .selectFrom('refreshTokens')
-                .select(
-                  sql<Date>`max(greatest(created_at, coalesce(rotated_at, created_at)))`.as('last'),
-                )
-                .where('employeeId', '=', e.id)
-                .executeTakeFirst()
-            )?.last?.toISOString() ?? null,
-        };
       }),
   });
 
@@ -480,98 +303,13 @@ export function teamRoutes(app: FastifyInstance) {
           return reply
             .code(403)
             .send({ error: 'FORBIDDEN', message: 'Missing permission: users.manage' });
-        const b = req.body;
-        // Invited and without credentials: until the invite is
-        // accepted (waits for SMTP) they can sign in nowhere. The
-        // drawer's fuller shape passes hours, skills and colour.
-        const checked = checkEmployeeState(b.hours ?? null, b.skillServiceIds ?? [], b.bookable);
-        if (checked.error)
-          return reply.code(422).send({ error: 'REFUSED_STATE', message: checked.error });
-        // No colour picked: the first one nobody carries yet.
-        let color = b.color ?? null;
-        if (!color) {
-          const taken = (
-            await trx.selectFrom('employees').select('color').execute()
-          ).map((e) => e.color);
-          color =
-            ['olive', 'clay', 'rose', 'sage', 'lilac', 'sky', 'sand', 'stone'].find(
-              (c) => !taken.includes(c),
-            ) ?? 'stone';
+        try {
+          return await createEmployee(trx, req.claims, req.body);
+        } catch (e) {
+          if (e instanceof TeamError)
+            return reply.code(422).send({ error: e.code, message: e.message });
+          throw e;
         }
-        const locationIds =
-          b.locationIds ??
-          (await trx.selectFrom('locations').select('id').execute()).map((l) => l.id);
-        const row = await trx
-          .insertInto('employees')
-          .values({
-            tenantId: req.claims.ten,
-            name: b.name,
-            email: b.email,
-            roleId: b.roleId ?? null,
-            roleTitle: b.roleTitle ?? 'New user',
-            access: b.access ?? 'staff',
-            bookable: b.bookable,
-            status: 'invited',
-            twofaEnabled: b.twofa,
-            color,
-            phone: b.phone ?? null,
-            ...(checked.hours ? { hours: JSON.stringify(checked.hours) } : {}),
-          })
-          .returning('id')
-          .executeTakeFirstOrThrow();
-        for (const lid of locationIds)
-          await trx
-            .insertInto('employeeLocations')
-            .values({ tenantId: req.claims.ten, employeeId: row.id, locationId: lid })
-            .execute();
-        for (const sid of b.skillServiceIds ?? [])
-          await trx
-            .insertInto('employeeSkills')
-            .values({ tenantId: req.claims.ten, employeeId: row.id, serviceId: sid })
-            .execute();
-        const actor = await trx
-          .selectFrom('employees')
-          .select('name')
-          .where('id', '=', req.claims.sub)
-          .executeTakeFirst();
-        const role = b.roleId
-          ? await trx.selectFrom('roles').select('name').where('id', '=', b.roleId).executeTakeFirst()
-          : undefined;
-        await logAudit(trx, req.claims.ten, {
-          actorEmployeeId: req.claims.sub,
-          actorName: actor?.name ?? '',
-          action: 'User invited',
-          object: `User · ${b.name}`,
-          before: '—',
-          after: role?.name ?? '—',
-        });
-        // The invite mail — through the outbox, mock until a
-        // provider is decided.
-        await queueMail(trx, {
-          tenantId: req.claims.ten,
-          to: b.email,
-          subject: 'You are invited to Velnes',
-          body: `${actor?.name ?? 'Your salon'} invited you as ${role?.name ?? 'a team member'}. The invite is valid for 7 days.`,
-          kind: 'employee_invite',
-          refId: row.id,
-        });
-        return {
-          id: row.id,
-          name: b.name,
-          roleTitle: b.roleTitle ?? 'New user',
-          email: b.email,
-          phone: b.phone ?? null,
-          access: b.access ?? ('staff' as const),
-          roleId: b.roleId ?? null,
-          bookable: b.bookable,
-          status: 'invited' as const,
-          color,
-          locationIds,
-          skillServiceIds: b.skillServiceIds ?? [],
-          hours: (checked.hours ?? null) as Employee['hours'],
-          twofaEnabled: b.twofa,
-          lastActive: null,
-        };
       }),
   });
 
