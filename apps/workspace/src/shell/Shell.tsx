@@ -341,11 +341,13 @@ export function Shell() {
                         inits(me.name)
                       )}
                     </span>
-                    <span>
+                    <span style={{ display: 'flex', flexDirection: 'column' }}>
                       <span className="mi-t" style={{ fontWeight: 700 }}>
                         {me.name}
                       </span>
-                      <span className="mi-s">{me.email}</span>
+                      <span className="mi-s" style={{ display: 'block' }}>
+                        {me.email}
+                      </span>
                     </span>
                   </div>
                   <input
@@ -363,12 +365,11 @@ export function Shell() {
                     disabled={avatarBusy}
                     onClick={() => avatarInput.current?.click()}
                   >
-                    <span className="check">
-                      <Icon d={I.user} size={14} w={2} />
-                    </span>
-                    <span className="grow">
-                      <span className="mi-t">{avatarBusy ? t('shell.avatarUploading') : t('shell.changePhoto')}</span>
-                    </span>
+                    {avatarBusy
+                      ? t('shell.avatarUploading')
+                      : me.avatar
+                        ? t('shell.changePhoto')
+                        : t('shell.addPhoto')}
                   </button>
                   {me.avatar ? (
                     <button
@@ -379,12 +380,7 @@ export function Shell() {
                         toast(t('shell.avatarRemoved'));
                       }}
                     >
-                      <span className="check">
-                        <Icon d={I.x} size={14} w={2} />
-                      </span>
-                      <span className="grow">
-                        <span className="mi-t">{t('shell.removePhoto')}</span>
-                      </span>
+                      {t('shell.deletePhoto')}
                     </button>
                   ) : null}
                   <div className="menu-sep" />
@@ -414,12 +410,7 @@ export function Shell() {
                       void logout().then(() => navigate('/login'));
                     }}
                   >
-                    <span className="check">
-                      <Icon d={I.arrowleft} size={14} w={2.5} />
-                    </span>
-                    <span className="grow">
-                      <span className="mi-t">{t('shell.signOut')}</span>
-                    </span>
+                    {t('shell.signOut')}
                   </button>
                 </div>
               ) : null}

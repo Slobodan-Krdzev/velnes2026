@@ -682,8 +682,15 @@ function LocationEditPanel({
                       padding: '10px 14px',
                     }}
                   >
-                    <span className="avatar" style={{ width: 32, height: 32 }}>
-                      {inits(e.name)}
+                    <span
+                      className="avatar"
+                      style={{ width: 32, height: 32, ...(e.avatar ? { padding: 0, overflow: 'hidden' } : {}) }}
+                    >
+                      {e.avatar ? (
+                        <img src={e.avatar} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 'inherit' }} />
+                      ) : (
+                        inits(e.name)
+                      )}
                     </span>
                     <span className="grow">
                       <span className="t">{e.name}</span>
@@ -940,8 +947,15 @@ function TeamSection({ openAudit }: { openAudit: () => void }) {
               <tr key={e.id} className={e.status === 'invited' ? 'dim' : ''}>
                 <td>
                   <span style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                    <span className="avatar" style={{ width: 36, height: 36 }}>
-                      {inits(e.name)}
+                    <span
+                      className="avatar"
+                      style={{ width: 36, height: 36, ...(e.avatar ? { padding: 0, overflow: 'hidden' } : {}) }}
+                    >
+                      {e.avatar ? (
+                        <img src={e.avatar} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 'inherit' }} />
+                      ) : (
+                        inits(e.name)
+                      )}
                     </span>
                     <span style={{ display: 'flex', flexDirection: 'column' }}>
                       <span className="bold">{e.name}</span>
