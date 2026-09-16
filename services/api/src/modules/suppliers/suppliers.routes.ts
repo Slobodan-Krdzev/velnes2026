@@ -86,6 +86,7 @@ export function suppliersRoutes(app: FastifyInstance) {
               manager: s.manager,
               rating: s.rating == null ? null : Number(s.rating),
               products: Number(counts.find((x) => x.supplierId === s.id)?.n ?? 0),
+              avatar: s.avatar ?? null,
               status: (c?.status === 'connected'
                 ? 'connected'
                 : c?.status === 'pending'

@@ -1,6 +1,7 @@
 import {
   PO_PERM_GROUPS,
   PortalCompanySchema,
+  PortalCompanyPatchSchema,
   PortalDashboardSchema,
   PortalBulkPriceSchema,
   PortalNotificationListSchema,
@@ -738,10 +739,32 @@ export function portalRoutes(app: FastifyInstance) {
       withSupplier(req.supplierClaims.sup, async (trx) => {
         const s = await trx
           .selectFrom('suppliers')
-          .select(['name', 'territory', 'minOrder', 'lead', 'terms', 'contact'])
+          .select(['name', 'territory', 'minOrder', 'lead', 'terms', 'contact', 'avatar'])
           .where('id', '=', req.supplierClaims.sup)
           .executeTakeFirstOrThrow();
-        return { name: s.name, territory: s.territory, minOrder: s.minOrder, lead: s.lead, terms: s.terms, contact: s.contact };
+        return { name: s.name, territory: s.territory, minOrder: s.minOrder, lead: s.lead, terms: s.terms, contact: s.contact, avatar: s.avatar ?? null };
+      }),
+  });
+
+  // The supplier's own avatar/logo — shown on the salon workspace's
+  // suppliers screen. Company settings sit under po.terms.
+  r.route({
+    method: 'PATCH',
+    url: '/portal/company',
+    preHandler: [app.authenticateSupplier],
+    schema: {
+      body: PortalCompanyPatchSchema,
+      response: { 200: z.object({ ok: z.literal(true) }), 403: z.object({ error: z.string(), message: z.string() }) },
+    },
+    handler: async (req, reply) =>
+      withSupplier(req.supplierClaims.sup, async (trx) => {
+        if (!(await portalCan(trx, reply, req.supplierClaims.rol, 'po.terms'))) return reply;
+        await trx
+          .updateTable('suppliers')
+          .set({ avatar: req.body.avatar })
+          .where('id', '=', req.supplierClaims.sup)
+          .execute();
+        return { ok: true as const };
       }),
   });
 

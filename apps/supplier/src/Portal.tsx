@@ -27,6 +27,7 @@ import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { z } from 'zod';
 import { pDelete, pGet, pPatch, pPost, PortalApiError, type PortalUser } from './api.js';
+import { fileToAvatarDataUrl } from './image.js';
 
 /** The supplier's own workspace: the prototype's viewPortal, chrome
  *  and all. Dashboard, Salons, Catalog, Orders and Promotions read
@@ -1986,6 +1987,20 @@ function Settings({ user, say }: { user: PortalUser; say: (m: string) => void })
   const [snap, setSnap] = useState('');
   const isOwner = user.role === 'sr_owner';
   const memberDirty = `${name}|${email}|${role}` !== snap;
+  const logoInput = useRef<HTMLInputElement | null>(null);
+  const [logoBusy, setLogoBusy] = useState(false);
+  const setLogo = async (avatar: string | null) => {
+    setLogoBusy(true);
+    try {
+      await pPatch(z.object({ ok: z.literal(true) }), '/portal/company', { avatar });
+      setCompany((c) => (c ? { ...c, avatar } : c));
+      say(avatar ? t('po.logoUpdated') : t('po.logoRemoved'));
+    } catch (e) {
+      say(e instanceof PortalApiError ? e.message : String(e));
+    } finally {
+      setLogoBusy(false);
+    }
+  };
 
   const load = useCallback(
     () =>
@@ -2124,6 +2139,44 @@ function Settings({ user, say }: { user: PortalUser; say: (m: string) => void })
         <div className="card">
           <div className="card-header">
             <h2>{t('po.company')}</h2>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '20px 20px 0' }}>
+            <span className="mark" style={{ width: 64, height: 64, fontSize: 22, padding: 0, overflow: 'hidden' }}>
+              {company?.avatar ? (
+                <img src={company.avatar} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 'inherit' }} />
+              ) : (
+                (company?.name ?? user.supplierName ?? '?')[0]
+              )}
+            </span>
+            <div>
+              <div style={{ fontWeight: 700 }}>{t('po.companyLogo')}</div>
+              <div className="muted" style={{ fontSize: 12, marginBottom: 8 }}>{t('po.companyLogoNote')}</div>
+              <input
+                ref={logoInput}
+                type="file"
+                accept="image/*"
+                style={{ display: 'none' }}
+                onChange={async (e) => {
+                  const f = e.target.files?.[0];
+                  if (f) await setLogo(await fileToAvatarDataUrl(f));
+                  e.target.value = '';
+                }}
+              />
+              {isOwner ? (
+                <>
+                  <button className="btn btn-secondary btn-sm" disabled={logoBusy} onClick={() => logoInput.current?.click()}>
+                    {company?.avatar ? t('po.changeLogo') : t('po.uploadLogo')}
+                  </button>{' '}
+                  {company?.avatar ? (
+                    <button className="btn btn-subtle btn-sm" disabled={logoBusy} onClick={() => void setLogo(null)}>
+                      {t('po.removeLogo')}
+                    </button>
+                  ) : null}
+                </>
+              ) : (
+                <span className="muted" style={{ fontSize: 12 }}>{t('po.logoOwnerOnly')}</span>
+              )}
+            </div>
           </div>
           <div className="grid2" style={{ padding: 20, gap: 16 }}>
             <label className="field">

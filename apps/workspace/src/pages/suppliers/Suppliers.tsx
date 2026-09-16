@@ -128,7 +128,13 @@ function SupplierRow({
 
   return (
     <div className="rowcard">
-      <span className={`mark ${s.status === 'connected' ? 'on' : ''}`}>{s.name[0]}</span>
+      <span className={`mark ${s.status === 'connected' ? 'on' : ''}`} style={s.avatar ? { padding: 0, overflow: 'hidden' } : undefined}>
+        {s.avatar ? (
+          <img src={s.avatar} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 'inherit' }} />
+        ) : (
+          s.name[0]
+        )}
+      </span>
       <span className="grow">
         <span className="t">
           {s.name}{' '}

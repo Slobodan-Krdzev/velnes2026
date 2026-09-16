@@ -74,9 +74,32 @@ describe('the supplier chain', () => {
       [demo.p1, demo.locCentar],
     );
     await admin.query(`DELETE FROM audit_log WHERE action IN ('Order submitted','Order status','Delivery received')`);
+    await admin.query(`UPDATE suppliers SET avatar=NULL WHERE id=$1`, [demo.sup1]);
     await admin.end();
     await app.close();
     await closeDb();
+  });
+
+  it('a supplier owner sets its logo; the salon sees it on the suppliers screen', async () => {
+    const avatar = 'data:image/png;base64,iVBORw0KGgo=';
+    // The owner (sr_owner) can; the salon then sees it in the directory.
+    const set = await app.inject({
+      method: 'PATCH',
+      url: `${API_PREFIX}/portal/company`,
+      headers: { authorization: `Bearer ${bojanToken}` },
+      payload: { avatar },
+    });
+    expect(set.statusCode).toBe(200);
+    const list = await get(`${API_PREFIX}/suppliers`);
+    const bp = list.json().suppliers.find((s: { id: string }) => s.id === demo.sup1);
+    expect(bp.avatar).toBe(avatar);
+    // The portal reads its own logo back.
+    const company = await app.inject({
+      method: 'GET',
+      url: `${API_PREFIX}/portal/company`,
+      headers: { authorization: `Bearer ${bojanToken}` },
+    });
+    expect(company.json().avatar).toBe(avatar);
   });
 
   it('lists the platform suppliers with this salon connection state', async () => {

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { AvatarSchema } from './auth.js';
 import { MoneySchema } from './catalog.js';
 
 /**
@@ -20,6 +21,9 @@ export const SupplierSchema = z.object({
   manager: z.string(),
   rating: z.number().nullable(),
   products: z.number().int(),
+  // The supplier's avatar/logo (data URL), shown on the workspace
+  // suppliers screen. Null until the supplier uploads one.
+  avatar: z.string().nullable().default(null),
   // The salon's side of the relationship:
   status: z.enum(['available', 'pending', 'connected']),
   customerNo: z.string(),
@@ -289,7 +293,10 @@ export const PortalCompanySchema = z.object({
   lead: z.string(),
   terms: z.string(),
   contact: z.string(),
+  avatar: z.string().nullable().default(null),
 });
+/** The supplier updating its own avatar/logo (data URL; null clears). */
+export const PortalCompanyPatchSchema = z.object({ avatar: AvatarSchema.nullable() });
 
 export const PortalTeamMemberSchema = z.object({
   id: z.uuid(),

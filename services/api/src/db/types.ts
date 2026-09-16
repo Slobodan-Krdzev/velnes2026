@@ -959,6 +959,7 @@ export interface SupportTickets {
 }
 
 export interface Suppliers {
+  avatar: string | null;
   contact: Generated<string>;
   createdAt: Generated<Timestamp>;
   id: Generated<string>;
