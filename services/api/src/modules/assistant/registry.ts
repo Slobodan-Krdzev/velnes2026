@@ -4,6 +4,7 @@ import { sql } from 'kysely';
 import type { Trx } from '../../db/index.js';
 import { createService, updateService } from '../catalog/catalog.crud.service.js';
 import { createException, deleteException, listExceptions } from '../scheduling/scheduling.service.js';
+import { createEmployee, updateEmployee } from '../team/team.service.js';
 
 /**
  * The AI Assistant Action Registry (V1 — workspace surface).
@@ -165,6 +166,80 @@ async function resolvePerformers(
   if (!ids.length)
     return { ok: false, code: 'NOT_FOUND', message: `Who performs it? Your team: ${staff.map((e) => e.name).join(', ')}. Or say "everyone".` };
   return { ok: true, ids, label: labels.join(', ') };
+}
+
+type EmpRow = { id: string; name: string };
+/** Resolve one employee by name under the caller's tenant (active staff). */
+async function resolveEmployee(
+  trx: Trx,
+  raw: string,
+): Promise<{ ok: true; emp: EmpRow } | { ok: false; code: 'AMBIGUOUS' | 'NOT_FOUND'; options: string[] }> {
+  const staff = (await trx
+    .selectFrom('employees')
+    .select(['id', 'name'])
+    .where('status', 'in', ['active', 'invited'])
+    .orderBy('name')
+    .execute()) as EmpRow[];
+  const low = raw.trim().toLowerCase();
+  const hits = staff.filter((e) => e.name.toLowerCase().includes(low));
+  if (hits.length === 1) return { ok: true, emp: hits[0]! };
+  if (hits.length > 1) return { ok: false, code: 'AMBIGUOUS', options: hits.map((e) => e.name) };
+  return { ok: false, code: 'NOT_FOUND', options: staff.map((e) => e.name) };
+}
+
+const DAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+const DAY_ABBR: Record<string, number> = { mon: 0, tue: 1, wed: 2, thu: 3, fri: 4, sat: 5, sun: 6 };
+const dayIndex = (w: string): number | undefined => {
+  const s = w.trim().toLowerCase();
+  const full = DAYS.indexOf(s);
+  if (full >= 0) return full;
+  return DAY_ABBR[s.slice(0, 3)];
+};
+/** Parse a day expression into weekday indices (0=Mon…6=Sun): "Mon-Fri",
+ *  "weekdays", "weekend", "Monday and Wednesday", "Tue, Thu". */
+function parseDays(raw: string): number[] {
+  const s = raw.trim().toLowerCase();
+  if (/weekday|working day|mon.*fri|every day.*except.*weekend/.test(s)) {
+    if (/mon\w*\s*(?:-|to|–|—|through)\s*fri/.test(s)) return [0, 1, 2, 3, 4];
+    if (/weekday|working day/.test(s)) return [0, 1, 2, 3, 4];
+  }
+  if (/weekend|sat\w*\s*(?:-|to|–|—|and)\s*sun/.test(s)) return [5, 6];
+  if (/every ?day|all week|daily/.test(s)) return [0, 1, 2, 3, 4, 5, 6];
+  // A range "X-Y" or "X to Y".
+  const range = s.match(/([a-z]+)\s*(?:-|–|—|to|through)\s*([a-z]+)/);
+  if (range) {
+    const a = dayIndex(range[1]!);
+    const b = dayIndex(range[2]!);
+    if (a !== undefined && b !== undefined && a <= b) return Array.from({ length: b - a + 1 }, (_, i) => a + i);
+  }
+  // A list of names.
+  const out = new Set<number>();
+  for (const w of s.split(/,|&|\band\b|\s+/)) {
+    const i = dayIndex(w);
+    if (i !== undefined) out.add(i);
+  }
+  return [...out].sort((x, y) => x - y);
+}
+const dayLabel = (i: number) => ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][i] ?? '?';
+const validTime = (s: string) => /^([01]\d|2[0-3]):[0-5]\d$/.test(s);
+/** Normalise "9", "9:00", "9am", "17:30" → "HH:MM", or undefined. */
+function toHHMM(raw: unknown): string | undefined {
+  if (typeof raw !== 'string') return undefined;
+  const s = raw.trim().toLowerCase();
+  const m = s.match(/^(\d{1,2})(?::(\d{2}))?\s*(am|pm)?$/);
+  if (!m) return validTime(s) ? s : undefined;
+  let h = Number(m[1]);
+  const min = m[2] ?? '00';
+  if (m[3] === 'pm' && h < 12) h += 12;
+  if (m[3] === 'am' && h === 12) h = 0;
+  if (h > 23) return undefined;
+  const out = `${String(h).padStart(2, '0')}:${min}`;
+  return validTime(out) ? out : undefined;
+}
+type Week = Record<string, [string, string][] | null>;
+async function currentWeek(trx: Trx, employeeId: string): Promise<Week> {
+  const e = await trx.selectFrom('employees').select('hours').where('id', '=', employeeId).executeTakeFirst();
+  return ((e?.hours as Week | null) ?? {}) as Week;
 }
 
 type LocRow = { id: string; name: string };
@@ -784,6 +859,350 @@ const manageAccessNav: ActionDef = {
   },
 };
 
+// ── write: add_team_member (invite a basic member; roles stay navigate-only) ──
+const addTeamMember: ActionDef = {
+  id: 'add_team_member',
+  app: 'workspace',
+  kind: 'write',
+  risk: 'medium',
+  permission: 'users.manage',
+  required: ['name', 'email'],
+  title: 'Invite a team member',
+  description:
+    'Invite a new team member by name and email. They join as a basic member — assigning their role or permissions is done separately in Team & access.',
+  params: [
+    { name: 'name', type: 'string', description: "The person's full name", required: true },
+    { name: 'email', type: 'string', description: 'Their email address', required: true },
+    { name: 'phone', type: 'string', description: 'Phone number (optional)' },
+    { name: 'bookable', type: 'boolean', description: 'Whether they take appointments (optional; default no)' },
+  ],
+  async resolve(trx, _claims, raw) {
+    const name = str(raw.name);
+    const email = str(raw.email).toLowerCase();
+    const missing: string[] = [];
+    if (!name) missing.push('name');
+    if (!email) missing.push('email');
+    const errors: ResolveResult['errors'] = [];
+    if (email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email))
+      errors.push({ field: 'email', code: 'BAD_EMAIL', message: "That doesn't look like an email address." });
+    if (email) {
+      const taken = await trx
+        .selectFrom('employees')
+        .select('id')
+        .where(sql<boolean>`lower(email) = ${email}`)
+        .executeTakeFirst();
+      if (taken) errors.push({ field: 'email', code: 'TAKEN', message: `Someone with ${email} is already on the team.` });
+    }
+    const args: Record<string, unknown> = {};
+    if (name) args.name = name;
+    if (email) args.email = email;
+    if (str(raw.phone)) args.phone = str(raw.phone);
+    if (raw.bookable !== undefined && bool(raw.bookable) !== undefined) args.bookable = bool(raw.bookable);
+    return { args, missing, errors };
+  },
+  async preview(_trx, _claims, args) {
+    const after: Record<string, unknown> = { name: str(args.name), email: str(args.email) };
+    if (args.phone) after.phone = str(args.phone);
+    if (args.bookable !== undefined) after.bookable = Boolean(args.bookable);
+    return {
+      changeSet: { ops: [{ kind: 'create', entity: { type: 'employee', label: str(args.name) }, after }] },
+      fingerprint: { email: str(args.email) },
+    };
+  },
+  async checkFingerprint(trx, _claims, args) {
+    const taken = await trx
+      .selectFrom('employees')
+      .select('id')
+      .where(sql<boolean>`lower(email) = ${str(args.email)}`)
+      .executeTakeFirst();
+    return taken ? { field: 'email', was: '—', now: 'already on the team', proposed: str(args.email) } : null;
+  },
+  async execute(trx, claims, args) {
+    const emp = await createEmployee(trx, claims, {
+      name: str(args.name),
+      email: str(args.email),
+      twofa: true,
+      bookable: Boolean(args.bookable ?? false),
+      ...(args.phone ? { phone: str(args.phone) } : {}),
+    });
+    const after: Record<string, unknown> = { name: emp.name, email: emp.email };
+    if (args.phone) after.phone = str(args.phone);
+    return {
+      message: `Invited ${emp.name} (${emp.email}). Assign their role in Team & access when you're ready.`,
+      change: { ops: [{ kind: 'create', entity: { type: 'employee', id: emp.id, label: emp.name }, after }] },
+    };
+  },
+};
+
+// ── write: edit_team_member (non-role fields only) ───────────────────
+const editTeamMember: ActionDef = {
+  id: 'edit_team_member',
+  app: 'workspace',
+  kind: 'write',
+  risk: 'medium',
+  permission: 'users.manage',
+  required: ['employee'],
+  title: 'Edit a team member',
+  description:
+    "Change a team member's name, job title, phone, or whether they take appointments. Changing their role, permissions or ownership is done in Team & access instead.",
+  params: [
+    { name: 'employee', type: 'string', description: 'Which team member', required: true },
+    { name: 'newName', type: 'string', description: 'A new name' },
+    { name: 'title', type: 'string', description: 'Their job title' },
+    { name: 'phone', type: 'string', description: 'Phone number' },
+    { name: 'bookable', type: 'boolean', description: 'Whether they take appointments' },
+  ],
+  async resolve(trx, _claims, raw) {
+    const who = str(raw.employee);
+    const errors: ResolveResult['errors'] = [];
+    const edits: Record<string, unknown> = {};
+    if (str(raw.newName)) edits.newName = str(raw.newName);
+    if (str(raw.title)) edits.title = str(raw.title);
+    if (raw.phone !== undefined) edits.phone = str(raw.phone); // may clear
+    if (raw.bookable !== undefined && bool(raw.bookable) !== undefined) edits.bookable = bool(raw.bookable);
+    if (!who) return { args: { ...edits }, missing: ['employee'], errors };
+    const r = await resolveEmployee(trx, who);
+    if (!r.ok)
+      return {
+        args: { ...edits, employee: who },
+        missing: [],
+        errors: [
+          {
+            field: 'employee',
+            code: r.code,
+            message:
+              r.code === 'AMBIGUOUS'
+                ? `Several people match "${who}": ${r.options.join(', ')}. Which one?`
+                : `I couldn't find "${who}". Your team: ${r.options.join(', ')}.`,
+          },
+        ],
+      };
+    if (!['newName', 'title', 'phone', 'bookable'].some((f) => edits[f] !== undefined))
+      errors.push({
+        field: 'change',
+        code: 'NOTHING',
+        message: `What would you like to change about ${r.emp.name}? (name, job title, phone, or bookable)`,
+      });
+    return { args: { ...edits, employeeId: r.emp.id, employeeName: r.emp.name }, missing: [], errors };
+  },
+  async preview(trx, _claims, args) {
+    const cur = await trx
+      .selectFrom('employees')
+      .select(['name', 'roleTitle', 'phone', 'bookable'])
+      .where('id', '=', String(args.employeeId))
+      .executeTakeFirstOrThrow();
+    const before: Record<string, unknown> = {};
+    const after: Record<string, unknown> = {};
+    if (args.newName !== undefined) { before.name = cur.name; after.name = str(args.newName); }
+    if (args.title !== undefined) { before.title = cur.roleTitle; after.title = str(args.title); }
+    if (args.phone !== undefined) { before.phone = cur.phone ?? '—'; after.phone = str(args.phone) || '—'; }
+    if (args.bookable !== undefined) { before.bookable = cur.bookable; after.bookable = Boolean(args.bookable); }
+    return {
+      changeSet: {
+        ops: [{ kind: 'update', entity: { type: 'employee', id: String(args.employeeId), label: str(args.employeeName) }, before, after }],
+      },
+      fingerprint: {},
+    };
+  },
+  async execute(trx, claims, args) {
+    const emp = await updateEmployee(trx, claims, String(args.employeeId), {
+      ...(args.newName !== undefined ? { name: str(args.newName) } : {}),
+      ...(args.title !== undefined ? { roleTitle: str(args.title) } : {}),
+      ...(args.phone !== undefined ? { phone: str(args.phone) || null } : {}),
+      ...(args.bookable !== undefined ? { bookable: Boolean(args.bookable) } : {}),
+    });
+    return {
+      message: `Updated ${emp.name}.`,
+      change: { ops: [{ kind: 'update', entity: { type: 'employee', id: emp.id, label: emp.name }, after: {} }] },
+    };
+  },
+};
+
+// ── write: set_working_hours (set named days to one period) ──────────
+const setWorkingHours: ActionDef = {
+  id: 'set_working_hours',
+  app: 'workspace',
+  kind: 'write',
+  risk: 'medium',
+  permission: 'users.manage',
+  required: ['employee', 'days', 'start', 'end'],
+  title: "Set a team member's working hours",
+  description:
+    "Set which hours a team member works on given days — e.g. Mon–Fri 09:00–17:00. Replaces those days' hours; other days are left as they are.",
+  params: [
+    { name: 'employee', type: 'string', description: 'Which team member', required: true },
+    { name: 'days', type: 'string', description: 'Which days — e.g. "Mon-Fri", "weekdays", "Monday and Wednesday"', required: true },
+    { name: 'start', type: 'string', description: 'Start time, HH:MM', required: true },
+    { name: 'end', type: 'string', description: 'End time, HH:MM', required: true },
+  ],
+  async resolve(trx, _claims, raw) {
+    const who = str(raw.employee);
+    const missing: string[] = [];
+    const errors: ResolveResult['errors'] = [];
+    const args: Record<string, unknown> = {};
+    const start = toHHMM(raw.start);
+    const end = toHHMM(raw.end);
+    if (!str(raw.start)) missing.push('start');
+    else if (!start) errors.push({ field: 'start', code: 'BAD_TIME', message: 'Give the start time as HH:MM.' });
+    else args.start = start;
+    if (!str(raw.end)) missing.push('end');
+    else if (!end) errors.push({ field: 'end', code: 'BAD_TIME', message: 'Give the end time as HH:MM.' });
+    else args.end = end;
+    if (start && end && end <= start)
+      errors.push({ field: 'end', code: 'BAD_RANGE', message: 'The end time is before the start.' });
+    if (!str(raw.days)) missing.push('days');
+    else {
+      const days = parseDays(str(raw.days));
+      if (!days.length) errors.push({ field: 'days', code: 'BAD_DAYS', message: 'Try "Mon-Fri" or "Monday, Wednesday".' });
+      else args.days = days;
+    }
+    if (!who) missing.push('employee');
+    else {
+      const r = await resolveEmployee(trx, who);
+      if (!r.ok)
+        errors.push({
+          field: 'employee',
+          code: r.code,
+          message:
+            r.code === 'AMBIGUOUS'
+              ? `Several people match "${who}": ${r.options.join(', ')}. Which one?`
+              : `I couldn't find "${who}". Your team: ${r.options.join(', ')}.`,
+        });
+      else {
+        args.employeeId = r.emp.id;
+        args.employeeName = r.emp.name;
+      }
+    }
+    return { args, missing, errors };
+  },
+  async preview(_trx, _claims, args) {
+    const days = (args.days as number[]).map(dayLabel).join(', ');
+    return {
+      changeSet: {
+        ops: [
+          {
+            kind: 'update',
+            entity: { type: 'hours', id: String(args.employeeId), label: `${str(args.employeeName)} — hours` },
+            after: { days, hours: `${str(args.start)}–${str(args.end)}` },
+          },
+        ],
+      },
+      fingerprint: {},
+    };
+  },
+  async execute(trx, claims, args) {
+    const week = await currentWeek(trx, String(args.employeeId));
+    const next: Week = { ...week };
+    for (const d of args.days as number[]) next[String(d)] = [[String(args.start), String(args.end)]];
+    const emp = await updateEmployee(trx, claims, String(args.employeeId), { hours: next });
+    const days = (args.days as number[]).map(dayLabel).join(', ');
+    return {
+      message: `${emp.name} now works ${str(args.start)}–${str(args.end)} on ${days}.`,
+      change: {
+        ops: [
+          {
+            kind: 'update',
+            entity: { type: 'hours', id: emp.id, label: `${emp.name} — hours` },
+            after: { days, hours: `${str(args.start)}–${str(args.end)}` },
+          },
+        ],
+      },
+    };
+  },
+};
+
+// ── write: add_split_shift (append a period to one day) ──────────────
+const addSplitShift: ActionDef = {
+  id: 'add_split_shift',
+  app: 'workspace',
+  kind: 'write',
+  risk: 'medium',
+  permission: 'users.manage',
+  required: ['employee', 'day', 'start', 'end'],
+  title: 'Add a split shift',
+  description:
+    "Add a second working period to one of a team member's days — e.g. a 14:00–18:00 shift on Tuesday alongside their morning.",
+  params: [
+    { name: 'employee', type: 'string', description: 'Which team member', required: true },
+    { name: 'day', type: 'string', description: 'Which day — a single weekday', required: true },
+    { name: 'start', type: 'string', description: 'Start time, HH:MM', required: true },
+    { name: 'end', type: 'string', description: 'End time, HH:MM', required: true },
+  ],
+  async resolve(trx, _claims, raw) {
+    const who = str(raw.employee);
+    const missing: string[] = [];
+    const errors: ResolveResult['errors'] = [];
+    const args: Record<string, unknown> = {};
+    const start = toHHMM(raw.start);
+    const end = toHHMM(raw.end);
+    if (!str(raw.start)) missing.push('start');
+    else if (!start) errors.push({ field: 'start', code: 'BAD_TIME', message: 'Give the start time as HH:MM.' });
+    else args.start = start;
+    if (!str(raw.end)) missing.push('end');
+    else if (!end) errors.push({ field: 'end', code: 'BAD_TIME', message: 'Give the end time as HH:MM.' });
+    else args.end = end;
+    if (start && end && end <= start)
+      errors.push({ field: 'end', code: 'BAD_RANGE', message: 'The end time is before the start.' });
+    if (!str(raw.day)) missing.push('day');
+    else {
+      const days = parseDays(str(raw.day));
+      if (days.length !== 1) errors.push({ field: 'day', code: 'BAD_DAY', message: 'Which single day? e.g. "Tuesday".' });
+      else args.day = days[0];
+    }
+    if (!who) missing.push('employee');
+    else {
+      const r = await resolveEmployee(trx, who);
+      if (!r.ok)
+        errors.push({
+          field: 'employee',
+          code: r.code,
+          message:
+            r.code === 'AMBIGUOUS'
+              ? `Several people match "${who}": ${r.options.join(', ')}. Which one?`
+              : `I couldn't find "${who}". Your team: ${r.options.join(', ')}.`,
+        });
+      else {
+        args.employeeId = r.emp.id;
+        args.employeeName = r.emp.name;
+      }
+    }
+    return { args, missing, errors };
+  },
+  async preview(_trx, _claims, args) {
+    return {
+      changeSet: {
+        ops: [
+          {
+            kind: 'update',
+            entity: { type: 'hours', id: String(args.employeeId), label: `${str(args.employeeName)} — ${dayLabel(Number(args.day))}` },
+            after: { adds: `${str(args.start)}–${str(args.end)}` },
+          },
+        ],
+      },
+      fingerprint: {},
+    };
+  },
+  async execute(trx, claims, args) {
+    const week = await currentWeek(trx, String(args.employeeId));
+    const key = String(args.day);
+    const existing = week[key] ?? [];
+    const next: Week = { ...week, [key]: [...existing, [String(args.start), String(args.end)]] };
+    const emp = await updateEmployee(trx, claims, String(args.employeeId), { hours: next });
+    return {
+      message: `Added ${str(args.start)}–${str(args.end)} on ${dayLabel(Number(args.day))} for ${emp.name}.`,
+      change: {
+        ops: [
+          {
+            kind: 'update',
+            entity: { type: 'hours', id: emp.id, label: `${emp.name} — ${dayLabel(Number(args.day))}` },
+            after: { adds: `${str(args.start)}–${str(args.end)}` },
+          },
+        ],
+      },
+    };
+  },
+};
+
 const ALL: ActionDef[] = [
   listServices,
   readServicePrice,
@@ -791,6 +1210,10 @@ const ALL: ActionDef[] = [
   editService,
   addClosure,
   removeClosure,
+  addTeamMember,
+  editTeamMember,
+  setWorkingHours,
+  addSplitShift,
   deleteServiceNav,
   manageAccessNav,
 ];

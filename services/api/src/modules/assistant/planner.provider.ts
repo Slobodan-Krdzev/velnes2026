@@ -55,6 +55,12 @@ export function stubPlan(input: PlanInput): Plan {
     else if (miss.includes('serviceName') && !numM) args.serviceName = word;
     else if (miss.includes('category') && !numM) args.category = word;
     else if (miss.includes('performers')) args.performers = word;
+    else if (miss.includes('email') && /@/.test(word)) args.email = word;
+    else if (miss.includes('employee') && !numM) args.employee = word;
+    else if (miss.includes('days')) args.days = word;
+    else if (miss.includes('day')) args.day = word;
+    else if (miss.includes('start')) args.start = word;
+    else if (miss.includes('end')) args.end = word;
     else if (miss.includes('location')) args.location = word;
     return { actionId: input.current.actionId, args };
   }
@@ -73,6 +79,32 @@ export function stubPlan(input: PlanInput): Plan {
   // Roles / permissions / owner (navigate-only).
   if (has('manage_access') && /\b(role|roles|permission|permissions|owner|ownership|manager|admin|access)\b/.test(low))
     return { actionId: 'manage_access', args: {} };
+
+  // Invite a team member: "invite NAME EMAIL".
+  const inv = msg.match(
+    /\b(?:invite|add)\b\s+(?:a\s+)?(?:new\s+)?(?:team\s+member\s+|employee\s+|staff\s+member\s+)?(.+?)[\s,]+([^\s@<>,]+@[^\s@<>,]+)/i,
+  );
+  if (has('add_team_member') && inv && !/\bservice\b/i.test(low)) {
+    const name = inv[1]!.replace(/\b(?:a|an|new|team|member|employee|staff)\b/gi, '').replace(/\s+/g, ' ').trim();
+    return { actionId: 'add_team_member', args: { name, email: inv[2]! } };
+  }
+
+  // Split shift: "add a split shift for NAME on DAY from HH:MM to HH:MM".
+  const ss = low.match(
+    /split\s+shift\s+(?:for\s+)?(.+?)\s+on\s+(\w+)\s+(?:from\s+)?([\d:apm.]+)\s*(?:to|-|–|—|until)\s*([\d:apm.]+)/,
+  );
+  if (has('add_split_shift') && ss)
+    return { actionId: 'add_split_shift', args: { employee: ss[1]!.trim(), day: ss[2]!, start: ss[3]!, end: ss[4]! } };
+
+  // Working hours: "set hours for NAME on DAYS from HH:MM to HH:MM".
+  const wh = low.match(
+    /(?:set\s+)?(?:working\s+)?hours\s+(?:for\s+)?(.+?)\s+on\s+(.+?)\s+(?:from\s+)?([\d:apm.]+)\s*(?:to|-|–|—|until)\s*([\d:apm.]+)/,
+  );
+  if (has('set_working_hours') && wh)
+    return {
+      actionId: 'set_working_hours',
+      args: { employee: wh[1]!.trim(), days: wh[2]!.trim(), start: wh[3]!, end: wh[4]! },
+    };
 
   // Create a service.
   if (has('create_service') && /\b(add|create|new)\b.{0,12}\bservice\b/.test(low)) {
@@ -95,6 +127,15 @@ export function stubPlan(input: PlanInput): Plan {
   if (has('remove_closure') && /\b(reopen|re-open|open)\b/.test(low)) {
     const iso = low.match(ISO);
     return { actionId: 'remove_closure', args: iso ? { date: iso[1]! } : {} };
+  }
+
+  // Edit a team member: "change phone/title/name for NAME to VALUE".
+  const etm = msg.match(
+    /\b(?:change|set|update)\s+(?:the\s+)?(phone|job title|title|name)\s+(?:for|of)\s+(.+?)\s+to\s+(.+?)\??$/i,
+  );
+  if (has('edit_team_member') && etm) {
+    const field = /title/i.test(etm[1]!) ? 'title' : /name/i.test(etm[1]!) ? 'newName' : 'phone';
+    return { actionId: 'edit_team_member', args: { employee: etm[2]!.trim(), [field]: etm[3]!.trim() } };
   }
 
   // Edit a service (price by default): "change/set/update X to N".

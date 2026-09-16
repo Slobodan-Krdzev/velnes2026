@@ -52,6 +52,13 @@ const PROMPTS: Record<string, string> = {
   performers: 'Who performs it — which employee(s), or "everyone"?',
   date: 'Which date? (yyyy-mm-dd)',
   location: 'Which location?',
+  email: "What's their email address?",
+  employee: 'Which team member?',
+  days: 'Which days? (e.g. Mon–Fri)',
+  day: 'Which day?',
+  start: 'Start time? (HH:MM)',
+  end: 'End time? (HH:MM)',
+  title: "What's their job title?",
 };
 
 function intentOf(action: ActionDef, args: Record<string, unknown>): string {

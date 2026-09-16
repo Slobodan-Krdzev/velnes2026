@@ -24,6 +24,7 @@ const admin = new pg.Client({ connectionString: ADMIN_URL });
 let owner = '';
 let bareToken = '';
 let bareRoleId = '';
+let testerId = '';
 
 async function token(email: string) {
   const res = await app.inject({
@@ -87,6 +88,17 @@ describe('the AI Assistant: plans, previews, approves, executes, audits', () => 
       `DELETE FROM schedule_exceptions WHERE tenant_id=$1 AND start_date='2026-12-25'`,
       [demo.business],
     );
+    // The throwaway invited member from the Phase-2 team tests.
+    await admin.query(
+      `DELETE FROM employee_skills WHERE employee_id IN (SELECT id FROM employees WHERE tenant_id=$1 AND email='tester@example.com')`,
+      [demo.business],
+    );
+    await admin.query(
+      `DELETE FROM employee_locations WHERE employee_id IN (SELECT id FROM employees WHERE tenant_id=$1 AND email='tester@example.com')`,
+      [demo.business],
+    );
+    await admin.query(`DELETE FROM mail_outbox WHERE tenant_id=$1 AND to_email='tester@example.com'`, [demo.business]);
+    await admin.query(`DELETE FROM employees WHERE tenant_id=$1 AND email='tester@example.com'`, [demo.business]);
     await admin.query(`DELETE FROM assistant_actions WHERE tenant_id=$1`, [demo.business]);
     await admin.query(`DELETE FROM assistant_drafts WHERE tenant_id=$1`, [demo.business]);
     await admin.query(`UPDATE employees SET role_id=$2 WHERE id=$1`, [demo.empAna, demo.roleEmployee]);
@@ -245,6 +257,58 @@ describe('the AI Assistant: plans, previews, approves, executes, audits', () => 
     // The service is untouched.
     const still = await admin.query(`SELECT id FROM services WHERE id=$1`, [demo.s4]);
     expect(still.rowCount).toBe(1);
+  });
+
+  it('invites a team member: collect → preview → approve → invited row', async () => {
+    const prep = await msg('Invite Tester McTest tester@example.com', undefined);
+    const d = prep.json().draft;
+    expect(d.status).toBe('READY_FOR_REVIEW');
+    expect(d.preview.ops[0]).toMatchObject({
+      kind: 'create',
+      after: { name: 'Tester McTest', email: 'tester@example.com' },
+    });
+    const done = await exec(d.id);
+    expect(done.json().status).toBe('COMPLETED');
+    const row = await admin.query(
+      `SELECT id, status FROM employees WHERE tenant_id=$1 AND email='tester@example.com'`,
+      [demo.business],
+    );
+    expect(row.rowCount).toBe(1);
+    expect(row.rows[0].status).toBe('invited');
+    testerId = row.rows[0].id;
+  });
+
+  it('edits a team member (non-role): changes the phone', async () => {
+    const prep = await msg('Change phone for Tester to 070111222', undefined);
+    const d = prep.json().draft;
+    expect(d.status).toBe('READY_FOR_REVIEW');
+    expect(await exec(d.id).then((r) => r.json().status)).toBe('COMPLETED');
+    const row = await admin.query(`SELECT phone FROM employees WHERE id=$1`, [testerId]);
+    expect(row.rows[0].phone).toBe('070111222');
+  });
+
+  it('sets working hours across days', async () => {
+    const prep = await msg('Set hours for Tester on Mon-Fri from 09:00 to 13:00', undefined);
+    const d = prep.json().draft;
+    expect(d.status).toBe('READY_FOR_REVIEW');
+    expect(await exec(d.id).then((r) => r.json().status)).toBe('COMPLETED');
+    const row = await admin.query(`SELECT hours FROM employees WHERE id=$1`, [testerId]);
+    expect(row.rows[0].hours['0']).toEqual([['09:00', '13:00']]); // Monday
+    expect(row.rows[0].hours['4']).toEqual([['09:00', '13:00']]); // Friday
+    expect(row.rows[0].hours['6']).toBeNull(); // Sunday untouched
+  });
+
+  it('adds a split shift to one day', async () => {
+    const prep = await msg('Add a split shift for Tester on Tuesday from 14:00 to 18:00', undefined);
+    const d = prep.json().draft;
+    expect(d.status).toBe('READY_FOR_REVIEW');
+    expect(await exec(d.id).then((r) => r.json().status)).toBe('COMPLETED');
+    const row = await admin.query(`SELECT hours FROM employees WHERE id=$1`, [testerId]);
+    // Tuesday now has the morning plus the split.
+    expect(row.rows[0].hours['1']).toEqual([
+      ['09:00', '13:00'],
+      ['14:00', '18:00'],
+    ]);
   });
 
   it('refuses every assistant call when HQ has the salon switched off', async () => {

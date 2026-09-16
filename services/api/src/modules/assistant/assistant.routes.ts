@@ -11,6 +11,7 @@ import { z } from 'zod';
 import { withTenant } from '../../db/index.js';
 import { CatalogError } from '../catalog/catalog.service.js';
 import { ScheduleError } from '../scheduling/scheduling.service.js';
+import { TeamError } from '../team/team.service.js';
 import { assistantEnabled, cancelDraft, executeDraft, handleMessage, resumeDraft } from './assistant.service.js';
 
 const Err = z.object({ error: z.string(), message: z.string() });
@@ -53,7 +54,7 @@ export function assistantRoutes(app: FastifyInstance) {
       } catch (e) {
         // A domain door refused: the transaction rolled back, the draft is
         // untouched. Surface the reason instead of a 500 — the honest result.
-        if (e instanceof CatalogError || e instanceof ScheduleError)
+        if (e instanceof CatalogError || e instanceof ScheduleError || e instanceof TeamError)
           return { status: 'FAILED' as const, message: e.message, conflict: null };
         throw e;
       }

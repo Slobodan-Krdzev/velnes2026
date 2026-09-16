@@ -29,6 +29,13 @@ const FIELD_LABEL: Record<string, string> = {
   closed: 'Closed',
   reason: 'Reason',
   performers: 'Performed by',
+  email: 'Email',
+  phone: 'Phone',
+  bookable: 'Takes appointments',
+  title: 'Job title',
+  days: 'Days',
+  hours: 'Hours',
+  adds: 'Adds',
 };
 const label = (k: string) => FIELD_LABEL[k] ?? k;
 
