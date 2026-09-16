@@ -22,7 +22,7 @@ import {
   logout,
   me,
   rotateRefreshToken,
-  setLang,
+  updateMe,
   startPreview,
 } from './auth.service.js';
 import { env } from '../../env.js';
@@ -155,6 +155,6 @@ export function authRoutes(app: FastifyInstance) {
     url: '/auth/me',
     preHandler: [app.authenticate],
     schema: { body: MePatchSchema, response: { 200: MeResponseSchema } },
-    handler: async (req) => setLang(req.claims, req.body.lang),
+    handler: async (req) => updateMe(req.claims, req.body),
   });
 }

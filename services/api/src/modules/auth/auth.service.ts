@@ -96,7 +96,7 @@ async function sessionEmployee(
   return withTenant(tenantId, async (trx) => {
     const e = await trx
       .selectFrom('employees')
-      .select(['id', 'name', 'email', 'access', 'roleId', 'lang'])
+      .select(['id', 'name', 'email', 'access', 'roleId', 'lang', 'avatar'])
       .where('id', '=', employeeId)
       .executeTakeFirstOrThrow();
     const locs = await trx
@@ -135,6 +135,7 @@ async function sessionEmployee(
       perms,
       roleName: role?.name ?? null,
       assistantEnabled: biz?.assistantEnabled ?? false,
+      avatar: e.avatar ?? null,
     };
   });
 }
@@ -254,11 +255,19 @@ export async function startPreview(claims: AccessClaims, targetId: string, renew
   return sessionEmployee(claims.ten, targetId);
 }
 
-export async function setLang(claims: AccessClaims, lang: 'en' | 'mk' | 'sq') {
-  // Commit the write before re-reading: sessionEmployee opens its own
-  // transaction and would not see an uncommitted update.
-  await withTenant(claims.ten, (trx) =>
-    trx.updateTable('employees').set({ lang }).where('id', '=', claims.sub).execute(),
-  );
+/** A user updating their own profile: language and/or avatar. */
+export async function updateMe(
+  claims: AccessClaims,
+  patch: { lang?: 'en' | 'mk' | 'sq' | undefined; avatar?: string | null | undefined },
+) {
+  const set: Record<string, unknown> = {};
+  if (patch.lang !== undefined) set.lang = patch.lang;
+  if (patch.avatar !== undefined) set.avatar = patch.avatar; // null clears
+  if (Object.keys(set).length)
+    // Commit the write before re-reading: sessionEmployee opens its own
+    // transaction and would not see an uncommitted update.
+    await withTenant(claims.ten, (trx) =>
+      trx.updateTable('employees').set(set).where('id', '=', claims.sub).execute(),
+    );
   return sessionEmployee(claims.ten, claims.sub);
 }

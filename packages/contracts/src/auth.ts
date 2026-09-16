@@ -62,10 +62,22 @@ export const MeResponseSchema = SessionEmployeeSchema.extend({
   // salon. The workspace shows the launcher only when true; the server
   // also enforces it at every assistant endpoint.
   assistantEnabled: z.boolean().default(false),
+  // The user's own avatar photo (data URL), shown in the workspace menu
+  // and the client app. Null until they upload one.
+  avatar: z.string().nullable().default(null),
 });
 export type MeResponse = z.infer<typeof MeResponseSchema>;
 
-export const MePatchSchema = z.object({ lang: LangSchema });
+/** Avatar photos — data URLs, downscaled client-side, stored inline like
+ *  the salon gallery until an asset host is decided. */
+export const AVATAR_MAX_CHARS = 300_000;
+export const AvatarSchema = z.string().min(1).max(AVATAR_MAX_CHARS);
+
+/** A user updating their own profile: language and/or their avatar. */
+export const MePatchSchema = z.object({
+  lang: LangSchema.optional(),
+  avatar: AvatarSchema.nullable().optional(), // null clears the photo
+});
 
 /** Preview access — the prototype's startPreview(): a user manager
  *  becomes another user for real. The server issues a genuine access

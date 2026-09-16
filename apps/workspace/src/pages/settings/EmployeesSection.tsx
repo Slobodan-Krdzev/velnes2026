@@ -2,9 +2,10 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { z } from 'zod';
 import { EmployeeSchema, EmployeeTimingsSchema, type Employee, type WeekHours } from '@velnes/contracts';
 import { EMP_COLORS, empColorOf, I, Icon, PhoneInput } from '@velnes/ui';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { get, patch, post } from '@velnes/client';
+import { fileToAvatarDataUrl } from '../../lib/image.js';
 import { useEmployees, useLocationCatalog, useLocations } from '../../api/queries.js';
 import { PanelPortal } from '../../lib/Panel.js';
 import { useOutsideClose } from '../../lib/pop.js';
@@ -89,6 +90,13 @@ export function EmployeesSection() {
                         }}
                       />
                     </span>
+                    {e.avatar ? (
+                      <img
+                        src={e.avatar}
+                        alt=""
+                        style={{ width: 26, height: 26, borderRadius: '50%', objectFit: 'cover', marginLeft: 8, verticalAlign: 'middle' }}
+                      />
+                    ) : null}
                     <span style={{ marginLeft: 8 }}>{e.name}</span>
                     <div className="muted" style={{ fontWeight: 500, fontSize: 12 }}>
                       {e.email || t('eset.noEmail')}
@@ -273,6 +281,8 @@ export function EmployeePanel({
   const [roleTitle, setRoleTitle] = useState(employee?.roleTitle ?? '');
   const [access, setAccess] = useState<Employee['access']>(employee?.access ?? 'staff');
   const [color, setColor] = useState(employee?.color ?? nextColor);
+  const [avatar, setAvatar] = useState<string | null>(employee?.avatar ?? null);
+  const avatarInput = useRef<HTMLInputElement>(null);
   const [hours, setHours] = useState<WeekHours>(employee?.hours ?? STD_WEEK);
   const [skills, setSkills] = useState<string[]>(employee?.skillServiceIds ?? []);
   const [bookable, setBookable] = useState(employee?.bookable ?? false);
@@ -300,6 +310,7 @@ export function EmployeePanel({
       roleTitle,
       access,
       color,
+      avatar,
       hours,
       skillServiceIds: skills,
       bookable,
@@ -342,6 +353,38 @@ export function EmployeePanel({
           </div>
         </div>
         <div className="panel-body">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 16 }}>
+            <span className="avatar" style={{ width: 56, height: 56, fontSize: 18 }}>
+              {avatar ? (
+                <img src={avatar} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 'inherit' }} />
+              ) : (
+                (name || employee?.name || '?')
+                  .split(' ')
+                  .map((p) => p[0])
+                  .join('')
+                  .slice(0, 2)
+              )}
+            </span>
+            <input
+              ref={avatarInput}
+              type="file"
+              accept="image/*"
+              style={{ display: 'none' }}
+              onChange={async (e) => {
+                const f = e.target.files?.[0];
+                if (f) touch(setAvatar)(await fileToAvatarDataUrl(f));
+                e.target.value = '';
+              }}
+            />
+            <button className="btn btn-secondary btn-sm" onClick={() => avatarInput.current?.click()}>
+              {avatar ? t('eset.changePhoto') : t('eset.addPhoto')}
+            </button>
+            {avatar ? (
+              <button className="btn btn-subtle btn-sm" onClick={() => touch(setAvatar)(null)}>
+                {t('eset.removePhoto')}
+              </button>
+            ) : null}
+          </div>
           <div className="grid2">
             <label className="field span2">
               <span>

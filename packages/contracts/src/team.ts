@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { AvatarSchema } from './auth.js';
 import { WeekHoursSchema } from './locations.js';
 import { EmployeeAccessSchema } from './permissions.js';
 
@@ -19,6 +20,8 @@ export const EmployeeSchema = z.object({
   twofaEnabled: z.boolean(),
   // The last sign-in or token refresh — real session data, or never.
   lastActive: z.string().nullable(),
+  // The member's avatar photo (data URL), or null.
+  avatar: z.string().nullable().default(null),
 });
 export type Employee = z.infer<typeof EmployeeSchema>;
 
@@ -39,6 +42,7 @@ export const EmployeeInviteSchema = z.object({
   hours: WeekHoursSchema.optional(),
   skillServiceIds: z.array(z.uuid()).optional(),
   bookable: z.boolean().default(false),
+  avatar: AvatarSchema.optional(),
 });
 
 export type EmployeeInvite = z.infer<typeof EmployeeInviteSchema>;
@@ -86,6 +90,8 @@ export const EmployeePatchSchema = z.object({
   skillServiceIds: z.array(z.uuid()).optional(),
   // Where the role applies; replaces the whole assignment.
   locationIds: z.array(z.uuid()).optional(),
+  // The member's avatar photo (data URL); null clears it.
+  avatar: AvatarSchema.nullable().optional(),
 });
 export type EmployeePatch = z.infer<typeof EmployeePatchSchema>;
 

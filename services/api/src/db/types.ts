@@ -281,6 +281,7 @@ export interface EmployeeLocations {
 
 export interface Employees {
   access: Generated<EmployeeAccess>;
+  avatar: string | null;
   bookable: Generated<boolean>;
   color: string | null;
   createdAt: Generated<Timestamp>;

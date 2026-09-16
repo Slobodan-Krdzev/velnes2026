@@ -69,6 +69,7 @@ export function teamRoutes(app: FastifyInstance) {
               .map((s) => s.serviceId),
             hours: (e.hours ?? null) as Employee['hours'],
             twofaEnabled: e.twofaEnabled,
+            avatar: e.avatar ?? null,
             lastActive: lastOf.get(e.id)?.toISOString() ?? null,
           })),
         };

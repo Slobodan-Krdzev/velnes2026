@@ -92,6 +92,7 @@ export async function employeeRow(trx: Trx, id: string): Promise<Employee> {
     skillServiceIds: skills.map((s) => s.serviceId),
     hours: (e.hours ?? null) as Employee['hours'],
     twofaEnabled: e.twofaEnabled,
+    avatar: e.avatar ?? null,
     lastActive:
       (
         await trx
@@ -140,6 +141,7 @@ export async function createEmployee(trx: Trx, claims: AccessClaims, b: Employee
       twofaEnabled: b.twofa,
       color,
       phone: b.phone ?? null,
+      avatar: b.avatar ?? null,
       ...(checked.hours ? { hours: JSON.stringify(checked.hours) } : {}),
     })
     .returning('id')
@@ -213,6 +215,7 @@ export async function updateEmployee(
       ...(patch.access !== undefined ? { access: patch.access } : {}),
       ...(patch.roleId !== undefined ? { roleId: patch.roleId } : {}),
       ...(patch.roleTitle !== undefined ? { roleTitle: patch.roleTitle } : {}),
+      ...(patch.avatar !== undefined ? { avatar: patch.avatar } : {}),
       ...(hoursToWrite !== undefined ? { hours: JSON.stringify(hoursToWrite) } : {}),
     })
     .where('id', '=', id)

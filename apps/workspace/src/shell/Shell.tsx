@@ -4,7 +4,7 @@ import { get } from '@velnes/client';
 import { LANGS, type Lang } from '@velnes/i18n';
 import type { PermKey } from '@velnes/contracts';
 import { Badge, I, Icon, VelnesMark } from '@velnes/ui';
-import { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useLocations } from '../api/queries.js';
@@ -13,6 +13,7 @@ import { useToast } from '../lib/toast.js';
 import { useSession } from '@velnes/client';
 import { WA_SUPPORT, WhatsAppGlyph, WhatsAppPopup } from './WhatsAppSupport.js';
 import { Assistant } from './Assistant.js';
+import { fileToAvatarDataUrl } from '../lib/image.js';
 
 /** Location scope — the prototype's loc-switch: chosen once in the
  *  topbar, honoured by every screen. 'all' = every assigned location. */
@@ -57,7 +58,21 @@ const inits = (name: string) =>
 
 export function Shell() {
   const { t, i18n } = useTranslation();
-  const { me, logout, setLang, can, preview, exitPreview } = useSession();
+  const { me, logout, setLang, setAvatar, can, preview, exitPreview } = useSession();
+  const avatarInput = useRef<HTMLInputElement>(null);
+  const [avatarBusy, setAvatarBusy] = useState(false);
+  const pickAvatar = async (file: File | undefined) => {
+    if (!file) return;
+    setAvatarBusy(true);
+    try {
+      await setAvatar(await fileToAvatarDataUrl(file));
+      toast(t('shell.avatarUpdated'));
+    } catch {
+      toast(t('shell.avatarFailed'));
+    } finally {
+      setAvatarBusy(false);
+    }
+  };
   const toast = useToast();
   const navigate = useNavigate();
   const routerLoc = useLocation();
@@ -302,7 +317,11 @@ export function Shell() {
                 title={me.name}
                 onClick={() => setEnvMenu((v) => !v)}
               >
-                {inits(me.name)}
+                {me.avatar ? (
+                  <img src={me.avatar} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 'inherit' }} />
+                ) : (
+                  inits(me.name)
+                )}
               </button>
               {envMenu ? (
                 <div className="menu menu-wide menu-scroll" role="menu">
@@ -315,7 +334,13 @@ export function Shell() {
                       gap: 10,
                     }}
                   >
-                    <span className="avatar">{inits(me.name)}</span>
+                    <span className="avatar">
+                      {me.avatar ? (
+                        <img src={me.avatar} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 'inherit' }} />
+                      ) : (
+                        inits(me.name)
+                      )}
+                    </span>
                     <span>
                       <span className="mi-t" style={{ fontWeight: 700 }}>
                         {me.name}
@@ -323,6 +348,45 @@ export function Shell() {
                       <span className="mi-s">{me.email}</span>
                     </span>
                   </div>
+                  <input
+                    ref={avatarInput}
+                    type="file"
+                    accept="image/*"
+                    style={{ display: 'none' }}
+                    onChange={(e) => {
+                      void pickAvatar(e.target.files?.[0]);
+                      e.target.value = '';
+                    }}
+                  />
+                  <button
+                    className="menu-row"
+                    disabled={avatarBusy}
+                    onClick={() => avatarInput.current?.click()}
+                  >
+                    <span className="check">
+                      <Icon d={I.user} size={14} w={2} />
+                    </span>
+                    <span className="grow">
+                      <span className="mi-t">{avatarBusy ? t('shell.avatarUploading') : t('shell.changePhoto')}</span>
+                    </span>
+                  </button>
+                  {me.avatar ? (
+                    <button
+                      className="menu-row"
+                      disabled={avatarBusy}
+                      onClick={() => {
+                        void setAvatar(null);
+                        toast(t('shell.avatarRemoved'));
+                      }}
+                    >
+                      <span className="check">
+                        <Icon d={I.x} size={14} w={2} />
+                      </span>
+                      <span className="grow">
+                        <span className="mi-t">{t('shell.removePhoto')}</span>
+                      </span>
+                    </button>
+                  ) : null}
                   <div className="menu-sep" />
                   <div className="menu-label">{t('shell.language')}</div>
                   {LANGS.map((l) => (

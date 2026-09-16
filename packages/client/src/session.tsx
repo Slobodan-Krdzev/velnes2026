@@ -36,6 +36,8 @@ interface Session {
   loginById: (employeeId: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   setLang: (lang: Lang) => Promise<void>;
+  /** Set or clear the signed-in user's own avatar photo (data URL). */
+  setAvatar: (avatar: string | null) => Promise<void>;
   can: (key: PermKey) => boolean;
   /** The prototype's preview mode: while set, `me` IS the previewed
    *  user — the access token, roles, scopes and data all follow. */
@@ -136,6 +138,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         previewRef.current = null;
         setPreview(null);
         adopt(null);
+      },
+      setAvatar: async (avatar) => {
+        adopt(await patch(MeResponseSchema, '/auth/me', { avatar }));
       },
       setLang: async (lang) => {
         adopt(await patch(MeResponseSchema, '/auth/me', { lang }));
