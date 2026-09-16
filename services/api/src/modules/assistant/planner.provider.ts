@@ -53,6 +53,7 @@ export function stubPlan(input: PlanInput): Plan {
     else if (miss.includes('durationMin') && numM) args.durationMin = cleanNum(numM[1]!);
     else if (miss.includes('name') && !numM) args.name = word;
     else if (miss.includes('serviceName') && !numM) args.serviceName = word;
+    else if (miss.includes('customerName') && !numM) args.customerName = word;
     else if (miss.includes('category') && !numM) args.category = word;
     else if (miss.includes('performers')) args.performers = word;
     else if (miss.includes('email') && /@/.test(word)) args.email = word;
@@ -82,6 +83,15 @@ export function stubPlan(input: PlanInput): Plan {
     )
   )
     return { actionId: 'list_appointments', args: {} };
+
+  // Customer profile: "tell me about NAME", "who is NAME", "NAME's history".
+  const cust =
+    msg.match(/(?:tell me about|who is|customer(?:\s+profile)?(?:\s+of|\s+for)?|profile of|history of|about the customer)\s+(.+?)\??$/i) ??
+    msg.match(/(.+?)['’]s\s+(?:profile|history|record|details)\b/i);
+  if (has('customer_profile') && cust) {
+    const name = cust[1]!.replace(/\b(the|customer|profile|history)\b/gi, '').replace(/\s+/g, ' ').trim();
+    if (name) return { actionId: 'customer_profile', args: { customerName: name } };
+  }
 
   // List services.
   if (has('list_services') && /\b(list|show|what).{0,20}\bservices?\b/.test(low))

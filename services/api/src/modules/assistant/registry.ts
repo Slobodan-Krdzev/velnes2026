@@ -6,6 +6,7 @@ import { createService, updateService } from '../catalog/catalog.crud.service.js
 import { createException, deleteException, listExceptions } from '../scheduling/scheduling.service.js';
 import { createEmployee, updateEmployee } from '../team/team.service.js';
 import { flightdeck } from '../flightdeck/flightdeck.service.js';
+import { isPremium } from '../customers/customers.service.js';
 
 /**
  * The AI Assistant Action Registry (V1 — workspace surface).
@@ -364,6 +365,112 @@ const readServicePrice: ActionDef = {
   },
   async read(_trx, _claims, args) {
     return `${str(args.serviceName)} is ${mkd(Number(args.price))}.`;
+  },
+};
+
+// ── read: customer_profile ("tell me about <customer>") ─────────────
+type CustRow = {
+  id: string;
+  name: string;
+  visits: number;
+  spend: number;
+  points: number;
+  noShows: number;
+  premium: unknown;
+  since: unknown;
+};
+async function resolveCustomer(
+  trx: Trx,
+  raw: string,
+): Promise<{ ok: true; cust: CustRow } | { ok: false; code: 'AMBIGUOUS' | 'NOT_FOUND'; options: string[] }> {
+  const name = raw.trim();
+  const base = trx
+    .selectFrom('customers')
+    .select(['id', 'name', 'visits', 'spend', 'points', 'noShows', 'premium', 'since']);
+  const exact = await base.where(sql<boolean>`lower(name) = ${name.toLowerCase()}`).execute();
+  const hits = exact.length
+    ? exact
+    : await base.where(sql<boolean>`lower(name) like ${'%' + name.toLowerCase() + '%'}`).limit(8).execute();
+  if (hits.length === 1) return { ok: true, cust: hits[0] as CustRow };
+  if (hits.length > 1) return { ok: false, code: 'AMBIGUOUS', options: hits.map((h) => h.name) };
+  return { ok: false, code: 'NOT_FOUND', options: [] };
+}
+const topOf = (rows: (string | null)[]): { name: string; n: number } | null => {
+  const m = new Map<string, number>();
+  for (const r of rows) if (r) m.set(r, (m.get(r) ?? 0) + 1);
+  let best: { name: string; n: number } | null = null;
+  for (const [name, n] of m) if (!best || n > best.n) best = { name, n };
+  return best;
+};
+
+const customerProfile: ActionDef = {
+  id: 'customer_profile',
+  app: 'workspace',
+  kind: 'read',
+  risk: 'low',
+  permission: 'customers.view_assigned',
+  required: ['customerName'],
+  title: 'Customer profile',
+  description:
+    "Explain a customer in words — visits, spend, loyalty points, Premium status, their most-booked service, usual location and usual staff member, and first/last visit. Use for \"tell me about <name>\", \"who is <name>\", \"<name>'s history\".",
+  params: [{ name: 'customerName', type: 'string', description: 'The customer to look up', required: true }],
+  async resolve(trx, _claims, raw) {
+    const customerName = str(raw.customerName);
+    if (!customerName) return { args: {}, missing: ['customerName'], errors: [] };
+    const r = await resolveCustomer(trx, customerName);
+    if (!r.ok)
+      return {
+        args: { customerName },
+        missing: [],
+        errors: [
+          {
+            field: 'customerName',
+            code: r.code,
+            message:
+              r.code === 'AMBIGUOUS'
+                ? `Several customers match "${customerName}": ${r.options.join(', ')}. Which one?`
+                : `I couldn't find a customer called "${customerName}".`,
+          },
+        ],
+      };
+    return { args: { customerId: r.cust.id }, missing: [], errors: [] };
+  },
+  async read(trx, _claims, args) {
+    const c = (await trx
+      .selectFrom('customers')
+      .select(['id', 'name', 'visits', 'spend', 'points', 'noShows', 'premium', 'since', 'phone'])
+      .where('id', '=', String(args.customerId))
+      .executeTakeFirstOrThrow()) as CustRow & { phone: string | null };
+    const appts = await trx
+      .selectFrom('appointments as a')
+      .leftJoin('services as s', 's.id', 'a.serviceId')
+      .leftJoin('locations as l', 'l.id', 'a.locationId')
+      .leftJoin('employees as e', 'e.id', 'a.employeeId')
+      .select(['a.date', 's.name as service', 'l.name as location', 'e.name as staff'])
+      .where('a.customerId', '=', String(args.customerId))
+      .where('a.kind', '=', 'appointment')
+      .where('a.status', '<>', 'cancelled')
+      .execute();
+    const day = (d: unknown) => new Date(d as string).toISOString().slice(0, 10);
+    const lines: string[] = [];
+    const prem = isPremium(c.premium) ? ' · Velnes Premium member' : '';
+    lines.push(
+      `${c.name}: ${c.visits} visit${c.visits === 1 ? '' : 's'}, ${mkd(c.spend)} spent, ${c.points} point${c.points === 1 ? '' : 's'}${prem}.`,
+    );
+    lines.push(`Customer since ${day(c.since)}.`);
+    if (appts.length) {
+      const dates = appts.map((a) => new Date(a.date as unknown as string).getTime());
+      lines.push(`First visit ${day(Math.min(...dates))}, last visit ${day(Math.max(...dates))}.`);
+      const svc = topOf(appts.map((a) => a.service));
+      const loc = topOf(appts.map((a) => a.location));
+      const staff = topOf(appts.map((a) => a.staff));
+      if (svc) lines.push(`Most booked: ${svc.name} (${svc.n}×).`);
+      if (loc) lines.push(`Usually at ${loc.name}${staff ? `, with ${staff.name}` : ''}.`);
+    } else {
+      lines.push('No appointments on record yet.');
+    }
+    if (c.noShows > 0) lines.push(`${c.noShows} no-show${c.noShows === 1 ? '' : 's'} on record.`);
+    return lines.join('\n');
   },
 };
 
@@ -1354,6 +1461,7 @@ const addSplitShift: ActionDef = {
 const ALL: ActionDef[] = [
   businessStatus,
   listAppointments,
+  customerProfile,
   listServices,
   readServicePrice,
   createServiceAction,

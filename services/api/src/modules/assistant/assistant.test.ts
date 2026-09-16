@@ -192,6 +192,17 @@ describe('the AI Assistant: plans, previews, approves, executes, audits', () => 
     expect(body.reply).not.toContain('Revenue today:'); // not the status summary
   });
 
+  it('explains a customer: visits, spend, most-booked, first/last visit', async () => {
+    const res = await msg('tell me about Katerina Stojanovska', undefined);
+    const body = res.json();
+    expect(body.draft.actionId).toBe('customer_profile');
+    expect(body.draft.kind).toBe('read');
+    expect(body.reply).toContain('Katerina Stojanovska');
+    expect(body.reply).toMatch(/visit/i);
+    expect(body.reply).toContain('MKD');
+    expect(body.reply.toLowerCase()).toContain('most booked');
+  });
+
   it('lists the salon services on request', async () => {
     const res = await msg('What are my services?', undefined);
     const body = res.json();

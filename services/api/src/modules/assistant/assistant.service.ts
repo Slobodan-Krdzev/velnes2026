@@ -45,6 +45,7 @@ interface Stored {
  *  own richer messages for not-found / ambiguous). */
 const PROMPTS: Record<string, string> = {
   serviceName: 'Which service?',
+  customerName: 'Which customer?',
   name: "What should the service be called?",
   price: "What's the price (in MKD)?",
   durationMin: 'How long does it take, in minutes?',
