@@ -383,22 +383,54 @@ const businessStatus: ActionDef = {
     return { args: {}, missing: [], errors: [] };
   },
   async read(trx, claims) {
-    const locId = await primaryLocationId(trx);
-    if (!locId) return "You don't have an operating location yet, so there's nothing to report.";
-    const f = await flightdeck(trx, { tenantId: claims.ten, locId, greetingName: '' });
+    // A whole-business question: aggregate today's figures across every
+    // operating location (a booking at any location counts), then take the
+    // tenant-wide items (new customers, Premium, stock) once. Reuses the
+    // flightdeck door — the same numbers the dashboard shows.
+    const locs = await trx
+      .selectFrom('locations')
+      .select('id')
+      .where('lifecycle', '<>', 'DRAFT')
+      .orderBy('createdAt')
+      .execute();
+    const locIds = locs.map((l) => l.id);
+    if (!locIds.length) {
+      const only = await primaryLocationId(trx);
+      if (only) locIds.push(only);
+    }
+    if (!locIds.length) return "You don't have an operating location yet, so there's nothing to report.";
+
+    // Sequentially (one transaction, one connection): sum the per-location
+    // today fields; keep a representative deck for the tenant-wide ones.
+    let bookedToday = 0;
+    let totalSlots = 0;
+    let revenueToday = 0;
+    let noShows = 0;
+    type Deck = Awaited<ReturnType<typeof flightdeck>>;
+    let primary: Deck | null = null;
+    for (const locId of locIds) {
+      const f = await flightdeck(trx, { tenantId: claims.ten, locId, greetingName: '' });
+      bookedToday += f.pulse.bookedToday;
+      totalSlots += f.pulse.totalSlots;
+      revenueToday += f.pulse.revenueToday;
+      noShows += f.snapshot.noShows;
+      if (!primary || f.pulse.bookedToday > primary.pulse.bookedToday) primary = f;
+    }
+    const f = primary!;
     const p = f.pulse;
+    const capacityPct = totalSlots ? Math.round((bookedToday / totalSlots) * 100) : 0;
+    const noShowPct = bookedToday ? Math.round((noShows / bookedToday) * 100) : 0;
+    const many = locIds.length > 1;
     const lines: string[] = [];
     const delta = (d: number | null) => (d === null ? '' : d === 0 ? ' (flat)' : d > 0 ? ` (up ${d}%)` : ` (down ${Math.abs(d)}%)`);
 
     lines.push(
-      `Appointments: ${p.bookedToday} of ${p.totalSlots} slot${p.totalSlots === 1 ? '' : 's'} booked today — ${p.capacityPct}% capacity.`,
+      `Appointments: ${bookedToday} of ${totalSlots} slot${totalSlots === 1 ? '' : 's'} booked today — ${capacityPct}% capacity${many ? ' across your locations' : ''}.`,
     );
-    lines.push(
-      `Revenue today: ${mkd(p.revenueToday)}${p.revenueTarget ? ` (recent daily average ~${mkd(p.revenueTarget)})` : ''}.`,
-    );
+    lines.push(`Revenue today: ${mkd(revenueToday)}.`);
     lines.push(`New customers this month: ${p.newCustomers}${delta(p.newCustomersDeltaPct)}.`);
     lines.push(`Average spend: ${mkd(p.avgSpend)}${delta(p.avgSpendDeltaPct)}.`);
-    if (f.snapshot.noShows > 0) lines.push(`No-shows today: ${f.snapshot.noShows} (${f.snapshot.noShowPct}%).`);
+    if (noShows > 0) lines.push(`No-shows today: ${noShows} (${noShowPct}%).`);
     if (f.memberRecs.count > 0)
       lines.push(
         `Velnes Premium: ${f.memberRecs.count} member opportunit${f.memberRecs.count === 1 ? 'y' : 'ies'} waiting, worth about ${mkd(f.memberRecs.value)}.`,
