@@ -54,9 +54,33 @@ describe('HQ team, supplier intelligence and the mail outbox', () => {
     await admin.query(`DELETE FROM supplier_brands WHERE brand_id IN (SELECT id FROM brands WHERE name='OrthoFlex (test)')`);
     await admin.query(`DELETE FROM brands WHERE name='OrthoFlex (test)'`);
     await admin.query(`DELETE FROM hq_roles WHERE std = false`);
+    await admin.query(`DELETE FROM service_categories WHERE name='Lashes (test)'`);
     await admin.end();
     await app.close();
     await closeDb();
+  });
+
+  it('a new service category must ship with a card image and icon (client-app media)', async () => {
+    const card = 'data:image/jpeg;base64,/9j/4AAQSkZJRg==';
+    const icon = 'data:image/png;base64,iVBORw0KGgo=';
+    // Refused without media.
+    const bad = await call('POST', '/hq/categories', { name: 'Lashes (test)', type: 'services' });
+    expect(bad.statusCode).toBe(400);
+    // Products don't need media.
+    // Accepted with both; GET returns them.
+    const ok = await call('POST', '/hq/categories', { name: 'Lashes (test)', type: 'services', cardImage: card, icon });
+    expect(ok.statusCode).toBe(200);
+    const id = ok.json().id as string;
+    const list = await call('GET', '/hq/categories');
+    const row = list.json().categories.find((c: { id: string }) => c.id === id);
+    expect(row.cardImage).toBe(card);
+    expect(row.icon).toBe(icon);
+    // Editing the media on an existing category works.
+    const newIcon = 'data:image/png;base64,AAAABBBB=';
+    const patched = await call('PATCH', `/hq/categories/services/${id}`, { icon: newIcon });
+    expect(patched.statusCode).toBe(200);
+    const after = (await call('GET', '/hq/categories')).json().categories.find((c: { id: string }) => c.id === id);
+    expect(after.icon).toBe(newIcon);
   });
 
   it('invites a teammate: super-only, invited status, mock mail in the outbox, login refused', async () => {

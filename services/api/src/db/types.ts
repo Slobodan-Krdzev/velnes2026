@@ -806,6 +806,8 @@ export interface SchemaMigrations {
 }
 
 export interface ServiceCategories {
+  cardImage: string | null;
+  icon: string | null;
   id: Generated<string>;
   name: string;
   parentId: string | null;

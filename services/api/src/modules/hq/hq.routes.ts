@@ -536,8 +536,8 @@ export function hqRoutes(app: FastifyInstance) {
         const prod = await trx.selectFrom('productCategories').selectAll().orderBy('sort').orderBy('name').execute();
         return {
           categories: [
-            ...svc.map((c) => ({ id: c.id, name: c.name, type: 'services' as const, sort: c.sort })),
-            ...prod.map((c) => ({ id: c.id, name: c.name, type: 'products' as const, sort: c.sort })),
+            ...svc.map((c) => ({ id: c.id, name: c.name, type: 'services' as const, sort: c.sort, cardImage: c.cardImage, icon: c.icon })),
+            ...prod.map((c) => ({ id: c.id, name: c.name, type: 'products' as const, sort: c.sort, cardImage: null, icon: null })),
           ],
         };
       }),
@@ -566,11 +566,13 @@ export function hqRoutes(app: FastifyInstance) {
           .selectFrom(table)
           .select((eb) => eb.fn.max('sort').as('m'))
           .executeTakeFirst();
-        const row = await trx
-          .insertInto(table)
-          .values({ name: req.body.name, sort: (max?.m ?? 0) + 1 })
-          .returning('id')
-          .executeTakeFirstOrThrow();
+        // Service categories carry the client-app card image + icon (the
+        // contract requires them for 'services'); product categories don't.
+        const values =
+          req.body.type === 'services'
+            ? { name: req.body.name, sort: (max?.m ?? 0) + 1, cardImage: req.body.cardImage, icon: req.body.icon }
+            : { name: req.body.name, sort: (max?.m ?? 0) + 1 };
+        const row = await trx.insertInto(table).values(values).returning('id').executeTakeFirstOrThrow();
         return { id: row.id };
       }),
   });
@@ -597,17 +599,27 @@ export function hqRoutes(app: FastifyInstance) {
             .executeTakeFirst();
           if (!row)
             return reply.code(404).send({ error: 'NOT_FOUND', message: 'Unknown category' });
-          const dupe = await trx
-            .selectFrom(table)
-            .select('id')
-            .where('name', '=', req.body.name)
-            .where('id', '!=', req.params.id)
-            .executeTakeFirst();
-          if (dupe)
-            return reply.code(409).send({ error: 'DUPLICATE', message: 'That category already exists' });
-          // A rename follows every salon's items automatically — the
-          // id is the truth, the name is the label.
-          await trx.updateTable(table).set({ name: req.body.name }).where('id', '=', req.params.id).execute();
+          if (req.body.name !== undefined) {
+            const dupe = await trx
+              .selectFrom(table)
+              .select('id')
+              .where('name', '=', req.body.name)
+              .where('id', '!=', req.params.id)
+              .executeTakeFirst();
+            if (dupe)
+              return reply.code(409).send({ error: 'DUPLICATE', message: 'That category already exists' });
+          }
+          // A rename follows every salon's items automatically — the id is
+          // the truth, the name is the label. Media (card image + icon) is a
+          // service-category field only.
+          const set: Record<string, unknown> = {};
+          if (req.body.name !== undefined) set.name = req.body.name;
+          if (table === 'serviceCategories') {
+            if (req.body.cardImage !== undefined) set.cardImage = req.body.cardImage;
+            if (req.body.icon !== undefined) set.icon = req.body.icon;
+          }
+          if (Object.keys(set).length)
+            await trx.updateTable(table).set(set).where('id', '=', req.params.id).execute();
           return { ok: true as const };
         }),
     });

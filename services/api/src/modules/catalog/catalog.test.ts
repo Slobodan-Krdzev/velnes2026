@@ -252,18 +252,20 @@ describe('catalog doors (contract tests vs prototype)', () => {
       payload: { email: 'ivana@revelapps.com', password: 'velnes-demo' },
     });
     const hqToken = (hq.json() as { accessToken: string }).accessToken;
+    // Service categories carry the client-app card image + icon (required).
+    const media = { cardImage: 'data:image/jpeg;base64,/9j/4AAQSkZJRg==', icon: 'data:image/png;base64,iVBORw0KGgo=' };
     const created = await app.inject({
       method: 'POST',
       url: `${API_PREFIX}/hq/categories`,
       headers: { authorization: `Bearer ${hqToken}` },
-      payload: { name: 'Prenatal (test)', type: 'services' },
+      payload: { name: 'Prenatal (test)', type: 'services', ...media },
     });
     expect(created.statusCode).toBe(200);
     const dupe = await app.inject({
       method: 'POST',
       url: `${API_PREFIX}/hq/categories`,
       headers: { authorization: `Bearer ${hqToken}` },
-      payload: { name: 'Prenatal (test)', type: 'services' },
+      payload: { name: 'Prenatal (test)', type: 'services', ...media },
     });
     expect(dupe.statusCode).toBe(409);
 

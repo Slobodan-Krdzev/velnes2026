@@ -164,21 +164,45 @@ export const HqAuditListSchema = z.object({
 
 /** The Velnes taxonomy, HQ-side: the platform's category shelves
  *  every salon picks from. */
+/** Category media — data URLs, stored inline like the salon gallery until an
+ *  asset host is decided. The client discovery app renders these. */
+export const CATEGORY_CARD_MAX_CHARS = 600_000;
+export const CATEGORY_ICON_MAX_CHARS = 200_000;
+export const CategoryCardSchema = z.string().min(1).max(CATEGORY_CARD_MAX_CHARS);
+export const CategoryIconSchema = z.string().min(1).max(CATEGORY_ICON_MAX_CHARS);
+
 export const HqCategoryRowSchema = z.object({
   id: z.uuid(),
   name: z.string(),
   type: z.enum(['services', 'products']),
   sort: z.number().int(),
+  // Service categories only (the client app browses them): a card image
+  // and an icon, both data URLs. Null on product categories, and on
+  // taxonomy rows created before this was required.
+  cardImage: z.string().nullable().default(null),
+  icon: z.string().nullable().default(null),
 });
 export const HqCategoryListSchema = z.object({
   categories: z.array(HqCategoryRowSchema),
 });
-export const HqCategoryCreateSchema = z.object({
-  name: z.string().min(1).max(60),
-  type: z.enum(['services', 'products']),
-});
+export const HqCategoryCreateSchema = z
+  .object({
+    name: z.string().min(1).max(60),
+    type: z.enum(['services', 'products']),
+    cardImage: CategoryCardSchema.optional(),
+    icon: CategoryIconSchema.optional(),
+  })
+  // A service category must ship with its card image and icon — the
+  // client app has nothing to show otherwise.
+  .superRefine((v, ctx) => {
+    if (v.type !== 'services') return;
+    if (!v.cardImage) ctx.addIssue({ code: 'custom', path: ['cardImage'], message: 'A card image is required' });
+    if (!v.icon) ctx.addIssue({ code: 'custom', path: ['icon'], message: 'An icon is required' });
+  });
 export const HqCategoryPatchSchema = z.object({
-  name: z.string().min(1).max(60),
+  name: z.string().min(1).max(60).optional(),
+  cardImage: CategoryCardSchema.optional(),
+  icon: CategoryIconSchema.optional(),
 });
 
 /** The category-request intake, HQ-side. */

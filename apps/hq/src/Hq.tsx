@@ -307,11 +307,38 @@ export function Hq({
 /** The Velnes taxonomy: the platform category shelves every salon
  *  picks from. Create and rename; renames follow every salon's items
  *  automatically because items reference the id, not the name. */
+/** Downscale an uploaded image to a data URL. Card = JPEG (opaque),
+ *  icon = PNG (keeps transparency). Keeps well under the contract caps. */
+async function fileToDataUrl(file: File, maxEdge: number, kind: 'card' | 'icon'): Promise<string> {
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await new Promise<HTMLImageElement>((res, rej) => {
+      const i = new Image();
+      i.onload = () => res(i);
+      i.onerror = rej;
+      i.src = url;
+    });
+    const scale = Math.min(1, maxEdge / Math.max(img.width, img.height));
+    const w = Math.max(1, Math.round(img.width * scale));
+    const h = Math.max(1, Math.round(img.height * scale));
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    canvas.getContext('2d')!.drawImage(img, 0, 0, w, h);
+    return kind === 'card' ? canvas.toDataURL('image/jpeg', 0.82) : canvas.toDataURL('image/png');
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
 function Categories({ say }: { say: (m: string) => void }) {
   const { t } = useTranslation();
   const [rows, setRows] = useState<z.infer<typeof HqCategoryListSchema>['categories']>([]);
   const [name, setName] = useState('');
   const [type, setType] = useState<'services' | 'products'>('services');
+  const [cardImage, setCardImage] = useState<string | null>(null);
+  const [icon, setIcon] = useState<string | null>(null);
+  const [imgEdit, setImgEdit] = useState<{ id: string; name: string; cardImage: string | null; icon: string | null } | null>(null);
   const [renaming, setRenaming] = useState<{ id: string; type: string; name: string } | null>(null);
   const [requests, setRequests] = useState<z.infer<typeof HqCategoryRequestListSchema>['requests']>([]);
   const [declining, setDeclining] = useState<{ id: string; reason: string } | null>(null);
@@ -354,12 +381,35 @@ function Categories({ say }: { say: (m: string) => void }) {
     }
   };
 
+  const closeAdd = () => {
+    setAdding(false);
+    setName('');
+    setCardImage(null);
+    setIcon(null);
+  };
   const add = async () => {
     try {
-      await hqPost(z.object({ id: z.string() }), '/hq/categories', { name: name.trim(), type });
-      setName('');
-      setAdding(false);
+      await hqPost(z.object({ id: z.string() }), '/hq/categories', {
+        name: name.trim(),
+        type,
+        ...(type === 'services' ? { cardImage: cardImage ?? undefined, icon: icon ?? undefined } : {}),
+      });
+      closeAdd();
       say(t('hq.categoryAdded'));
+      load();
+    } catch (e) {
+      say(e instanceof HqApiError ? e.message : String(e));
+    }
+  };
+  const saveImages = async () => {
+    if (!imgEdit) return;
+    try {
+      await hqPatch(z.object({ ok: z.literal(true) }), `/hq/categories/services/${imgEdit.id}`, {
+        ...(imgEdit.cardImage ? { cardImage: imgEdit.cardImage } : {}),
+        ...(imgEdit.icon ? { icon: imgEdit.icon } : {}),
+      });
+      setImgEdit(null);
+      say(t('hq.categoryImagesSaved'));
       load();
     } catch (e) {
       say(e instanceof HqApiError ? e.message : String(e));
@@ -381,6 +431,34 @@ function Categories({ say }: { say: (m: string) => void }) {
     }
   };
 
+  const imgPicker = (label: string, value: string | null, kind: 'card' | 'icon', onPick: (v: string) => void) => (
+    <label className="field" style={{ flex: 1 }}>
+      <span>{label}</span>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        {value ? (
+          <img
+            src={value}
+            alt=""
+            style={{ width: kind === 'card' ? 72 : 44, height: 44, objectFit: kind === 'card' ? 'cover' : 'contain', borderRadius: 6, background: 'var(--surface-muted, #f4f2ec)' }}
+          />
+        ) : (
+          <span style={{ width: kind === 'card' ? 72 : 44, height: 44, borderRadius: 6, background: 'var(--surface-muted, #f4f2ec)', display: 'grid', placeItems: 'center', color: 'var(--ink-muted)' }}>
+            <Icon d={I.plus} size={16} />
+          </span>
+        )}
+        <input
+          type="file"
+          accept="image/*"
+          onChange={async (e) => {
+            const f = e.target.files?.[0];
+            if (f) onPick(await fileToDataUrl(f, kind === 'card' ? 720 : 128, kind));
+            e.target.value = '';
+          }}
+        />
+      </div>
+    </label>
+  );
+
   const pane = (kind: 'services' | 'products') => (
     <div className="card">
       <div className="card-header">
@@ -401,7 +479,18 @@ function Categories({ say }: { say: (m: string) => void }) {
                       onChange={(e) => setRenaming({ ...renaming, name: e.target.value })}
                     />
                   ) : (
-                    r.name
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      {r.type === 'services' ? (
+                        r.icon ? (
+                          <img src={r.icon} alt="" style={{ width: 24, height: 24, borderRadius: 5, objectFit: 'contain', background: 'var(--surface-muted, #f4f2ec)' }} />
+                        ) : (
+                          <span title={t('hq.imagesMissing')} style={{ width: 24, height: 24, borderRadius: 5, display: 'grid', placeItems: 'center', background: 'var(--surface-muted, #f4f2ec)', color: 'var(--ink-muted)', fontSize: 13 }}>
+                            !
+                          </span>
+                        )
+                      ) : null}
+                      {r.name}
+                    </span>
                   )}
                 </td>
                 <td className="right">
@@ -416,6 +505,16 @@ function Categories({ say }: { say: (m: string) => void }) {
                     </>
                   ) : (
                     <>
+                      {r.type === 'services' ? (
+                        <>
+                          <button
+                            className="btn btn-ghost btn-sm"
+                            onClick={() => setImgEdit({ id: r.id, name: r.name, cardImage: r.cardImage, icon: r.icon })}
+                          >
+                            {r.cardImage && r.icon ? t('hq.editImages') : t('hq.addImages')}
+                          </button>{' '}
+                        </>
+                      ) : null}
                       <button
                         className="btn btn-ghost btn-sm"
                         onClick={() => setRenaming({ id: r.id, type: r.type, name: r.name })}
@@ -562,16 +661,59 @@ function Categories({ say }: { say: (m: string) => void }) {
                   <option value="products">{t('hq.forProducts')}</option>
                 </select>
               </label>
+              {type === 'services' ? (
+                <>
+                  <span className="muted" style={{ fontSize: 12, fontWeight: 500 }}>
+                    {t('hq.categoryMediaHint')}
+                  </span>
+                  <div style={{ display: 'flex', gap: 14 }}>
+                    {imgPicker(t('hq.categoryCard'), cardImage, 'card', setCardImage)}
+                    {imgPicker(t('hq.categoryIcon'), icon, 'icon', setIcon)}
+                  </div>
+                </>
+              ) : null}
             </div>
             <div className="modal-foot">
-              <button className="btn btn-secondary" onClick={() => setAdding(false)}>
+              <button className="btn btn-secondary" onClick={closeAdd}>
                 {t('hq.cancel')}
               </button>
-              <button className="btn btn-primary" disabled={!name.trim()} onClick={() => void add()}>
+              <button
+                className="btn btn-primary"
+                disabled={!name.trim() || (type === 'services' && !(cardImage && icon))}
+                onClick={() => void add()}
+              >
                 {t('hq.addCategory')}
               </button>
             </div>
-            <button className="modal-close" aria-label={t('hq.cancel')} onClick={() => setAdding(false)}>
+            <button className="modal-close" aria-label={t('hq.cancel')} onClick={closeAdd}>
+              <Icon d={I.x} size={20} />
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {imgEdit ? (
+        <div className="overlay" onClick={() => setImgEdit(null)}>
+          <div className="modal" role="dialog" aria-modal="true" style={{ maxWidth: 420 }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-head">
+              <h2>{t('hq.categoryImages')} · {imgEdit.name}</h2>
+            </div>
+            <div className="modal-body" style={{ display: 'grid', gap: 14 }}>
+              <span className="muted" style={{ fontSize: 12, fontWeight: 500 }}>{t('hq.categoryMediaHint')}</span>
+              <div style={{ display: 'flex', gap: 14 }}>
+                {imgPicker(t('hq.categoryCard'), imgEdit.cardImage, 'card', (v) => setImgEdit({ ...imgEdit, cardImage: v }))}
+                {imgPicker(t('hq.categoryIcon'), imgEdit.icon, 'icon', (v) => setImgEdit({ ...imgEdit, icon: v }))}
+              </div>
+            </div>
+            <div className="modal-foot">
+              <button className="btn btn-secondary" onClick={() => setImgEdit(null)}>
+                {t('hq.cancel')}
+              </button>
+              <button className="btn btn-primary" disabled={!(imgEdit.cardImage && imgEdit.icon)} onClick={() => void saveImages()}>
+                {t('hq.save')}
+              </button>
+            </div>
+            <button className="modal-close" aria-label={t('hq.cancel')} onClick={() => setImgEdit(null)}>
               <Icon d={I.x} size={20} />
             </button>
           </div>
