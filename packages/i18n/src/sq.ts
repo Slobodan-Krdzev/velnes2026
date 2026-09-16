@@ -288,6 +288,7 @@ export const sq: Record<TranslationKey, string> = {
   'cal.pickDate': 'Zgjidh datën',
   'shell.showDataFor': 'Shfaq të dhënat për',
   'shell.signedIn': 'I identifikuar',
+  'shell.settings': 'Cilësimet',
   'shell.changePhoto': 'Ndrysho foton',
   'shell.addPhoto': 'Shto foto',
   'shell.deletePhoto': 'Fshij foton',

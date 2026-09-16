@@ -288,6 +288,7 @@ export const mk: Record<TranslationKey, string> = {
   'cal.pickDate': 'Избери датум',
   'shell.showDataFor': 'Прикажи податоци за',
   'shell.signedIn': 'Најавен(а)',
+  'shell.settings': 'Поставки',
   'shell.changePhoto': 'Смени фотографија',
   'shell.addPhoto': 'Додај фотографија',
   'shell.deletePhoto': 'Избриши фотографија',

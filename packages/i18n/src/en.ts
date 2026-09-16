@@ -295,6 +295,7 @@ export const en = {
   'cal.pickDate': 'Pick a date',
   'shell.showDataFor': 'Show data for',
   'shell.signedIn': 'Signed in',
+  'shell.settings': 'Settings',
   'shell.changePhoto': 'Change photo',
   'shell.addPhoto': 'Add photo',
   'shell.deletePhoto': 'Delete photo',

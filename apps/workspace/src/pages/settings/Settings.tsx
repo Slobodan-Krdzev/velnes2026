@@ -17,7 +17,7 @@ import {
   type WeekHours,
 } from '@velnes/contracts';
 import { I, Icon, PhoneInput } from '@velnes/ui';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { z } from 'zod';
@@ -108,7 +108,11 @@ export function SettingsPage() {
   const first = visible.find(([id]) => !id.startsWith('#'))?.[0] as SectionId | undefined;
   // Exit-preview lands here asking for a section — the prototype's
   // state.settingsTab='team' — but only one the caller may see.
-  const asked = (useLocation().state as { tab?: SectionId } | null)?.tab;
+  const routeState = useLocation().state as { tab?: SectionId; profile?: string } | null;
+  const asked = routeState?.tab;
+  // The account menu's Settings link asks to open the signed-in user's own
+  // member panel (their dedicated edit screen).
+  const askedProfile = routeState?.profile;
   const [tab, setTab] = useState<SectionId>(
     asked && visible.some(([id]) => id === asked) ? asked : (first ?? 'general'),
   );
@@ -156,6 +160,7 @@ export function SettingsPage() {
           {tab === 'locations' ? <LocationsSection /> : null}
           {tab === 'team' ? (
             <TeamSection
+              openProfileId={askedProfile}
               openAudit={() => {
                 setAuditFromTeam(true);
                 setTab('audit');
@@ -869,7 +874,7 @@ const inits = (n: string) =>
 
 /** The prototype's setTeam(): the Users table, the invite lade and
  *  the per-user locations panel — every act through the real doors. */
-function TeamSection({ openAudit }: { openAudit: () => void }) {
+function TeamSection({ openAudit, openProfileId }: { openAudit: () => void; openProfileId?: string | undefined }) {
   const { t } = useTranslation();
   const toast = useToast();
   const qc = useQueryClient();
@@ -888,6 +893,16 @@ function TeamSection({ openAudit }: { openAudit: () => void }) {
   const [inviting, setInviting] = useState(false);
   const [locsFor, setLocsFor] = useState<string | null>(null);
   const [editing, setEditing] = useState<Employee | null>(null);
+  // The account menu's Settings link opens the signed-in user's own panel.
+  const openedProfile = useRef(false);
+  useEffect(() => {
+    if (openedProfile.current || !openProfileId) return;
+    const emp = employees.data?.employees.find((e) => e.id === openProfileId);
+    if (emp) {
+      openedProfile.current = true;
+      setEditing(emp);
+    }
+  }, [openProfileId, employees.data]);
 
   const patchEmp = async (id: string, body: Record<string, unknown>) => {
     try {

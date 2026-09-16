@@ -2,9 +2,10 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { z } from 'zod';
 import { EmployeeSchema, EmployeeTimingsSchema, type Employee, type WeekHours } from '@velnes/contracts';
 import { EMP_COLORS, empColorOf, I, Icon, PhoneInput } from '@velnes/ui';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { get, patch, post } from '@velnes/client';
+import { get, patch, post, useSession } from '@velnes/client';
+import { fileToAvatarDataUrl } from '../../lib/image.js';
 import { useEmployees, useLocationCatalog, useLocations } from '../../api/queries.js';
 import { PanelPortal } from '../../lib/Panel.js';
 import { useOutsideClose } from '../../lib/pop.js';
@@ -283,6 +284,25 @@ export function EmployeePanel({
   const [hours, setHours] = useState<WeekHours>(employee?.hours ?? STD_WEEK);
   const [skills, setSkills] = useState<string[]>(employee?.skillServiceIds ?? []);
   const [bookable, setBookable] = useState(employee?.bookable ?? false);
+  // The photo is self-service: editable only when this is your own screen,
+  // saved through /auth/me so it works whatever your role.
+  const { me, setAvatar: setMyAvatar } = useSession();
+  const isSelf = !!employee && employee.id === me?.id;
+  const [photo, setPhoto] = useState<string | null>(employee?.avatar ?? null);
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const avatarInput = useRef<HTMLInputElement>(null);
+  const setMyPhoto = async (v: string | null) => {
+    setPhotoBusy(true);
+    try {
+      await setMyAvatar(v);
+      setPhoto(v);
+      await qc.invalidateQueries({ queryKey: ['employees'] });
+    } catch (e) {
+      toast(e instanceof Error ? e.message : String(e));
+    } finally {
+      setPhotoBusy(false);
+    }
+  };
   const [dirty, setDirty] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const timings = useQuery({
@@ -349,15 +369,15 @@ export function EmployeePanel({
           </div>
         </div>
         <div className="panel-body">
-          {/* The photo is the member's own — set from their account menu.
-              Shown here read-only so the manager sees who this is. */}
+          {/* The photo is the member's own: editable on your own screen,
+              read-only when a manager views someone else. */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 16 }}>
             <span
               className="avatar"
-              style={{ width: 56, height: 56, fontSize: 18, ...(employee?.avatar ? { padding: 0, overflow: 'hidden' } : {}) }}
+              style={{ width: 56, height: 56, fontSize: 18, ...(photo ? { padding: 0, overflow: 'hidden' } : {}) }}
             >
-              {employee?.avatar ? (
-                <img src={employee.avatar} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 'inherit' }} />
+              {photo ? (
+                <img src={photo} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 'inherit' }} />
               ) : (
                 (name || employee?.name || '?')
                   .split(' ')
@@ -366,9 +386,33 @@ export function EmployeePanel({
                   .slice(0, 2)
               )}
             </span>
-            <span className="muted" style={{ fontSize: 12, fontWeight: 500 }}>
-              {t('eset.photoSelfService')}
-            </span>
+            {isSelf ? (
+              <>
+                <input
+                  ref={avatarInput}
+                  type="file"
+                  accept="image/*"
+                  style={{ display: 'none' }}
+                  onChange={async (e) => {
+                    const f = e.target.files?.[0];
+                    if (f) await setMyPhoto(await fileToAvatarDataUrl(f));
+                    e.target.value = '';
+                  }}
+                />
+                <button className="btn btn-secondary btn-sm" disabled={photoBusy} onClick={() => avatarInput.current?.click()}>
+                  {photo ? t('shell.changePhoto') : t('shell.addPhoto')}
+                </button>
+                {photo ? (
+                  <button className="btn btn-subtle btn-sm" disabled={photoBusy} onClick={() => void setMyPhoto(null)}>
+                    {t('shell.deletePhoto')}
+                  </button>
+                ) : null}
+              </>
+            ) : (
+              <span className="muted" style={{ fontSize: 12, fontWeight: 500 }}>
+                {t('eset.photoSelfService')}
+              </span>
+            )}
           </div>
           <div className="grid2">
             <label className="field span2">
