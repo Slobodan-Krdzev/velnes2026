@@ -1011,9 +1011,14 @@ const editTeamMember: ActionDef = {
       ...(args.phone !== undefined ? { phone: str(args.phone) || null } : {}),
       ...(args.bookable !== undefined ? { bookable: Boolean(args.bookable) } : {}),
     });
+    const after: Record<string, unknown> = {};
+    if (args.newName !== undefined) after.name = str(args.newName);
+    if (args.title !== undefined) after.title = str(args.title);
+    if (args.phone !== undefined) after.phone = str(args.phone) || '—';
+    if (args.bookable !== undefined) after.bookable = Boolean(args.bookable);
     return {
       message: `Updated ${emp.name}.`,
-      change: { ops: [{ kind: 'update', entity: { type: 'employee', id: emp.id, label: emp.name }, after: {} }] },
+      change: { ops: [{ kind: 'update', entity: { type: 'employee', id: emp.id, label: emp.name }, after }] },
     };
   },
 };

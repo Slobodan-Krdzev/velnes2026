@@ -619,3 +619,32 @@ navigate-delete/entitlement-gate) and the live browser run above. Full gate gree
 **Phase 2 (next, not built here):** extract real `createEmployee`/`updateEmployee`/
 hours doors from the team route handlers (with parity tests), then add team-member,
 working-hours and split-shift actions on top; roles stay navigate-only.
+
+---
+
+## Part I — Phase 2 delivered (2026-09-16)
+
+The team-door refactor + the remaining action set, so the Assistant now covers
+Alex's whole list, every action asking for all it needs before it will act.
+
+- **Refactor first:** `createEmployee` / `updateEmployee` / `checkEmployeeState` /
+  `employeeRow` extracted from the inline `team.routes` handlers into
+  `team.service.ts` (a `TeamError` the routes map to 404/409/422). The routes are
+  now thin; behaviour is unchanged (parity held by the team/roles/authz suites).
+- **New actions** (same resolve → validate → preview → approve → door → dual-audit
+  path): `add_team_member` (invite by name + email; roles stay navigate-only),
+  `edit_team_member` (name/title/phone/bookable), `set_working_hours` (day
+  expressions + am/pm → those days set, others untouched), `add_split_shift`
+  (append a period; the week validator rejects overlaps).
+- **create_service** completed earlier now also requires **category** (so it lands
+  in the catalog) and **performers** (who does it); placeholder args like
+  `<UNKNOWN>` are treated as absent. A successful mutation invalidates the open
+  catalog/schedule views so changes appear live.
+
+Verified: API suite **179 green**; the live model handles free phrasing ("bring on
+a new therapist Jana Petrov, jana@example.com" → invite; "Ana works Monday through
+Friday 9am to 5pm" → hours). Full gate green.
+
+**Still deferred (unchanged):** the real supplier surface; product/combo actions;
+per-employee time-off as a distinct door; the entitlement *usage* metering (F.1).
+Roles/permissions/owner and destructive deletes remain navigate-only by design.
