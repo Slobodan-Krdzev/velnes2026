@@ -24,6 +24,7 @@ import {
 } from '../modules/booking/booking.service.js';
 import { svcAt, svcVariants } from '../modules/catalog/catalog.service.js';
 import { locLive } from '../modules/locations/locations.service.js';
+import { discoveryRoutes } from './discovery.routes.js';
 
 const ErrorSchema = z.object({ error: z.string(), message: z.string() });
 const KeyQuery = z.object({ key: z.string().min(4) });
@@ -128,6 +129,10 @@ export async function publicRoutes(app: FastifyInstance) {
     keyGenerator: (req) =>
       ((req.query as { key?: string })?.key ?? (req.body as { widgetKey?: string })?.widgetKey ?? req.ip) as string,
   });
+
+  // The consumer app's key-free discovery doors share this scope (and
+  // with it, the public rate limiter).
+  await app.register(discoveryRoutes);
 
   const r = app.withTypeProvider<ZodTypeProvider>();
 

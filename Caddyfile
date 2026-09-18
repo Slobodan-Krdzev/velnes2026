@@ -38,3 +38,10 @@ hq.velnes.mk {
 	try_files {path} /index.html
 	file_server
 }
+
+# The consumer app: the public face people browse and book from.
+velnes.mk, www.velnes.mk {
+	root * /srv/velnes/consumer
+	try_files {path} /index.html
+	file_server
+}
