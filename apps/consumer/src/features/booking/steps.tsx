@@ -1,7 +1,9 @@
-import { useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { fmtMKD, minutesLbl } from '../../lib/api/mappers.js';
 import { ApiError, pubPost } from '../../lib/api/client.js';
+import { useSession } from '../../lib/api/session.js';
 import { IcArr } from '../discovery/cards.js';
 import { useBooking } from './store.js';
 
@@ -19,6 +21,11 @@ const IcCheck = (
 export function BookIdentity() {
   const nav = useNavigate();
   const { draft, patch } = useBooking();
+  const { signedIn } = useSession();
+  // A signed-in client has already told us who they are.
+  useEffect(() => {
+    if (signedIn && draft) nav('/book/review', { replace: true });
+  }, [signedIn, draft, nav]);
   const [email, setEmail] = useState(draft?.email ?? '');
   const [fw, setFw] = useState<'self' | 'other'>(draft?.forWhom ?? 'self');
   const [guest, setGuest] = useState(draft?.guestName ?? '');
@@ -211,6 +218,87 @@ export function BookConfirmed() {
         <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginTop: '18px' }}>
           <button className="btn btn-p" onClick={done}>Back to home</button>
         </div>
+      </div>
+    </section>
+  );
+}
+
+/** The signed-in path: nothing to ask, only to confirm. Books through
+ *  the client door, which is what links the person to this salon as a
+ *  customer and rings both bells. */
+export function BookReview() {
+  const nav = useNavigate();
+  const { draft, setDraft } = useBooking();
+  const { signedIn, profile, api } = useSession();
+  const qc = useQueryClient();
+  const [err, setErr] = useState('');
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    if (!signedIn) nav('/book/identity', { replace: true });
+  }, [signedIn, nav]);
+  if (!draft || !profile) return null;
+  const book = async () => {
+    setBusy(true);
+    setErr('');
+    try {
+      const res = await api<{
+        ref: string;
+        date: string;
+        time: string;
+        end: string;
+        serviceName: string;
+        locationName: string;
+        employeeName: string;
+        price: number;
+      }>('/book', {
+        method: 'POST',
+        body: JSON.stringify({
+          key: crypto.randomUUID(),
+          slug: draft.slug,
+          locationId: draft.locationId,
+          serviceId: draft.serviceId,
+          variantId: draft.variantId,
+          date: draft.date,
+          time: draft.time,
+          employeeId: draft.employeeId,
+        }),
+      });
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ['my-appointments'] }),
+        qc.invalidateQueries({ queryKey: ['my-notifications'] }),
+        qc.invalidateQueries({ queryKey: ['my-salons'] }),
+      ]);
+      setDraft({ ...draft, email: profile.email });
+      nav('/book/confirmed', { state: res });
+    } catch (e) {
+      setBusy(false);
+      setErr(e instanceof ApiError ? e.message : 'Something went wrong — please try again.');
+    }
+  };
+  return (
+    <section data-screen="email">
+      <div className="authwrap">
+        <h1>Confirm your booking</h1>
+        <div className="sub">
+          Booking as {`${profile.first} ${profile.last}`.trim()} · {profile.email}
+        </div>
+        <div className="minisum">
+          <div className="r"><span className="k">Salon</span><span className="v">{draft.salonName}</span></div>
+          <div className="r"><span className="k">Treatment</span><span className="v">{draft.serviceName} · {minutesLbl(draft.durationMin)}</span></div>
+          <div className="r"><span className="k">Professional</span><span className="v">{draft.employeeName}</span></div>
+          <div className="r"><span className="k">Date &amp; time</span><span className="v">{draft.dayLbl} · {draft.time}</span></div>
+          <div className="r"><span className="k">Total</span><span className="v">{fmtMKD(draft.price)}</span></div>
+        </div>
+        {err ? <div className="acc-err" style={{ marginTop: '10px' }}>{err}</div> : null}
+        <button
+          className="btn btn-p"
+          style={{ width: '100%', marginTop: '18px', minHeight: '50px' }}
+          disabled={busy}
+          onClick={book}
+        >
+          {busy ? 'Booking…' : 'Confirm booking'} {IcArr}
+        </button>
+        <div className="auth-note">{IcVok13} You can cancel from My Velnes at any time.</div>
       </div>
     </section>
   );

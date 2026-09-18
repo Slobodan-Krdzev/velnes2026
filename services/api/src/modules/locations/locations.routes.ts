@@ -129,6 +129,8 @@ export function locationsRoutes(app: FastifyInstance) {
             ...(b.tz !== undefined ? { tz: b.tz } : {}),
             ...(b.rooms !== undefined ? { rooms: b.rooms } : {}),
             ...(b.online !== undefined ? { online: b.online } : {}),
+            ...(b.lat !== undefined ? { lat: b.lat } : {}),
+            ...(b.lng !== undefined ? { lng: b.lng } : {}),
           })
           .where('id', '=', req.params.id)
           .execute();
@@ -183,6 +185,8 @@ export function locationsRoutes(app: FastifyInstance) {
           opened: row.opened ? row.opened.toISOString().slice(0, 10) : null,
           lifecycle: row.lifecycle,
           hours: (row.hours ?? null) as Location['hours'],
+          lat: row.lat,
+          lng: row.lng,
         };
       }),
   });

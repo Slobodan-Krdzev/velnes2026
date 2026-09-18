@@ -59,6 +59,30 @@ export async function withSupplier<T>(supplierId: string, fn: (trx: Trx) => Prom
   });
 }
 
+/**
+ * The client-context door: a signed-in consumer reads and edits their
+ * own account, their links, their notifications and their appointments
+ * across every salon — never a tenant context, so they can never see a
+ * salon's other customers.
+ */
+export async function withClient<T>(clientUserId: string, fn: (trx: Trx) => Promise<T>): Promise<T> {
+  return db.transaction().execute(async (trx) => {
+    await sql`select set_config('app.client_id', ${clientUserId}, true)`.execute(trx);
+    return fn(trx);
+  });
+}
+
+/**
+ * The narrow pre-session door for the consumer app: register, verify
+ * an email code, log in. Nothing but `client_users` answers here.
+ */
+export async function withClientAuth<T>(fn: (trx: Trx) => Promise<T>): Promise<T> {
+  return db.transaction().execute(async (trx) => {
+    await sql`select set_config('app.auth', 'client_login', true)`.execute(trx);
+    return fn(trx);
+  });
+}
+
 export async function closeDb() {
   await db.destroy();
 }

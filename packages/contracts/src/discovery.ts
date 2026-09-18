@@ -32,6 +32,10 @@ export const DiscoverySalonCardSchema = z.object({
   serviceCategories: z.array(z.string()),
   /** First gallery photo (data URL) — null when the salon has none. */
   photo: z.string().nullable(),
+  /** The first live location's pin, so results can map the salon.
+   *  Null when the salon has not dropped one yet. */
+  lat: z.number().nullable(),
+  lng: z.number().nullable(),
   /** A live widget exists, so the booking doors will answer for it. */
   bookable: z.boolean(),
 });
@@ -70,6 +74,10 @@ export const DiscoverySalonDetailSchema = z.object({
   phone: z.string().nullable(),
   description: z.string(),
   pitch: z.string(),
+  /** The salon's own pin — where the map puts it. Independent of
+   *  whether it is bookable yet; null until someone drops one. */
+  lat: z.number().nullable(),
+  lng: z.number().nullable(),
   categories: z.array(z.string()),
   gallery: z.array(DiscoveryGalleryPhotoSchema),
   showPrices: z.boolean(),
@@ -83,6 +91,9 @@ export const DiscoverySalonDetailSchema = z.object({
       name: z.string(),
       city: z.string().nullable(),
       address: z.string().nullable(),
+      // The map obeys the pin; the address text above is what we print.
+      lat: z.number().nullable(),
+      lng: z.number().nullable(),
     }),
   ),
 });

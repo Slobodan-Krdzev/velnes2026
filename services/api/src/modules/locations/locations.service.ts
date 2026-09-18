@@ -42,6 +42,8 @@ function toContract(l: LocationRow): Location {
     opened: l.opened ? localIso(l.opened) : null,
     lifecycle: l.lifecycle,
     hours: (l.hours ?? null) as Location['hours'],
+    lat: l.lat,
+    lng: l.lng,
   };
 }
 

@@ -47,6 +47,9 @@ export interface SalonVM {
   serviceCategories: string[];
   /** CSS background-image value — first gallery photo, else decorative default. */
   photo: string;
+  /** The salon's own map pin; null until it drops one. */
+  lat: number | null;
+  lng: number | null;
   bookable: boolean;
 }
 
@@ -59,6 +62,8 @@ export function salonVM(s: DiscoverySalonCard): SalonVM {
     pitch: s.pitch,
     serviceCategories: s.serviceCategories,
     photo: s.photo ? `url("${s.photo}")` : 'var(--im)',
+    lat: s.lat,
+    lng: s.lng,
     bookable: s.bookable,
   };
 }

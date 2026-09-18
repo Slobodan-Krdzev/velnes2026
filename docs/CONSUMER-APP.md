@@ -27,7 +27,9 @@ subsystem does not exist yet, the surface is simply absent.
 | Salon page | `GET /public/discovery/salons/:slug` — gallery, description, team (honoring `showTeam`), sellable products, live locations |
 | Treatments, prices, durations | the existing `GET /public/services` (per location) |
 | Open times | the existing `GET /public/availability` — the one availability engine, no second opinion |
-| Booking | the existing `POST /public/book` → `confirmBooking()`, the same door the widget uses |
+| Booking (guest) | the existing `POST /public/book` → `confirmBooking()`, the same door the widget uses |
+| Booking (signed in) | `POST /client/book` → the same `confirmBooking()`, plus the customer link and both notifications |
+| My Velnes | `GET /client/me`, `/me/appointments`, `/me/notifications`, `/me/salons` |
 
 ### The discovery doors (new)
 
@@ -71,36 +73,106 @@ Two decisions worth recording:
   physiotherapist's measured pace exceeds the catalog duration, so the
   engine (correctly) offers nothing.
 
+## Client users — the fourth principal
+
+A **client user** is platform-level: one person, one email, one password,
+every salon. That is different from `customers`, which are per-tenant
+rows a salon owns. The bridge between them is `client_customer_links`,
+and the rule it encodes is: **registering makes you nobody's customer;
+booking does.** The first booking at a salon creates (or adopts, if a
+guest booking already left one with the same email or phone) that
+salon's own `customers` row and links it — so the salon sees a real
+customer in its workspace while the person keeps one account.
+
+Tables: `client_users`, `client_customer_links`, `client_notifications`,
+plus `appointments.client_user_id`
+(`db/migrations/20260918140600_client_users.sql`).
+
+**The token.** `ClientClaims` carries `cli`, which no employee, HQ or
+supplier token has, and lacks the `ten`/`sup` claims theirs require: the
+four shapes reject each other by construction, and a test asserts a
+client token 401s on a staff door. RLS gains `app.client_id` (the
+client's own row, links, notifications and appointments) and the narrow
+`app.auth = 'client_login'` pre-session mode, matching the pattern the
+other three logins already use.
+
+**A client context deliberately cannot read salon tables.** So "my
+appointments" reads the client's own rows under their context, then
+fills in the labels (salon, location, service, professional) under each
+salon's own context — no join across a boundary the database is right to
+refuse.
+
+**Email verification is real**, even though delivery is not. Registration
+generates a six-digit code, queues it through `queueMail()` into
+`mail_outbox` (mock transport: stamped `mock_sent`, nothing leaves), and
+an unverified account cannot sign in. Swapping in a provider changes the
+transport, not the flow. Registration and resend answer identically
+whether or not the address already has an account — the app must never
+become an oracle for who is registered.
+
+## Notifications, both ways
+
+One event, two bells, written inside the same transaction as the change:
+
+- **To the client** (`client_notifications`): booking confirmed,
+  appointment cancelled, password changed, welcome.
+- **To the salon** (`platform_notices`, `audience: 'salons'` — the bell
+  the workspace already shows): a new booking from Velnes, a client
+  cancellation. This needed one new policy: a tenant context could ring
+  HQ but not its own feed.
+
+A client cancelling from My Velnes writes to the salon's calendar, its
+`appointment_history` (`source: 'client'`, with the client's name) and
+its bell — the salon learns it the same way it learns anything else.
+
+## Maps
+
+Real OpenStreetMap through Leaflet — the same setup the registration
+wizard already uses. **The pin is the truth on the map; the address text
+is the truth in print.** They are separate columns and may disagree,
+which is exactly the situation today: pins come from what the owner
+placed during registration (`locations.lat/lng`, backfilled from
+`registrations.draft` by `20260918120500_location_geo.sql`), while the
+printed address is the salon's own text. Approval now keeps the pin
+instead of discarding it, and `PATCH /locations/:id` accepts one so a
+salon can correct a wrong pin from the workspace.
+
+Maps appear on the salon page, in category results (every matching salon
+pinned, the best match in brand colour), and on an appointment in My
+Velnes. A salon with no pin gets no map and says so, rather than
+guessing coordinates from its address text.
+
 ## Honest deferrals
 
 These are absent rather than faked, and each needs a platform decision
 before it can be real:
 
-- **Consumer accounts.** There is no platform-level person table and no
-  fourth token shape yet; customers exist only per tenant. So there is
-  no login, no "My Velnes" account area, no favourites, no loyalty, no
-  Premium, and no appointment history — the whole account layer of the
-  prototype is unbuilt. Guest booking is the only path, matching what
-  the booking page already does.
-- **Email verification.** `queueMail()` + `mail_outbox` exist with a
-  mock transport; the prototype's verification-code step is not shown
-  because nothing sends yet. The guest flow collects an email and
-  attaches it to the booking, unverified — honest about what it is.
-- **Notifications.** No consumer notification feed exists;
-  `supplier_notifications` is the shape to copy when one is decided.
+- **SMTP delivery.** The verification flow is real; the transport is
+  not. `env.mailTransport = 'mock'` stamps outbox rows `mock_sent` and
+  nothing leaves the building. A provider decision (Resend was the
+  guess) turns it on without touching the flow. Until then a dev-only
+  door, `GET /client/dev/last-code`, reads the code back out of the
+  outbox — it exists only while the transport is mock.
+- **Password reset.** There is no "forgot password" door yet; it needs
+  the same mail decision.
+- **Phone verification.** Phones are collected and shown to the salon
+  but never verified — SMS has no provider either.
+- **Favourites, Billing, Loyalty and Premium.** The prototype's other
+  account sections are absent from the menu rather than shown empty:
+  loyalty ledgers and premium are per-tenant mirrors today, and nothing
+  backs a consumer-side view of them.
 - **Reviews and ratings.** No tables exist, so every star, review count
   and "top rated" badge from the prototype is omitted rather than
   invented.
-- **Maps and distance.** `locations` has no lat/lng (coordinates are
-  captured during registration and dropped on approval), so the map
-  panels keep the prototype's decorative artwork with real salon names
-  as pins, and "Get directions" hands off to Google Maps with the real
-  address. A live map with real pins needs `locations.lat/lng` plus a
-  backfill from `registrations.draft`, and a provider decision
-  (Leaflet + OpenStreetMap needs no key; Google Maps needs one).
+- **Distance and "near me".** Pins exist now, but there is no geo search
+  or distance sort — that is part of the blocked discovery work.
 - **Offers.** `last_minute_offers` / `personal_offers` are per-customer
-  and need an identified consumer, so the prototype's offer rails are
-  omitted.
+  promises a salon makes; surfacing them to a linked client is a real
+  next step, not yet built.
+- **Seeded salons have no pins.** The four salons that registered
+  through the wizard have real coordinates; the demo-seed salons
+  (velnes-fizio and friends) never had any, so they show an address and
+  no map until someone drops a pin in the workspace.
 - **Search.** The search field filters the categories and salons already
   loaded. Real search/discovery is still blocked on the §5 answers.
 - **i18n.** The app ships English copy; `@velnes/i18n` is wired into the

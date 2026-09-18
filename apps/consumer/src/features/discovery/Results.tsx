@@ -3,17 +3,9 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { DHeader } from '../../app/chrome.js';
 import { categoryVM, fmtMKD, salonVM, type SalonVM } from '../../lib/api/mappers.js';
 import { useCategories, useSalons } from '../../lib/api/queries.js';
-import { FlowerMark, IcArr, IcClock, IcPin, IcSpark, IcVok, useSalonLive } from './cards.js';
-
-/* Desktop-aside pin slots — the prototype's decorative positions; the
- * real map arrives with location coordinates. */
-const PIN_POS_D: [string, string][] = [
-  ['40%', '24%'],
-  ['68%', '42%'],
-  ['28%', '56%'],
-  ['76%', '64%'],
-  ['52%', '80%'],
-];
+import { useMyNotifications } from '../../lib/api/session.js';
+import { SalonMap } from '../../components/SalonMap.js';
+import { IcArr, IcClock, IcPin, IcSpark, IcVok, useSalonLive } from './cards.js';
 
 function useCategoryResults(categorySlug: string | undefined) {
   const catsQ = useCategories();
@@ -174,8 +166,21 @@ function AltM({ s }: { s: SalonVM }) {
 export function Results() {
   const nav = useNavigate();
   const { category } = useParams();
+  const unread = useMyNotifications().data?.unread ?? 0;
   const { cat, rows, best, alts, loaded } = useCategoryResults(category);
   const title = cat?.name ?? '';
+  // Only salons that actually dropped a pin appear on the map — no
+  // guessed coordinates from address text.
+  const pins = rows
+    .filter((s) => s.lat != null && s.lng != null)
+    .map((s, i) => ({
+      lat: s.lat!,
+      lng: s.lng!,
+      label: s.name,
+      sub: s.city,
+      here: i === 0,
+      onClick: () => nav(`/salon/${s.slug}`),
+    }));
   return (
     <>
       <div className="d-env">
@@ -242,27 +247,25 @@ export function Results() {
               </div>
             </div>
             <aside className="res-map">
-              <svg viewBox="0 0 520 760" preserveAspectRatio="xMidYMid slice" style={{ position: 'absolute', inset: '0', width: '100%', height: '100%' }} aria-hidden="true">
-                <rect width="520" height="760" fill="#F0F3E9" />
-                <path d="M0 210 C130 180 260 240 520 200" fill="none" stroke="#D6E5EC" strokeWidth="30" strokeLinecap="round" />
-                <path d="M340 540 C420 560 480 620 520 700 L520 760 L360 760 Z" fill="#E4EDD6" />
-                <g stroke="#fff" fill="none" strokeLinecap="round">
-                  <path d="M70 0 L110 760" strokeWidth="6" />
-                  <path d="M0 380 C170 340 350 420 520 380" strokeWidth="6" />
-                  <path d="M260 0 C280 250 230 500 300 760" strokeWidth="6" />
-                  <path d="M0 580 L520 520" strokeWidth="3.5" />
-                  <path d="M150 90 L470 470" strokeWidth="3.5" />
-                </g>
-              </svg>
-              {rows.slice(0, PIN_POS_D.length).map((s, i) => (
-                <span key={s.slug} className="map-pin2" style={{ left: PIN_POS_D[i]![0], top: PIN_POS_D[i]![1] }}>
-                  <span className="p" style={s.bookable ? {} : { background: '#B9A392' }}>{FlowerMark}</span>
-                  <span className="lbl">
-                    {s.name}
-                    <small>{s.city}</small>
-                  </span>
-                </span>
-              ))}
+              {pins.length ? (
+                <SalonMap pins={pins} height="100%" radius={0} />
+              ) : (
+                <>
+                  <svg viewBox="0 0 520 760" preserveAspectRatio="xMidYMid slice" style={{ position: 'absolute', inset: '0', width: '100%', height: '100%' }} aria-hidden="true">
+                    <rect width="520" height="760" fill="#F0F3E9" />
+                    <path d="M0 210 C130 180 260 240 520 200" fill="none" stroke="#D6E5EC" strokeWidth="30" strokeLinecap="round" />
+                    <path d="M340 540 C420 560 480 620 520 700 L520 760 L360 760 Z" fill="#E4EDD6" />
+                    <g stroke="#fff" fill="none" strokeLinecap="round">
+                      <path d="M70 0 L110 760" strokeWidth="6" />
+                      <path d="M0 380 C170 340 350 420 520 380" strokeWidth="6" />
+                      <path d="M260 0 C280 250 230 500 300 760" strokeWidth="6" />
+                    </g>
+                  </svg>
+                  <div className="sm muted" style={{ position: 'absolute', inset: 'auto 16px 16px', textAlign: 'center' }}>
+                    None of these salons has placed itself on the map yet.
+                  </div>
+                </>
+              )}
             </aside>
           </div>
         </section>

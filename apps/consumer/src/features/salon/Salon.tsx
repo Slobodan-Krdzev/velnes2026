@@ -5,6 +5,7 @@ import type { PublicServiceSchema } from '@velnes/contracts';
 import { DHeader } from '../../app/chrome.js';
 import { fmtMKD, minutesLbl } from '../../lib/api/mappers.js';
 import { useAvailability, useSalonDetail, useSalonServices } from '../../lib/api/queries.js';
+import { SalonMap } from '../../components/SalonMap.js';
 import { IcArr, IcClock, IcPin, IcSpark, IcVok } from '../discovery/cards.js';
 import { useBooking } from '../booking/store.js';
 
@@ -443,7 +444,11 @@ export function Salon() {
   if (!d) return null;
   const photo = d.gallery[0]?.img ? `url("${d.gallery[0].img}")` : 'var(--ih)';
   const photo2 = d.gallery[1]?.img ? `url("${d.gallery[1].img}")` : 'var(--if)';
-  const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${d.address ?? ''} ${d.city ?? ''} ${d.name}`.trim())}`;
+  const printedAddress = [d.address, d.city].filter(Boolean).join(', ');
+  const mapsUrl = (lat: number | null, lng: number | null) =>
+    lat != null && lng != null
+      ? `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`
+      : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${printedAddress} ${d.name}`.trim())}`;
   const showPrice = p.sel ? fmtMKD(p.price) : '—';
   const book = () => goBook(p, nav, setDraft);
   const teamCard = (idPrefix: string) => (
@@ -469,15 +474,35 @@ export function Salon() {
       ))}
     </div>
   );
+  // The pin the salon dropped wins on the map; the address text is what
+  // we print. They are separate truths and may disagree.
+  const pin = p.location?.lat != null && p.location.lng != null ? p.location : d;
+  const mapPins =
+    pin.lat != null && pin.lng != null
+      ? [{ lat: pin.lat, lng: pin.lng, label: d.name, sub: printedAddress, here: true }]
+      : [];
   const locationCard = (idPrefix: string) => (
     <div className="scard" id={`${idPrefix}-info`}>
       <h2>Location</h2>
-      <div className="locmap">{LocMapSvg}</div>
+      {mapPins.length ? (
+        <SalonMap pins={mapPins} height={190} zoom={16} radius={12} />
+      ) : (
+        <div className="locmap">{LocMapSvg}</div>
+      )}
       <div className="locrow">
         <span>
-          <b style={{ color: 'var(--ink)' }}>{[d.address, d.city].filter(Boolean).join(', ')}</b>
+          <b style={{ color: 'var(--ink)' }}>{printedAddress}</b>
+          {!mapPins.length ? (
+            <span className="sm muted">This salon hasn’t placed itself on the map yet.</span>
+          ) : null}
         </span>
-        <a className="readall" style={{ margin: '0' }} href={mapsUrl} target="_blank" rel="noreferrer">
+        <a
+          className="readall"
+          style={{ margin: '0' }}
+          href={mapsUrl(pin.lat ?? null, pin.lng ?? null)}
+          target="_blank"
+          rel="noreferrer"
+        >
           Get directions
         </a>
       </div>

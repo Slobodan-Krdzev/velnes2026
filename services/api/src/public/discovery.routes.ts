@@ -80,6 +80,22 @@ async function listedBusinesses(): Promise<ListedBusiness[]> {
 }
 
 /** Live-widget lookup under app.public — same policy the widget doors use. */
+/** Where a salon sits on the map: the pin its owner dropped, preferring
+ *  a live location's but falling back to any of them — a salon that is
+ *  listed but not yet bookable still has a place in the world. */
+async function firstPin(tenantId: string): Promise<{ lat: number | null; lng: number | null }> {
+  const rows = await withTenant(tenantId, (trx) =>
+    trx
+      .selectFrom('locations')
+      .select(['lat', 'lng', 'lifecycle'])
+      .orderBy('name')
+      .execute(),
+  );
+  const pinned = rows.filter((l) => l.lat != null && l.lng != null);
+  const best = pinned.find((l) => l.lifecycle === 'ACTIVE') ?? pinned[0];
+  return { lat: best?.lat ?? null, lng: best?.lng ?? null };
+}
+
 async function liveWidgets(tenantIds: string[]) {
   if (!tenantIds.length) return [];
   return db.transaction().execute(async (trx) => {
@@ -136,6 +152,7 @@ export async function discoveryRoutes(app: FastifyInstance) {
             .where('s.status', '=', 'active')
             .execute(),
         );
+        const pin = await firstPin(b.id);
         salons.push({
           slug: b.slug,
           name: b.name,
@@ -145,6 +162,8 @@ export async function discoveryRoutes(app: FastifyInstance) {
           categories: b.marketplace.categories,
           serviceCategories: cats.map((c) => c.name),
           photo: photos[0]?.img ?? null,
+          lat: pin.lat,
+          lng: pin.lng,
           bookable: bookable.has(b.id),
         });
       }
@@ -165,7 +184,8 @@ export async function discoveryRoutes(app: FastifyInstance) {
       if (!biz)
         return reply.code(404).send({ error: 'UNKNOWN_SALON', message: 'No salon here' });
       const widget = (await liveWidgets([biz.id]))[0];
-      const { team, products, locations } = await withTenant(biz.id, async (trx) => {
+      const pin = await firstPin(biz.id);
+      const { team, products, locations, addr } = await withTenant(biz.id, async (trx) => {
         const team = biz.marketplace.showTeam
           ? await trx
               .selectFrom('employees')
@@ -189,23 +209,43 @@ export async function discoveryRoutes(app: FastifyInstance) {
           ? (
               await trx
                 .selectFrom('locations')
-                .select(['id', 'name', 'city', 'address', 'lifecycle'])
+                .select(['id', 'name', 'city', 'address', 'lifecycle', 'lat', 'lng'])
                 .where('id', 'in', widget.locationIds.length ? widget.locationIds : [biz.id])
                 .execute()
             )
               .filter((l) => l.lifecycle === 'ACTIVE')
-              .map((l) => ({ id: l.id, name: l.name, city: l.city, address: l.address }))
+              .map((l) => ({
+                id: l.id,
+                name: l.name,
+                city: l.city,
+                address: l.address,
+                lat: l.lat,
+                lng: l.lng,
+              }))
           : [];
-        return { team, products, locations };
+        // What we print: the business card's address, else the first
+        // location's — a salon always has one somewhere.
+        const any = await trx
+          .selectFrom('locations')
+          .select(['address', 'city'])
+          .orderBy('name')
+          .executeTakeFirst();
+        const addr = {
+          address: biz.address ?? any?.address ?? null,
+          city: biz.city ?? any?.city ?? null,
+        };
+        return { team, products, locations, addr };
       });
       return {
         slug: biz.slug,
         name: biz.name,
-        city: biz.city,
-        address: biz.address,
+        city: addr.city,
+        address: addr.address,
         phone: biz.phone,
         description: biz.description,
         pitch: biz.marketplace.pitch,
+        lat: pin.lat,
+        lng: pin.lng,
         categories: biz.marketplace.categories,
         gallery: GallerySchema.parse(biz.gallery).map((p) => ({ id: p.id, name: p.name, img: p.img })),
         showPrices: biz.marketplace.showPrices,
