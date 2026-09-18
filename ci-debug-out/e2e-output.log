@@ -1,0 +1,279 @@
+$ playwright test
+Applying: 20260824120001_tenant_plumbing.sql
+Applied: 20260824120001_tenant_plumbing.sql in 6.362419ms
+Applying: 20260824120002_tenancy_core.sql
+Applied: 20260824120002_tenancy_core.sql in 34.466423ms
+Applying: 20260824120003_auth_audit.sql
+Applied: 20260824120003_auth_audit.sql in 11.657939ms
+Applying: 20260824150004_catalog.sql
+Applied: 20260824150004_catalog.sql in 29.550407ms
+Applying: 20260824150005_products_stock.sql
+Applied: 20260824150005_products_stock.sql in 17.921589ms
+Applying: 20260824180006_scheduling.sql
+Applied: 20260824180006_scheduling.sql in 30.437578ms
+Applying: 20260824180007_timing.sql
+Applied: 20260824180007_timing.sql in 8.547915ms
+Applying: 20260824180008_employee_hours.sql
+Applied: 20260824180008_employee_hours.sql in 1.83894ms
+Applying: 20260824210009_till.sql
+Applied: 20260824210009_till.sql in 45.013151ms
+Applying: 20260825090010_employee_lang.sql
+Applied: 20260825090010_employee_lang.sql in 2.17052ms
+Applying: 20260825170011_widgets.sql
+Applied: 20260825170011_widgets.sql in 10.094665ms
+Applying: 20260825190012_widget_attribution.sql
+Applied: 20260825190012_widget_attribution.sql in 3.167259ms
+Applying: 20260826090013_hq_registrations.sql
+Applied: 20260826090013_hq_registrations.sql in 8.929389ms
+Applying: 20260826100014_hq_read_links.sql
+Applied: 20260826100014_hq_read_links.sql in 1.773613ms
+Applying: 20260826110015_location_address.sql
+Applied: 20260826110015_location_address.sql in 2.017779ms
+Applying: 20260826130016_customers_ci.sql
+Applied: 20260826130016_customers_ci.sql in 10.292746ms
+Applying: 20260826150017_marketing_offers.sql
+Applied: 20260826150017_marketing_offers.sql in 11.485716ms
+Applying: 20260826170018_suppliers.sql
+Applied: 20260826170018_suppliers.sql in 24.838988ms
+Applying: 20260826200019_business_settings.sql
+Applied: 20260826200019_business_settings.sql in 2.902888ms
+Applying: 20260903120020_hq_categories.sql
+Applied: 20260903120020_hq_categories.sql in 7.667826ms
+Applying: 20260903160021_customer_email_verified.sql
+Applied: 20260903160021_customer_email_verified.sql in 2.064529ms
+Applying: 20260903170022_product_img.sql
+Applied: 20260903170022_product_img.sql in 1.689057ms
+Applying: 20260903190023_category_requests.sql
+Applied: 20260903190023_category_requests.sql in 7.19484ms
+Applying: 20260903200024_notice_audience.sql
+Applied: 20260903200024_notice_audience.sql in 2.087948ms
+Applying: 20260903210025_notice_target.sql
+Applied: 20260903210025_notice_target.sql in 2.387158ms
+Applying: 20260903220026_mail_outbox_hq_suppliers.sql
+Applied: 20260903220026_mail_outbox_hq_suppliers.sql in 5.426042ms
+Applying: 20260903230027_hq_invited.sql
+Applied: 20260903230027_hq_invited.sql in 1.806534ms
+Applying: 20260903240028_brands_hq_roles.sql
+Applied: 20260903240028_brands_hq_roles.sql in 9.522034ms
+Applying: 20260904090029_supplier_login_lookup.sql
+Applied: 20260904090029_supplier_login_lookup.sql in 1.733887ms
+Applying: 20260904100030_hq_onboarding_read.sql
+Applied: 20260904100030_hq_onboarding_read.sql in 1.842426ms
+Applying: 20260904110031_hq_role_perms.sql
+Applied: 20260904110031_hq_role_perms.sql in 2.099101ms
+Applying: 20260904120032_portal_payments_read.sql
+Applied: 20260904120032_portal_payments_read.sql in 2.165438ms
+Applying: 20260904130033_supplier_roles.sql
+Applied: 20260904130033_supplier_roles.sql in 4.886782ms
+Applying: 20260904140034_portal_invite_mail.sql
+Applied: 20260904140034_portal_invite_mail.sql in 1.629227ms
+Applying: 20260904150035_supplier_product_delete.sql
+Applied: 20260904150035_supplier_product_delete.sql in 2.561863ms
+Applying: 20260904160036_supplier_notifications.sql
+Applied: 20260904160036_supplier_notifications.sql in 5.060473ms
+Applying: 20260904170037_order_supplier_note.sql
+Applied: 20260904170037_order_supplier_note.sql in 1.852916ms
+Applying: 20260904180038_supplier_users_hq_invite.sql
+Applied: 20260904180038_supplier_users_hq_invite.sql in 1.739845ms
+Applying: 20260904190039_combos.sql
+Applied: 20260904190039_combos.sql in 5.844447ms
+Applying: 20260904200040_support_tickets.sql
+Applied: 20260904200040_support_tickets.sql in 7.697739ms
+Applying: 20260905090041_notice_ref.sql
+Applied: 20260905090041_notice_ref.sql in 1.725844ms
+Applying: 20260906120042_business_categories.sql
+Applied: 20260906120042_business_categories.sql in 5.357225ms
+Applying: 20260914120050_ai_assistant.sql
+Applied: 20260914120050_ai_assistant.sql in 8.944906ms
+Applying: 20260915120100_assistant_entitlement.sql
+Applied: 20260915120100_assistant_entitlement.sql in 2.077511ms
+Applying: 20260916150200_service_category_media.sql
+Applied: 20260916150200_service_category_media.sql in 1.772168ms
+Applying: 20260916170300_avatars.sql
+Applied: 20260916170300_avatars.sql in 1.778312ms
+Applying: 20260916180400_supplier_self_update.sql
+Applied: 20260916180400_supplier_self_update.sql in 1.825302ms
+Seeded the demo world into velnes.
+Demo login: maria@velnes.mk (and colleagues) · password: velnes-demo
+
+Running 8 tests using 2 workers
+×F···×F··×T
+
+  1) e2e/booking.spec.ts:9:5 › a visitor books through the hosted page ─────────────────────────────
+
+    Test timeout of 60000ms exceeded.
+
+    Error: locator.fill: Test timeout of 60000ms exceeded.
+    Call log:
+      - waiting for getByPlaceholder('+389 70 000 000')
+
+
+      35 |   await expect(page.getByText(/This time is held for you/)).toBeVisible();
+      36 |   await page.getByPlaceholder('Marija Stojanovska').fill('E2E Visitor');
+    > 37 |   await page.getByPlaceholder('+389 70 000 000').fill('+389 70 555 444');
+         |                                                  ^
+      38 |   await page.getByText(/cancellation policy/).click();
+      39 |   await page.getByRole('button', { name: 'Continue' }).click();
+      40 |
+        at /home/runner/work/velnes2026/velnes2026/e2e/booking.spec.ts:37:50
+
+    Error Context: test-results/booking-a-visitor-books-through-the-hosted-page/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/booking-a-visitor-books-through-the-hosted-page/trace.zip
+    Usage:
+
+        pnpm exec playwright show-trace test-results/booking-a-visitor-books-through-the-hosted-page/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Retry #1 ───────────────────────────────────────────────────────────────────────────────────────
+
+    Test timeout of 60000ms exceeded.
+
+    Error: locator.fill: Test timeout of 60000ms exceeded.
+    Call log:
+      - waiting for getByPlaceholder('+389 70 000 000')
+
+
+      35 |   await expect(page.getByText(/This time is held for you/)).toBeVisible();
+      36 |   await page.getByPlaceholder('Marija Stojanovska').fill('E2E Visitor');
+    > 37 |   await page.getByPlaceholder('+389 70 000 000').fill('+389 70 555 444');
+         |                                                  ^
+      38 |   await page.getByText(/cancellation policy/).click();
+      39 |   await page.getByRole('button', { name: 'Continue' }).click();
+      40 |
+        at /home/runner/work/velnes2026/velnes2026/e2e/booking.spec.ts:37:50
+
+    Error Context: test-results/booking-a-visitor-books-through-the-hosted-page-retry1/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/booking-a-visitor-books-through-the-hosted-page-retry1/trace.zip
+    Usage:
+
+        pnpm exec playwright show-trace test-results/booking-a-visitor-books-through-the-hosted-page-retry1/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2) e2e/platform.spec.ts:22:5 › a stranger registers, HQ activates, the owner signs into their own world 
+
+    Error: locator.fill: Error: strict mode violation: getByLabel('Password') resolved to 2 elements:
+        1) <input value="" class="input" type="password"/> aka getByRole('textbox', { name: 'Password', exact: true })
+        2) <input value="" class="input" type="password"/> aka getByRole('textbox', { name: 'Confirm password' })
+
+    Call log:
+      - waiting for getByLabel('Password')
+
+
+      25 |   await page.getByLabel('Your name').fill('Petra Novak');
+      26 |   await page.getByLabel('E-mail').fill(ownerEmail);
+    > 27 |   await page.getByLabel('Password').fill('super-secret');
+         |                                     ^
+      28 |   await page.getByRole('button', { name: 'Next' }).click();
+      29 |   await page.getByLabel('Salon name').fill(`Studio Nova ${runId}`);
+      30 |   await page.getByRole('button', { name: 'Next' }).click();
+        at /home/runner/work/velnes2026/velnes2026/e2e/platform.spec.ts:27:37
+
+    Error Context: test-results/platform-a-stranger-regist-12fa1--signs-into-their-own-world/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/platform-a-stranger-regist-12fa1--signs-into-their-own-world/trace.zip
+    Usage:
+
+        pnpm exec playwright show-trace test-results/platform-a-stranger-regist-12fa1--signs-into-their-own-world/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Retry #1 ───────────────────────────────────────────────────────────────────────────────────────
+
+    Error: locator.fill: Error: strict mode violation: getByLabel('Password') resolved to 2 elements:
+        1) <input value="" class="input" type="password"/> aka getByRole('textbox', { name: 'Password', exact: true })
+        2) <input value="" class="input" type="password"/> aka getByRole('textbox', { name: 'Confirm password' })
+
+    Call log:
+      - waiting for getByLabel('Password')
+
+
+      25 |   await page.getByLabel('Your name').fill('Petra Novak');
+      26 |   await page.getByLabel('E-mail').fill(ownerEmail);
+    > 27 |   await page.getByLabel('Password').fill('super-secret');
+         |                                     ^
+      28 |   await page.getByRole('button', { name: 'Next' }).click();
+      29 |   await page.getByLabel('Salon name').fill(`Studio Nova ${runId}`);
+      30 |   await page.getByRole('button', { name: 'Next' }).click();
+        at /home/runner/work/velnes2026/velnes2026/e2e/platform.spec.ts:27:37
+
+    Error Context: test-results/platform-a-stranger-regist-12fa1--signs-into-their-own-world-retry1/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/platform-a-stranger-regist-12fa1--signs-into-their-own-world-retry1/trace.zip
+    Usage:
+
+        pnpm exec playwright show-trace test-results/platform-a-stranger-regist-12fa1--signs-into-their-own-world-retry1/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  3) e2e/workspace.spec.ts:26:5 › book an appointment from the calendar drawer ─────────────────────
+
+    Error: locator.selectOption: Error: Element is not a <select> element
+    Call log:
+      - waiting for locator('.panel').getByLabel(/Customer/)
+        - locator resolved to <input value="" class="input" aria-label="Customer" placeholder="Search customers, or type a new name"/>
+      - attempting select option action
+        - waiting for element to be visible and enabled
+
+
+      47 |     .click();
+      48 |   await page.getByLabel('Time 1').selectOption('10:00');
+    > 49 |   await page.locator('.panel').getByLabel(/Customer/).selectOption({ label: 'Katerina Stojanovska' });
+         |                                                       ^
+      50 |   const book = page.getByRole('button', { name: 'Book appointment' });
+      51 |   await expect(book).toBeEnabled();
+      52 |   await book.click();
+        at /home/runner/work/velnes2026/velnes2026/e2e/workspace.spec.ts:49:55
+
+    Error Context: test-results/workspace-book-an-appointment-from-the-calendar-drawer/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/workspace-book-an-appointment-from-the-calendar-drawer/trace.zip
+    Usage:
+
+        pnpm exec playwright show-trace test-results/workspace-book-an-appointment-from-the-calendar-drawer/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Retry #1 ───────────────────────────────────────────────────────────────────────────────────────
+
+    Error: locator.selectOption: Error: Element is not a <select> element
+    Call log:
+      - waiting for locator('.panel').getByLabel(/Customer/)
+        - locator resolved to <input value="" class="input" aria-label="Customer" placeholder="Search customers, or type a new name"/>
+      - attempting select option action
+        - waiting for element to be visible and enabled
+
+
+      47 |     .click();
+      48 |   await page.getByLabel('Time 1').selectOption('10:00');
+    > 49 |   await page.locator('.panel').getByLabel(/Customer/).selectOption({ label: 'Katerina Stojanovska' });
+         |                                                       ^
+      50 |   const book = page.getByRole('button', { name: 'Book appointment' });
+      51 |   await expect(book).toBeEnabled();
+      52 |   await book.click();
+        at /home/runner/work/velnes2026/velnes2026/e2e/workspace.spec.ts:49:55
+
+    Error Context: test-results/workspace-book-an-appointment-from-the-calendar-drawer-retry1/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/workspace-book-an-appointment-from-the-calendar-drawer-retry1/trace.zip
+    Usage:
+
+        pnpm exec playwright show-trace test-results/workspace-book-an-appointment-from-the-calendar-drawer-retry1/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  3 failed
+    e2e/booking.spec.ts:9:5 › a visitor books through the hosted page ──────────────────────────────
+    e2e/platform.spec.ts:22:5 › a stranger registers, HQ activates, the owner signs into their own world 
+    e2e/workspace.spec.ts:26:5 › book an appointment from the calendar drawer ──────────────────────
+  5 passed (2.2m)
+[ELIFECYCLE] Command failed with exit code 1.
