@@ -188,7 +188,33 @@ salon can correct a wrong pin from the workspace.
 Maps appear on the salon page, in category results (every matching salon
 pinned, the best match in brand colour; the mobile "Map" button opens
 the full-screen sheet), on the booking confirmation, and on an
-appointment in My Velnes.
+appointment in My Velnes. **There is no decorative map anywhere** — a
+category with nothing to pin still gets the real map, with a line saying
+so over it, because a drawing of streets that are not streets is worse
+than an empty city.
+
+### Where the person is
+
+"Near me" asks the browser for a location **once**. The answer is
+remembered (`localStorage`) and then *followed* with `watchPosition`:
+somebody looking for a salon is often walking to one, so the dot, the
+distances and the framing stay current as they move. A return visit
+picks the watch back up with no second prompt — and the Permissions API
+is consulted too, so a grant from an earlier visit counts. Revoking
+permission in the browser turns it off cleanly rather than leaving a
+stale fix on screen.
+
+**None of it leaves the browser.** The coordinates are never sent to the
+API: centring and distance are computed locally. A first visit watches
+nothing and prompts for nothing until the button is pressed.
+
+With a position known, the map centres on the person (city zoom, results
+around them) and re-centres only when they walk off the edge — never
+while they are panning a map they are reading. Result cards then show a
+real distance ("380 m from you"), measured great-circle from the salon's
+own pin, and the salon page says how far it is. Ordering is untouched:
+distance is shown, not yet ranked, because ranking is part of the
+blocked discovery work.
 
 **Every location now has coordinates.** Salons that registered through
 the wizard have the pin their owner placed. The rest — the demo-seed

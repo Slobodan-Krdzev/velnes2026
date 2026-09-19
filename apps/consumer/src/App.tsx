@@ -8,6 +8,7 @@ import { Home } from './features/discovery/Home.js';
 import { Results } from './features/discovery/Results.js';
 import { Salon } from './features/salon/Salon.js';
 import { SessionProvider } from './lib/api/session.js';
+import { GeoProvider } from './lib/geo.js';
 
 const qc = new QueryClient({
   defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false } },
@@ -17,7 +18,8 @@ export function App() {
   return (
     <QueryClientProvider client={qc}>
       <SessionProvider>
-        <BookingProvider>
+        <GeoProvider>
+          <BookingProvider>
           <BrowserRouter>
             <Routes>
               <Route path="/" element={<Home />} />
@@ -37,7 +39,8 @@ export function App() {
               <Route path="*" element={<Home />} />
             </Routes>
           </BrowserRouter>
-        </BookingProvider>
+          </BookingProvider>
+        </GeoProvider>
       </SessionProvider>
     </QueryClientProvider>
   );

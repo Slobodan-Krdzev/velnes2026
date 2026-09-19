@@ -9,6 +9,7 @@ import { SalonGallery } from '../../components/SalonGallery.js';
 import { SalonMap } from '../../components/SalonMap.js';
 import { IcArr, IcClock, IcPin, IcSpark, IcVok } from '../discovery/cards.js';
 import { useBooking } from '../booking/store.js';
+import { distanceKm, distanceLbl, useUserLocation } from '../../lib/geo.js';
 
 type PublicService = z.infer<typeof PublicServiceSchema>;
 
@@ -536,6 +537,7 @@ function goBook(p: Page, nav: (to: string) => void, setDraft: ReturnType<typeof 
 
 export function Salon() {
   const nav = useNavigate();
+  const geo = useUserLocation();
   const p = useSalonPage();
   const { setDraft } = useBooking();
   const d = p.detail;
@@ -580,17 +582,29 @@ export function Salon() {
     pin.lat != null && pin.lng != null
       ? [{ lat: pin.lat, lng: pin.lng, label: d.name, sub: printedAddress, here: true }]
       : [];
+  const away =
+    geo.position && pin.lat != null && pin.lng != null
+      ? distanceLbl(distanceKm(geo.position, { lat: pin.lat, lng: pin.lng }))
+      : null;
   const locationCard = (idPrefix: string) => (
     <div className="scard" id={`${idPrefix}-info`}>
       <h2>Location</h2>
       {mapPins.length ? (
-        <SalonMap pins={mapPins} height={190} zoom={16} radius={12} labels={false} />
+        <SalonMap
+          pins={mapPins}
+          you={geo.position}
+          height={190}
+          zoom={16}
+          radius={12}
+          labels={false}
+        />
       ) : (
         <div className="locmap">{LocMapSvg}</div>
       )}
       <div className="locrow">
         <span>
           <b style={{ color: 'var(--ink)' }}>{printedAddress}</b>
+          {away ? <span className="sm muted">{away} from you</span> : null}
           {!mapPins.length ? (
             <span className="sm muted">This salon hasn’t placed itself on the map yet.</span>
           ) : null}

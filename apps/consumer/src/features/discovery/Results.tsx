@@ -4,6 +4,7 @@ import { DHeader } from '../../app/chrome.js';
 import { categoryVM, fmtMKD, salonVM, type SalonVM } from '../../lib/api/mappers.js';
 import { useCategories, useSalons } from '../../lib/api/queries.js';
 import { useMyNotifications } from '../../lib/api/session.js';
+import { distanceKm, distanceLbl, useUserLocation } from '../../lib/geo.js';
 import { SalonMap } from '../../components/SalonMap.js';
 import { IcArr, IcClock, IcPin, IcSpark, IcVok, useSalonLive } from './cards.js';
 
@@ -19,18 +20,25 @@ function useCategoryResults(categorySlug: string | undefined) {
   return { cat, rows, best: rows[0], alts: rows.slice(1), loaded: Boolean(catsQ.data && salonsQ.data) };
 }
 
-/** The live line under a result: today's first open slot, from-price. */
+/** The live line under a result: today's first open slot, from-price,
+ *  and — once the person has shared where they are — how far it is. */
 function useLiveLine(s: SalonVM) {
   const { svc, slots } = useSalonLive(s.slug);
+  const { position } = useUserLocation();
+  const km =
+    position && s.lat != null && s.lng != null
+      ? distanceKm(position, { lat: s.lat, lng: s.lng })
+      : null;
   return {
     av: slots[0] ? `Available today at ${slots[0]}` : null,
     pr: svc ? fmtMKD(Math.min(svc.price, svc.priceFrom ?? svc.price)) : null,
+    away: km === null ? null : `${distanceLbl(km)} from you`,
   };
 }
 
 function BestD({ s }: { s: SalonVM }) {
   const nav = useNavigate();
-  const { av, pr } = useLiveLine(s);
+  const { av, pr, away } = useLiveLine(s);
   return (
     <article className="best">
       <span className="flag" style={{ zIndex: 2 }}>Best match</span>
@@ -44,7 +52,7 @@ function BestD({ s }: { s: SalonVM }) {
             {av ? <span className="tiny-tag" style={{ background: '#EAF2E4', color: '#3E5A34' }}>Available today</span> : null}
           </div>
           <div className="sm muted">
-            {IcPin} {s.city}
+            {IcPin} {away ?? s.city}
           </div>
           {s.pitch ? <p style={{ margin: '2px 0', fontSize: '14px' }}>{s.pitch}</p> : null}
           {av ? <span className="avail">{IcClock} {av}</span> : null}
@@ -67,7 +75,7 @@ function BestD({ s }: { s: SalonVM }) {
 
 function AltD({ s }: { s: SalonVM }) {
   const nav = useNavigate();
-  const { av, pr } = useLiveLine(s);
+  const { av, pr, away } = useLiveLine(s);
   return (
     <article className="card alt">
       <div className="ph" style={{ backgroundImage: s.photo }}></div>
@@ -76,7 +84,7 @@ function AltD({ s }: { s: SalonVM }) {
           {s.name} <span className="vok">{IcVok}</span>
         </h4>
         <div className="sm muted">
-          {IcPin} {s.city}
+          {IcPin} {away ?? s.city}
         </div>
         {av ? <span className="avail">{IcClock} {av}</span> : null}
       </div>
@@ -98,7 +106,7 @@ function AltD({ s }: { s: SalonVM }) {
 
 function BestM({ s }: { s: SalonVM }) {
   const nav = useNavigate();
-  const { av, pr } = useLiveLine(s);
+  const { av, pr, away } = useLiveLine(s);
   return (
     <article className="m-best">
       <div className="ph" style={{ backgroundImage: s.photo }}>
@@ -109,7 +117,7 @@ function BestM({ s }: { s: SalonVM }) {
           {s.name} <span className="vok">{IcVok}</span>
         </h3>
         <div className="sm muted">
-          {IcPin} {s.city}
+          {IcPin} {away ?? s.city}
         </div>
         {s.pitch ? <div style={{ fontSize: '13.5px' }}>{s.pitch}</div> : null}
         {av ? <span className="avail">{IcClock} {av}</span> : null}
@@ -130,7 +138,7 @@ function BestM({ s }: { s: SalonVM }) {
 
 function AltM({ s }: { s: SalonVM }) {
   const nav = useNavigate();
-  const { av, pr } = useLiveLine(s);
+  const { av, pr, away } = useLiveLine(s);
   return (
     <article className="card m-alt">
       <div className="ph" style={{ backgroundImage: s.photo }}></div>
@@ -139,7 +147,7 @@ function AltM({ s }: { s: SalonVM }) {
           {s.name} <span className="vok">{IcVok}</span>
         </h4>
         <div className="sm muted">
-          {IcPin} {s.city}
+          {IcPin} {away ?? s.city}
           {av ? (
             <>
               {' · '}
@@ -167,6 +175,7 @@ export function Results() {
   const nav = useNavigate();
   const { category } = useParams();
   const unread = useMyNotifications().data?.unread ?? 0;
+  const geo = useUserLocation();
   const [mapOpen, setMapOpen] = useState(false);
   const { cat, rows, best, alts, loaded } = useCategoryResults(category);
   const title = cat?.name ?? '';
@@ -196,7 +205,18 @@ export function Results() {
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 6l12 12M18 6 6 18" /></svg>
                 </button>
               </div>
-              <span className="chip">{IcPin}Near me</span>
+              <button
+                className={`chip${geo.status === 'on' ? ' on' : ''}`}
+                onClick={geo.status === 'on' ? geo.disable : geo.enable}
+                title={
+                  geo.status === 'on'
+                    ? 'Following your location — click to stop'
+                    : 'Centre the map on you'
+                }
+              >
+                {IcPin}
+                {geo.status === 'asking' ? 'Locating…' : 'Near me'}
+              </button>
               <span className="chip">{IcClock}Now</span>
               <span style={{ width: '1px', alignSelf: 'stretch', background: 'var(--line-soft)' }}></span>
               <button className="chip">
@@ -248,25 +268,21 @@ export function Results() {
               </div>
             </div>
             <aside className="res-map">
-              {pins.length ? (
-                <SalonMap pins={pins} height="100%" radius={0} />
-              ) : (
-                <>
-                  <svg viewBox="0 0 520 760" preserveAspectRatio="xMidYMid slice" style={{ position: 'absolute', inset: '0', width: '100%', height: '100%' }} aria-hidden="true">
-                    <rect width="520" height="760" fill="#F0F3E9" />
-                    <path d="M0 210 C130 180 260 240 520 200" fill="none" stroke="#D6E5EC" strokeWidth="30" strokeLinecap="round" />
-                    <path d="M340 540 C420 560 480 620 520 700 L520 760 L360 760 Z" fill="#E4EDD6" />
-                    <g stroke="#fff" fill="none" strokeLinecap="round">
-                      <path d="M70 0 L110 760" strokeWidth="6" />
-                      <path d="M0 380 C170 340 350 420 520 380" strokeWidth="6" />
-                      <path d="M260 0 C280 250 230 500 300 760" strokeWidth="6" />
-                    </g>
-                  </svg>
-                  <div className="sm muted" style={{ position: 'absolute', inset: 'auto 16px 16px', textAlign: 'center' }}>
-                    None of these salons has placed itself on the map yet.
-                  </div>
-                </>
-              )}
+              <SalonMap
+                pins={pins}
+                you={geo.position}
+                center={geo.position}
+                zoom={13}
+                height="100%"
+                radius={0}
+                emptyNote={
+                  pins.length
+                    ? undefined
+                    : loaded
+                      ? 'No salon here has placed itself on the map yet.'
+                      : undefined
+                }
+              />
             </aside>
           </div>
         </section>
@@ -290,7 +306,18 @@ export function Results() {
               </div>
             </div>
             <div className="m-chiprow">
-              <span className="chip">{IcPin}Near me</span>
+              <button
+                className={`chip${geo.status === 'on' ? ' on' : ''}`}
+                onClick={geo.status === 'on' ? geo.disable : geo.enable}
+                title={
+                  geo.status === 'on'
+                    ? 'Following your location — click to stop'
+                    : 'Centre the map on you'
+                }
+              >
+                {IcPin}
+                {geo.status === 'asking' ? 'Locating…' : 'Near me'}
+              </button>
               <span className="chip">{IcClock}Now</span>
               <span className="chip">Filters</span>
             </div>
@@ -332,7 +359,14 @@ export function Results() {
                   </button>
                 </div>
                 <div style={{ flex: 1, minHeight: 0 }}>
-                  <SalonMap pins={pins} height="100%" radius={0} />
+                  <SalonMap
+                    pins={pins}
+                    you={geo.position}
+                    center={geo.position}
+                    zoom={13}
+                    height="100%"
+                    radius={0}
+                  />
                 </div>
               </div>
             ) : null}

@@ -33,3 +33,50 @@
   font-family: inherit;
   background: #F0F3E9;
 }
+
+/* Where you are: a live dot, not a pin — a person is not a place you
+   can book. It pulses gently so a moving fix reads as current. */
+.you-dot {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: rgba(255, 141, 103, 0.28);
+}
+.you-core {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--brand);
+  border: 2px solid #fff9f7;
+  box-shadow: 0 2px 6px rgba(45, 26, 18, 0.35);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .you-dot {
+    animation: you-pulse 2.4s ease-out infinite;
+  }
+  @keyframes you-pulse {
+    0% { box-shadow: 0 0 0 0 rgba(255, 141, 103, 0.45); }
+    70% { box-shadow: 0 0 0 14px rgba(255, 141, 103, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(255, 141, 103, 0); }
+  }
+}
+
+/* Said over a real map, never instead of one. */
+.map-note {
+  position: absolute;
+  left: 50%;
+  bottom: 16px;
+  transform: translateX(-50%);
+  z-index: 500;
+  max-width: 86%;
+  text-align: center;
+  background: rgba(255, 249, 247, 0.94);
+  border: 1px solid var(--line-soft);
+  border-radius: 999px;
+  padding: 7px 14px;
+  font-size: 12.5px;
+  color: var(--muted);
+  box-shadow: 0 6px 18px rgba(45, 26, 18, 0.14);
+}
