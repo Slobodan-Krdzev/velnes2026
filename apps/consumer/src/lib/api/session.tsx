@@ -90,8 +90,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     staleTime: 60_000,
   });
 
-  // A token the server no longer accepts is not a session.
-  const dead = me.isError && me.error instanceof ApiError && me.error.status === 401;
+  // A token the server no longer honours is not a session — whether it
+  // is refused (401) or names an account that no longer exists (404).
+  const dead =
+    me.isError && me.error instanceof ApiError && [401, 404].includes(me.error.status);
   const signOut = useCallback(() => {
     writeToken(null);
     setToken(null);
@@ -105,7 +107,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     () => ({
       token: dead ? null : token,
       signedIn: Boolean(token) && !dead,
-      profile: me.data ?? null,
+      profile: dead ? null : (me.data ?? null),
       setSession: (t, p) => {
         writeToken(t);
         setToken(t);

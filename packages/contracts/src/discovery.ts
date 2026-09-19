@@ -56,10 +56,14 @@ export const DiscoveryProductSchema = z.object({
   /** Whole MKD denars, as stored. */
   price: z.number().int(),
 });
+/** A gallery entry: the photograph a salon uploaded, or — when it has
+ *  only named the space so far — the colour tile the workspace editor
+ *  shows in its place. One of the two is always present. */
 export const DiscoveryGalleryPhotoSchema = z.object({
   id: z.string(),
   name: z.string(),
-  img: z.string(),
+  img: z.string().nullable(),
+  tone: z.string().nullable(),
 });
 
 /** The full salon page payload. Team and prices honor the salon's own

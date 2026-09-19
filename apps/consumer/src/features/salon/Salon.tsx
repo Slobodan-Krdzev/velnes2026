@@ -5,6 +5,7 @@ import type { PublicServiceSchema } from '@velnes/contracts';
 import { DHeader } from '../../app/chrome.js';
 import { fmtMKD, minutesLbl } from '../../lib/api/mappers.js';
 import { useSalonDetail, useSalonServices, useVisitSlots } from '../../lib/api/queries.js';
+import { SalonGallery } from '../../components/SalonGallery.js';
 import { SalonMap } from '../../components/SalonMap.js';
 import { IcArr, IcClock, IcPin, IcSpark, IcVok } from '../discovery/cards.js';
 import { useBooking } from '../booking/store.js';
@@ -635,18 +636,7 @@ export function Salon() {
           </div>
           <div className="d-wrap d-salon">
             <div>
-              <div className="gal" style={{ backgroundImage: photo }}>
-                {d.gallery.length > 1 ? (
-                  <>
-                    <span className="count">1 / {d.gallery.length}</span>
-                    <span className="dots">
-                      {d.gallery.map((g) => (
-                        <i key={g.id}></i>
-                      ))}
-                    </span>
-                  </>
-                ) : null}
-              </div>
+              <SalonGallery photos={d.gallery} salonName={d.name} variant="gal" fallback={photo} />
               <h1 className="serif" style={{ fontSize: '32px', marginTop: '16px', display: 'flex', alignItems: 'center', gap: '10px' }}>
                 {d.name} <span className="vok">{IcVok}</span>
               </h1>
@@ -735,18 +725,7 @@ export function Salon() {
               </span>
             </div>
             <div style={{ height: '12px' }}></div>
-            <div className="m-gal" style={{ backgroundImage: photo }}>
-              {d.gallery.length > 1 ? (
-                <>
-                  <span className="count">1 / {d.gallery.length}</span>
-                  <span className="dots">
-                    {d.gallery.map((g) => (
-                      <i key={g.id}></i>
-                    ))}
-                  </span>
-                </>
-              ) : null}
-            </div>
+            <SalonGallery photos={d.gallery} salonName={d.name} variant="m-gal" fallback={photo} />
             {d.team.length ? (
               <button className="prostrip">
                 <span className="avs">

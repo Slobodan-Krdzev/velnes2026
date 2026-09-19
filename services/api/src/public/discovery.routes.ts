@@ -1,7 +1,6 @@
 import {
   BusinessSettingsSchema,
   DiscoveryCategoriesSchema,
-  DiscoveryGalleryPhotoSchema,
   DiscoverySalonDetailSchema,
   DiscoverySalonsSchema,
 } from '@velnes/contracts';
@@ -17,7 +16,28 @@ const ErrorSchema = z.object({ error: z.string(), message: z.string() });
  *  either the global HQ taxonomy or data a salon publishes through its
  *  marketplace listing switch — nothing tenant-private. */
 
-const GallerySchema = z.array(DiscoveryGalleryPhotoSchema.loose()).catch([]);
+/** A salon's gallery as the consumer app can use it. Entries may carry
+ *  a colour tone and no photograph — the prototype's placeholders, and
+ *  what the seed still holds — so they are dropped one by one rather
+ *  than letting a single empty entry take the whole gallery with it. */
+const GalleryEntrySchema = z
+  .object({
+    id: z.string(),
+    name: z.string().default(''),
+    img: z.string().nullable().default(null),
+    tone: z.string().nullable().default(null),
+  })
+  .loose();
+const GallerySchema = z.array(GalleryEntrySchema).catch([]);
+/** Everything the salon put in its gallery, photograph or tile. A
+ *  malformed entry is dropped on its own rather than taking the whole
+ *  gallery with it. */
+const galleryOf = (gallery: unknown) =>
+  GallerySchema.parse(gallery)
+    .filter((p) => p.img || p.tone)
+    .map((p) => ({ id: p.id, name: p.name, img: p.img, tone: p.tone }));
+/** The card image: the first real photograph, if there is one. */
+const cardPhoto = (gallery: unknown) => galleryOf(gallery).find((p) => p.img)?.img ?? null;
 
 /** The consumer app is first-party: answer velnes hosts and local dev,
  *  nothing else needs these doors cross-origin. */
@@ -142,7 +162,7 @@ export async function discoveryRoutes(app: FastifyInstance) {
       const bookable = new Set(widgets.map((w) => w.tenantId));
       const salons = [];
       for (const b of listed) {
-        const photos = GallerySchema.parse(b.gallery);
+        const photo = cardPhoto(b.gallery);
         const cats = await withTenant(b.id, (trx) =>
           trx
             .selectFrom('services as s')
@@ -161,7 +181,7 @@ export async function discoveryRoutes(app: FastifyInstance) {
           pitch: b.marketplace.pitch,
           categories: b.marketplace.categories,
           serviceCategories: cats.map((c) => c.name),
-          photo: photos[0]?.img ?? null,
+          photo,
           lat: pin.lat,
           lng: pin.lng,
           bookable: bookable.has(b.id),
@@ -247,7 +267,7 @@ export async function discoveryRoutes(app: FastifyInstance) {
         lat: pin.lat,
         lng: pin.lng,
         categories: biz.marketplace.categories,
-        gallery: GallerySchema.parse(biz.gallery).map((p) => ({ id: p.id, name: p.name, img: p.img })),
+        gallery: galleryOf(biz.gallery),
         showPrices: biz.marketplace.showPrices,
         team: team.map((e) => ({ id: e.id, name: e.name, role: e.roleTitle, avatar: e.avatar })),
         products,

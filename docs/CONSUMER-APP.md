@@ -151,6 +151,28 @@ A client cancelling from My Velnes writes to the salon's calendar, its
 `appointment_history` (`source: 'client'`, with the client's name) and
 its bell — the salon learns it the same way it learns anything else.
 
+## The salon's own photos
+
+The gallery a salon builds under Settings › Company is what the salon
+page shows: a browsable frame in the prototype's `.gal` / `.m-gal`
+markup with arrows, clickable dots, a live counter, and a full-size
+view (arrow keys move, Escape closes).
+
+A gallery entry is **either a photograph or a colour tile**. The
+workspace editor has always allowed naming a space before uploading a
+photo of it — the seeded demo salons are exactly that, four named rooms
+with tones and no images — so the consumer app renders the tile with its
+name rather than substituting a stock photograph of somebody else's
+salon. Only entries that are neither are dropped, and dropped
+individually: a single malformed entry used to take the whole gallery
+down with it, which is why the demo salon appeared to have no photos at
+all.
+
+Card images (home, results) use the first real photograph a salon has;
+a salon with none falls back to the prototype's decorative image, which
+is the one place the app still shows a picture that is not the salon's
+own.
+
 ## Maps
 
 Real OpenStreetMap through Leaflet — the same setup the registration

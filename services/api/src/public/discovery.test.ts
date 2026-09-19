@@ -115,6 +115,37 @@ describe('the consumer discovery surface', () => {
     expect(d.products.every((p) => p.price > 0)).toBe(true);
   });
 
+  it('serves the gallery a salon uploads — and keeps tiles that have no photo yet', async () => {
+    // The seeded demo salon has named its spaces without uploading
+    // photographs: those entries carry a colour, and must survive.
+    const seeded = await app.inject({ method: 'GET', url: `${P}/discovery/salons/velnes-fizio` });
+    const tiles = DiscoverySalonDetailSchema.parse(seeded.json()).gallery;
+    expect(tiles.length).toBeGreaterThan(0);
+    expect(tiles.every((g) => g.img !== null || g.tone !== null)).toBe(true);
+
+    // A real uploaded photo comes through whole, and leads the card.
+    await admin.query(`UPDATE businesses SET gallery = $1::jsonb WHERE slug = 'velnes-fizio'`, [
+      JSON.stringify([
+        { id: 'g1', name: 'Reception', img: null, tone: '#6f7357' },
+        { id: 'g2', name: 'Room one', img: 'data:image/png;base64,iVBORw0KGgo=', tone: null },
+      ]),
+    ]);
+    try {
+      const res = await app.inject({ method: 'GET', url: `${P}/discovery/salons/velnes-fizio` });
+      const g = DiscoverySalonDetailSchema.parse(res.json()).gallery;
+      expect(g).toHaveLength(2);
+      expect(g[1]!.img).toBe('data:image/png;base64,iVBORw0KGgo=');
+      // The card picks the first real photograph, not the tile.
+      const list = await app.inject({ method: 'GET', url: `${P}/discovery/salons` });
+      const card = DiscoverySalonsSchema.parse(list.json()).salons.find((s) => s.slug === 'velnes-fizio');
+      expect(card!.photo).toBe('data:image/png;base64,iVBORw0KGgo=');
+    } finally {
+      await admin.query(`UPDATE businesses SET gallery = $1::jsonb WHERE slug = 'velnes-fizio'`, [
+        JSON.stringify(tiles),
+      ]);
+    }
+  });
+
   it('honors the salon’s own "show team" switch', async () => {
     await admin.query(
       `UPDATE businesses SET settings = jsonb_set(settings, '{marketplace,showTeam}', 'false')
