@@ -183,6 +183,12 @@ the pin was already required in the wizard, and it is now required at
 the door too — `RegistrationDraftSchema` refuses a draft without one, so
 no path can create a salon that the map cannot find.
 
+**A salon can move its own pin.** Settings › Locations carries the same
+Leaflet picker (one component, two places: the registration wizard and
+the location panel), so a wrong or placeholder pin is fixed where every
+other location detail is edited, and saving sends it through the
+existing `PATCH /locations/:id` under `locations.manage`.
+
 ## Honest deferrals
 
 These are absent rather than faked, and each needs a platform decision

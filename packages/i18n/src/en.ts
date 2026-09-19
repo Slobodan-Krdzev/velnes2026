@@ -457,6 +457,7 @@ export const en = {
   'lset.locationSettings': 'Location settings',
   'lset.street': 'Street and number',
   'lset.rooms': 'Treatment rooms',
+  'lset.pinNote': 'The address above is what we print. This pin is where every map puts you — clients see it on your salon page and in search results. Click the map, drag the pin, or use your current location.',
   'lset.tz': 'Time zone',
   'lset.tzHint': 'Availability and reports use the time of this location',
   'lset.invoiceNumbering': 'Invoice numbering',

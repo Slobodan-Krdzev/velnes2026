@@ -23,6 +23,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { z } from 'zod';
 import { api, get, patch, post } from '@velnes/client';
 import { useEmployees, useLocationCatalog, useLocations } from '../../api/queries.js';
+import { LocationMap } from '../register/LocationMap.js';
 import { WeekHoursEditor } from './bits.js';
 import { BookingSection } from './BookingSection.js';
 import { CompanySection } from './CompanySection.js';
@@ -520,6 +521,10 @@ function LocationEditPanel({
   const [cancel, setCancel] = useState(String(l.cancelHours));
   const [online, setOnline] = useState(l.online);
   const [hours, setHours] = useState<WeekHours>(l.hours ?? LOC_STD_HOURS);
+  // The map pin. Separate from the address text on purpose: the address
+  // is what we print, the pin is where every map puts this salon.
+  const [lat, setLat] = useState<number | null>(l.lat);
+  const [lng, setLng] = useState<number | null>(l.lng);
   const [error, setError] = useState<string | null>(null);
 
   const save = async () => {
@@ -536,6 +541,8 @@ function LocationEditPanel({
         cancelHours: Number.isFinite(Number(cancel)) ? Number(cancel) : l.cancelHours,
         online,
         hours,
+        lat,
+        lng,
       });
       onSaved();
     } catch (e) {
@@ -599,6 +606,15 @@ function LocationEditPanel({
                 countryLabel={t('phone.country')}
               />
             </div>
+            <LocationMap
+              lat={lat}
+              lng={lng}
+              onPick={(la, ln) => {
+                setLat(la);
+                setLng(ln);
+              }}
+            />
+            <div className="note">{t('lset.pinNote')}</div>
             <label className="field">
               <span>{t('lset.tz')}</span>
               <select

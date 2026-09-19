@@ -450,6 +450,7 @@ export const sq: Record<TranslationKey, string> = {
   'lset.locationSettings': 'Cilësimet e lokacionit',
   'lset.street': 'Rruga dhe numri',
   'lset.rooms': 'Dhoma trajtimi',
+  'lset.pinNote': 'Adresa më sipër është ajo që shtypim. Kjo gjilpërë është vendi ku çdo hartë ju vendos — klientët e shohin në faqen tuaj dhe në rezultate. Klikoni hartën, tërhiqni gjilpërën ose përdorni vendndodhjen tuaj aktuale.',
   'lset.tz': 'Zona kohore',
   'lset.tzHint': 'Disponueshmëria dhe raportet përdorin orën e këtij lokacioni',
   'lset.invoiceNumbering': 'Numërimi i faturave',
