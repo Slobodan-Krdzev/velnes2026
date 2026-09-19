@@ -36,6 +36,37 @@ export function LocationMap({
   const mapRef = useRef<L.Map | null>(null);
   const markerRef = useRef<L.Marker | null>(null);
   const [ready, setReady] = useState(false);
+  const [locating, setLocating] = useState(false);
+  const [geoErr, setGeoErr] = useState('');
+
+  /** Ask the device where it is, then move the map and the pin there. */
+  const locateMe = () => {
+    if (!navigator.geolocation) {
+      setGeoErr(t('reg.pinNoGeo'));
+      return;
+    }
+    setGeoErr('');
+    setLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setLocating(false);
+        const la = round(pos.coords.latitude);
+        const ln = round(pos.coords.longitude);
+        onPick(la, ln);
+        const map = mapRef.current;
+        if (map) {
+          map.setView([la, ln], 17);
+          if (markerRef.current) markerRef.current.setLatLng([la, ln]);
+          else markerRef.current = L.marker([la, ln], { icon: PIN, draggable: true }).addTo(map);
+        }
+      },
+      () => {
+        setLocating(false);
+        setGeoErr(t('reg.pinDenied'));
+      },
+      { enableHighAccuracy: true, timeout: 10_000 },
+    );
+  };
 
   useEffect(() => {
     if (!boxRef.current || mapRef.current) return;
@@ -86,15 +117,22 @@ export function LocationMap({
         aria-label={t('reg.pinHint')}
         style={{ height: 300, borderRadius: 14, overflow: 'hidden', border: '1px solid var(--line)' }}
       />
-      {!ready ? (
-        <button
-          type="button"
-          className="btn btn-subtle btn-sm"
-          style={{ marginTop: 8, alignSelf: 'flex-start' }}
-          onClick={() => onPick(SKOPJE[0], SKOPJE[1])}
-        >
-          {t('reg.pinFallback')}
+      <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
+        {/* Device precision: the exact spot beats a dragged guess, and
+            the salon is usually standing in it while registering. */}
+        <button type="button" className="btn btn-subtle btn-sm" onClick={locateMe} disabled={locating}>
+          {locating ? t('reg.pinLocating') : t('reg.pinUseDevice')}
         </button>
+        {!ready ? (
+          <button type="button" className="btn btn-subtle btn-sm" onClick={() => onPick(SKOPJE[0], SKOPJE[1])}>
+            {t('reg.pinFallback')}
+          </button>
+        ) : null}
+      </div>
+      {geoErr ? (
+        <span className="hint" style={{ marginTop: 6, color: 'var(--danger, #B4531F)' }}>
+          {geoErr}
+        </span>
       ) : null}
       {lat != null && lng != null ? (
         <span className="hint tnum" style={{ marginTop: 6 }}>

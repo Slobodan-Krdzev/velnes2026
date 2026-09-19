@@ -27,7 +27,8 @@ subsystem does not exist yet, the surface is simply absent.
 | Salon page | `GET /public/discovery/salons/:slug` — gallery, description, team (honoring `showTeam`), sellable products, live locations |
 | Treatments, prices, durations | the existing `GET /public/services` (per location) |
 | Open times | the existing `GET /public/availability` — the one availability engine, no second opinion |
-| Booking (guest) | the existing `POST /public/book` → `confirmBooking()`, the same door the widget uses |
+| Open times for a visit | `POST /public/slots` — one answer for the whole visit, however many treatments |
+| Booking (guest) | `POST /public/book` → `confirmChain()` → `confirmBooking()`, the same door the widget uses |
 | Booking (signed in) | `POST /client/book` → the same `confirmBooking()`, plus the customer link and both notifications |
 | My Velnes | `GET /client/me`, `/me/appointments`, `/me/notifications`, `/me/salons` |
 
@@ -72,6 +73,31 @@ Two decisions worth recording:
   first location — and, for the demo tenant, a location where the only
   physiotherapist's measured pace exceeds the catalog duration, so the
   engine (correctly) offers nothing.
+
+## A visit is several treatments
+
+People book "haircut then colour", so the salon page is multi-select:
+tapping a treatment adds it to the visit, tapping again removes it, and
+each one carries its own option (the variant picker appears per
+treatment). The cart lists them with prices and the running total.
+
+Rather than invent a new kind of appointment, a visit is what it looks
+like on the salon's calendar: **real back-to-back appointments, one per
+treatment, booked together in one transaction.** If the third treatment
+cannot fit, the first two never happened — a test asserts exactly that.
+Spacing follows the occupancy rule `bookingCheck` already enforces (an
+appointment owns `[start − prep, start + treatment + reset]`), so the
+next treatment starts the moment the previous one lets go.
+
+`availableChainSlots` offers only start times where *every* treatment
+fits with somebody free for each, so a time is never offered that only
+half the visit can keep. Offer and booking share one `freeFor()` helper,
+including the existing "skip anyone slower than the catalog quote" rule
+— which is what keeps a later treatment's start time true.
+
+Idempotency is per visit: keys are derived per leg (`key:1`, `key:2`),
+and a retried visit answers with the visit it already made rather than
+colliding with its own appointments.
 
 ## Client users — the fourth principal
 
@@ -138,9 +164,24 @@ instead of discarding it, and `PATCH /locations/:id` accepts one so a
 salon can correct a wrong pin from the workspace.
 
 Maps appear on the salon page, in category results (every matching salon
-pinned, the best match in brand colour), and on an appointment in My
-Velnes. A salon with no pin gets no map and says so, rather than
-guessing coordinates from its address text.
+pinned, the best match in brand colour; the mobile "Map" button opens
+the full-screen sheet), on the booking confirmation, and on an
+appointment in My Velnes.
+
+**Every location now has coordinates.** Salons that registered through
+the wizard have the pin their owner placed. The rest — the demo-seed
+salons, which never registered — were given **placeholder pins** at
+Alex's request (`20260919090700_location_geo_placeholders.sql`): each
+salon's own city centre with a small spread so pins do not stack, and
+Skopje as the fallback when the city is unknown. These are dummy
+coordinates, not surveyed addresses; any salon can correct its own from
+Settings › Locations.
+
+**New registrations capture a precise pin.** The wizard's map gained a
+"Use my current location" button (device geolocation, high accuracy),
+the pin was already required in the wizard, and it is now required at
+the door too — `RegistrationDraftSchema` refuses a draft without one, so
+no path can create a salon that the map cannot find.
 
 ## Honest deferrals
 

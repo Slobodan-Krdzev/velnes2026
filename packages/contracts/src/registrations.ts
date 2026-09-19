@@ -93,14 +93,26 @@ export const RegistrationDraftSchema = z.object({
     vat: z.string().default(''),
     currency: z.string().default('MKD'),
   }),
-  loc: z.object({
-    street: z.string().min(1),
-    no: z.string().default(''),
-    city: z.string().min(1),
-    zip: z.string().default(''),
-    lat: z.number().nullable().default(null),
-    lng: z.number().nullable().default(null),
-  }),
+  loc: z
+    .object({
+      street: z.string().min(1),
+      no: z.string().default(''),
+      city: z.string().min(1),
+      zip: z.string().default(''),
+      // The pin is required: it is what the consumer app's map obeys,
+      // and a salon nobody can find on a map is a salon nobody visits.
+      // The wizard offers device precision or a click on the map.
+      lat: z.number().min(-90).max(90).nullable().default(null),
+      lng: z.number().min(-180).max(180).nullable().default(null),
+    })
+    .superRefine((v, ctx) => {
+      if (v.lat === null || v.lng === null)
+        ctx.addIssue({
+          code: 'custom',
+          path: ['lat'],
+          message: 'Place your pin on the map — it is how clients find you',
+        });
+    }),
   // The salon writes its own services; the category is picked from the
   // Velnes taxonomy HQ curates (a name from /service-categories).
   services: z.array(RegServiceSchema).min(1),

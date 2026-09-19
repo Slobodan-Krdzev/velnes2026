@@ -4,7 +4,7 @@ import type { z } from 'zod';
 import type { PublicServiceSchema } from '@velnes/contracts';
 import { DHeader } from '../../app/chrome.js';
 import { fmtMKD, minutesLbl } from '../../lib/api/mappers.js';
-import { useAvailability, useSalonDetail, useSalonServices } from '../../lib/api/queries.js';
+import { useSalonDetail, useSalonServices, useVisitSlots } from '../../lib/api/queries.js';
 import { SalonMap } from '../../components/SalonMap.js';
 import { IcArr, IcClock, IcPin, IcSpark, IcVok } from '../discovery/cards.js';
 import { useBooking } from '../booking/store.js';
@@ -78,9 +78,30 @@ function dayChips(offset: number) {
   return out;
 }
 
-function TrCard({ s, on, desktop, onPick }: { s: PublicService; on: boolean; desktop: boolean; onPick: () => void }) {
+/** A treatment card is a toggle: tap to add it to the visit, tap again
+ *  to drop it. When it is in the visit and an option is chosen, the
+ *  card shows that option's own duration and price. */
+function TrCard({
+  s,
+  on,
+  desktop,
+  chosen,
+  onToggle,
+}: {
+  s: PublicService;
+  on: boolean;
+  desktop: boolean;
+  chosen: { durationMin: number; price: number; label: string | null } | null;
+  onToggle: () => void;
+}) {
+  const priceLbl =
+    on && chosen
+      ? fmtMKD(chosen.price)
+      : s.variants.length
+        ? `from ${fmtMKD(Math.min(s.price, s.priceFrom ?? s.price))}`
+        : fmtMKD(s.price);
   return (
-    <button className={`tr-card${desktop ? ' dtr' : ''}${on ? ' on' : ''}`} onClick={onPick}>
+    <button className={`tr-card${desktop ? ' dtr' : ''}${on ? ' on' : ''}`} onClick={onToggle}>
       <span className="row1">
         <span className="nm">
           {IcScissors}
@@ -89,8 +110,11 @@ function TrCard({ s, on, desktop, onPick }: { s: PublicService; on: boolean; des
         <span className="ok">{IcCheck}</span>
       </span>
       <span className="in2">
-        <span>{minutesLbl(s.durationMin)}</span>
-        <b>{s.variants.length ? `from ${fmtMKD(Math.min(s.price, s.priceFrom ?? s.price))}` : fmtMKD(s.price)}</b>
+        <span>
+          {minutesLbl(on && chosen ? chosen.durationMin : s.durationMin)}
+          {on && chosen?.label ? ` · ${chosen.label}` : ''}
+        </span>
+        <b>{priceLbl}</b>
       </span>
     </button>
   );
@@ -111,48 +135,76 @@ function useSalonPage() {
   // The visible four-day window; the calendar chip walks it forward.
   const [dayOffset, setDayOffset] = useState(0);
   const days = useMemo(() => dayChips(dayOffset), [dayOffset]);
-  const [selId, setSelId] = useState<string | null>(null);
-  const [touched, setTouched] = useState(false);
+  // The visit: several treatments in the order they were picked. The
+  // prototype's desktop cart is multi-select, and a salon visit really
+  // is "haircut then colour" — so the cart is the state, not one id.
+  const [cart, setCart] = useState<{ serviceId: string; variantId: string | null }[]>([]);
   const [empId, setEmpId] = useState('any');
-  const [variantId, setVariantId] = useState<string | null>(null);
   const [locOpen, setLocOpen] = useState(false);
+  const [openVariantFor, setOpenVariantFor] = useState<string | null>(null);
   const [date, setDate] = useState(days[0]!.iso);
   const [time, setTime] = useState('');
   const [allOpen, setAllOpen] = useState(false);
   const [proOpen, setProOpen] = useState(false);
   const [prodOpen, setProdOpen] = useState(false);
   const [cartMin, setCartMin] = useState(false);
+  // A slot tapped on the home screen arrives as a link: start the visit
+  // with that treatment already in the cart.
   useEffect(() => {
     const qsSvc = params.get('service');
-    if (services.length && !selId) {
-      const match = qsSvc ? services.find((s) => s.id === qsSvc) : undefined;
-      setSelId((match ?? services[0]!).id);
-      if (match) setTouched(true);
-      const qd = params.get('date');
-      const qt = params.get('time');
-      if (qd && days.some((d) => d.iso === qd)) setDate(qd);
-      if (qt) setTime(qt);
-    }
-  }, [services, selId, params, days]);
+    if (!services.length || cart.length || !qsSvc) return;
+    const match = services.find((s) => s.id === qsSvc);
+    if (!match) return;
+    setCart([{ serviceId: match.id, variantId: null }]);
+    const qd = params.get('date');
+    const qt = params.get('time');
+    if (qd && days.some((d) => d.iso === qd)) setDate(qd);
+    if (qt) setTime(qt);
+  }, [services, cart.length, params, days]);
   // The day window moved: land on its first day rather than a date that
   // is no longer on screen.
   useEffect(() => {
     if (!days.some((d) => d.iso === date)) setDate(days[0]!.iso);
   }, [days, date]);
-  const sel = services.find((s) => s.id === selId) ?? null;
-  const availQ = useAvailability({ key, locationId, serviceId: sel?.id, date, employeeId: empId, variantId });
+  // Every line of the visit, resolved against the catalog.
+  const lines = useMemo(
+    () =>
+      cart
+        .map((c) => {
+          const svc = services.find((x) => x.id === c.serviceId);
+          if (!svc) return null;
+          const variant = svc.variants.find((v) => v.id === c.variantId) ?? null;
+          return {
+            ...c,
+            svc,
+            variant,
+            name: variant ? `${svc.name} · ${variant.label}` : svc.name,
+            price: variant?.price ?? svc.price,
+            durationMin: variant?.durationMin ?? svc.durationMin,
+          };
+        })
+        .filter((x): x is NonNullable<typeof x> => x !== null),
+    [cart, services],
+  );
+  const availQ = useVisitSlots({
+    key,
+    locationId,
+    date,
+    employeeId: empId,
+    items: lines.map((l) => ({ serviceId: l.serviceId, variantId: l.variantId })),
+  });
   const free = useMemo(() => (availQ.data?.slots ?? []).filter((s) => s.free).map((s) => s.t), [availQ.data]);
   useEffect(() => {
     if (free.length && !free.includes(time)) setTime(free[0]!);
     if (!free.length) setTime('');
   }, [free, time]);
-  const variant = sel?.variants.find((v) => v.id === variantId) ?? null;
-  // What the door will actually charge: the variant when one is chosen,
-  // the service's own price otherwise. Never the "from" price.
-  const price = variant?.price ?? sel?.price ?? 0;
-  const durationMin = variant?.durationMin ?? sel?.durationMin ?? 0;
+  // What the door will actually charge for the visit: every line at the
+  // price its own option carries. Never a "from" price.
+  const price = lines.reduce((n, l) => n + l.price, 0);
+  const durationMin = lines.reduce((n, l) => n + l.durationMin, 0);
   const dayLbl = days.find((d) => d.iso === date)?.lbl ?? date;
-  const empName = sel?.employees.find((e) => e.id === empId)?.name ?? 'Any available professional';
+  const team = lines[0]?.svc.employees ?? [];
+  const empName = team.find((e) => e.id === empId)?.name ?? 'Any available professional';
   return {
     slug: slug ?? '',
     detail,
@@ -162,20 +214,27 @@ function useSalonPage() {
     dayOffset,
     nextDays: () => setDayOffset(dayOffset + 4),
     prevDays: () => setDayOffset(Math.max(0, dayOffset - 4)),
-    sel,
-    pick: (id: string) => {
-      setSelId(id);
-      setTouched(true);
+    lines,
+    cart,
+    inCart: (id: string) => cart.some((c) => c.serviceId === id),
+    toggle: (id: string) => {
+      setCart((c) =>
+        c.some((x) => x.serviceId === id)
+          ? c.filter((x) => x.serviceId !== id)
+          : [...c, { serviceId: id, variantId: null }],
+      );
       setEmpId('any');
-      setVariantId(null);
+      setOpenVariantFor(id);
     },
-    touched,
+    remove: (id: string) => setCart((c) => c.filter((x) => x.serviceId !== id)),
+    setVariant: (serviceId: string, variantId: string | null) =>
+      setCart((c) => c.map((x) => (x.serviceId === serviceId ? { ...x, variantId } : x))),
+    openVariantFor,
+    setOpenVariantFor,
     empId,
     setEmpId,
     empName,
-    variant,
-    variantId,
-    setVariantId,
+    team,
     price,
     durationMin,
     location,
@@ -183,10 +242,8 @@ function useSalonPage() {
     pickLoc: (i: number) => {
       setLocIdx(i);
       // A different location is a different catalog and a different team.
-      setSelId(null);
-      setTouched(false);
+      setCart([]);
       setEmpId('any');
-      setVariantId(null);
       setLocOpen(false);
     },
     locOpen,
@@ -209,6 +266,12 @@ function useSalonPage() {
 }
 
 type Page = ReturnType<typeof useSalonPage>;
+
+/** What this treatment costs and takes *as chosen* in the visit. */
+function chosenOf(p: Page, serviceId: string) {
+  const l = p.lines.find((x) => x.serviceId === serviceId);
+  return l ? { durationMin: l.durationMin, price: l.price, label: l.variant?.label ?? null } : null;
+}
 
 /** The book card core — identical structure in both environments (the
  *  prototype's desktop variant adds .dtr to cards). */
@@ -258,7 +321,14 @@ function BookCard({ p, desktop }: { p: Page; desktop: boolean }) {
       </div>
       <div className="tr-grid">
         {head.map((s) => (
-          <TrCard key={s.id} s={s} desktop={desktop} on={p.sel?.id === s.id && (desktop ? p.touched : true)} onPick={() => p.pick(s.id)} />
+          <TrCard
+            key={s.id}
+            s={s}
+            desktop={desktop}
+            on={p.inCart(s.id)}
+            chosen={chosenOf(p, s.id)}
+            onToggle={() => p.toggle(s.id)}
+          />
         ))}
       </div>
       {rest.length ? (
@@ -266,7 +336,14 @@ function BookCard({ p, desktop }: { p: Page; desktop: boolean }) {
           {p.allOpen ? (
             <div className="tr-grid" style={{ marginTop: '10px' }}>
               {rest.map((s) => (
-                <TrCard key={s.id} s={s} desktop={desktop} on={p.sel?.id === s.id && (desktop ? p.touched : true)} onPick={() => p.pick(s.id)} />
+                <TrCard
+                  key={s.id}
+                  s={s}
+                  desktop={desktop}
+                  on={p.inCart(s.id)}
+                  chosen={chosenOf(p, s.id)}
+                  onToggle={() => p.toggle(s.id)}
+                />
               ))}
             </div>
           ) : null}
@@ -275,35 +352,44 @@ function BookCard({ p, desktop }: { p: Page; desktop: boolean }) {
           </button>
         </>
       ) : null}
-      {p.sel && p.sel.variants.length ? (
-        <>
-          <div className="bk-sub" style={{ marginTop: '14px' }}>
-            <span className="muted">Options for {p.sel.name}</span>
-          </div>
-          <div className="pro-grid">
-            <button className={`pro-card${p.variantId === null ? ' on' : ''}`} onClick={() => p.setVariantId(null)}>
-              <span className="pav any">{IcClock}</span>
-              <span>
-                <b>Standard</b>
-                <span className="sm muted">
-                  {minutesLbl(p.sel.durationMin)} · {fmtMKD(p.sel.price)}
-                </span>
-              </span>
-            </button>
-            {p.sel.variants.map((v) => (
-              <button key={v.id} className={`pro-card${p.variantId === v.id ? ' on' : ''}`} onClick={() => p.setVariantId(v.id)}>
+      {p.lines
+        .filter((l) => l.svc.variants.length)
+        .map((l) => (
+          <div key={l.serviceId}>
+            <div className="bk-sub" style={{ marginTop: '14px' }}>
+              <span className="muted">Options for {l.svc.name}</span>
+            </div>
+            <div className="pro-grid">
+              <button
+                className={`pro-card${l.variantId === null ? ' on' : ''}`}
+                onClick={() => p.setVariant(l.serviceId, null)}
+              >
                 <span className="pav any">{IcClock}</span>
                 <span>
-                  <b>{v.label}</b>
+                  <b>Standard</b>
                   <span className="sm muted">
-                    {minutesLbl(v.durationMin)} · {fmtMKD(v.price)}
+                    {minutesLbl(l.svc.durationMin)} · {fmtMKD(l.svc.price)}
                   </span>
                 </span>
               </button>
-            ))}
+              {l.svc.variants.map((v) => (
+                <button
+                  key={v.id}
+                  className={`pro-card${l.variantId === v.id ? ' on' : ''}`}
+                  onClick={() => p.setVariant(l.serviceId, v.id)}
+                >
+                  <span className="pav any">{IcClock}</span>
+                  <span>
+                    <b>{v.label}</b>
+                    <span className="sm muted">
+                      {minutesLbl(v.durationMin)} · {fmtMKD(v.price)}
+                    </span>
+                  </span>
+                </button>
+              ))}
+            </div>
           </div>
-        </>
-      ) : null}
+        ))}
       <div className="pro-row">
         <span className="av">{IcPerson}</span>
         <span className="who2">
@@ -323,7 +409,7 @@ function BookCard({ p, desktop }: { p: Page; desktop: boolean }) {
               <span className="sm muted">First available · fastest option</span>
             </span>
           </button>
-          {(p.sel?.employees ?? []).map((e) => (
+          {p.team.map((e) => (
             <button key={e.id} className={`pro-card${p.empId === e.id ? ' on' : ''}`} onClick={() => p.setEmpId(e.id)}>
               <span className="pav">{initials(e.name)}</span>
               <span>
@@ -410,18 +496,29 @@ function BookCard({ p, desktop }: { p: Page; desktop: boolean }) {
 
 function goBook(p: Page, nav: (to: string) => void, setDraft: ReturnType<typeof useBooking>['setDraft']) {
   const d = p.detail;
-  if (!d || !p.sel || !p.time || !d.publishableKey || !p.location) return;
+  const first = p.lines[0];
+  if (!d || !first || !p.time || !d.publishableKey || !p.location) return;
   setDraft({
     slug: p.slug,
     salonName: d.locations.length > 1 ? `${d.name} · ${p.location.name}` : d.name,
     photo: d.gallery[0]?.img ? `url("${d.gallery[0].img}")` : 'var(--ih)',
     publishableKey: d.publishableKey,
     locationId: p.location.id,
-    serviceId: p.sel.id,
-    serviceName: p.variant ? `${p.sel.name} · ${p.variant.label}` : p.sel.name,
+    lat: p.location.lat ?? d.lat,
+    lng: p.location.lng ?? d.lng,
+    items: p.lines.map((l) => ({
+      serviceId: l.serviceId,
+      variantId: l.variantId,
+      name: l.name,
+      durationMin: l.durationMin,
+      price: l.price,
+    })),
+    // The first treatment names the visit for doors that take one.
+    serviceId: first.serviceId,
+    serviceName: p.lines.map((l) => l.name).join(' + '),
     durationMin: p.durationMin,
     price: p.price,
-    variantId: p.variantId,
+    variantId: first.variantId,
     employeeId: p.empId,
     employeeName: p.empName,
     date: p.date,
@@ -449,7 +546,8 @@ export function Salon() {
     lat != null && lng != null
       ? `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`
       : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${printedAddress} ${d.name}`.trim())}`;
-  const showPrice = p.sel ? fmtMKD(p.price) : '—';
+  const showPrice = p.lines.length ? fmtMKD(p.price) : '—';
+  const visitLbl = p.lines.length ? p.lines.map((l) => l.name).join(' + ') : 'Nothing selected yet';
   const book = () => goBook(p, nav, setDraft);
   const teamCard = (idPrefix: string) => (
     <div className="scard" id={`${idPrefix}-team`}>
@@ -566,7 +664,7 @@ export function Salon() {
             </div>
             {d.bookable ? <BookCard p={p} desktop /> : null}
           </div>
-          {d.bookable && p.sel && p.touched ? (
+          {d.bookable && p.lines.length ? (
             <div className={`dcart${p.cartMin ? ' min' : ''}`} id="dcart">
               <div className="dcart-h">
                 Your booking
@@ -575,20 +673,34 @@ export function Salon() {
                 </button>
               </div>
               {p.cartMin ? (
-                <div className="dcart-mini">1 item · {showPrice}</div>
+                <div className="dcart-mini">
+                  {p.lines.length} {p.lines.length === 1 ? 'item' : 'items'} · {showPrice}
+                </div>
               ) : (
                 <div>
                   <div>
-                    <div className="dcart-row">
-                      <span className="nm2">
-                        {p.sel.name}
-                        <span className="sub2">{p.variant ? `${p.variant.label} · ${minutesLbl(p.durationMin)}` : minutesLbl(p.durationMin)}</span>
-                      </span>
-                      <b style={{ color: 'var(--ink)' }}>{showPrice}</b>
-                    </div>
+                    {p.lines.map((l) => (
+                      <div className="dcart-row" key={l.serviceId}>
+                        <span className="nm2">
+                          {l.svc.name}
+                          <span className="sub2">
+                            {l.variant ? `${l.variant.label} · ` : ''}
+                            {minutesLbl(l.durationMin)}
+                          </span>
+                        </span>
+                        <b style={{ color: 'var(--ink)' }}>{fmtMKD(l.price)}</b>
+                        <button
+                          className="x"
+                          aria-label={`Remove ${l.svc.name}`}
+                          onClick={() => p.remove(l.serviceId)}
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    ))}
                   </div>
                   <div className="dcart-when sm muted">
-                    {p.dayLbl} · {p.time || '—'} · {p.empName}
+                    {p.dayLbl} · {p.time || '—'} · {minutesLbl(p.durationMin)} · {p.empName}
                   </div>
                   <div className="dcart-tot">
                     <span>Total</span>
@@ -597,6 +709,11 @@ export function Salon() {
                   <button className="btn btn-p" style={{ width: '100%' }} disabled={!p.time} onClick={book}>
                     Book now
                   </button>
+                  {!p.time ? (
+                    <div className="sm muted" style={{ textAlign: 'center', marginTop: '7px' }}>
+                      Pick a time that fits the whole visit.
+                    </div>
+                  ) : null}
                 </div>
               )}
             </div>
@@ -672,7 +789,7 @@ export function Salon() {
                     </span>
                     <span className="line">
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="7" cy="18" r="2.6" /><circle cx="17" cy="18" r="2.6" /><path d="M8.8 16.2 17 4M15.2 16.2 7 4" /></svg>
-                      <b data-sum="tr">{p.sel?.name ?? '—'}</b>
+                      <b data-sum="tr">{visitLbl}</b>
                       <span className="sep">|</span>
                       {IcCal}
                       <b data-sum="day">{p.dayLbl}</b>

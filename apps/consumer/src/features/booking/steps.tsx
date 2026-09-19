@@ -5,11 +5,26 @@ import { fmtMKD, minutesLbl } from '../../lib/api/mappers.js';
 import { ApiError, pubPost } from '../../lib/api/client.js';
 import { useSession } from '../../lib/api/session.js';
 import { IcArr } from '../discovery/cards.js';
+import { SalonMap } from '../../components/SalonMap.js';
 import { useBooking } from './store.js';
 
 /** Guest identity steps — prototype markup, wired to the real booking
  *  door. The email verification-code step waits for the SMTP phase; the
  *  guest flow is the same unverified identity today's booking page uses. */
+
+/** What a booked visit looks like coming back: the whole span, and a
+ *  line per treatment underneath. */
+export interface BookedVisit {
+  ref: string;
+  date: string;
+  time: string;
+  end: string;
+  serviceName: string;
+  items: { ref: string; serviceName: string; time: string; end: string; price: number; employeeName: string }[];
+  locationName: string;
+  employeeName: string;
+  price: number;
+}
 
 const IcVok13 = (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3.5l7 2.5v5c0 4.5-3 8-7 9.5-4-1.5-7-5-7-9.5V6z" /><path d="M9 12l2 2 4-4" /></svg>
@@ -63,7 +78,12 @@ export function BookIdentity() {
         <div className="minisum">
           <div className="r"><span className="k">For</span><span className="v">{fw === 'other' ? guest || 'Someone else' : 'Myself'}</span></div>
           <div className="r"><span className="k">Salon</span><span className="v">{draft.salonName}</span></div>
-          <div className="r"><span className="k">Treatment</span><span className="v">{draft.serviceName} · {minutesLbl(draft.durationMin)}</span></div>
+          <div className="r">
+            <span className="k">{draft.items.length > 1 ? 'Treatments' : 'Treatment'}</span>
+            <span className="v">
+              {draft.items.map((i) => i.name).join(' + ')} · {minutesLbl(draft.durationMin)}
+            </span>
+          </div>
           <div className="r"><span className="k">Date &amp; time</span><span className="v">{draft.dayLbl} · {draft.time}</span></div>
           <div className="r"><span className="k">Total</span><span className="v">{fmtMKD(draft.price)}</span></div>
         </div>
@@ -134,12 +154,16 @@ export function BookProfile() {
     setErr('');
     setBusy(true);
     try {
-      const res = await pubPost<{ ref: string; date: string; time: string; end: string; serviceName: string; locationName: string; employeeName: string; price: number }>('/book', {
+      const res = await pubPost<BookedVisit>('/book', {
         widgetKey: draft.publishableKey,
         key: crypto.randomUUID(),
         locationId: draft.locationId,
         serviceId: draft.serviceId,
         variantId: draft.variantId,
+        items: draft.items.map((i) => ({
+          serviceId: i.serviceId,
+          ...(i.variantId ? { variantId: i.variantId } : {}),
+        })),
         date: draft.date,
         time: draft.time,
         employeeId: draft.employeeId,
@@ -186,9 +210,7 @@ export function BookProfile() {
 export function BookConfirmed() {
   const nav = useNavigate();
   const { draft, setDraft } = useBooking();
-  const state = (history.state?.usr ?? null) as
-    | { ref: string; date: string; time: string; end: string; serviceName: string; locationName: string; employeeName: string; price: number }
-    | null;
+  const state = (history.state?.usr ?? null) as BookedVisit | null;
   if (!state) {
     nav('/');
     return null;
@@ -208,13 +230,39 @@ export function BookConfirmed() {
         <div className="sumcard">
           <div className="row"><span className="k">Salon</span><span className="v">{draft?.salonName ?? state.locationName}</span></div>
           <div className="row"><span className="k">For</span><span className="v">{draft?.forWhom === 'other' ? draft.guestName : 'Myself'}</span></div>
-          <div className="row"><span className="k">Treatment</span><span className="v">{state.serviceName}</span></div>
-          <div className="row"><span className="k">Professional</span><span className="v">{state.employeeName || 'Any available professional'}</span></div>
+          {state.items.length > 1 ? (
+            state.items.map((i) => (
+              <div className="row" key={i.ref}>
+                <span className="k">
+                  {i.time}–{i.end}
+                </span>
+                <span className="v">
+                  {i.serviceName}
+                  {i.employeeName ? ` · ${i.employeeName}` : ''} · {fmtMKD(i.price)}
+                </span>
+              </div>
+            ))
+          ) : (
+            <>
+              <div className="row"><span className="k">Treatment</span><span className="v">{state.serviceName}</span></div>
+              <div className="row"><span className="k">Professional</span><span className="v">{state.employeeName || 'Any available professional'}</span></div>
+            </>
+          )}
           <div className="row"><span className="k">Email</span><span className="v">{draft?.email ?? '—'}</span></div>
           <div className="row"><span className="k">Date &amp; time</span><span className="v">{state.date} · {state.time} – {state.end}</span></div>
           <div className="row"><span className="k">Booking reference</span><span className="v">{state.ref.slice(0, 8).toUpperCase()}</span></div>
           <div className="row tot"><span className="k" style={{ color: 'var(--ink)', fontWeight: '700' }}>Total</span><span className="v">{fmtMKD(state.price)}</span></div>
         </div>
+        {draft?.lat != null && draft.lng != null ? (
+          <div style={{ marginTop: '16px' }}>
+            <SalonMap
+              pins={[{ lat: draft.lat, lng: draft.lng, label: draft.salonName, sub: state.locationName, here: true }]}
+              height={170}
+              zoom={16}
+              radius={12}
+            />
+          </div>
+        ) : null}
         <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginTop: '18px' }}>
           <button className="btn btn-p" onClick={done}>Back to home</button>
         </div>
@@ -241,16 +289,7 @@ export function BookReview() {
     setBusy(true);
     setErr('');
     try {
-      const res = await api<{
-        ref: string;
-        date: string;
-        time: string;
-        end: string;
-        serviceName: string;
-        locationName: string;
-        employeeName: string;
-        price: number;
-      }>('/book', {
+      const res = await api<BookedVisit>('/book', {
         method: 'POST',
         body: JSON.stringify({
           key: crypto.randomUUID(),
@@ -258,6 +297,10 @@ export function BookReview() {
           locationId: draft.locationId,
           serviceId: draft.serviceId,
           variantId: draft.variantId,
+          items: draft.items.map((i) => ({
+            serviceId: i.serviceId,
+            ...(i.variantId ? { variantId: i.variantId } : {}),
+          })),
           date: draft.date,
           time: draft.time,
           employeeId: draft.employeeId,
@@ -284,7 +327,12 @@ export function BookReview() {
         </div>
         <div className="minisum">
           <div className="r"><span className="k">Salon</span><span className="v">{draft.salonName}</span></div>
-          <div className="r"><span className="k">Treatment</span><span className="v">{draft.serviceName} · {minutesLbl(draft.durationMin)}</span></div>
+          <div className="r">
+            <span className="k">{draft.items.length > 1 ? 'Treatments' : 'Treatment'}</span>
+            <span className="v">
+              {draft.items.map((i) => i.name).join(' + ')} · {minutesLbl(draft.durationMin)}
+            </span>
+          </div>
           <div className="r"><span className="k">Professional</span><span className="v">{draft.employeeName}</span></div>
           <div className="r"><span className="k">Date &amp; time</span><span className="v">{draft.dayLbl} · {draft.time}</span></div>
           <div className="r"><span className="k">Total</span><span className="v">{fmtMKD(draft.price)}</span></div>

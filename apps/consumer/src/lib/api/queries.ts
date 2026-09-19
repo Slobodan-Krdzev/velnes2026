@@ -7,7 +7,7 @@ import type {
   DiscoverySalonsSchema,
   PublicServicesResponseSchema,
 } from '@velnes/contracts';
-import { pub } from './client.js';
+import { pub, pubPost } from './client.js';
 
 type Categories = z.infer<typeof DiscoveryCategoriesSchema>;
 type Salons = z.infer<typeof DiscoverySalonsSchema>;
@@ -46,6 +46,36 @@ export function useSalonServices(key: string | null | undefined, locationId: str
     queryFn: () => pub<Services>(`/services?key=${key}&locationId=${locationId}`),
     enabled: Boolean(key && locationId),
     staleTime: 60_000,
+  });
+}
+
+/** Free times for a whole visit — one or several treatments. The one
+ *  answer the salon page asks for, so a time is never offered that only
+ *  part of the visit can keep. */
+export function useVisitSlots(args: {
+  key: string | null | undefined;
+  locationId: string | undefined;
+  date: string | undefined;
+  employeeId?: string;
+  items: { serviceId: string; variantId?: string | null }[];
+}) {
+  const { key, locationId, date, employeeId, items } = args;
+  const sig = items.map((i) => `${i.serviceId}:${i.variantId ?? ''}`).join(',');
+  return useQuery({
+    queryKey: ['visit-slots', key, locationId, date, employeeId ?? 'any', sig],
+    queryFn: () =>
+      pubPost<Availability>('/slots', {
+        key,
+        locationId,
+        date,
+        employeeId: employeeId ?? 'any',
+        items: items.map((i) => ({
+          serviceId: i.serviceId,
+          ...(i.variantId ? { variantId: i.variantId } : {}),
+        })),
+      }),
+    enabled: Boolean(key && locationId && date && items.length),
+    staleTime: 30_000,
   });
 }
 

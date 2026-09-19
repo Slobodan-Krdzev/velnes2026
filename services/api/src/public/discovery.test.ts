@@ -4,6 +4,7 @@ import {
   DiscoverySalonDetailSchema,
   DiscoverySalonsSchema,
 } from '@velnes/contracts';
+import { randomUUID } from 'node:crypto';
 import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { closeDb } from '../db/index.js';
@@ -25,6 +26,13 @@ describe('the consumer discovery surface', () => {
     await admin.connect();
   });
   afterAll(async () => {
+    await admin.query(
+      `DELETE FROM appointment_history WHERE appointment_id IN (SELECT id FROM appointments WHERE customer_id IN (SELECT id FROM customers WHERE name='Visit Tester'))`,
+    );
+    await admin.query(
+      `DELETE FROM appointments WHERE customer_id IN (SELECT id FROM customers WHERE name='Visit Tester')`,
+    );
+    await admin.query(`DELETE FROM customers WHERE name='Visit Tester'`);
     await admin.end();
     await app.close();
     await closeDb();
@@ -99,6 +107,87 @@ describe('the consumer discovery surface', () => {
          WHERE slug = 'velnes-fizio'`,
       );
     }
+  });
+
+  it('offers and books a visit of several treatments, back to back', async () => {
+    const { demo } = await import('../db/seed-demo.js');
+    const day = (() => {
+      const d = new Date();
+      d.setDate(d.getDate() + 16 - ((d.getDay() + 5) % 7));
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    })();
+    const items = [{ serviceId: demo.s1 }, { serviceId: demo.s2 }];
+
+    const slots = await app.inject({
+      method: 'POST',
+      url: `${P}/slots`,
+      payload: {
+        key: 'pk_live_velnes_demo',
+        locationId: demo.locAerodrom,
+        date: day,
+        employeeId: 'any',
+        items,
+      },
+    });
+    expect(slots.statusCode).toBe(200);
+    const slot = slots.json().slots.find((s: { free: boolean }) => s.free);
+    expect(slot, 'a two-treatment visit fits somewhere that day').toBeDefined();
+
+    const res = await app.inject({
+      method: 'POST',
+      url: `${P}/book`,
+      payload: {
+        widgetKey: 'pk_live_velnes_demo',
+        key: randomUUID(),
+        locationId: demo.locAerodrom,
+        serviceId: demo.s1,
+        date: day,
+        time: slot.t,
+        employeeId: 'any',
+        items,
+        name: 'Visit Tester',
+        phone: '+389 70 999 222',
+      },
+    });
+    expect(res.statusCode).toBe(200);
+    const out = res.json();
+    // Two real appointments, and the second starts after the first ends.
+    expect(out.items).toHaveLength(2);
+    expect(out.items[1].time >= out.items[0].end).toBe(true);
+    expect(out.price).toBe(out.items[0].price + out.items[1].price);
+    expect(out.end).toBe(out.items[1].end);
+
+    const rows = await admin.query(
+      `SELECT count(*)::int AS n FROM appointments WHERE id = ANY($1)`,
+      [out.items.map((i: { ref: string }) => i.ref)],
+    );
+    expect(rows.rows[0].n).toBe(2);
+  });
+
+  it('books nothing at all when one treatment in the visit cannot fit', async () => {
+    const { demo } = await import('../db/seed-demo.js');
+    const before = await admin.query(`SELECT count(*)::int AS n FROM appointments`);
+    const res = await app.inject({
+      method: 'POST',
+      url: `${P}/book`,
+      payload: {
+        widgetKey: 'pk_live_velnes_demo',
+        key: randomUUID(),
+        locationId: demo.locAerodrom,
+        serviceId: demo.s1,
+        date: '2026-12-25',
+        // 18:30 leaves no room for a second treatment before closing.
+        time: '18:30',
+        employeeId: 'any',
+        items: [{ serviceId: demo.s1 }, { serviceId: demo.s2 }],
+        name: 'Visit Tester',
+        phone: '+389 70 999 223',
+      },
+    });
+    expect(res.statusCode).toBe(409);
+    // The whole visit rolled back: not even the first treatment stuck.
+    const after = await admin.query(`SELECT count(*)::int AS n FROM appointments`);
+    expect(after.rows[0].n).toBe(before.rows[0].n);
   });
 
   it('refuses an unknown salon', async () => {

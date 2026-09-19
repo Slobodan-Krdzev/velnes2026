@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { DHeader } from '../../app/chrome.js';
 import { categoryVM, fmtMKD, salonVM, type SalonVM } from '../../lib/api/mappers.js';
@@ -167,6 +167,7 @@ export function Results() {
   const nav = useNavigate();
   const { category } = useParams();
   const unread = useMyNotifications().data?.unread ?? 0;
+  const [mapOpen, setMapOpen] = useState(false);
   const { cat, rows, best, alts, loaded } = useCategoryResults(category);
   const title = cat?.name ?? '';
   // Only salons that actually dropped a pin appear on the map — no
@@ -282,7 +283,7 @@ export function Results() {
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 6l12 12M18 6 6 18" /></svg>
                   </button>
                 </div>
-                <button className="map-btn" aria-label="Map view">
+                <button className="map-btn" aria-label="Map view" onClick={() => setMapOpen(true)}>
                   <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M9 4 3 6.5v13L9 17l6 2.5 6-2.5v-13L15 6.5z" /><path d="M9 4v13M15 6.5v13" /></svg>
                   Map
                 </button>
@@ -320,6 +321,21 @@ export function Results() {
               </span>
               <span className="i">{IcSpark} No perfect match? Velnes finds alternatives that do fit.</span>
             </div>
+            {mapOpen ? (
+              <div className="mapsheet open" style={{ display: 'flex', flexDirection: 'column' }}>
+                <div className="ms-head">
+                  <h2 className="serif">
+                    {pins.length} {pins.length === 1 ? 'place' : 'places'} near you
+                  </h2>
+                  <button className="iconb" onClick={() => setMapOpen(false)} aria-label="Close">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 6l12 12M18 6 6 18" /></svg>
+                  </button>
+                </div>
+                <div style={{ flex: 1, minHeight: 0 }}>
+                  <SalonMap pins={pins} height="100%" radius={0} />
+                </div>
+              </div>
+            ) : null}
             <nav className="tabbar">
               <button className="tab-i" onClick={() => nav('/')}>
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 11 12 4l8 7v8a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 19z" /></svg>Home
@@ -327,14 +343,18 @@ export function Results() {
               <button className="tab-i on">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="M20 20l-4.2-4.2" /></svg>Search
               </button>
-              <button className="tab-i">
+              <button className="tab-i" onClick={() => nav('/account/appts')}>
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"><rect x="3.5" y="5" width="17" height="15" rx="2.5" /><path d="M3.5 10h17M8 3.5v3M16 3.5v3" /></svg>Bookings
               </button>
               <button className="tab-i">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round"><path d="M12 20s-7.4-4.6-7.4-9.4A4.3 4.3 0 0 1 12 8a4.3 4.3 0 0 1 7.4 2.6C19.4 15.4 12 20 12 20z" /></svg>Favorites
               </button>
-              <button className="tab-i">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><circle cx="12" cy="8" r="3.5" /><path d="M5 20a7.2 7.2 0 0 1 14 0" /></svg>Profile
+              <button className="tab-i" onClick={() => nav('/account')}>
+                <span className="vnav-ic">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><circle cx="12" cy="8" r="3.5" /><path d="M5 20a7.2 7.2 0 0 1 14 0" /></svg>
+                  <span className="acc-bdg" hidden={unread === 0}>{unread}</span>
+                </span>
+                Profile
               </button>
             </nav>
           </div>

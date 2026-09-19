@@ -128,6 +128,18 @@ export const ClientBookRequestSchema = z.object({
   employeeId: z.union([z.uuid(), z.literal('any')]).default('any'),
   variantId: z.uuid().nullable().optional(),
   modifierOptionIds: z.array(z.uuid()).default([]),
+  /** A visit of several treatments; serviceId names the first. */
+  items: z
+    .array(
+      z.object({
+        serviceId: z.uuid(),
+        variantId: z.uuid().nullable().optional(),
+        modifierOptionIds: z.array(z.uuid()).default([]),
+      }),
+    )
+    .min(1)
+    .max(8)
+    .optional(),
 });
 
 /** The salons a client is a customer of — the bridge, from their side. */

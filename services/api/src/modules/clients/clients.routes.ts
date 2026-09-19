@@ -22,11 +22,8 @@ import { sql } from 'kysely';
 import { z } from 'zod';
 import { db, withClient, withHq, withTenant } from '../../db/index.js';
 import { env } from '../../env.js';
-import {
-  BookingError,
-  BookingRefused,
-  confirmBooking,
-} from '../booking/booking.service.js';
+import { BookingError, BookingRefused, confirmChain } from '../booking/booking.service.js';
+import { visitPayload } from '../../public/public.routes.js';
 import {
   changeClientPassword,
   ClientError,
@@ -456,15 +453,20 @@ export async function clientRoutes(app: FastifyInstance) {
             last: c.last,
             phone: c.phone,
           });
-          const a = await confirmBooking(trx, null, {
+          const items = req.body.items ?? [
+            {
+              serviceId: req.body.serviceId,
+              variantId: req.body.variantId ?? null,
+              modifierOptionIds: req.body.modifierOptionIds,
+            },
+          ];
+          const booked = await confirmChain(trx, null, {
             key: req.body.key,
             locationId: req.body.locationId,
-            serviceId: req.body.serviceId,
             date: req.body.date,
             time: req.body.time,
             employeeId: req.body.employeeId,
-            variantId: req.body.variantId ?? null,
-            modifierOptionIds: req.body.modifierOptionIds,
+            items,
             customerId,
             name: `${c.first} ${c.last}`.trim() || c.email,
             phone: c.phone ?? '',
@@ -472,33 +474,24 @@ export async function clientRoutes(app: FastifyInstance) {
             source: 'client',
             deposit: 0,
           });
+          // Every treatment in the visit belongs to this account.
           await trx
             .updateTable('appointments')
             .set({ clientUserId: c.id })
-            .where('id', '=', a.id)
+            .where(
+              'id',
+              'in',
+              booked.map((a) => a.id),
+            )
             .execute();
-          const [locRow, empRow] = await Promise.all([
-            trx.selectFrom('locations').select('name').where('id', '=', a.locationId).executeTakeFirst(),
-            a.employeeId
-              ? trx.selectFrom('employees').select('name').where('id', '=', a.employeeId).executeTakeFirst()
-              : Promise.resolve(undefined),
-          ]);
+          const out = await visitPayload(trx, booked);
           await notifySalon(trx, biz.id, {
             kind: 'booking',
             title: 'New booking from Velnes',
-            body: `${`${c.first} ${c.last}`.trim() || c.email} booked ${a.serviceName ?? 'an appointment'} on ${a.date} at ${a.start}.`,
-            refId: a.id,
+            body: `${`${c.first} ${c.last}`.trim() || c.email} booked ${out.serviceName || 'an appointment'} on ${out.date} at ${out.time}.`,
+            refId: out.ref,
           });
-          return {
-            ref: a.id,
-            date: a.date,
-            time: a.start,
-            end: a.end,
-            serviceName: a.serviceName ?? '',
-            locationName: locRow?.name ?? '',
-            employeeName: empRow?.name ?? '',
-            price: a.price,
-          };
+          return out;
         });
         await notifyClient(c.id, {
           kind: 'appointment',

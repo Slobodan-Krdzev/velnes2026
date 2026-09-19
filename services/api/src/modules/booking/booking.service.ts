@@ -794,3 +794,272 @@ export async function appointmentEvent(
     await recomputeTiming(trx, a.tenantId, a.employeeId, a.serviceId, null, null);
   }
 }
+
+/* ────────────────────────────────────────────────────────────────
+ * Chained bookings: several treatments, one visit.
+ *
+ * A salon visit is often "haircut then colour", and the consumer app
+ * lets people pick more than one. Rather than invent a new kind of
+ * appointment, a chain is what it looks like on the calendar: real
+ * back-to-back appointments, one per treatment, booked together in one
+ * transaction so the whole visit either happens or does not.
+ *
+ * Spacing follows the same occupancy rule bookingCheck enforces — an
+ * appointment owns [start − prep, start + treatment + reset] — so the
+ * next treatment starts exactly when the previous one lets go.
+ * ──────────────────────────────────────────────────────────────── */
+
+export interface ChainItem {
+  serviceId: string;
+  variantId?: string | null | undefined;
+  modifierOptionIds?: string[] | undefined;
+}
+
+interface ChainLeg extends ChainItem {
+  treatmentMin: number;
+  prepMin: number;
+  resetMin: number;
+}
+
+/** Each treatment's shape. With "no preference" the quoted duration is
+ *  the catalog's — the same rule availableSlots already applies, so the
+ *  times offered are the times that get booked. */
+async function chainLegs(
+  trx: Trx,
+  q: { locationId: string; items: ChainItem[]; employeeId: string | 'any' },
+): Promise<ChainLeg[]> {
+  const legs: ChainLeg[] = [];
+  for (const it of q.items) {
+    const line = await svcLine(trx, {
+      serviceId: it.serviceId,
+      locationId: q.locationId,
+      variantId: it.variantId ?? null,
+      modifierOptionIds: it.modifierOptionIds ?? [],
+      employeeId: q.employeeId === 'any' ? null : q.employeeId,
+    });
+    if (line.missingRequired.length)
+      throw new BookingRefused(
+        refuse(
+          'MISSING_REQUIRED',
+          { groups: line.missingRequired.join(', ') },
+          `Choose ${line.missingRequired.join(', ')} first`,
+        ),
+      );
+    legs.push({
+      ...it,
+      treatmentMin: line.treatmentMin,
+      prepMin: line.prepMin,
+      resetMin: line.resetMin,
+    });
+  }
+  return legs;
+}
+
+/**
+ * Who can take this treatment at this exact minute. With "no
+ * preference" the offered duration is the catalog's, so anyone whose
+ * measured pace runs longer is skipped — the same rule availableSlots
+ * applies, which is what keeps the chain's later starts true.
+ */
+async function freeFor(
+  trx: Trx,
+  q: {
+    locationId: string;
+    date: string;
+    start: string;
+    leg: ChainLeg;
+    pool: string[];
+    anyEmployee: boolean;
+    key?: string | undefined;
+  },
+): Promise<string | null> {
+  for (const emp of q.pool) {
+    let dur = q.leg.treatmentMin;
+    if (q.anyEmployee) {
+      const line = await svcLine(trx, {
+        serviceId: q.leg.serviceId,
+        locationId: q.locationId,
+        variantId: q.leg.variantId ?? null,
+        modifierOptionIds: q.leg.modifierOptionIds ?? [],
+        employeeId: emp,
+      });
+      if (line.treatmentMin > q.leg.treatmentMin) continue;
+      dur = line.treatmentMin;
+    }
+    const refusal = await bookingCheck(trx, {
+      locationId: q.locationId,
+      date: q.date,
+      start: q.start,
+      dur,
+      emp,
+      sid: q.leg.serviceId,
+      key: q.key,
+      prepMin: q.leg.prepMin,
+      resetMin: q.leg.resetMin,
+    });
+    if (!refusal) return emp;
+  }
+  return null;
+}
+
+/** When each treatment starts, given when the visit starts. */
+function legStarts(startMin: number, legs: ChainLeg[]): number[] {
+  const out: number[] = [];
+  let t = startMin;
+  legs.forEach((leg, i) => {
+    if (i > 0) t += legs[i - 1]!.resetMin + leg.prepMin;
+    out.push(t);
+    t += leg.treatmentMin;
+  });
+  return out;
+}
+
+/** The whole visit's span, prep and reset included. */
+export function chainSpan(legs: ChainLeg[], startMin = 0) {
+  const starts = legStarts(startMin, legs);
+  const last = legs[legs.length - 1]!;
+  return {
+    starts,
+    from: starts[0]! - legs[0]!.prepMin,
+    to: starts[starts.length - 1]! + last.treatmentMin + last.resetMin,
+    treatmentMin: legs.reduce((n, l) => n + l.treatmentMin, 0),
+  };
+}
+
+/**
+ * Free start times for a whole chain: a slot counts only when every
+ * treatment in it fits, in order, with somebody free for each. One
+ * answer for the visit, so the app can never offer a time that only
+ * half works.
+ */
+export async function availableChainSlots(
+  trx: Trx,
+  q: {
+    locationId: string;
+    items: ChainItem[];
+    employeeId: string | 'any';
+    date: string;
+    key?: string | undefined;
+  },
+) {
+  if (!q.items.length) return [];
+  if (!(await locLive(trx, q.locationId))) return [];
+  for (const it of q.items) {
+    const cfg = await svcAt(trx, it.serviceId, q.locationId).catch(() => null);
+    if (!cfg?.active) return [];
+  }
+  const legs = await chainLegs(trx, q);
+  const pools: string[][] = [];
+  for (const leg of legs) {
+    pools.push(
+      q.employeeId === 'any'
+        ? (await empsFor(trx, q.locationId, leg.serviceId)).map((e) => e.id)
+        : [q.employeeId],
+    );
+  }
+  if (pools.some((p) => !p.length)) return [];
+  const sch = await scheduleFor(trx, q.locationId, q.date);
+  const out: { t: string; emp: string | null; free: boolean }[] = [];
+  for (let m = DAY_START; ; m += 30) {
+    const span = chainSpan(legs, m);
+    if (span.to > DAY_END) break;
+    if (m - clipPrep(legs[0]!.prepMin, m, sch) < DAY_START) continue;
+    // Whoever takes the first treatment is the face of the slot.
+    let first: string | null = null;
+    let all = true;
+    for (let i = 0; i < legs.length; i++) {
+      const who = await freeFor(trx, {
+        locationId: q.locationId,
+        date: q.date,
+        start: hhmm(span.starts[i]!),
+        leg: legs[i]!,
+        pool: pools[i]!,
+        anyEmployee: q.employeeId === 'any',
+        key: q.key,
+      });
+      if (!who) {
+        all = false;
+        break;
+      }
+      if (i === 0) first = who;
+    }
+    out.push({ t: hhmm(m), emp: all ? first : null, free: all });
+  }
+  return out;
+}
+
+/**
+ * Book the whole visit. Each treatment goes through confirmBooking —
+ * the one door, with its own permission, pricing, refusals and audit —
+ * and they share a transaction, so a refusal on the third treatment
+ * un-books the first two. The idempotency key is derived per leg, so a
+ * retried visit is still exactly one visit.
+ */
+export async function confirmChain(
+  trx: Trx,
+  claims: AccessClaims | null,
+  req: Omit<BookRequest, 'serviceId' | 'variantId' | 'modifierOptionIds'> & { items: ChainItem[] },
+): Promise<Appointment[]> {
+  if (!req.items.length) throw new BookingError('NOT_FOUND', 'Nothing to book');
+  // Idempotency first, exactly as confirmBooking does it: a retried
+  // visit must answer with the visit it already made, not discover that
+  // its own appointments are now in the way.
+  const keys =
+    req.items.length > 1 ? req.items.map((_, i) => `${req.key}:${i + 1}`) : [req.key];
+  const prior = await trx
+    .selectFrom('appointments')
+    .select(['id', 'idempotencyKey'])
+    .where('idempotencyKey', 'in', keys)
+    .execute();
+  if (prior.length) {
+    const ordered = keys
+      .map((k) => prior.find((p) => p.idempotencyKey === k))
+      .filter((p): p is { id: string; idempotencyKey: string | null } => Boolean(p));
+    return Promise.all(ordered.map((p) => toContract(trx, p.id)));
+  }
+  const legs = await chainLegs(trx, {
+    locationId: req.locationId,
+    items: req.items,
+    employeeId: req.employeeId,
+  });
+  const span = chainSpan(legs, mins(req.time));
+  const out: Appointment[] = [];
+  for (let i = 0; i < legs.length; i++) {
+    const leg = legs[i]!;
+    const start = hhmm(span.starts[i]!);
+    // "No preference" is resolved here, not by confirmBooking: a
+    // treatment later in the visit starts wherever the previous one
+    // ended, which is rarely on the half hour its slot grid uses.
+    let empId = req.employeeId;
+    if (empId === 'any') {
+      const pool = await empsFor(trx, req.locationId, leg.serviceId);
+      const who = await freeFor(trx, {
+        locationId: req.locationId,
+        date: req.date,
+        start,
+        leg,
+        pool: pool.map((e) => e.id),
+        anyEmployee: true,
+        key: req.key,
+      });
+      if (!who)
+        throw new BookingRefused(
+          refuse('NOBODY_FREE', { time: start, date: req.date }, `Nobody is free at ${start} on ${req.date}`),
+        );
+      empId = who;
+    }
+    const a = await confirmBooking(trx, claims, {
+      ...req,
+      key: legs.length > 1 ? `${req.key}:${i + 1}` : req.key,
+      time: start,
+      employeeId: empId,
+      serviceId: leg.serviceId,
+      variantId: leg.variantId ?? null,
+      modifierOptionIds: leg.modifierOptionIds ?? [],
+      // The first treatment may create the customer; the rest reuse it.
+      ...(out[0]?.customerId ? { customerId: out[0].customerId } : {}),
+    });
+    out.push(a);
+  }
+  return out;
+}
