@@ -583,7 +583,7 @@ export function Salon() {
     <div className="scard" id={`${idPrefix}-info`}>
       <h2>Location</h2>
       {mapPins.length ? (
-        <SalonMap pins={mapPins} height={190} zoom={16} radius={12} />
+        <SalonMap pins={mapPins} height={190} zoom={16} radius={12} labels={false} />
       ) : (
         <div className="locmap">{LocMapSvg}</div>
       )}

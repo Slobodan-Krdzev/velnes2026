@@ -18,6 +18,26 @@ import {
 export const DEMO_PASSWORD = 'velnes-demo';
 
 // Stable ids so tests and docs can reference the world.
+/** Demo pins: the city, nudged deterministically by name so two salons
+ *  in one city do not stack. Placeholder coordinates, not surveyed —
+ *  the same honesty the placeholder migration carries. */
+const CITY_PINS: Record<string, [number, number]> = {
+  Skopje: [41.9981, 21.4254],
+  Bitola: [41.0314, 21.3347],
+  Ohrid: [41.1231, 20.8016],
+  Prishtina: [42.6629, 21.1655],
+  Thessaloniki: [40.6401, 22.9444],
+};
+function cityPin(city: string, seed: string): [number, number] {
+  const base = CITY_PINS[city] ?? CITY_PINS.Skopje!;
+  let h = 0;
+  for (const ch of seed) h = (h * 31 + ch.charCodeAt(0)) % 1000;
+  return [
+    Number((base[0] + ((h % 100) - 50) * 0.0004).toFixed(5)),
+    Number((base[1] + ((Math.floor(h / 10) % 100) - 50) * 0.0005).toFixed(5)),
+  ];
+}
+
 export const demo = {
   business: '10000000-0000-4000-8000-000000000001',
   // The prototype's other hqBusinesses: the HQ dashboard's demo world.
@@ -292,10 +312,13 @@ export async function seedDemo(adminUrl: string) {
     ]);
 
     await q(
-      `INSERT INTO locations (id, tenant_id, name, city, address, tz, phone, rooms, inv_prefix, online, cancel_hours, opened, hours, payments, lifecycle)
+      // The pins are demo coordinates in the right part of Skopje — the
+      // consumer app's maps need somewhere real to draw, and a salon
+      // corrects its own from Settings › Locations.
+      `INSERT INTO locations (id, tenant_id, name, city, address, tz, phone, rooms, inv_prefix, online, cancel_hours, opened, hours, payments, lifecycle, lat, lng)
        VALUES
-       ($1,$3,'Centar','Skopje','Macedonia Street 21','Europe/Skopje','+389 2 3112 940',3,'CEN-2026-',true,24,'2024-03-01',$4,$6,'ACTIVE'),
-       ($2,$3,'Aerodrom','Skopje','Jane Sandanski 82','Europe/Skopje','+389 2 2455 118',2,'AER-2026-',true,24,'2025-09-15',$5,$6,'ACTIVE')`,
+       ($1,$3,'Centar','Skopje','Macedonia Street 21','Europe/Skopje','+389 2 3112 940',3,'CEN-2026-',true,24,'2024-03-01',$4,$6,'ACTIVE',41.99465,21.43122),
+       ($2,$3,'Aerodrom','Skopje','Jane Sandanski 82','Europe/Skopje','+389 2 2455 118',2,'AER-2026-',true,24,'2025-09-15',$5,$6,'ACTIVE',41.98087,21.46201)`,
       [
         demo.locCentar,
         demo.locAerodrom,
@@ -1083,9 +1106,16 @@ export async function seedDemo(adminUrl: string) {
         );
       for (const [locName, lifecycle] of b.locs)
         await q(
-          `INSERT INTO locations (tenant_id, name, city, inv_prefix, lifecycle)
-           VALUES ($1,$2,$3,$4,$5)`,
-          [b.id, locName, b.city, `${b.name.slice(0, 3).toUpperCase()}-`, lifecycle],
+          `INSERT INTO locations (tenant_id, name, city, inv_prefix, lifecycle, lat, lng)
+           VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+          [
+            b.id,
+            locName,
+            b.city,
+            `${b.name.slice(0, 3).toUpperCase()}-`,
+            lifecycle,
+            ...cityPin(b.city, locName),
+          ],
         );
       if (b.catalog)
         await q(

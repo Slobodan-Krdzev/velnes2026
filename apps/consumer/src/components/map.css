@@ -1,0 +1,35 @@
+/* Pin labels, shaped after the prototype's .map-pin2 .lbl: the name is
+   always readable, so a map of results says who is where without a
+   click. Leaflet's own tooltip chrome is replaced wholesale. */
+.leaflet-tooltip.velnes-lbl {
+  background: #fff;
+  border: 1px solid var(--line-soft);
+  border-radius: 999px;
+  box-shadow: 0 6px 16px rgba(45, 26, 18, 0.16);
+  padding: 4px 10px;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink);
+  white-space: nowrap;
+  max-width: 190px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.leaflet-tooltip.velnes-lbl::before {
+  display: none; /* no arrow: the pin already points */
+}
+.leaflet-tooltip.velnes-lbl small {
+  display: block;
+  font-weight: 600;
+  font-size: 11px;
+  color: var(--muted);
+}
+/* The salon this page is about leads. */
+.leaflet-tooltip.velnes-lbl.here {
+  border-color: var(--brand);
+}
+.leaflet-container {
+  font-family: inherit;
+  background: #F0F3E9;
+}

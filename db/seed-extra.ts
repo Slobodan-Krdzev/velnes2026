@@ -302,6 +302,25 @@ const SUPPLIERS: Supplier[] = [
   },
 ];
 
+/** Demo pins: the salon's own city, nudged by slug so pins do not
+ *  stack. Placeholder coordinates — salons correct their own. */
+const CITY_PINS: Record<string, [number, number]> = {
+  Skopje: [41.9981, 21.4254],
+  Bitola: [41.0314, 21.3347],
+  Ohrid: [41.1231, 20.8016],
+  Prishtina: [42.6629, 21.1655],
+  Thessaloniki: [40.6401, 22.9444],
+};
+function cityPin(city: string, seed: string): [number, number] {
+  const base = CITY_PINS[city] ?? CITY_PINS.Skopje!;
+  let h = 0;
+  for (const ch of seed) h = (h * 31 + ch.charCodeAt(0)) % 1000;
+  return [
+    Number((base[0] + ((h % 100) - 50) * 0.0004).toFixed(5)),
+    Number((base[1] + ((Math.floor(h / 10) % 100) - 50) * 0.0005).toFixed(5)),
+  ];
+}
+
 async function main() {
   const client = new pg.Client({ connectionString: ADMIN_URL });
   await client.connect();
@@ -378,9 +397,10 @@ async function main() {
       );
 
     await q(
-      `INSERT INTO locations (id, tenant_id, name, city, address, tz, phone, rooms, inv_prefix, online, cancel_hours, opened, hours, payments, lifecycle)
-       VALUES ($1,$2,$3,$4,$5,'Europe/Skopje',$6,3,$7,true,24,CURRENT_DATE - 180,$8,$9,'ACTIVE')`,
-      [locId, bizId, s.city, s.city, s.address, s.phone, s.slug.slice(0, 3).toUpperCase() + '-2026-', JSON.stringify(stdHours()), JSON.stringify(payments)],
+      // Demo pins so every listed salon has somewhere to sit on a map.
+      `INSERT INTO locations (id, tenant_id, name, city, address, tz, phone, rooms, inv_prefix, online, cancel_hours, opened, hours, payments, lifecycle, lat, lng)
+       VALUES ($1,$2,$3,$4,$5,'Europe/Skopje',$6,3,$7,true,24,CURRENT_DATE - 180,$8,$9,'ACTIVE',$10,$11)`,
+      [locId, bizId, s.city, s.city, s.address, s.phone, s.slug.slice(0, 3).toUpperCase() + '-2026-', JSON.stringify(stdHours()), JSON.stringify(payments), ...cityPin(s.city, s.slug)],
     );
 
     await q(

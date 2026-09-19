@@ -1,9 +1,10 @@
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import './map.css';
 import markerIcon from 'leaflet/dist/images/marker-icon.png';
 import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png';
 import markerShadow from 'leaflet/dist/images/marker-shadow.png';
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 
 /** Real OpenStreetMap, same Leaflet setup the registration wizard uses.
  *  The pins are the ones salons dropped themselves — never derived from
@@ -47,18 +48,30 @@ export function SalonMap({
   zoom = 15,
   interactive = true,
   radius = 14,
+  labels = true,
 }: {
   pins: MapPin[];
   height: number | string;
   zoom?: number;
   interactive?: boolean;
   radius?: number | string;
+  /** Names beside the pins. On a results map that is the whole point;
+   *  on a single-salon map the page already says the name. */
+  labels?: boolean;
 }) {
   const boxRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<L.Map | null>(null);
+  // Callers build the pin list inline, so its identity changes on every
+  // render. Redrawing on the content, not the array, keeps the map from
+  // being torn down and rebuilt underneath the person using it.
+  const sig = pins.map((p) => `${p.lat},${p.lng},${p.label},${p.here ? 1 : 0}`).join('|');
+  const live = useRef(pins);
+  live.current = pins;
+  const stable = useMemo(() => live.current, [sig]);
 
   useEffect(() => {
     const box = boxRef.current;
+    const pins = stable;
     if (!box || !pins.length) return;
     // No layout (headless tests, hidden environment) → nothing to draw.
     if (!box.clientWidth) return;
@@ -79,23 +92,56 @@ export function SalonMap({
     } catch {
       return;
     }
+    const labelled: L.Marker[] = [];
     const markers = pins.map((p) => {
       const m = L.marker([p.lat, p.lng], { icon: p.here ? HERE : PIN }).addTo(map);
-      m.bindPopup(
-        `<b style="font-family:inherit">${escapeHtml(p.label)}</b>${p.sub ? `<br><span>${escapeHtml(p.sub)}</span>` : ''}`,
-      );
-      if (p.onClick) m.on('click', p.onClick);
+      if (labels)
+        m.bindTooltip(
+          `${escapeHtml(p.label)}${p.sub ? `<small>${escapeHtml(p.sub)}</small>` : ''}`,
+          {
+            permanent: true,
+            direction: 'right',
+            offset: [10, -10],
+            className: `velnes-lbl${p.here ? ' here' : ''}`,
+          },
+        );
+      if (labels && !p.here) labelled.push(m);
+      else
+        m.bindPopup(
+          `<b style="font-family:inherit">${escapeHtml(p.label)}</b>${p.sub ? `<br><span>${escapeHtml(p.sub)}</span>` : ''}`,
+        );
+      if (p.onClick) {
+        m.on('click', p.onClick);
+        m.getElement()?.style.setProperty('cursor', 'pointer');
+      }
       return m;
     });
     if (markers.length === 1) map.setView([pins[0]!.lat, pins[0]!.lng], zoom);
-    else map.fitBounds(L.featureGroup(markers).getBounds().pad(0.25));
+    else
+      // Never zoom past street level just because two salons share a
+      // corner, and leave room for the labels.
+      map.fitBounds(L.featureGroup(markers).getBounds().pad(0.3), { maxZoom: 15 });
+
+    // Names are only useful while they can be told apart. Zoomed out
+    // over several cities they pile on top of each other, so only the
+    // best match keeps its label until the map is close enough to read.
+    const LABEL_ZOOM = 11;
+    const syncLabels = () => {
+      const near = map.getZoom() >= LABEL_ZOOM;
+      for (const m of labelled) {
+        if (near) m.openTooltip();
+        else m.closeTooltip();
+      }
+    };
+    map.on('zoomend', syncLabels);
+    syncLabels();
     mapRef.current = map;
     setTimeout(() => map.invalidateSize(), 0);
     return () => {
       map.remove();
       mapRef.current = null;
     };
-  }, [pins, zoom, interactive]);
+  }, [stable, zoom, interactive, labels]);
 
   if (!pins.length) return null;
   return (

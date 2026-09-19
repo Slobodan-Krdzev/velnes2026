@@ -433,6 +433,7 @@ export function MyVelnes({ section = 'over' }: { section?: SecId }) {
                           height={170}
                           zoom={16}
                           radius={12}
+                          labels={false}
                         />
                       ) : null}
                       <div className="sm" style={{ color: 'var(--ink)', marginTop: '8px' }}>

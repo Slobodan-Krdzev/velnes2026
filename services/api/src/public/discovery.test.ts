@@ -60,6 +60,28 @@ describe('the consumer discovery surface', () => {
     expect(velnes!.bookable).toBe(true);
   });
 
+  it('carries a pin on every listed salon, so a results map has something to draw', async () => {
+    const res = await app.inject({ method: 'GET', url: `${P}/discovery/salons` });
+    const { salons } = DiscoverySalonsSchema.parse(res.json());
+    // Pins come from what a salon placed (or a placeholder); never from
+    // guessing at the address text.
+    for (const s of salons) {
+      expect(s.lat === null || (s.lat > 40 && s.lat < 43), `${s.slug} lat`).toBe(true);
+      expect(s.lng === null || (s.lng > 20 && s.lng < 23), `${s.slug} lng`).toBe(true);
+    }
+    expect(salons.every((s) => s.lat !== null && s.lng !== null)).toBe(true);
+  });
+
+  it('gives the salon page a pin per location, so an appointment can be mapped', async () => {
+    const res = await app.inject({ method: 'GET', url: `${P}/discovery/salons/velnes-fizio` });
+    const d = DiscoverySalonDetailSchema.parse(res.json());
+    expect(d.lat).not.toBeNull();
+    for (const l of d.locations) {
+      expect(l.lat, `${l.name} has its own pin`).not.toBeNull();
+      expect(l.lng).not.toBeNull();
+    }
+  });
+
   it('hides a salon that switches its marketplace listing off', async () => {
     const before = await app.inject({ method: 'GET', url: `${P}/discovery/salons` });
     expect(before.json().salons.some((s: { slug: string }) => s.slug === 'velnes-fizio')).toBe(true);

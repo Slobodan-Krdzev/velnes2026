@@ -260,6 +260,7 @@ export function BookConfirmed() {
               height={170}
               zoom={16}
               radius={12}
+              labels={false}
             />
           </div>
         ) : null}
