@@ -410,6 +410,87 @@ describe('the consumer discovery surface', () => {
     expect(res.json().error).toBe('UNKNOWN_CATEGORY');
   });
 
+  describe('admission', () => {
+    it('drops a salon whose only location is not ACTIVE', async () => {
+      const body = await firstCategoryWithServices();
+      const slug = body.services[0]!.salon.slug;
+      const before = body.services.filter((s) => s.salon.slug === slug).length;
+      expect(before).toBeGreaterThan(0);
+      // Only ACTIVE locations exist to the outside world. A salon still
+      // being set up is not open, whatever else is true of it.
+      await admin.query(
+        `UPDATE locations SET lifecycle = 'APPROVED'
+         WHERE tenant_id = (SELECT id FROM businesses WHERE slug = $1)`,
+        [slug],
+      );
+      try {
+        const res = await app.inject({
+          method: 'GET',
+          url: `${P}/discovery/categories/${body.category.id}/services`,
+        });
+        const after = DiscoveryCategoryServicesSchema.parse(res.json());
+        expect(after.services.some((s) => s.salon.slug === slug)).toBe(false);
+      } finally {
+        await admin.query(
+          `UPDATE locations SET lifecycle = 'ACTIVE'
+           WHERE tenant_id = (SELECT id FROM businesses WHERE slug = $1)`,
+          [slug],
+        );
+      }
+    });
+
+    it('drops a salon that cannot be booked, rather than ranking it low', async () => {
+      const body = await firstCategoryWithServices();
+      const slug = body.services[0]!.salon.slug;
+      // A weight can always be out-argued by another weight; this must
+      // be absolute, so it is an admission rule.
+      await admin.query(
+        `UPDATE widgets SET status = 'draft'
+         WHERE tenant_id = (SELECT id FROM businesses WHERE slug = $1)`,
+        [slug],
+      );
+      try {
+        const res = await app.inject({
+          method: 'GET',
+          url: `${P}/discovery/categories/${body.category.id}/services`,
+        });
+        const after = DiscoveryCategoryServicesSchema.parse(res.json());
+        expect(after.services.some((s) => s.salon.slug === slug)).toBe(false);
+      } finally {
+        await admin.query(
+          `UPDATE widgets SET status = 'live'
+           WHERE tenant_id = (SELECT id FROM businesses WHERE slug = $1)`,
+          [slug],
+        );
+      }
+    });
+
+    it('never offers a result that cannot be booked', async () => {
+      // The page's whole promise. Now true by construction rather than
+      // by the weights happening to work out.
+      const body = await firstCategoryWithServices();
+      expect(body.services.length).toBeGreaterThan(0);
+      expect(body.services.every((s) => s.salon.bookable)).toBe(true);
+    });
+
+    it('keeps the shelf and the doors on the same admission rules', async () => {
+      // A category card is a promise there is something behind it. The
+      // shelf and the service doors must therefore admit identically —
+      // this is the invariant that breaks first if they drift.
+      const { categories } = DiscoveryCategoriesSchema.parse(
+        (await app.inject({ method: 'GET', url: `${P}/discovery/categories` })).json(),
+      );
+      for (const c of categories) {
+        const res = await app.inject({
+          method: 'GET',
+          url: `${P}/discovery/categories/${c.id}/services`,
+        });
+        const got = DiscoveryCategoryServicesSchema.parse(res.json());
+        expect(got.services.length, `${c.name} has something behind it`).toBeGreaterThan(0);
+      }
+    });
+  });
+
   /** Phase B, step 4: the ranked form of the same results. */
   describe('ranked results', () => {
     async function ranked(body: Record<string, unknown>, headers: Record<string, string> = {}) {

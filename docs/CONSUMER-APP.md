@@ -269,9 +269,12 @@ has always understood.
 **The shelf only carries categories with something behind them.** A
 category card is a promise that there is a result on the other side, so
 `GET /public/discovery/categories` now returns only the categories a
-listed salon has an active, online service in — filtered on exactly the
-predicate the services door lists by, because if the two ever drifted a
-card would open onto an empty page. The taxonomy row is untouched and
+salon actually offers something in — filtered on exactly the predicate
+the services doors admit by, because if the two ever drifted a card
+would open onto an empty page. Admission is three hard rules: the salon
+publishes a listing, has a location on lifecycle `ACTIVE`, and is
+bookable. A treatment nobody can book does not compete for position on a
+surface whose whole purpose is booking. The taxonomy row is untouched and
 the registration wizard still offers the whole of it through its own
 door (`/registrations/service-categories`), so a category nobody serves
 yet stays choosable by a salon while staying off the shelf. A test walks

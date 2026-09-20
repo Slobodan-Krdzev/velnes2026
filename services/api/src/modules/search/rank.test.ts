@@ -69,12 +69,17 @@ describe('the ranker', () => {
     expect(order(ranked)).toEqual(['near-cheap', 'pricey', 'offline', 'far']);
   });
 
-  it('lets a nearby salon that takes no online bookings beat a distant one that does', () => {
-    // Not an accident, and worth stating outright: proximity is weighted
-    // 0.30 and availability 0.20, so a salon on your street that does not
-    // take online bookings outranks an equivalent one 70km away that
-    // does. If "bookable first, always" is wanted, that is an admission
-    // rule and not a weight — see §2 Stage 1.
+  it('would let a nearby unbookable salon beat a distant bookable one — which is why admission exists', () => {
+    // The ranker weighs; it does not forbid. At proximity 0.30 against
+    // availability 0.20 a salon on your street that takes no online
+    // bookings does out-score a bookable one 70km away, and no weight
+    // can be trusted to prevent that because another weight can always
+    // out-argue it.
+    //
+    // So consumer service discovery does not hand it such a candidate
+    // in the first place: bookability is a Stage 1 admission rule (see
+    // admittedBusinesses in discovery.routes.ts), and this test is kept
+    // to show exactly what that rule is protecting against.
     const near = candidate({ id: 'near-offline' });
     near.salon.bookable = false;
     const far = candidate({

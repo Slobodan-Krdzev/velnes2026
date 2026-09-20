@@ -148,9 +148,9 @@ async function liveWidgets(tenantIds: string[]) {
  * would open onto an empty page, which is the one thing the shelf must
  * not do.
  */
-async function categoryIdsOnOffer(listed: ListedBusiness[]): Promise<Set<string>> {
+async function categoryIdsOnOffer(admitted: ListedBusiness[]): Promise<Set<string>> {
   const out = new Set<string>();
-  for (const b of listed) {
+  for (const b of admitted) {
     const rows = await withTenant(b.id, (trx) =>
       trx
         .selectFrom('services')
@@ -169,6 +169,48 @@ async function categoryIdsOnOffer(listed: ListedBusiness[]): Promise<Set<string>
 interface CandidateMeta {
   businessId: string;
   createdAt: string;
+}
+
+/**
+ * Stage 1 admission for consumer service discovery — §5.
+ *
+ * Three hard rules, and they are hard: a salon that fails one is absent,
+ * never merely ranked low.
+ *
+ *  - It publishes a marketplace listing.
+ *  - It has at least one location on lifecycle ACTIVE. Only ACTIVE
+ *    locations exist to the outside world, which is the rule the
+ *    lifecycle was built to carry; a salon still being set up is not
+ *    open, whatever else is true of it.
+ *  - It is bookable — a live widget answers for it. This surface exists
+ *    to be booked from, and a treatment that cannot be booked has no
+ *    business competing for position with one that can. As an admission
+ *    rule rather than a weight, because a weight can always be
+ *    out-argued by another weight: at proximity 0.30 against
+ *    availability 0.20 a nearby salon that took no bookings used to
+ *    outrank a bookable one further away, which is precisely the
+ *    outcome this forbids.
+ *
+ * One predicate, used by the category shelf and by both service doors,
+ * so a card can never open onto a page its own admission rules emptied.
+ */
+async function admittedBusinesses(): Promise<ListedBusiness[]> {
+  const listed = await listedBusinesses();
+  if (!listed.length) return [];
+  const bookable = new Set((await liveWidgets(listed.map((b) => b.id))).map((w) => w.tenantId));
+  const out: ListedBusiness[] = [];
+  for (const b of listed) {
+    if (!bookable.has(b.id)) continue;
+    const active = await withTenant(b.id, (trx) =>
+      trx
+        .selectFrom('locations')
+        .select('id')
+        .where('lifecycle', '=', 'ACTIVE')
+        .executeTakeFirst(),
+    );
+    if (active) out.push(b);
+  }
+  return out;
 }
 
 /**
@@ -194,10 +236,8 @@ async function gatherCategory(categoryId: string): Promise<
     .executeTakeFirst();
   if (!category) return null;
 
-  const listed = await listedBusinesses();
-  const widgets = await liveWidgets(listed.map((b) => b.id));
-  const bookable = new Set(widgets.map((w) => w.tenantId));
-  // An empty IN list is not valid SQL to build, and "no salon is listed"
+  const listed = await admittedBusinesses();
+  // An empty IN list is not valid SQL to build, and "nothing is admitted"
   // is an ordinary state — a category page with nothing on it, not an
   // error. The same guard liveWidgets already uses.
   const created = listed.length
@@ -258,7 +298,10 @@ async function gatherCategory(categoryId: string): Promise<
           photo,
           lat: pin.lat,
           lng: pin.lng,
-          bookable: bookable.has(b.id),
+          // Admission already guaranteed this; kept on the card because
+          // the app still says it, and a field that silently became
+          // constant is a field someone will later misread.
+          bookable: true,
           showPrices: show,
         },
       });
@@ -304,7 +347,7 @@ export async function discoveryRoutes(app: FastifyInstance) {
     url: '/discovery/categories',
     schema: { response: { 200: DiscoveryCategoriesSchema } },
     handler: async () => {
-      const onOffer = await categoryIdsOnOffer(await listedBusinesses());
+      const onOffer = await categoryIdsOnOffer(await admittedBusinesses());
       const rows = await db
         .selectFrom('serviceCategories')
         .select(['id', 'name', 'cardImage', 'icon'])

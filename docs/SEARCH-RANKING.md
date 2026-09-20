@@ -59,7 +59,8 @@ demoted. Nothing here is a matter of degree.
 | --- | --- |
 | Business is marketplace-listed | live (Phase A) |
 | Service is `active` and `online` | live (Phase A) |
-| Location lifecycle is `ACTIVE` | **deferred, and deliberately** — see below |
+| Location lifecycle is `ACTIVE` | live (Phase B) |
+| **Bookable — a live widget answers** | live (Phase B) |
 | Within the radius, when the viewer set one | live (Phase B step 5) |
 | Above the quality floor | **inert** — no reviews exist, so nothing is below any floor yet |
 
@@ -67,15 +68,32 @@ The quality floor is declared and does nothing. That is deliberate: the
 shape is in place so that turning reviews on later is a data change, not
 a ranking rewrite. It must not be faked with a proxy like "has photos".
 
-**The ACTIVE-location rule is not in v1, and that needs a decision.**
-Applied to the data as it stands it would remove **4 of the 10 listed
-salons** from every result — the imported ones that never went through
-the registration wizard and so have a location that was never activated.
-In production the rule is right and would be nearly a no-op; against the
-current seed it is destructive. Left out rather than slipped in, so that
-both doors keep one notion of who is in the running and nobody loses
-salons without being told. Turning it on is a one-line change plus a
-decision about those four.
+**Bookability is an admission rule, not a weight, and that is the
+point.** This surface exists to be booked from. A weight can always be
+out-argued by another weight — at `proximity` 0.30 against
+`availability` 0.20 a nearby salon taking no online bookings really did
+out-score a bookable one further away, and the ranker's own test still
+records that, kept precisely to show what the rule is protecting
+against. So the candidate never reaches the ranker. `availability`
+survives as a weight for the day it means "how soon", rather than
+"at all".
+
+**The ACTIVE rule was enforced by fixing the data, not by bending the
+rule.** Four imported demo salons were trading while parked on APPROVED,
+because nobody had walked them through the last lifecycle step. A
+migration moved them to ACTIVE the way `locTransition` would — online
+true, an opened date, and a `location_lifecycle_log` row recording
+APPROVED → ACTIVE with its reason — rather than the rule being relaxed
+to accommodate them.
+
+Worth recording, because an earlier note in this document guessed
+otherwise: enabling the rule changed **no results at all**. Those four
+salons were already absent from service discovery for two reasons that
+predate it — none of their services is `active` and `online`, and none
+has a live widget. The estimate that the rule would "remove 4 of 10
+salons" was about the listed set, not about anything a person would have
+seen, and the caution it produced was greater than the case deserved.
+The repair was still right: the data was wrong, and is now correct.
 
 ### Stage 2 — Score
 
