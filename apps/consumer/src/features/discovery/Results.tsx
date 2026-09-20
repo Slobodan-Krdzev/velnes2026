@@ -19,7 +19,17 @@ import type { SearchFacets } from '@velnes/contracts';
 import { useMyNotifications, useSession } from '../../lib/api/session.js';
 import { distanceKm, distanceLbl, useUserLocation } from '../../lib/geo.js';
 import { SalonMap } from '../../components/SalonMap.js';
-import { IcArr, IcClock, IcPin, IcSpark, IcVok, SugListM, SugPanelD, useSalonLive } from './cards.js';
+import {
+  IcArr,
+  IcClock,
+  IcMark,
+  IcPin,
+  IcSpark,
+  IcVok,
+  SugListM,
+  SugPanelD,
+  useSalonLive,
+} from './cards.js';
 import { useSearchBox } from './useSearchBox.js';
 
 /** A salon the text matched by name without earning a direct opening. */
@@ -689,6 +699,11 @@ export function Results() {
           <div className="m-page">
             <div className="m-topbar">
               <div className="searchrow">
+                {/* The phone's results screen has no header of its own, so
+                    the mark sits here and doubles as the way home. */}
+                <button className="m-mark" onClick={() => nav('/')} aria-label="Velnes home">
+                  {IcMark}
+                </button>
                 {/* On a phone the bar opens the full-screen sheet, exactly
                     as it does on the home page — typing into a 40px strip
                     under a sticky header is not the same feature. */}
