@@ -6,10 +6,11 @@ that category, in a fixed, impersonal order (bookable first, then
 cheapest, then alphabetically). This document says what replaces that
 order, and — as importantly — what does not.
 
-Written as a proposal with defaults already chosen, so it can be argued
-with rather than filled in. The handful of choices that genuinely change
-the shape of the thing are collected at the end under **Open decisions**;
-everything else is a recommendation you can simply accept.
+**Decided 2026-09-20.** Written first as a proposal with defaults
+already chosen; the four choices that changed the shape of the thing
+were settled by Alex on the same day and are recorded in §8 with the
+reasoning, so a later reader can tell what was chosen from what was
+merely inherited. Phase B builds what §4 lists.
 
 Scope: ordering service results inside one category, which is the door
 Phase A built. Free-text search is a later question and reuses the same
@@ -149,9 +150,10 @@ Applied to the most recent qualifying booking, not to each.
 **"Similar services" — what we can honestly mean.** There is no tag
 table, no attributes, no embeddings. Two services are similar in v1 if
 they share an HQ category **and** their durations are within ±50% of one
-another. That is a weak notion and is marked as such; anything better
-needs a data decision (service tags on the HQ taxonomy), which is listed
-under open decisions.
+another. **Decided:** keep the weak notion for now rather than add
+service tags to the taxonomy. It is cheap and honest, and the scorer
+does not change when tags arrive — only this predicate does. It stays
+marked as weak so nobody later mistakes it for real similarity.
 
 **Only completed appointments count.** A cancelled or no-show visit is
 not a preference. Pending ones are not either, until they happen.
@@ -177,7 +179,11 @@ not bookable            0.00
 
 The full version needs a projection — a `next_free_slot` per
 (location, category) refreshed on booking and on schedule changes —
-which is its own piece of work. See open decisions.
+which is roughly its own phase. **Decided:** ship the reduced version,
+so Phase B is not held behind it. The consequence is stated plainly and
+must stay stated: until the projection exists the app may not claim
+"available today" on the strength of this component, because it only
+knows the salon takes online bookings at all.
 
 #### 2.4 `value`
 
@@ -225,12 +231,13 @@ exposure = min(impressions_7d / IMPRESSION_CAP, 1)      weight -0.05
 
 It needs an impressions counter, which is a write on every result page —
 a real cost and a real privacy surface (it is a log of what people
-browsed). Deferred to v2, and listed as an open decision, because
-"count what everyone looked at" deserves a deliberate yes rather than
-arriving as a side effect of ranking.
+browsed). **Decided: deferred.** "Count what everyone looked at" should
+be a deliberate yes, not something that arrives as a side effect of
+ranking, and nothing yet demands it.
 
-Until it exists, **chain dedup below is the only fairness mechanism**,
-and that is worth knowing.
+Until it exists, **chain dedup and the new-salon window are the only
+fairness mechanisms**, which is worth knowing and worth watching: if one
+salon visibly owns a category, this is the decision to revisit first.
 
 ### Stage 3 — Diversify
 
@@ -279,16 +286,21 @@ The line this document draws, and proposes to keep permanently:
 - **Location is not stored.** It is used to sort one response and is not
   written to any row. See §5.
 
-**Proposed mode: on by default for signed-in clients, with one switch
-off in My Velnes › General.** The client already sees their own booking
-history in the app; using it to order their own results is not a new
-disclosure to anyone. The switch exists because some people simply do
-not want it, and its state is a field on `client_users`.
+**Decided: on by default for signed-in clients, with one switch off in
+My Velnes › General.** The client already sees their own booking history
+in the app; using it to order their own results is not a new disclosure
+to anyone. The switch exists because some people simply do not want it,
+and its state is a field on `client_users`.
 
-Alternatives, for the record: opt-in (personalisation then never happens
-for the ~90% who never visit settings, and `affinity` is effectively
-dead code); or non-optional (saves a column, and removes a choice that
-costs us almost nothing to offer).
+Rejected, and why: opt-in, because personalisation would then never
+happen for the great majority who never open settings, leaving
+`affinity` as effectively dead code and Phase B's main feature dormant;
+non-optional, because the switch costs almost nothing and removing the
+choice buys only a column.
+
+The default is only defensible while the two rules above hold — own
+history only, and no profiling of signed-out visitors. If either is ever
+relaxed, this default has to be reopened at the same time.
 
 ---
 
@@ -412,31 +424,66 @@ Ranking is where test suites usually give up. What is checkable:
 
 ---
 
-## 8. Open decisions
+## 8. Decisions
 
-Everything above is a recommendation. These four change the work
-materially, and are yours.
+Settled by Alex, 2026-09-20. Recorded with what was rejected, because a
+decision without its alternative is indistinguishable from an accident.
 
-1. **Consent mode.** On by default for signed-in clients with an off
-   switch (recommended), opt-in only, or non-optional?
-2. **Availability in v1.** Ship the reduced version (bookable flag), or
-   build the `next_free_slot` projection now and have real "available
-   today" ranking from the start? The projection is roughly its own
-   phase.
-3. **Impressions, and therefore exposure decay.** Counting what every
-   viewer was shown is the only way to make exposure fairness real, and
-   it is a browsing log. Build it, or leave chain dedup as the sole
-   fairness brake for now?
-4. **Service tags.** "Similar services" is weak without them — same
-   category and a duration band is all v1 can honestly claim. Add tags
-   to the HQ taxonomy, or accept the weak notion for now?
+| # | Question | Decision | Consequence |
+| --- | --- | --- | --- |
+| 1 | Consent mode | **On by default**, switch to opt out | `client_users` gains one boolean; My Velnes › General gains one row |
+| 2 | Availability in v1 | **Reduced** — the bookable flag | Phase B ships now; the app may not say "available today" on this component alone |
+| 3 | Impressions / exposure decay | **Deferred** | No browsing log. Chain dedup + new-salon window are the only fairness brakes |
+| 4 | Service tags | **Not now** — keep the weak notion | Similarity is "same category, duration ±50%" and stays labelled weak |
 
-Two smaller ones, where accepting the default is fine: the weight set in
-§2, and the 30-day new-salon window.
+The default weight set in §2 and the 30-day new-salon window were
+accepted as proposed. They are config, so they are the cheapest things
+here to change later.
+
+**What would reopen these.** Each decision is reversible and none is
+load-bearing for the others:
+
+- One salon visibly owning a category reopens #3.
+- The app wanting to say "available today" honestly reopens #2.
+- Reviews arriving makes `quality` live and may shift the weights.
+- Relaxing "own history only" or "never profile signed-out visitors"
+  reopens #1 on the spot.
 
 ---
 
-## 9. Honest deferrals
+## 9. Phase B build order
+
+Each step is shippable on its own and leaves the app working. Definition
+of done per the engineering guide: contract, migration, service,
+endpoint, UI, tests, seed, docs note.
+
+1. **`search_config`** — migration, versioned rows, one active, HQ-only
+   RLS, activation audited. Seed the default weights from §2. Nothing
+   reads it yet.
+2. **The ranker** — one pure function: `(candidates, viewer, config) →
+   ordered`. No database, no Fastify; it is the piece worth unit-testing
+   hardest, and the golden-order test from §7 lives against it.
+3. **Consent** — the `client_users` boolean, the My Velnes › General
+   switch, and the door honouring it.
+4. **The door** — Phase A's `GET .../categories/:id/services` gains a
+   `POST` sibling carrying viewer context (rounded position, radius,
+   later filters). The `GET` stays as the unpersonalised public form,
+   which is also what a signed-out viewer with no location gets.
+5. **Admission** — location lifecycle `ACTIVE`, and radius when the
+   viewer sets one.
+6. **Affinity** — the cross-tenant read through `withClient`, recency
+   decay, the three live sub-signals.
+7. **Diversify** — chain dedup, the new-salon window, stable tiebreak.
+8. **The UI** — the results page sends position and radius, shows
+   `rankVersion` in dev only, and says plainly when results are
+   personalised so the order is never mysterious.
+9. **HQ Search lab** — edit the config, dry-run a draft against the
+   active version, diff the order.
+
+Steps 1–2 can be built and tested with no user-visible change at all,
+which makes them the safe place to start.
+
+## 10. Honest deferrals
 
 - **Reviews and ratings.** `quality` stays inert until they exist.
 - **Favourites.** Not persisted anywhere; Phase C.

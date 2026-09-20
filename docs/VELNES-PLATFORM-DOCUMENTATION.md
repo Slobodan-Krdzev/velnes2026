@@ -313,10 +313,11 @@ UI + tests + seed + docs note.
 
 ## 13. Known open items (inherit from prototype)
 
-§5 search-architecture answers — proposed in `docs/SEARCH-RANKING.md`,
-with four decisions still open (consent mode, availability in v1,
-impressions/exposure decay, service tags); until those are settled the
-consumer results page keeps Phase A's fixed, impersonal order;
+§5 search-architecture answers — **settled 2026-09-20** in
+`docs/SEARCH-RANKING.md` (ranking stages, weights, consent, the Search
+lab, and what stays inert); Phase B is unblocked and builds in the order
+given there, while the consumer results page keeps Phase A's fixed,
+impersonal order until it lands;
 SMTP provider decision (email verification, invites — tokens/seats
 already modeled); payment provider + fiscalization (per legal
 entity); SUSPENDED/CLOSED transition surfaces; timing suite
