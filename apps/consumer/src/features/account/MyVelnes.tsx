@@ -1,9 +1,10 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import type { z } from 'zod';
 import type { ClientAppointmentSchema } from '@velnes/contracts';
 import { SalonMap } from '../../components/SalonMap.js';
+import { useWheelScroll } from '../../lib/useWheelScroll.js';
 import { ApiError } from '../../lib/api/client.js';
 import { fmtMKD, minutesLbl } from '../../lib/api/mappers.js';
 import {
@@ -110,6 +111,9 @@ export function MyVelnes({ section = 'over' }: { section?: SecId }) {
   const notifs = useMyNotifications();
   const salons = useMySalons();
   const [tab, setTab] = useState<'up' | 'past' | 'canc'>('up');
+  // The section chips are a rail too: the wheel slides them.
+  const chipsRef = useRef<HTMLDivElement | null>(null);
+  useWheelScroll(chipsRef);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
 
@@ -191,7 +195,7 @@ export function MyVelnes({ section = 'over' }: { section?: SecId }) {
                 </span>
               </button>
             </div>
-            <div className="acc-chips">
+            <div className="acc-chips" ref={chipsRef}>
               {SECS.map((s) => (
                 <button
                   key={s.id}

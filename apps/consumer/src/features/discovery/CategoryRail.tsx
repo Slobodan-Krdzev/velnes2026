@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react';
 import type { CategoryVM } from '../../lib/api/mappers.js';
+import { useWheelScroll } from '../../lib/useWheelScroll.js';
 import { CatCard } from './cards.js';
 
 /**
@@ -29,6 +30,8 @@ const CHEV_R = (
 export function CategoryRail({ categories }: { categories: CategoryVM[] }) {
   const trackRef = useRef<HTMLDivElement | null>(null);
   const setWidth = useRef(0);
+  // The shelf slides under the mouse wheel as well as the arrows.
+  useWheelScroll(trackRef);
   const n = categories.length;
   // Too few to fill a row: a loop would just be a jitter.
   const loops = n > 3;

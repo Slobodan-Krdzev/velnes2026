@@ -3,20 +3,15 @@
    prototype.css so that file stays the untouched reference the design
    is measured against.
 
-   2026-09-20 — the search card needs air above and below; the category
-   shelf becomes one sliding row instead of a grid. */
+   2026-09-20 — the category shelf becomes one sliding row instead of a
+   grid, and slides under the mouse wheel. */
 
-/* The card used to ride 96px up into the hero, covering the lead line
-   and sitting flush against the categories. It still overlaps the
-   curve, just not the words, and the shelf below gets room. */
-.searchcard {
-  margin: -54px auto 40px;
-}
-@media (max-width: 1100px) {
-  .searchcard {
-    margin: -40px auto 32px;
-  }
-}
+/* 2026-09-20 (later the same day) — Alex pointed at the prototype: the
+   desktop card belongs where the prototype puts it, riding 96px up into
+   the hero so it meets the photograph on the curve. The earlier -54px
+   departure is withdrawn, and with no rule here prototype.css governs
+   again — one source of truth rather than a copy that can drift. */
+
 .m-searchcard {
   margin-top: 18px;
   margin-bottom: 22px;

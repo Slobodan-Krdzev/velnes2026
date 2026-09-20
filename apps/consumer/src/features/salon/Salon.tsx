@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import type { z } from 'zod';
 import type { PublicServiceSchema } from '@velnes/contracts';
@@ -6,6 +6,7 @@ import { DHeader } from '../../app/chrome.js';
 import { fmtMKD, minutesLbl } from '../../lib/api/mappers.js';
 import { useSalonDetail, useSalonServices, useVisitSlots } from '../../lib/api/queries.js';
 import { SalonGallery } from '../../components/SalonGallery.js';
+import { useWheelScroll } from '../../lib/useWheelScroll.js';
 import { SalonMap } from '../../components/SalonMap.js';
 import { IcArr, IcClock, IcPin, IcSpark, IcVok } from '../discovery/cards.js';
 import { useBooking } from '../booking/store.js';
@@ -278,6 +279,10 @@ function chosenOf(p: Page, serviceId: string) {
 /** The book card core — identical structure in both environments (the
  *  prototype's desktop variant adds .dtr to cards). */
 function BookCard({ p, desktop }: { p: Page; desktop: boolean }) {
+  // The day row slides under the wheel too, not only by dragging it.
+  // Declared before the early return: hooks cannot sit behind one.
+  const dayRef = useRef<HTMLDivElement | null>(null);
+  useWheelScroll(dayRef);
   const d = p.detail;
   if (!d) return null;
   const head = p.services.slice(0, 4);
@@ -468,7 +473,7 @@ function BookCard({ p, desktop }: { p: Page; desktop: boolean }) {
         </>
       ) : null}
       <div className="bk-h" style={{ marginTop: '20px' }}>2. Choose date &amp; time</div>
-      <div className="dayrow">
+      <div className="dayrow" ref={dayRef}>
         {p.dayOffset > 0 ? (
           <button className="daychip daychip--cal" onClick={p.prevDays} aria-label="Earlier days">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14.5 6 8.5 12l6 6" /></svg>
