@@ -2,6 +2,12 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAvailability, useSalonDetail, useSalonServices } from '../../lib/api/queries.js';
 import { fmtMKD, type CategoryVM, type SalonVM } from '../../lib/api/mappers.js';
+import {
+  rememberPendingFavourite,
+  useFavourites,
+  useSession,
+} from '../../lib/api/session.js';
+import type { FavouriteKind } from '@velnes/contracts';
 
 /* Icons lifted from the prototype's SVG map — exact markup. */
 export const IcArr = (
@@ -57,12 +63,61 @@ export function CatCard({ c }: { c: CategoryVM }) {
   );
 }
 
+/**
+ * The heart — Phase C, docs/FAVOURITES.md.
+ *
+ * One component behind every heart in the app, so they cannot disagree
+ * about what is saved or behave differently from each other. The state
+ * comes from the single favourites query rather than from each card, so
+ * a salon hearted on the home page is hearted on the salon page too.
+ *
+ * Signed out it still draws, because hiding it hides the reason to have
+ * an account. Tapping remembers the one thing you meant to save and
+ * sends you to sign in; it is applied when you come back, once.
+ */
+export function FavHeart({
+  kind,
+  id,
+  label,
+  className = 'fav',
+}: {
+  kind: FavouriteKind;
+  id: string;
+  label: string;
+  className?: string;
+}) {
+  const nav = useNavigate();
+  const { signedIn } = useSession();
+  const { saved, toggle } = useFavourites();
+  const [failed, setFailed] = useState(false);
+  const on = signedIn && saved(kind, id);
+  return (
+    <button
+      className={on ? `${className} on` : className}
+      aria-pressed={on}
+      aria-label={on ? `Remove ${label} from favourites` : `Save ${label} to favourites`}
+      title={failed ? 'Could not save that — try again' : undefined}
+      onClick={(e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        if (!signedIn) {
+          rememberPendingFavourite({ kind, id });
+          nav('/login');
+          return;
+        }
+        void toggle(kind, id).then((ok) => setFailed(!ok));
+      }}
+    >
+      {IcHeart}
+    </button>
+  );
+}
+
 /** Salon recommendation card — the prototype's rc2 markup, fed real data.
  *  Rating/distance/price rows wait for their subsystems; the city line is
  *  what we can honestly say today. */
 export function SalonCard({ s }: { s: SalonVM }) {
   const nav = useNavigate();
-  const [fav, setFav] = useState(false);
   return (
     <article className="rc2" onClick={() => nav(`/salon/${s.slug}`)}>
       <div className="rph" style={{ backgroundImage: s.photo }}>
@@ -74,16 +129,7 @@ export function SalonCard({ s }: { s: SalonVM }) {
             {s.serviceCategories[0]}
           </span>
         ) : null}
-        <button
-          className={fav ? 'fav on' : 'fav'}
-          onClick={(e) => {
-            e.stopPropagation();
-            setFav(!fav);
-          }}
-          aria-label="Save"
-        >
-          {IcHeart}
-        </button>
+        <FavHeart kind="salon" id={s.id} label={s.name} />
       </div>
       <div className="rbd">
         <h3>{s.name}</h3>

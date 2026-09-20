@@ -161,3 +161,59 @@ export const ClientSalonLinkSchema = z.object({
   since: z.iso.date(),
 });
 export const ClientSalonLinksSchema = z.object({ salons: z.array(ClientSalonLinkSchema) });
+
+
+/**
+ * Favourites — Phase C, docs/FAVOURITES.md.
+ *
+ * The client's own list, across every salon. Three kinds, as the
+ * prototype's section subtitle has it: salons, pros and services.
+ *
+ * Not to be confused with two things that already carry the word or the
+ * idea. `favoriteService` in Customer Insights is *derived* — the
+ * service a customer books most, computed per salon, chosen by nobody.
+ * And "My salons" is `client_customer_links`: the salons you have
+ * booked at, which is a relationship rather than a preference.
+ */
+export const FavouriteKindSchema = z.enum(['salon', 'service', 'pro']);
+
+/** One favourite, resolved for display. Only targets that are public
+ *  right now appear — see `ClientFavouritesSchema`. */
+export const ClientFavouriteSchema = z.object({
+  kind: FavouriteKindSchema,
+  /** business / service / employee id, by kind. */
+  id: z.uuid(),
+  name: z.string(),
+  /** The quiet second line: a city, a role, "at <salon>". */
+  sub: z.string(),
+  /** The salon this belongs to, so a row can link somewhere. */
+  salonSlug: z.string(),
+  salonName: z.string(),
+  /** Card image as a CSS-ready data URL, or null. Pros carry none —
+   *  the row draws initials, as the prototype does. */
+  photo: z.string().nullable(),
+  savedAt: z.string(),
+});
+
+/**
+ * The whole list, grouped the way the section renders it.
+ *
+ * What is *not* here is as important as what is. A favourite whose
+ * target has been unpublished — a service set to draft, a salon that
+ * cleared its listing, a pro whose team is no longer shown — is kept in
+ * the database and left out of this response. It is not gone, it is not
+ * visible, and the person did not change their mind; if it comes back,
+ * so does the row. `hidden` says how many are in that state, so the
+ * section can be honest about it rather than silently short.
+ */
+export const ClientFavouritesSchema = z.object({
+  salons: z.array(ClientFavouriteSchema),
+  services: z.array(ClientFavouriteSchema),
+  pros: z.array(ClientFavouriteSchema),
+  /** Saved, but not available to show right now. */
+  hidden: z.number().int(),
+});
+
+export type FavouriteKind = z.infer<typeof FavouriteKindSchema>;
+export type ClientFavourite = z.infer<typeof ClientFavouriteSchema>;
+export type ClientFavourites = z.infer<typeof ClientFavouritesSchema>;

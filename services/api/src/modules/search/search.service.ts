@@ -8,6 +8,7 @@ import { withClient, withHq, withTenant } from '../../db/index.js';
 import type { ViewerHistory } from './rank.js';
 import { rank } from './rank.js';
 import { candidatesOf, gatherCategory } from '../../public/discovery.routes.js';
+import { favouriteIds } from '../clients/favourites.service.js';
 
 /**
  * The Search lab's config — §5, docs/SEARCH-RANKING.md.
@@ -98,11 +99,18 @@ export async function viewerHistory(clientUserId: string, now: Date): Promise<Vi
     businesses: {},
     categories: {},
     durationsByCategory: {},
-    // Favourites are not persisted yet (Phase C). Empty rather than
-    // absent, so the ranker needs no special case the day they land.
     favouriteServiceIds: [],
     favouriteBusinessIds: [],
   };
+
+  // Phase C: the seam §2.2 left open. Nothing about the scoring changes
+  // — the weight, the max-not-sum rule and the absence of recency decay
+  // on a favourite were all settled before favourites existed, and
+  // double counting is impossible because of the first two: booked and
+  // favourited scores max(1.00, 0.90), not 1.90.
+  const favs = await favouriteIds(clientUserId);
+  history.favouriteServiceIds = favs.services;
+  history.favouriteBusinessIds = favs.businesses;
 
   const done = rows.filter((a) => endOf(a.date, a.startMin, a.durationMin) <= now);
   if (!done.length) return history;

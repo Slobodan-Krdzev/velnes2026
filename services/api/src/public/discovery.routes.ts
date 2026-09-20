@@ -16,7 +16,7 @@ import { svcVariants } from '../modules/catalog/catalog.service.js';
 import { ClientClaimsSchema } from '@velnes/contracts';
 import { distanceKm, rank, type RankCandidate } from '../modules/search/rank.js';
 import { activeSearchConfig, viewerHistory } from '../modules/search/search.service.js';
-import { db, withTenant } from '../db/index.js';
+import { db, withClient, withTenant } from '../db/index.js';
 
 const ErrorSchema = z.object({ error: z.string(), message: z.string() });
 
@@ -414,6 +414,7 @@ export async function discoveryRoutes(app: FastifyInstance) {
         );
         const pin = await firstPin(b.id);
         salons.push({
+          id: b.id,
           slug: b.slug,
           name: b.name,
           city: b.city,
@@ -514,11 +515,18 @@ export async function discoveryRoutes(app: FastifyInstance) {
       let personalised = false;
       const claims = await clientClaimsOf(req);
       if (claims) {
-        const me = await db
-          .selectFrom('clientUsers')
-          .select('personalisedResults')
-          .where('id', '=', claims.sub)
-          .executeTakeFirst();
+        // Under the client's own context, not the bare handle:
+        // client_users carries RLS keyed on app.client_id, so a read
+        // without it returns nothing at all — and "nothing" reads
+        // exactly like "consent is off", which is how this managed to
+        // look like working code.
+        const me = await withClient(claims.sub, (trx) =>
+          trx
+            .selectFrom('clientUsers')
+            .select('personalisedResults')
+            .where('id', '=', claims.sub)
+            .executeTakeFirst(),
+        );
         if (me?.personalisedResults) {
           history = await viewerHistory(claims.sub, now);
           personalised = true;
@@ -619,6 +627,7 @@ export async function discoveryRoutes(app: FastifyInstance) {
         return { team, products, locations, addr };
       });
       return {
+        id: biz.id,
         slug: biz.slug,
         name: biz.name,
         city: addr.city,

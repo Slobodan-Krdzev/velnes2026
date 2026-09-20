@@ -202,6 +202,54 @@ describe('the ranker', () => {
       expect(similar).toBeGreaterThan(unrelated);
     });
 
+    it('does not double-count a treatment that is both booked and favourited', () => {
+      // Phase C's guard, and the reason §2.2 chose max over sum before
+      // favourites existed. Booked scores 1.00 and favourited 0.90; if
+      // these were added the result would be 1.90 and one relationship
+      // would drown every other component.
+      const c = candidate({ id: 'x' });
+      const bookedOnly = affinityOf(c, { ...noHistory, services: { x: NOW.toISOString() } }, cfg, NOW);
+      const favOnly = affinityOf(c, { ...noHistory, favouriteServiceIds: ['x'] }, cfg, NOW);
+      const both = affinityOf(
+        c,
+        { ...noHistory, services: { x: NOW.toISOString() }, favouriteServiceIds: ['x'] },
+        cfg,
+        NOW,
+      );
+      expect(bookedOnly).toBeCloseTo(cfg.affinity.weights.bookedThisService, 5);
+      expect(favOnly).toBeCloseTo(cfg.affinity.weights.favourited, 5);
+      expect(both, 'max, not sum').toBeCloseTo(Math.max(bookedOnly, favOnly), 5);
+      expect(both).toBeLessThanOrEqual(1);
+    });
+
+    it('counts a favourite without decaying it — a favourite is not an event', () => {
+      // A booking fades; a standing statement about what you like does
+      // not. Nothing about when it was saved enters the score.
+      const c = candidate({ id: 'x' });
+      const now = affinityOf(c, { ...noHistory, favouriteServiceIds: ['x'] }, cfg, NOW);
+      const later = affinityOf(
+        c,
+        { ...noHistory, favouriteServiceIds: ['x'] },
+        cfg,
+        new Date('2030-01-01T00:00:00Z'),
+      );
+      expect(later).toBe(now);
+    });
+
+    it('lets a favourited salon lift its treatments', () => {
+      const liked = candidate({ id: 'liked', price: 4000 });
+      const other = candidate({ id: 'other', price: 2000 });
+      const cold = rank([liked, other], { position: null, history: noHistory }, cfg, { now: NOW });
+      expect(order(cold), 'on price alone the cheaper leads').toEqual(['other', 'liked']);
+      const warm = rank(
+        [liked, other],
+        { position: null, history: { ...noHistory, favouriteBusinessIds: ['biz-liked'] } },
+        cfg,
+        { now: NOW },
+      );
+      expect(order(warm)).toEqual(['liked', 'other']);
+    });
+
     it('is absent entirely for a viewer with no history', () => {
       const ranked = rank([candidate({ id: 'a' })], { position: null, history: null }, cfg, {
         now: NOW,

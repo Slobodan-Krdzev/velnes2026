@@ -42,6 +42,8 @@ export function categoryVM(c: DiscoveryCategory): CategoryVM {
 }
 
 export interface SalonVM {
+  /** The salon's own id — what a favourite refers to. */
+  id: string;
   slug: string;
   name: string;
   city: string;
@@ -59,6 +61,7 @@ export interface SalonVM {
 
 export function salonVM(s: DiscoverySalonCard): SalonVM {
   return {
+    id: s.id,
     slug: s.slug,
     name: s.name,
     city: s.city ?? '',

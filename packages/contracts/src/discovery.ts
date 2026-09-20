@@ -22,6 +22,9 @@ export const DiscoveryCategoriesSchema = z.object({
 /** A salon card in discovery results: only businesses whose
  *  settings.marketplace.listed is true, and only what the card needs. */
 export const DiscoverySalonCardSchema = z.object({
+  /** The salon's own id. Needed to favourite it, and no more sensitive
+   *  than the service ids this surface already publishes. */
+  id: z.uuid(),
   slug: z.string(),
   name: z.string(),
   city: z.string().nullable(),
@@ -72,6 +75,7 @@ export const DiscoveryGalleryPhotoSchema = z.object({
  *  own-use, priced). publishableKey/locations come from the live widget
  *  and are null for a listed-but-not-bookable salon. */
 export const DiscoverySalonDetailSchema = z.object({
+  id: z.uuid(),
   slug: z.string(),
   name: z.string(),
   city: z.string().nullable(),

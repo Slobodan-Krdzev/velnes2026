@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BrowserRouter, Route, Routes } from 'react-router-dom';
 import { Login, Register } from './features/account/Auth.js';
@@ -7,17 +8,35 @@ import { BookConfirmed, BookIdentity, BookProfile, BookReview } from './features
 import { Home } from './features/discovery/Home.js';
 import { Results } from './features/discovery/Results.js';
 import { Salon } from './features/salon/Salon.js';
-import { SessionProvider } from './lib/api/session.js';
+import { SessionProvider, useFavourites, useSession } from './lib/api/session.js';
 import { GeoProvider } from './lib/geo.js';
 
 const qc = new QueryClient({
   defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false } },
 });
 
+/**
+ * A heart tapped while signed out is applied here, once, when a session
+ * appears — Phase C, docs/FAVOURITES.md.
+ *
+ * Centrally rather than in each of the two places that establish a
+ * session (signing in, and verifying a new account), so that a third
+ * one added later cannot forget to do it.
+ */
+function PendingFavourite() {
+  const { signedIn } = useSession();
+  const { applyPending } = useFavourites();
+  useEffect(() => {
+    if (signedIn) void applyPending();
+  }, [signedIn, applyPending]);
+  return null;
+}
+
 export function App() {
   return (
     <QueryClientProvider client={qc}>
       <SessionProvider>
+        <PendingFavourite />
         <GeoProvider>
           <BookingProvider>
           <BrowserRouter>
@@ -34,6 +53,7 @@ export function App() {
               <Route path="/account" element={<MyVelnes section="over" />} />
               <Route path="/account/general" element={<MyVelnes section="general" />} />
               <Route path="/account/appts" element={<MyVelnes section="appts" />} />
+              <Route path="/account/favs" element={<MyVelnes section="favs" />} />
               <Route path="/account/notifs" element={<MyVelnes section="notifs" />} />
               <Route path="/account/appointments/:id" element={<MyVelnes section="appts" />} />
               <Route path="*" element={<Home />} />

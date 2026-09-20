@@ -10,7 +10,9 @@ import {
   ClientProfileSchema,
   ClientRegisterSchema,
   ClientResendSchema,
+  ClientFavouritesSchema,
   ClientSalonLinksSchema,
+  FavouriteKindSchema,
   ClientSessionSchema,
   ClientVerifySchema,
   PublicBookResponseSchema,
@@ -24,6 +26,11 @@ import { db, withClient, withHq, withTenant } from '../../db/index.js';
 import { env } from '../../env.js';
 import { BookingError, BookingRefused, confirmChain } from '../booking/booking.service.js';
 import { visitPayload } from '../../public/public.routes.js';
+import {
+  addFavourite,
+  listFavourites,
+  removeFavourite,
+} from './favourites.service.js';
 import {
   changeClientPassword,
   ClientError,
@@ -369,6 +376,56 @@ export async function clientRoutes(app: FastifyInstance) {
   });
 
   // ---- the bell ----------------------------------------------------
+
+  /**
+   * Favourites — Phase C, docs/FAVOURITES.md.
+   *
+   * One read door, not two. The hearts scattered across discovery need
+   * to know what is already saved, and the obvious shortcut is a second,
+   * leaner "just the ids" endpoint — which is exactly how a concept
+   * grows a second door that later disagrees with the first. The app
+   * derives its heart states from this same response.
+   */
+  r.route({
+    method: 'GET',
+    url: '/me/favourites',
+    preHandler: [app.authenticateClient],
+    schema: { response: { 200: ClientFavouritesSchema } },
+    handler: async (req) => listFavourites(req.clientClaims.sub),
+  });
+
+  r.route({
+    method: 'PUT',
+    url: '/me/favourites/:kind/:id',
+    preHandler: [app.authenticateClient],
+    schema: {
+      params: z.object({ kind: FavouriteKindSchema, id: z.uuid() }),
+      response: { 200: z.object({ ok: z.literal(true) }), 404: ErrorSchema },
+    },
+    // Idempotent: pressing a filled heart again is not an error, and a
+    // heart that errored because it was already filled would be a
+    // strange thing to explain to anybody.
+    handler: async (req, reply) => {
+      const r2 = await addFavourite(req.clientClaims.sub, req.params.kind, req.params.id);
+      if (r2 === 'unknown')
+        return reply.code(404).send({ error: 'UNKNOWN_TARGET', message: 'Nothing to save here' });
+      return { ok: true as const };
+    },
+  });
+
+  r.route({
+    method: 'DELETE',
+    url: '/me/favourites/:kind/:id',
+    preHandler: [app.authenticateClient],
+    schema: {
+      params: z.object({ kind: FavouriteKindSchema, id: z.uuid() }),
+      response: { 200: z.object({ ok: z.literal(true) }) },
+    },
+    handler: async (req) => {
+      await removeFavourite(req.clientClaims.sub, req.params.kind, req.params.id);
+      return { ok: true as const };
+    },
+  });
 
   r.route({
     method: 'GET',

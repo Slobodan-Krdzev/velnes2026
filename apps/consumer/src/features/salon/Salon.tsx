@@ -6,6 +6,7 @@ import { DHeader } from '../../app/chrome.js';
 import { fmtMKD, minutesLbl } from '../../lib/api/mappers.js';
 import { useSalonDetail, useSalonServices, useVisitSlots } from '../../lib/api/queries.js';
 import { SalonGallery } from '../../components/SalonGallery.js';
+import { FavHeart } from '../discovery/cards.js';
 import { useWheelScroll } from '../../lib/useWheelScroll.js';
 import { SalonMap } from '../../components/SalonMap.js';
 import { IcArr, IcClock, IcPin, IcSpark, IcVok } from '../discovery/cards.js';
@@ -110,6 +111,10 @@ function TrCard({
           {IcScissors}
           <span className="t">{s.name}</span>
         </span>
+        {/* A departure from the prototype, and a necessary one: the
+            prototype's Favourites section lists saved services but gives
+            nowhere to save one. See docs/FAVOURITES.md. */}
+        <FavHeart kind="service" id={s.id} label={s.name} className="fav fav-inline" />
         <span className="ok">{IcCheck}</span>
       </span>
       <span className="in2">
@@ -417,13 +422,20 @@ function BookCard({ p, desktop }: { p: Page; desktop: boolean }) {
             </span>
           </button>
           {p.team.map((e) => (
-            <button key={e.id} className={`pro-card${p.empId === e.id ? ' on' : ''}`} onClick={() => p.setEmpId(e.id)}>
-              <span className="pav">{initials(e.name)}</span>
-              <span>
-                <b>{e.name}</b>
-                <span className="sm muted">{d.team.find((t) => t.id === e.id)?.role ?? ''}</span>
-              </span>
-            </button>
+            <span key={e.id} className="pro-wrap">
+              <button className={`pro-card${p.empId === e.id ? ' on' : ''}`} onClick={() => p.setEmpId(e.id)}>
+                <span className="pav">{initials(e.name)}</span>
+                <span>
+                  <b>{e.name}</b>
+                  <span className="sm muted">{d.team.find((t) => t.id === e.id)?.role ?? ''}</span>
+                </span>
+              </button>
+              {/* Beside the card, not inside it: a button within a
+                  button is not valid markup, and the prototype never
+                  had to solve this because it had no way to save a pro
+                  at all. See docs/FAVOURITES.md. */}
+              <FavHeart kind="pro" id={e.id} label={e.name} className="fav fav-pro" />
+            </span>
           ))}
         </div>
       ) : null}

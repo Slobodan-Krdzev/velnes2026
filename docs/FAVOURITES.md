@@ -1,12 +1,12 @@
 # Phase C — persisted favourites
 
-The plan, decided 2026-09-20, before any of it is built. Nothing in this
-document is implemented yet.
+Decided and **built**, 2026-09-20. This began as a plan written before
+any of it existed; what follows is what was actually made, with the
+places it departed from the plan marked.
 
-Today the heart on a salon card is `useState(false)`: it fills in, and
-forgets the moment you navigate away. Phase C makes it real customer
-data — the client's own, on the client's own account, across every
-salon.
+The heart on a salon card used to be `useState(false)`: it filled in,
+and forgot the moment you navigated away. It is now real customer data —
+the client's own, on their own account, across every salon.
 
 ---
 
@@ -169,23 +169,45 @@ plain sentence.
 
 A new table, and **nothing to backfill**. The heart was never persisted
 anywhere, in any environment, so there is no prior state to carry over —
-worth saying plainly rather than leaving somebody to look for it. The
-demo seed gains a couple of favourites for the demo client, so the
-section is not empty in development.
+worth saying plainly rather than leaving somebody to look for it.
+
+**The demo seed gained nothing, and that was not a choice.** The plan
+said it would carry a couple of favourites for the demo client; there is
+no demo client. `seed-demo.ts` creates no `client_users` row at all —
+consumer accounts are made by registering through the app. Seeding
+favourites would therefore mean first inventing a seeded consumer
+account, which is a larger decision about the demo world than this phase
+should take on its own. So the section starts empty in a fresh
+development database, which is at least the state it is designed to
+handle, and the tests make their own client and clean it up.
 
 ---
 
 ## 8. Build order
 
-1. Migration, contract, RLS.
-2. Service and the three doors, with cross-tenant label resolution.
-3. `viewerHistory()` reads them — the ranking seam closes itself.
-4. Hearts become real on salon cards: optimistic, with rollback.
-5. Hearts wherever else the prototype puts them — it has eight `.fav`
-   buttons and the app has one, so this step begins with an audit.
-6. The Favourites section in My Velnes.
-7. Seed and docs.
-8. Tests, throughout rather than at the end.
+1. ~~Migration, contract, RLS.~~ **Done.**
+2. ~~Service and the three doors, with cross-tenant label resolution.~~ **Done.**
+3. ~~`viewerHistory()` reads them~~ **Done** — two empty arrays became the client's own favourites, and nothing else about the scorer moved.
+4. ~~Hearts become real on salon cards~~ **Done** — one `FavHeart` behind every heart in the app, reading one query, so a salon hearted on the home page is hearted on the salon page too.
+5. ~~Hearts wherever else the prototype puts them~~ — **the audit
+   changed this step.** All eight of the prototype's `.fav` buttons are
+   on `.rc2` salon cards: four on the desktop "Recommended near you" row
+   and the same four on mobile. That is the one heart the app already
+   had.
+
+   Which means the prototype can *show* favourite services and
+   professionals in its account section but offers no way to save
+   either — `toggleFav('svc', …)` is only ever reached from the
+   Favourites list, to remove. So the two new placements are a **stated
+   departure**, not prototype fidelity: a heart on a treatment row, and
+   one beside a team card. Both are in the prototype's visual language
+   (same mark, same brand colour when on) and both live in
+   `overrides.css` with the reason written next to them. The team one
+   sits *beside* its card rather than inside it because `.pro-card` is
+   itself a `<button>`, and a button inside a button is not markup.
+6. ~~The Favourites section in My Velnes.~~ **Done** — third in the menu, the prototype's markup, minus the star rating it carries for salons because reviews still do not exist.
+7. ~~Seed and docs.~~ **Docs done; the seed could not be.** See below.
+8. ~~Tests~~ **Done** — twelve against the doors, three more in the ranker's own suite.
 
 ## 9. What the tests have to prove
 
@@ -200,3 +222,31 @@ section is not empty in development.
   guard, asserted rather than assumed.
 - With personalisation off, favourites reorder nothing.
 - The write doors refuse a signed-out caller.
+
+
+---
+
+## 10. What the build changed about the plan
+
+Three things, recorded because a plan that quietly becomes something
+else is worse than one that was never written.
+
+**The heart audit moved step 5.** The prototype hearts only salon cards.
+Saving a service or a professional is a departure we chose, not fidelity
+we inherited — see step 5 above.
+
+**The seed could not be done.** There is no demo client to give
+favourites to. §7.
+
+**A Phase B defect surfaced, and was fixed.** The ranked door read
+`client_users.personalisedResults` through the bare database handle,
+with no RLS context. `client_users` is keyed on `app.client_id`, so the
+read returned nothing — and nothing reads exactly like "consent is off",
+which is why it looked like working code and passed every Phase B test:
+those only ever asserted the signed-out case, where `false` is correct.
+The first test to sign a client in caught it immediately. It now reads
+under `withClient`, and personalisation works for the first time.
+
+This is the "unless testing exposes a defect" case: no weight moved and
+no rule changed, but personalisation had never actually run in
+production conditions until now.

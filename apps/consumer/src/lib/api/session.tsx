@@ -3,9 +3,11 @@ import { createContext, useCallback, useContext, useMemo, useState, type ReactNo
 import type { z } from 'zod';
 import type {
   ClientAppointmentsSchema,
+  ClientFavouritesSchema,
   ClientNotificationsSchema,
   ClientProfileSchema,
   ClientSalonLinksSchema,
+  FavouriteKind,
 } from '@velnes/contracts';
 import { ApiError } from './client.js';
 
@@ -17,6 +19,7 @@ const C = '/api/v1/client';
 const TOKEN_KEY = 'velnes.client.token';
 
 export type ClientProfile = z.infer<typeof ClientProfileSchema>;
+type Favourites = z.infer<typeof ClientFavouritesSchema>;
 type Appointments = z.infer<typeof ClientAppointmentsSchema>;
 type Notifications = z.infer<typeof ClientNotificationsSchema>;
 type SalonLinks = z.infer<typeof ClientSalonLinksSchema>;
@@ -178,4 +181,132 @@ export function useMySalons() {
     enabled: signedIn,
     staleTime: 60_000,
   });
+}
+
+
+/** Where a heart tapped while signed out waits for its owner to come
+ *  back. One item, this tab only, applied once and then forgotten — not
+ *  a second list of favourites living in the browser. */
+const PENDING_KEY = 'velnes.client.pendingFavourite';
+
+export interface PendingFavourite {
+  kind: FavouriteKind;
+  id: string;
+}
+
+/** Deliberately forgiving: a browser with storage disabled should make
+ *  the heart do less, never make the page fail. */
+export function rememberPendingFavourite(f: PendingFavourite) {
+  try {
+    sessionStorage.setItem(PENDING_KEY, JSON.stringify(f));
+  } catch {
+    /* no storage — the tap is simply lost, which is the old behaviour */
+  }
+}
+function takePendingFavourite(): PendingFavourite | null {
+  try {
+    const raw = sessionStorage.getItem(PENDING_KEY);
+    if (!raw) return null;
+    sessionStorage.removeItem(PENDING_KEY);
+    const p = JSON.parse(raw) as PendingFavourite;
+    return p && typeof p.id === 'string' ? p : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The client's favourites — Phase C, docs/FAVOURITES.md.
+ *
+ * One query behind every heart in the app as well as the Favourites
+ * section, so the two can never disagree about what is saved. Toggling
+ * is optimistic: the heart fills under the finger and rolls back if the
+ * write fails, because a heart that waits for a round trip feels broken
+ * even when it is working.
+ */
+export function useFavourites() {
+  const { api, signedIn } = useSession();
+  const qc = useQueryClient();
+  const q = useQuery({
+    queryKey: ['my-favourites'],
+    queryFn: () => api<Favourites>('/me/favourites'),
+    enabled: signedIn,
+    staleTime: 30_000,
+  });
+
+  const saved = useCallback(
+    (kind: FavouriteKind, id: string) => {
+      const d = q.data;
+      if (!d) return false;
+      const list = kind === 'salon' ? d.salons : kind === 'service' ? d.services : d.pros;
+      return list.some((f) => f.id === id);
+    },
+    [q.data],
+  );
+
+  const toggle = useCallback(
+    async (kind: FavouriteKind, id: string) => {
+      const on = saved(kind, id);
+      // Optimistic: move the heart now, put it back if the door refuses.
+      const key = ['my-favourites'];
+      const prev = qc.getQueryData<Favourites>(key);
+      if (prev) {
+        const pick = (d: Favourites) =>
+          kind === 'salon' ? d.salons : kind === 'service' ? d.services : d.pros;
+        const next: Favourites = {
+          ...prev,
+          salons: [...prev.salons],
+          services: [...prev.services],
+          pros: [...prev.pros],
+        };
+        const list = pick(next);
+        if (on) {
+          const i = list.findIndex((f) => f.id === id);
+          if (i >= 0) list.splice(i, 1);
+        } else {
+          // A placeholder until the refetch brings the real row: enough
+          // for the heart to read as filled, and nothing is rendered
+          // from it in a list the user is looking at.
+          list.unshift({
+            kind,
+            id,
+            name: '',
+            sub: '',
+            salonSlug: '',
+            salonName: '',
+            photo: null,
+            savedAt: new Date().toISOString(),
+          });
+        }
+        qc.setQueryData(key, next);
+      }
+      try {
+        await api(`/me/favourites/${kind}/${id}`, { method: on ? 'DELETE' : 'PUT' });
+        await qc.invalidateQueries({ queryKey: key });
+        // The order of results depends on what is favourited, so what is
+        // on screen behind this is now stale.
+        await qc.invalidateQueries({ queryKey: ['ranked-services'] });
+        return true;
+      } catch {
+        if (prev) qc.setQueryData(key, prev);
+        return false;
+      }
+    },
+    [api, qc, saved],
+  );
+
+  /** Apply a heart that was tapped before signing in. Called once, when
+   *  a session appears. */
+  const applyPending = useCallback(async () => {
+    const p = takePendingFavourite();
+    if (!p) return;
+    try {
+      await api(`/me/favourites/${p.kind}/${p.id}`, { method: 'PUT' });
+      await qc.invalidateQueries({ queryKey: ['my-favourites'] });
+    } catch {
+      /* the target may have gone while they were away; not worth a fuss */
+    }
+  }, [api, qc]);
+
+  return { data: q.data, isLoading: q.isLoading, isError: q.isError, saved, toggle, applyPending };
 }

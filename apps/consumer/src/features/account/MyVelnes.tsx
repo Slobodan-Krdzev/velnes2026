@@ -8,6 +8,7 @@ import { useWheelScroll } from '../../lib/useWheelScroll.js';
 import { ApiError } from '../../lib/api/client.js';
 import { fmtMKD, minutesLbl } from '../../lib/api/mappers.js';
 import {
+  useFavourites,
   useMyAppointments,
   useMyNotifications,
   useMySalons,
@@ -32,6 +33,8 @@ const BACK = (
 const SECS = [
   { id: 'general', t: 'General', sub: 'Account info & password' },
   { id: 'appts', t: 'Appointments', sub: 'Upcoming & history' },
+  // Third, where the prototype puts it.
+  { id: 'favs', t: 'Favourites', sub: 'Salons, pros & services' },
   { id: 'notifs', t: 'Notifications', sub: '' },
 ] as const;
 type SecId = (typeof SECS)[number]['id'] | 'over' | 'appt';
@@ -41,6 +44,7 @@ const TITLES: Record<string, string> = {
   general: 'General',
   appts: 'Appointments',
   appt: 'Appointment',
+  favs: 'Favourites',
   notifs: 'Notifications',
 };
 
@@ -486,6 +490,9 @@ export function MyVelnes({ section = 'over' }: { section?: SecId }) {
                 </>
               ) : null}
 
+              {/* ---- favourites ---- */}
+              {sec === 'favs' ? <Favourites /> : null}
+
               {/* ---- notifications ---- */}
               {sec === 'notifs' ? (
                 <>
@@ -542,6 +549,121 @@ export function MyVelnes({ section = 'over' }: { section?: SecId }) {
 
 /** General: what the account actually holds, and the doors that change
  *  it. Email is the sign-in identity and stays read-only. */
+/**
+ * Favourites — Phase C, docs/FAVOURITES.md.
+ *
+ * The prototype's markup: a card per kind, a row per thing, a heart that
+ * removes it, a way through to book. What the prototype's row carries
+ * and this one does not is a star rating — reviews do not exist, so it
+ * comes out rather than being invented.
+ */
+function Favourites() {
+  const nav = useNavigate();
+  const { data, isLoading, isError, toggle } = useFavourites();
+
+  if (isLoading)
+    return <div className="sm muted" style={{ padding: '18px 4px' }}>Loading your favourites…</div>;
+  if (isError || !data)
+    return (
+      <div className="acc-err">
+        Could not load your favourites just now. Refresh to try again.
+      </div>
+    );
+
+  const total = data.salons.length + data.services.length + data.pros.length;
+  if (!total)
+    return (
+      <div className="acc-empty">
+        <b>No favourites yet</b>
+        Save salons and professionals you love so they&rsquo;re easy to find again.
+        <br />
+        <button className="btn btn-p" onClick={() => nav('/')}>
+          Explore Velnes
+        </button>
+      </div>
+    );
+
+  type Fav = (typeof data.salons)[number];
+  const row = (f: Fav, cta: { label: string; go: () => void }) => (
+    <div className="acc-row" key={`${f.kind}-${f.id}`}>
+      {f.photo ? (
+        <div className="ph" style={{ backgroundImage: `url("${f.photo}")` }}></div>
+      ) : (
+        <span className="avdot" style={{ width: '44px', height: '44px', fontSize: '14px', flex: '0 0 auto' }}>
+          {f.name
+            .split(' ')
+            .map((w: string) => w[0])
+            .join('')
+            .slice(0, 2)}
+        </span>
+      )}
+      <div className="bd">
+        <b>{f.name}</b>
+        <div className="sm muted">{f.sub}</div>
+      </div>
+      <button
+        className="acc-link"
+        style={{ fontSize: '19px', lineHeight: '1' }}
+        aria-label={`Remove ${f.name} from favourites`}
+        onClick={() => void toggle(f.kind, f.id)}
+      >
+        ♥
+      </button>
+      <button
+        className="btn btn-g"
+        style={{ minHeight: '36px', padding: '6px 13px', fontSize: '13px' }}
+        onClick={cta.go}
+      >
+        {cta.label}
+      </button>
+    </div>
+  );
+
+  return (
+    <>
+      {data.salons.length ? (
+        <div className="acc-card">
+          <div className="acc-lbl">Salons</div>
+          {data.salons.map((f) =>
+            row(f, { label: 'View salon', go: () => nav(`/salon/${f.salonSlug}`) }),
+          )}
+        </div>
+      ) : null}
+
+      {data.pros.length ? (
+        <div className="acc-card">
+          <div className="acc-lbl">Professionals</div>
+          {data.pros.map((f) =>
+            row(f, { label: 'View salon', go: () => nav(`/salon/${f.salonSlug}`) }),
+          )}
+        </div>
+      ) : null}
+
+      {data.services.length ? (
+        <div className="acc-card">
+          <div className="acc-lbl">Services</div>
+          {data.services.map((f) =>
+            row(f, {
+              label: 'Book',
+              // Straight to the salon page with the treatment already in
+              // the cart — the link that page has always understood.
+              go: () => nav(`/salon/${f.salonSlug}?service=${encodeURIComponent(f.id)}`),
+            }),
+          )}
+        </div>
+      ) : null}
+
+      {data.hidden ? (
+        <div className="sm muted" style={{ padding: '10px 4px' }}>
+          {data.hidden === 1
+            ? 'One more is saved but not bookable right now — it will come back here if it returns.'
+            : `${data.hidden} more are saved but not bookable right now — they will come back here if they return.`}
+        </div>
+      ) : null}
+    </>
+  );
+}
+
 function General() {
   const qc = useQueryClient();
   const { profile, api } = useSession();

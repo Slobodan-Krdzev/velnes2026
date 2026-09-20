@@ -235,6 +235,16 @@ export interface ClientCustomerLinks {
   tenantId: string;
 }
 
+export interface ClientFavourites {
+  clientUserId: string;
+  createdAt: Generated<Timestamp>;
+  id: Generated<string>;
+  kind: string;
+  missingSince: Timestamp | null;
+  refId: string;
+  tenantId: string;
+}
+
 export interface ClientNotifications {
   body: Generated<string>;
   clientUserId: string;
@@ -1105,6 +1115,7 @@ export interface DB {
   checkoutItems: CheckoutItems;
   checkouts: Checkouts;
   clientCustomerLinks: ClientCustomerLinks;
+  clientFavourites: ClientFavourites;
   clientNotifications: ClientNotifications;
   clientUsers: ClientUsers;
   combos: Combos;
