@@ -90,17 +90,6 @@
   }
 }
 
-/* 2026-09-20 — more presence for the hero photograph on desktop. The
-   height comes from the inner block, since .d-hero itself is laid out
-   by the "home v2" rules; the search card still rides up over the
-   curve, so the extra room goes to the image, not to empty page. */
-@media (min-width: 900px) {
-  .hero-in {
-    padding-top: 104px;
-    min-height: 560px;
-  }
-}
-
 /* The shelf runs off both edges rather than stopping at one: fading the
    ends says "there is more this way" without a hard cut. Masked rather
    than overlaid, so it works over the page's own background whatever
