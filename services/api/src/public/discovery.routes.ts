@@ -4,6 +4,8 @@ import {
   DiscoveryCategoryServicesSchema,
   DiscoverySalonDetailSchema,
   DiscoveryRankedServicesSchema,
+  SearchSuggestionsSchema,
+  SearchSuggestRequestSchema,
   DiscoverySalonsSchema,
   DiscoveryViewerSchema,
 } from '@velnes/contracts';
@@ -16,6 +18,7 @@ import { svcVariants } from '../modules/catalog/catalog.service.js';
 import { ClientClaimsSchema } from '@velnes/contracts';
 import { distanceKm, rank, type RankCandidate } from '../modules/search/rank.js';
 import { activeSearchConfig, viewerHistory } from '../modules/search/search.service.js';
+import { lookupMatches, MIN_QUERY, topMatches } from '../modules/search/lookup.js';
 import { db, withClient, withTenant } from '../db/index.js';
 
 const ErrorSchema = z.object({ error: z.string(), message: z.string() });
@@ -194,6 +197,39 @@ interface CandidateMeta {
  * One predicate, used by the category shelf and by both service doors,
  * so a card can never open onto a page its own admission rules emptied.
  */
+/**
+ * The admitted set, remembered briefly.
+ *
+ * `admittedBusinesses()` asks each listed salon whether it has an ACTIVE
+ * location — one query per tenant. That is nothing on a category page
+ * and far too much on every keystroke, so the suggestion door reads
+ * through this instead.
+ *
+ * Only the suggestion door. Everything that decides what a customer can
+ * actually book keeps calling the uncached version, because a salon that
+ * unlists itself should disappear from results immediately, not in
+ * fifteen seconds — and the existing tests that toggle a salon and
+ * re-query are asserting exactly that.
+ *
+ * The cost of the cache is that a suggestion can name a salon that
+ * unlisted moments ago. Clicking it lands on a page that correctly shows
+ * nothing, which is a smaller lie than a search box that stalls.
+ */
+const ADMITTED_TTL_MS = 15_000;
+let admittedCache: { at: number; value: ListedBusiness[] } | null = null;
+
+async function admittedBusinessesCached(): Promise<ListedBusiness[]> {
+  if (admittedCache && Date.now() - admittedCache.at < ADMITTED_TTL_MS) return admittedCache.value;
+  const value = await admittedBusinesses();
+  admittedCache = { at: Date.now(), value };
+  return value;
+}
+
+/** Tests change the world and then expect to see it. */
+export function resetAdmittedCache() {
+  admittedCache = null;
+}
+
 async function admittedBusinesses(): Promise<ListedBusiness[]> {
   const listed = await listedBusinesses();
   if (!listed.length) return [];
@@ -471,6 +507,63 @@ export async function discoveryRoutes(app: FastifyInstance) {
       );
 
       return { category, services: sorted };
+    },
+  });
+
+  /**
+   * What the customer might mean, while they are still typing — step 4
+   * of docs/SEARCH.md.
+   *
+   * One door for all three kinds, because there is one search bar. A
+   * POST rather than a GET for the same reason the ranked door is one:
+   * the query is a body, and viewer context will join it here later
+   * without ever reaching a URL.
+   *
+   * Suggestions are not results. This answers "what might you mean";
+   * the search door answers "given that, what can you book". They are
+   * allowed to contain different kinds of thing, and do.
+   */
+  r.route({
+    method: 'POST',
+    url: '/discovery/suggest',
+    schema: {
+      body: SearchSuggestRequestSchema,
+      response: { 200: SearchSuggestionsSchema },
+    },
+    handler: async (req) => {
+      const q = req.body.q.trim();
+      // Two characters match half the world; below that, say nothing
+      // rather than everything.
+      if (q.length < MIN_QUERY)
+        return { salons: [], services: [], categories: [], q: req.body.q };
+
+      const admitted = await admittedBusinessesCached();
+      const bySlug = new Map(admitted.map((b) => [b.slug, b]));
+      const matches = await lookupMatches(
+        q,
+        admitted.map((b) => b.id),
+      );
+
+      return {
+        salons: topMatches(matches, 'salon', 5).map((m) => ({
+          id: m.id,
+          slug: m.salonSlug ?? '',
+          name: m.display,
+          city: bySlug.get(m.salonSlug ?? '')?.city ?? null,
+        })),
+        services: topMatches(matches, 'service', 6).map((m) => ({
+          id: m.id,
+          name: m.display,
+          salonName: m.salonName ?? '',
+          salonSlug: m.salonSlug ?? '',
+          categoryId: m.categoryId ?? null,
+        })),
+        categories: topMatches(matches, 'category', 4).map((m) => ({
+          id: m.id,
+          name: m.display,
+        })),
+        q: req.body.q,
+      };
     },
   });
 

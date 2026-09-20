@@ -198,6 +198,38 @@ export const DiscoveryRankedServicesSchema = z.object({
   personalised: z.boolean(),
 });
 
+/**
+ * What the customer might mean, while they are still typing.
+ *
+ * Three kinds in one list, because there is one search bar and the
+ * customer never picks an entity type. The headings a client renders
+ * over these are informational — they are not controls, not filters, and
+ * not a mode.
+ */
+export const SearchSuggestionsSchema = z.object({
+  salons: z.array(
+    z.object({ id: z.uuid(), slug: z.string(), name: z.string(), city: z.string().nullable() }),
+  ),
+  services: z.array(
+    z.object({
+      id: z.uuid(),
+      name: z.string(),
+      salonName: z.string(),
+      salonSlug: z.string(),
+      categoryId: z.uuid().nullable(),
+    }),
+  ),
+  categories: z.array(z.object({ id: z.uuid(), name: z.string() })),
+  /** Echoed back so a client can discard a response that arrived late. */
+  q: z.string(),
+});
+
+export const SearchSuggestRequestSchema = z.object({
+  q: z.string().max(120),
+});
+
+export type SearchSuggestions = z.infer<typeof SearchSuggestionsSchema>;
+
 export type DiscoveryViewer = z.infer<typeof DiscoveryViewerSchema>;
 export type DiscoveryRankedServices = z.infer<typeof DiscoveryRankedServicesSchema>;
 export type DiscoveryCategory = z.infer<typeof DiscoveryCategorySchema>;
