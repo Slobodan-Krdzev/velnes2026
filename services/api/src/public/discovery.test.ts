@@ -1,6 +1,7 @@
 import {
   API_PREFIX,
   DiscoveryCategoriesSchema,
+  DiscoveryCategoryServicesSchema,
   DiscoverySalonDetailSchema,
   DiscoverySalonsSchema,
 } from '@velnes/contracts';
@@ -247,5 +248,124 @@ describe('the consumer discovery surface', () => {
     const res = await app.inject({ method: 'GET', url: `${P}/discovery/salons/no-such-salon` });
     expect(res.statusCode).toBe(404);
     expect(res.json().error).toBe('UNKNOWN_SALON');
+  });
+
+  /** The first category the seed actually publishes services in — the
+   *  taxonomy is global, so most categories are legitimately empty. */
+  async function firstCategoryWithServices() {
+    const cats = DiscoveryCategoriesSchema.parse(
+      (await app.inject({ method: 'GET', url: `${P}/discovery/categories` })).json(),
+    ).categories;
+    for (const c of cats) {
+      const res = await app.inject({
+        method: 'GET',
+        url: `${P}/discovery/categories/${c.id}/services`,
+      });
+      const body = DiscoveryCategoryServicesSchema.parse(res.json());
+      if (body.services.length) return body;
+    }
+    throw new Error('the seed has no category with published services');
+  }
+
+  it('lists the services in a category across every listed salon, key-free', async () => {
+    const body = await firstCategoryWithServices();
+    expect(body.services.length).toBeGreaterThan(0);
+    // Every row really is in the category that was asked for, and
+    // carries the salon offering it — a service with no salon behind it
+    // is not something anyone can book.
+    for (const s of body.services) {
+      expect(s.category).toBe(body.category.name);
+      expect(s.salon.slug.length).toBeGreaterThan(0);
+      expect(s.durationMin).toBeGreaterThan(0);
+    }
+  });
+
+  it('orders results bookable first, then by price, and the same way twice', async () => {
+    const body = await firstCategoryWithServices();
+    const asking = (s: (typeof body.services)[number]) =>
+      s.priceFrom ?? s.price ?? Number.POSITIVE_INFINITY;
+    for (let i = 1; i < body.services.length; i++) {
+      const a = body.services[i - 1]!;
+      const b = body.services[i]!;
+      if (a.salon.bookable !== b.salon.bookable) {
+        expect(a.salon.bookable, 'bookable leads').toBe(true);
+        continue;
+      }
+      expect(asking(a) <= asking(b), `${a.name} before ${b.name}`).toBe(true);
+    }
+    // Deterministic: the same request twice gives the same order. This
+    // is the property personalised ranking will have to replace on
+    // purpose rather than by accident.
+    const again = await app.inject({
+      method: 'GET',
+      url: `${P}/discovery/categories/${body.category.id}/services`,
+    });
+    expect(again.json().services.map((s: { id: string }) => s.id)).toEqual(
+      body.services.map((s) => s.id),
+    );
+  });
+
+  it('withholds prices from a salon that does not publish them', async () => {
+    const body = await firstCategoryWithServices();
+    const slug = body.services[0]!.salon.slug;
+    await admin.query(
+      `UPDATE businesses SET settings = jsonb_set(settings, '{marketplace,showPrices}', 'false')
+       WHERE slug = $1`,
+      [slug],
+    );
+    try {
+      const res = await app.inject({
+        method: 'GET',
+        url: `${P}/discovery/categories/${body.category.id}/services`,
+      });
+      const after = DiscoveryCategoryServicesSchema.parse(res.json());
+      const hidden = after.services.filter((s) => s.salon.slug === slug);
+      expect(hidden.length).toBeGreaterThan(0);
+      // Not shipped and then hidden by the app — never sent at all.
+      for (const s of hidden) {
+        expect(s.salon.showPrices).toBe(false);
+        expect(s.price).toBeNull();
+        expect(s.priceFrom).toBeNull();
+      }
+    } finally {
+      await admin.query(
+        `UPDATE businesses SET settings = jsonb_set(settings, '{marketplace,showPrices}', 'true')
+         WHERE slug = $1`,
+        [slug],
+      );
+    }
+  });
+
+  it('drops the services of a salon that switches its listing off', async () => {
+    const body = await firstCategoryWithServices();
+    const slug = body.services[0]!.salon.slug;
+    await admin.query(
+      `UPDATE businesses SET settings = jsonb_set(settings, '{marketplace,listed}', 'false')
+       WHERE slug = $1`,
+      [slug],
+    );
+    try {
+      const res = await app.inject({
+        method: 'GET',
+        url: `${P}/discovery/categories/${body.category.id}/services`,
+      });
+      const after = DiscoveryCategoryServicesSchema.parse(res.json());
+      expect(after.services.some((s) => s.salon.slug === slug)).toBe(false);
+    } finally {
+      await admin.query(
+        `UPDATE businesses SET settings = jsonb_set(settings, '{marketplace,listed}', 'true')
+         WHERE slug = $1`,
+        [slug],
+      );
+    }
+  });
+
+  it('refuses an unknown category', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: `${P}/discovery/categories/${randomUUID()}/services`,
+    });
+    expect(res.statusCode).toBe(404);
+    expect(res.json().error).toBe('UNKNOWN_CATEGORY');
   });
 });

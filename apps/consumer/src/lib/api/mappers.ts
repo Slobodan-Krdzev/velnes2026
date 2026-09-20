@@ -1,4 +1,8 @@
-import type { DiscoveryCategory, DiscoverySalonCard } from '@velnes/contracts';
+import type {
+  DiscoveryCategory,
+  DiscoverySalonCard,
+  DiscoveryServiceCard,
+} from '@velnes/contracts';
 
 /** The only place API shapes meet the UI's view models (handover rule:
  *  components never import from here through a side door). */
@@ -70,4 +74,62 @@ export function salonVM(s: DiscoverySalonCard): SalonVM {
 
 export function minutesLbl(min: number): string {
   return `${min} min`;
+}
+
+/** A treatment as a result: the service itself, and the salon it is at.
+ *  What the category cards now open onto — you pick the treatment, and
+ *  the salon comes with it, rather than picking a salon and hunting for
+ *  the treatment inside it. */
+export interface ServiceVM {
+  id: string;
+  name: string;
+  category: string;
+  durationMin: number;
+  /** Null when the salon publishes no prices — the door withholds the
+   *  number rather than sending it to be hidden here. */
+  price: number | null;
+  priceFrom: number | null;
+  salon: {
+    slug: string;
+    name: string;
+    city: string;
+    /** CSS background-image value, as the cards want it. */
+    photo: string;
+    lat: number | null;
+    lng: number | null;
+    bookable: boolean;
+    showPrices: boolean;
+  };
+}
+
+export function serviceVM(s: DiscoveryServiceCard): ServiceVM {
+  return {
+    id: s.id,
+    name: s.name,
+    category: s.category,
+    durationMin: s.durationMin,
+    price: s.price,
+    priceFrom: s.priceFrom,
+    salon: {
+      slug: s.salon.slug,
+      name: s.salon.name,
+      city: s.salon.city ?? '',
+      photo: s.salon.photo ? `url("${s.salon.photo}")` : 'var(--im)',
+      lat: s.salon.lat,
+      lng: s.salon.lng,
+      bookable: s.salon.bookable,
+      showPrices: s.salon.showPrices,
+    },
+  };
+}
+
+/** What a result card prints where the price goes. A service with
+ *  variants starts at the cheapest of them, so it says "from"; a salon
+ *  that publishes no prices says so plainly rather than showing a gap. */
+export function priceLbl(s: ServiceVM): string | null {
+  if (!s.salon.showPrices) return null;
+  if (s.priceFrom != null && s.price != null && s.priceFrom < s.price)
+    return `from ${fmtMKD(s.priceFrom)}`;
+  if (s.price != null) return fmtMKD(s.price);
+  return null;
 }

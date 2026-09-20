@@ -5,6 +5,7 @@ import type {
   DiscoveryCategoriesSchema,
   DiscoverySalonDetailSchema,
   DiscoverySalonsSchema,
+  DiscoveryCategoryServicesSchema,
   PublicServicesResponseSchema,
 } from '@velnes/contracts';
 import { pub, pubPost } from './client.js';
@@ -13,6 +14,7 @@ type Categories = z.infer<typeof DiscoveryCategoriesSchema>;
 type Salons = z.infer<typeof DiscoverySalonsSchema>;
 type SalonDetail = z.infer<typeof DiscoverySalonDetailSchema>;
 type Services = z.infer<typeof PublicServicesResponseSchema>;
+type CategoryServices = z.infer<typeof DiscoveryCategoryServicesSchema>;
 type Availability = z.infer<typeof AvailabilityResponseSchema>;
 
 export function useCategories() {
@@ -36,6 +38,18 @@ export function useSalonDetail(slug: string | undefined) {
     queryKey: ['salon', slug],
     queryFn: () => pub<SalonDetail>(`/discovery/salons/${slug}`),
     enabled: Boolean(slug),
+    staleTime: 60_000,
+  });
+}
+
+/** Everything offered in one category, across every listed salon — the
+ *  door behind a category card. The id comes from the category list the
+ *  app already holds, so this waits until that has arrived. */
+export function useCategoryServices(categoryId: string | undefined) {
+  return useQuery({
+    queryKey: ['category-services', categoryId],
+    queryFn: () => pub<CategoryServices>(`/discovery/categories/${categoryId}/services`),
+    enabled: Boolean(categoryId),
     staleTime: 60_000,
   });
 }

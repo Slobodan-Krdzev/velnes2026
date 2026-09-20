@@ -253,6 +253,36 @@ the location panel), so a wrong or placeholder pin is fixed where every
 other location detail is edited, and saving sends it through the
 existing `PATCH /locations/:id` under `locations.manage`.
 
+## A category opens onto treatments
+
+A category card used to open onto a list of salons that happened to
+offer something in that category. It now opens onto the treatments
+themselves: `GET /public/discovery/categories/:id/services` returns every
+active, online service published under one category across every
+marketplace-listed salon, and each row carries the salon it belongs to —
+name, city, pin, whether it is bookable. You choose the treatment, and
+the salon comes with it, rather than choosing a salon and hunting for the
+treatment inside it. Clicking a result opens the salon page with that
+service already in the cart, through the `?service=<id>` link the page
+has always understood.
+
+Prices are withheld rather than hidden. A salon that clears
+`marketplace.showPrices` has its numbers nulled at the door and the card
+carries `showPrices: false`, so the app never receives a price it is
+merely trusted not to draw. A service with variants that undercut its
+master price says "from".
+
+**The order is deliberate, and deliberately impersonal.** Bookable
+salons lead, then the cheaper treatment, then alphabetically — stable
+enough that a test asserts the same request twice returns the same
+order. Ranking by where somebody is standing and what they have booked
+before is the §5 search-architecture work (exposure decay, chain dedup,
+quality floor, consent modes, and the HQ Search lab that tunes them).
+That ranking belongs behind this one door when it is decided; it is
+absent here rather than guessed at, so nothing has to be un-built when
+§5 lands. The map beside the results draws one pin per salon, not one
+per treatment.
+
 ## Honest deferrals
 
 These are absent rather than faked, and each needs a platform decision
@@ -286,6 +316,14 @@ before it can be real:
   no map until someone drops a pin in the workspace.
 - **Search.** The search field filters the categories and salons already
   loaded. Real search/discovery is still blocked on the §5 answers.
+- **Personalised results.** A category now lists its treatments, but in
+  a fixed order. Ranking them by the customer's location and by what
+  they have booked before — most-booked service, favourites, similar
+  treatments — is agreed as the next step and waits on §5. Two of its
+  inputs do not exist yet either: favourites are not persisted anywhere
+  (the heart on a card is component state), and there is no geo search
+  or distance sort. The cross-salon half is ready: `withClient` already
+  reads a client's appointments across every tenant.
 - **i18n.** The app ships English copy; `@velnes/i18n` is wired into the
   other five apps and this one still needs its copy pass.
 - **Currency.** Everything is MKD, taken from the API — the prototype's

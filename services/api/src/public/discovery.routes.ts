@@ -1,13 +1,16 @@
 import {
   BusinessSettingsSchema,
   DiscoveryCategoriesSchema,
+  DiscoveryCategoryServicesSchema,
   DiscoverySalonDetailSchema,
   DiscoverySalonsSchema,
 } from '@velnes/contracts';
+import type { DiscoveryServiceCard } from '@velnes/contracts';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { sql } from 'kysely';
 import { z } from 'zod';
+import { svcVariants } from '../modules/catalog/catalog.service.js';
 import { db, withTenant } from '../db/index.js';
 
 const ErrorSchema = z.object({ error: z.string(), message: z.string() });
@@ -188,6 +191,106 @@ export async function discoveryRoutes(app: FastifyInstance) {
         });
       }
       return { salons };
+    },
+  });
+
+  /**
+   * Everything offered in one category, across every listed salon —
+   * the door behind a category card.
+   *
+   * What it will not do yet: rank. The order here is deterministic and
+   * impersonal — bookable first, then cheapest, then by name — because
+   * ordering results by where somebody is and what they have booked
+   * before is the §5 search-architecture decision (exposure decay,
+   * quality floor, consent modes, the HQ Search lab that tunes them).
+   * Inventing a ranking here would put that rule behind a second door.
+   */
+  r.route({
+    method: 'GET',
+    url: '/discovery/categories/:id/services',
+    schema: {
+      params: z.object({ id: z.uuid() }),
+      response: { 200: DiscoveryCategoryServicesSchema, 404: ErrorSchema },
+    },
+    handler: async (req, reply) => {
+      const category = await db
+        .selectFrom('serviceCategories')
+        .select(['id', 'name', 'cardImage', 'icon'])
+        .where('id', '=', req.params.id)
+        .executeTakeFirst();
+      if (!category)
+        return reply.code(404).send({ error: 'UNKNOWN_CATEGORY', message: 'No category here' });
+
+      const listed = await listedBusinesses();
+      const widgets = await liveWidgets(listed.map((b) => b.id));
+      const bookable = new Set(widgets.map((w) => w.tenantId));
+
+      const services: DiscoveryServiceCard[] = [];
+      for (const b of listed) {
+        const photo = cardPhoto(b.gallery);
+        const pin = await firstPin(b.id);
+        const rows = await withTenant(b.id, async (trx) => {
+          const found = await trx
+            .selectFrom('services as s')
+            .select(['s.id', 's.name', 's.durationMin', 's.price', 's.sort'])
+            .where('s.categoryId', '=', category.id)
+            .where('s.status', '=', 'active')
+            // POS-only treatments are not on offer to the public.
+            .where('s.online', '=', true)
+            .orderBy('s.sort')
+            .orderBy('s.name')
+            .execute();
+          // A variant's price can undercut the master's, and the card
+          // says "from" when it does. No location here, so this is the
+          // salon-wide price before any per-location override.
+          return Promise.all(
+            found.map(async (s) => {
+              const vs = (await svcVariants(trx, s.id, null)).filter((v) => v.active);
+              return {
+                ...s,
+                priceFrom: vs.length ? Math.min(...vs.map((v) => v.price)) : null,
+              };
+            }),
+          );
+        });
+        const show = b.marketplace.showPrices;
+        for (const s of rows) {
+          services.push({
+            id: s.id,
+            name: s.name,
+            category: category.name,
+            durationMin: s.durationMin,
+            price: show ? s.price : null,
+            priceFrom: show ? s.priceFrom : null,
+            salon: {
+              slug: b.slug,
+              name: b.name,
+              city: b.city,
+              photo,
+              lat: pin.lat,
+              lng: pin.lng,
+              bookable: bookable.has(b.id),
+              showPrices: show,
+            },
+          });
+        }
+      }
+
+      // The stated order, and the whole of it: something you can book
+      // leads; then the cheaper treatment; then alphabetical, so the
+      // list is stable between requests. A salon that hides its prices
+      // sorts after the ones that publish them rather than as free.
+      const askingPrice = (s: DiscoveryServiceCard) =>
+        s.priceFrom ?? s.price ?? Number.POSITIVE_INFINITY;
+      services.sort(
+        (a, z) =>
+          Number(z.salon.bookable) - Number(a.salon.bookable) ||
+          askingPrice(a) - askingPrice(z) ||
+          a.name.localeCompare(z.name) ||
+          a.salon.name.localeCompare(z.salon.name),
+      );
+
+      return { category, services };
     },
   });
 

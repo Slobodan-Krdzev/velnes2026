@@ -1,60 +1,95 @@
 import { useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { DHeader } from '../../app/chrome.js';
-import { categoryVM, fmtMKD, salonVM, type SalonVM } from '../../lib/api/mappers.js';
-import { useCategories, useSalons } from '../../lib/api/queries.js';
+import {
+  categoryVM,
+  minutesLbl,
+  priceLbl,
+  serviceVM,
+  type ServiceVM,
+} from '../../lib/api/mappers.js';
+import { useCategories, useCategoryServices } from '../../lib/api/queries.js';
 import { useMyNotifications } from '../../lib/api/session.js';
 import { distanceKm, distanceLbl, useUserLocation } from '../../lib/geo.js';
 import { SalonMap } from '../../components/SalonMap.js';
 import { IcArr, IcClock, IcPin, IcSpark, IcVok, useSalonLive } from './cards.js';
 
+/**
+ * What a category card opens onto: every treatment published in that
+ * category, across every listed salon.
+ *
+ * The URL carries a slugified category name, and the category list the
+ * app already holds turns that back into the id the door wants. The
+ * order is the server's — bookable first, then cheapest — and nothing
+ * here re-sorts it: ranking by where somebody is and what they have
+ * booked before is the §5 work, and it will land behind that one door
+ * rather than in this component.
+ */
 function useCategoryResults(categorySlug: string | undefined) {
   const catsQ = useCategories();
-  const salonsQ = useSalons();
   const cats = useMemo(() => (catsQ.data?.categories ?? []).map(categoryVM), [catsQ.data]);
   const cat = cats.find((c) => c.slug === categorySlug);
-  const all = useMemo(() => (salonsQ.data?.salons ?? []).map(salonVM), [salonsQ.data]);
-  const matches = cat ? all.filter((s) => s.serviceCategories.includes(cat.name)) : [];
-  // Bookable salons lead — the best match must actually answer the doors.
-  const rows = [...matches.filter((s) => s.bookable), ...matches.filter((s) => !s.bookable)];
-  return { cat, rows, best: rows[0], alts: rows.slice(1), loaded: Boolean(catsQ.data && salonsQ.data) };
+  const servicesQ = useCategoryServices(cat?.id);
+  const rows = useMemo(
+    () => (servicesQ.data?.services ?? []).map(serviceVM),
+    [servicesQ.data],
+  );
+  return {
+    cat,
+    rows,
+    best: rows[0],
+    alts: rows.slice(1),
+    // Loaded once the category is known and its services have answered
+    // — an unknown slug is settled by the category list alone.
+    loaded: Boolean(catsQ.data) && (!cat || Boolean(servicesQ.data)),
+  };
 }
 
 /** The live line under a result: today's first open slot, from-price,
  *  and — once the person has shared where they are — how far it is. */
-function useLiveLine(s: SalonVM) {
-  const { svc, slots } = useSalonLive(s.slug);
+function useLiveLine(s: ServiceVM) {
+  const { slots } = useSalonLive(s.salon.slug);
   const { position } = useUserLocation();
   const km =
-    position && s.lat != null && s.lng != null
-      ? distanceKm(position, { lat: s.lat, lng: s.lng })
+    position && s.salon.lat != null && s.salon.lng != null
+      ? distanceKm(position, { lat: s.salon.lat, lng: s.salon.lng })
       : null;
   return {
     av: slots[0] ? `Available today at ${slots[0]}` : null,
-    pr: svc ? fmtMKD(Math.min(svc.price, svc.priceFrom ?? svc.price)) : null,
+    // The price of this treatment, not the salon's cheapest anything.
+    pr: priceLbl(s),
     away: km === null ? null : `${distanceLbl(km)} from you`,
   };
 }
 
-function BestD({ s }: { s: SalonVM }) {
+/** Where a result card sends you: the salon page, with the treatment
+ *  already named so the salon page can open on it. */
+function salonHref(s: ServiceVM) {
+  return `/salon/${s.salon.slug}?service=${encodeURIComponent(s.id)}`;
+}
+
+/** The line under a result's title: which salon, and how far. */
+function whereLine(s: ServiceVM, away: string | null) {
+  return `${s.salon.name}${away ?? s.salon.city ? ` · ${away ?? s.salon.city}` : ''}`;
+}
+
+function BestD({ s }: { s: ServiceVM }) {
   const nav = useNavigate();
   const { av, pr, away } = useLiveLine(s);
   return (
     <article className="best">
       <span className="flag" style={{ zIndex: 2 }}>Best match</span>
       <div className="grid">
-        <div className="ph" style={{ backgroundImage: s.photo }}></div>
+        <div className="ph" style={{ backgroundImage: s.salon.photo }}></div>
         <div className="bd">
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
-            <h3>
-              {s.name} <span className="vok">{IcVok}</span>
-            </h3>
+            <h3>{s.name}</h3>
             {av ? <span className="tiny-tag" style={{ background: '#EAF2E4', color: '#3E5A34' }}>Available today</span> : null}
           </div>
           <div className="sm muted">
-            {IcPin} {away ?? s.city}
+            {IcPin} {whereLine(s, away)} <span className="vok">{IcVok}</span>
           </div>
-          {s.pitch ? <p style={{ margin: '2px 0', fontSize: '14px' }}>{s.pitch}</p> : null}
+          <p style={{ margin: '2px 0', fontSize: '14px' }}>{minutesLbl(s.durationMin)}</p>
           {av ? <span className="avail">{IcClock} {av}</span> : null}
         </div>
       </div>
@@ -62,10 +97,10 @@ function BestD({ s }: { s: SalonVM }) {
         <span className="sm muted">Flexible cancellation up to 2 h before</span>
         {pr ? (
           <span className="price">
-            <b>from {pr}</b>
+            <b>{pr}</b>
           </span>
         ) : null}
-        <button className="btn btn-p" onClick={() => nav(`/salon/${s.slug}`)}>
+        <button className="btn btn-p" onClick={() => nav(salonHref(s))}>
           Book now {IcArr}
         </button>
       </div>
@@ -73,29 +108,27 @@ function BestD({ s }: { s: SalonVM }) {
   );
 }
 
-function AltD({ s }: { s: SalonVM }) {
+function AltD({ s }: { s: ServiceVM }) {
   const nav = useNavigate();
   const { av, pr, away } = useLiveLine(s);
   return (
     <article className="card alt">
-      <div className="ph" style={{ backgroundImage: s.photo }}></div>
+      <div className="ph" style={{ backgroundImage: s.salon.photo }}></div>
       <div>
-        <h4>
-          {s.name} <span className="vok">{IcVok}</span>
-        </h4>
+        <h4>{s.name}</h4>
         <div className="sm muted">
-          {IcPin} {away ?? s.city}
+          {IcPin} {whereLine(s, away)} <span className="vok">{IcVok}</span>
         </div>
         {av ? <span className="avail">{IcClock} {av}</span> : null}
       </div>
-      <div className="why">{s.pitch}</div>
+      <div className="why">{minutesLbl(s.durationMin)}</div>
       <div className="pr">
-        {pr ? <b>from {pr}</b> : null}
+        {pr ? <b>{pr}</b> : null}
         <br />
         <button
           className="btn btn-g"
           style={{ minHeight: '38px', padding: '6px 14px', fontSize: '13.5px', marginTop: '6px' }}
-          onClick={() => nav(`/salon/${s.slug}`)}
+          onClick={() => nav(salonHref(s))}
         >
           View &amp; book {IcArr}
         </button>
@@ -104,31 +137,29 @@ function AltD({ s }: { s: SalonVM }) {
   );
 }
 
-function BestM({ s }: { s: SalonVM }) {
+function BestM({ s }: { s: ServiceVM }) {
   const nav = useNavigate();
   const { av, pr, away } = useLiveLine(s);
   return (
     <article className="m-best">
-      <div className="ph" style={{ backgroundImage: s.photo }}>
+      <div className="ph" style={{ backgroundImage: s.salon.photo }}>
         <span className="flag">Best match</span>
       </div>
       <div className="bd">
-        <h3>
-          {s.name} <span className="vok">{IcVok}</span>
-        </h3>
+        <h3>{s.name}</h3>
         <div className="sm muted">
-          {IcPin} {away ?? s.city}
+          {IcPin} {whereLine(s, away)} <span className="vok">{IcVok}</span>
         </div>
-        {s.pitch ? <div style={{ fontSize: '13.5px' }}>{s.pitch}</div> : null}
+        <div style={{ fontSize: '13.5px' }}>{minutesLbl(s.durationMin)}</div>
         {av ? <span className="avail">{IcClock} {av}</span> : null}
       </div>
       <div className="foot">
-        <button className="btn btn-p" style={{ flex: 1 }} onClick={() => nav(`/salon/${s.slug}`)}>
+        <button className="btn btn-p" style={{ flex: 1 }} onClick={() => nav(salonHref(s))}>
           Book now {IcArr}
         </button>
         {pr ? (
           <span className="pr">
-            <b>from {pr}</b>
+            <b>{pr}</b>
           </span>
         ) : null}
       </div>
@@ -136,18 +167,16 @@ function BestM({ s }: { s: SalonVM }) {
   );
 }
 
-function AltM({ s }: { s: SalonVM }) {
+function AltM({ s }: { s: ServiceVM }) {
   const nav = useNavigate();
   const { av, pr, away } = useLiveLine(s);
   return (
     <article className="card m-alt">
-      <div className="ph" style={{ backgroundImage: s.photo }}></div>
+      <div className="ph" style={{ backgroundImage: s.salon.photo }}></div>
       <div>
-        <h4>
-          {s.name} <span className="vok">{IcVok}</span>
-        </h4>
+        <h4>{s.name}</h4>
         <div className="sm muted">
-          {IcPin} {away ?? s.city}
+          {IcPin} {whereLine(s, away)}
           {av ? (
             <>
               {' · '}
@@ -155,13 +184,13 @@ function AltM({ s }: { s: SalonVM }) {
             </>
           ) : null}
         </div>
-        <div className="why">{s.pitch}</div>
+        <div className="why">{minutesLbl(s.durationMin)}</div>
         <div className="row">
-          <b>{pr ? `from ${pr}` : ''}</b>
+          <b>{pr ?? ''}</b>
           <button
             className="btn btn-g"
             style={{ minHeight: '36px', padding: '5px 13px', fontSize: '13px' }}
-            onClick={() => nav(`/salon/${s.slug}`)}
+            onClick={() => nav(salonHref(s))}
           >
             View &amp; book
           </button>
@@ -179,18 +208,28 @@ export function Results() {
   const [mapOpen, setMapOpen] = useState(false);
   const { cat, rows, best, alts, loaded } = useCategoryResults(category);
   const title = cat?.name ?? '';
-  // Only salons that actually dropped a pin appear on the map — no
-  // guessed coordinates from address text.
-  const pins = rows
-    .filter((s) => s.lat != null && s.lng != null)
-    .map((s, i) => ({
-      lat: s.lat!,
-      lng: s.lng!,
-      label: s.name,
-      sub: s.city,
-      here: i === 0,
-      onClick: () => nav(`/salon/${s.slug}`),
-    }));
+  // One pin per salon, not one per treatment: a salon offering four
+  // services in this category is still one place on the map. Only
+  // salons that really dropped a pin appear — no coordinates guessed
+  // from address text.
+  const pins = useMemo(() => {
+    const seen = new Set<string>();
+    return rows
+      .filter((s) => {
+        if (s.salon.lat == null || s.salon.lng == null) return false;
+        if (seen.has(s.salon.slug)) return false;
+        seen.add(s.salon.slug);
+        return true;
+      })
+      .map((s, i) => ({
+        lat: s.salon.lat!,
+        lng: s.salon.lng!,
+        label: s.salon.name,
+        sub: s.salon.city,
+        here: i === 0,
+        onClick: () => nav(`/salon/${s.salon.slug}`),
+      }));
+  }, [rows, nav]);
   return (
     <>
       <div className="d-env">
@@ -236,14 +275,14 @@ export function Results() {
               </div>
               <div id="d-reslist">
                 {best ? <BestD s={best} /> : loaded ? (
-                  <div className="sm muted" style={{ padding: '18px 4px' }}>No salons offer {title} yet — new salons join Velnes every week.</div>
+                  <div className="sm muted" style={{ padding: '18px 4px' }}>Nothing published under {title} yet — new salons join Velnes every week.</div>
                 ) : null}
                 {alts.length ? (
                   <>
                     <h2 className="serif" style={{ fontSize: '19px', margin: '22px 0 2px' }}>Smart alternatives</h2>
                     <div className="sm muted" style={{ marginBottom: '12px' }}>Also great options, if you&rsquo;d like something different.</div>
                     {alts.map((s) => (
-                      <AltD key={s.slug} s={s} />
+                      <AltD key={s.id} s={s} />
                     ))}
                   </>
                 ) : null}
@@ -337,7 +376,7 @@ export function Results() {
                     <div className="sm muted">Also great options, if you&rsquo;d like something different.</div>
                   </div>
                   {alts.map((s) => (
-                    <AltM key={s.slug} s={s} />
+                    <AltM key={s.id} s={s} />
                   ))}
                 </>
               ) : null}

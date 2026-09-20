@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { MoneySchema } from './catalog.js';
 
 /** The consumer discovery surface (apps/consumer): read-only, key-free
  *  public doors. Everything here is data a salon has already chosen to
@@ -102,6 +103,55 @@ export const DiscoverySalonDetailSchema = z.object({
   ),
 });
 
+/** A service as a discovery result: the treatment, and the salon that
+ *  offers it. Enough to choose one and go — the variants, modifiers and
+ *  live times belong to the salon page, which is where the choosing
+ *  turns into a booking.
+ *
+ *  Prices are null when the salon has cleared `marketplace.showPrices`.
+ *  That is a published-or-not decision, so the door withholds the number
+ *  rather than shipping it and trusting the app to hide it. */
+export const DiscoveryServiceCardSchema = z.object({
+  id: z.uuid(),
+  name: z.string(),
+  /** HQ-taxonomy category name — the one the result was asked for. */
+  category: z.string(),
+  durationMin: z.number().int(),
+  /** Whole MKD denars, as everywhere. Null when the salon hides prices. */
+  price: MoneySchema.nullable(),
+  /** The cheapest variant, when a service has several that differ —
+   *  null when it has none, or when prices are hidden. */
+  priceFrom: MoneySchema.nullable(),
+  salon: z.object({
+    slug: z.string(),
+    name: z.string(),
+    city: z.string().nullable(),
+    /** First gallery photo (data URL), null when the salon has none. */
+    photo: z.string().nullable(),
+    lat: z.number().nullable(),
+    lng: z.number().nullable(),
+    /** A live widget exists, so the booking doors answer for it. */
+    bookable: z.boolean(),
+    /** False when the salon publishes no prices, so the card can say so
+     *  instead of showing a hole where a number should be. */
+    showPrices: z.boolean(),
+  }),
+});
+
+/** Every published service in one category, across every listed salon.
+ *
+ *  The order is deterministic and has nothing personal in it yet:
+ *  bookable salons first (a result you can actually book leads), then
+ *  cheapest first, then by name. Ranking on location and on what a
+ *  person has booked before is the §5 search-architecture work and is
+ *  deliberately absent rather than guessed at here. */
+export const DiscoveryCategoryServicesSchema = z.object({
+  category: DiscoveryCategorySchema,
+  services: z.array(DiscoveryServiceCardSchema),
+});
+
 export type DiscoveryCategory = z.infer<typeof DiscoveryCategorySchema>;
+export type DiscoveryServiceCard = z.infer<typeof DiscoveryServiceCardSchema>;
+export type DiscoveryCategoryServices = z.infer<typeof DiscoveryCategoryServicesSchema>;
 export type DiscoverySalonCard = z.infer<typeof DiscoverySalonCardSchema>;
 export type DiscoverySalonDetail = z.infer<typeof DiscoverySalonDetailSchema>;
