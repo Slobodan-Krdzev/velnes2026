@@ -89,3 +89,39 @@
     display: none;
   }
 }
+
+/* 2026-09-20 — more presence for the hero photograph on desktop. The
+   height comes from the inner block, since .d-hero itself is laid out
+   by the "home v2" rules; the search card still rides up over the
+   curve, so the extra room goes to the image, not to empty page. */
+@media (min-width: 900px) {
+  .hero-in {
+    padding-top: 104px;
+    min-height: 560px;
+  }
+}
+
+/* The shelf runs off both edges rather than stopping at one: fading the
+   ends says "there is more this way" without a hard cut. Masked rather
+   than overlaid, so it works over the page's own background whatever
+   sits behind it. */
+.catrail-track {
+  --fade: 34px;
+  -webkit-mask-image: linear-gradient(
+    to right,
+    transparent 0,
+    #000 var(--fade),
+    #000 calc(100% - var(--fade)),
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to right,
+    transparent 0,
+    #000 var(--fade),
+    #000 calc(100% - var(--fade)),
+    transparent 100%
+  );
+}
+.m-env .catrail-track {
+  --fade: 24px;
+}
