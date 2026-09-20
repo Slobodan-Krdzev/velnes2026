@@ -324,8 +324,10 @@ before it can be real:
 - **Reviews and ratings.** No tables exist, so every star, review count
   and "top rated" badge from the prototype is omitted rather than
   invented.
-- **Distance and "near me".** Pins exist now, but there is no geo search
-  or distance sort — that is part of the blocked discovery work.
+- ~~**Distance and "near me".**~~ **Done in Phase B.** Results are
+  ordered by distance from the viewer's rounded position, and a radius
+  can already be sent as a hard filter (nothing sends one yet — that is
+  Search, `docs/SEARCH.md`).
 - **Offers.** `last_minute_offers` / `personal_offers` are per-customer
   promises a salon makes; surfacing them to a linked client is a real
   next step, not yet built.
@@ -333,19 +335,19 @@ before it can be real:
   through the wizard have real coordinates; the demo-seed salons
   (velnes-fizio and friends) never had any, so they show an address and
   no map until someone drops a pin in the workspace.
-- **Search.** The search field filters the categories and salons already
-  loaded. Real search/discovery is still blocked on the §5 answers.
+- **Search.** The search field still filters the categories and salons
+  already loaded, in the browser. It is no longer *blocked* — §5 is
+  settled and Phase B shipped — it is simply not built. The plan is
+  `docs/SEARCH.md`; a complete earlier design also exists in
+  `reference/prototype/`.
 - **Personalised results.** Live as of Phase B: results are ordered by
   where the viewer is and, for a signed-in client who has not switched it
   off, by what they have booked before. `docs/SEARCH-RANKING.md` has the
-  rules. Still absent from that ordering, and honestly so: favourites
-  (not persisted — see above), real availability (the component only
-  knows whether a salon takes online bookings at all, so the app must not
-  claim "available today" on its strength), reviews, and exposure decay. Two of its
-  inputs do not exist yet either: favourites are not persisted anywhere
-  (the heart on a card is component state), and there is no geo search
-  or distance sort. The cross-salon half is ready: `withClient` already
-  reads a client's appointments across every tenant.
+  rules. Favourites joined that ordering in Phase C. Still absent, and
+  honestly so: real availability (the component only knows whether a
+  salon takes online bookings at all, so the app must not claim
+  "available today" on its strength), reviews behind `quality`, and
+  exposure decay.
 - **i18n.** The app ships English copy; `@velnes/i18n` is wired into the
   other five apps and this one still needs its copy pass.
 - **Currency.** Everything is MKD, taken from the API — the prototype's
