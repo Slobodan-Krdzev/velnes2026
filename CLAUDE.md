@@ -52,7 +52,12 @@ loyalty/premium and geo search stay deferred, not faked (see
 BOOKING-PAGE, REGISTRATIONS-HQ, CUSTOMERS-MARKETING, SUPPLIERS,
 CONSUMER-APP) — each ends with its honest deferrals, which together
 form the backlog.
-Search/discovery is NOT started — it waits for Alex's §5 answers.
+Search/discovery is **built** (2026-09-21): one universal search bar,
+`search_documents` as the cross-tenant matching projection,
+`service_category_terms` for multilingual synonyms, the Phase B ranker
+gaining `textRelevance`, server-side filters, a real "Most chosen", a
+zero-result miss log and the HQ Search lab. `docs/SEARCH.md` §12 carries
+what each step settled; §14 its deferrals.
 All apps are trilingual (en/mk/sq, `packages/i18n`, completeness
 tested); MK/SQ dictionaries still need native review.
 Principals: tenant employees, `hq_users`, `supplier_users`,

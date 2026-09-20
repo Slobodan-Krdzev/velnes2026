@@ -8,7 +8,14 @@ import { sql } from 'kysely';
 import { withClient, withHq, withTenant } from '../../db/index.js';
 import type { ViewerHistory } from './rank.js';
 import { rank } from './rank.js';
-import { candidatesOf, gatherCategory } from '../../public/discovery.routes.js';
+import {
+  candidatesOf,
+  gatherCategory,
+  textCandidates,
+  withTextRelevance,
+} from '../../public/discovery.routes.js';
+import { applyFilters } from './filters.js';
+import type { RankCandidate } from './rank.js';
 import { favouriteIds } from '../clients/favourites.service.js';
 
 /**
@@ -403,17 +410,54 @@ export async function activateSearchConfig(
  * looks to one particular person's history" is not.
  */
 export async function previewRanking(
-  categoryId: string,
+  what: { categoryId: string | null; q: string | null },
   draft: SearchConfigPayload,
   at: { lat: number | null; lng: number | null },
 ): Promise<SearchPreview | null> {
-  const found = await gatherCategory(categoryId);
-  if (!found) return null;
-  const { category, services, meta } = found;
   const active = await activeSearchConfig();
-  const candidates = candidatesOf(category.id, services, meta);
   const position = at.lat != null && at.lng != null ? { lat: at.lat, lng: at.lng } : null;
   const viewer = { position, history: null };
+
+  let label: string;
+  let candidates: RankCandidate[];
+  let interpretation: SearchPreview['interpretation'] = null;
+
+  if (what.q) {
+    // Step 11: the text entrance, through the door's own candidate
+    // builder. A lab that built candidates a second way would be
+    // explaining a search nobody performs.
+    const t = await textCandidates(what.q.trim());
+    const gathered = withTextRelevance(t.byCategory, t.matches);
+    // Admission is the same function the door applies, with no filters
+    // set — so the gap between gathered and admitted here is purely
+    // what the ranker's own rules removed.
+    candidates = applyFilters(
+      gathered,
+      { radiusKm: null, priceBand: null, categoryId: null },
+      position,
+      null,
+    ).admitted;
+    label = what.q;
+    interpretation = {
+      normalized: await normalizedForm(what.q),
+      how: t.read.how,
+      ambiguous: t.read.ambiguous,
+      directSalon: t.read.directSalon?.name ?? null,
+      matches: t.matches
+        .slice()
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 20)
+        .map((m) => ({ kind: m.kind, display: m.display, how: m.how, score: m.score })),
+      categories: t.facetCategories.map((c) => c.name),
+      gathered: gathered.length,
+      admitted: candidates.length,
+    };
+  } else {
+    const found = await gatherCategory(what.categoryId!);
+    if (!found) return null;
+    candidates = candidatesOf(found.category.id, found.services, found.meta);
+    label = found.category.name;
+  }
 
   const before = rank(candidates, viewer, active.payload).map((r) => r.candidate.id);
   const after = rank(candidates, viewer, draft);
@@ -433,9 +477,23 @@ export async function previewRanking(
     };
   });
   return {
-    category: category.name,
+    category: label,
     activeVersion: active.version,
     rows,
     moved: rows.filter((r) => r.moved !== 0).length,
+    interpretation,
   };
+}
+
+/**
+ * What `search_norm` makes of a query.
+ *
+ * Asked of the database rather than reimplemented, for the same reason
+ * everything else here is: one implementation of "what does this text
+ * become", or the lab would eventually explain a normalization the
+ * index does not use.
+ */
+async function normalizedForm(q: string): Promise<string> {
+  const r = await withHq((trx) => sql<{ n: string }>`select search_norm(${q}) as n`.execute(trx));
+  return r.rows[0]?.n ?? '';
 }

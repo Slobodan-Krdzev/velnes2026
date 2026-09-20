@@ -5,9 +5,10 @@ whether that is a salon, a treatment or an intent, and answers
 accordingly. Nobody should have to know how our database is arranged in
 order to find a massage.
 
-Decided 2026-09-20. **Steps 1–8 built 2026-09-21**; steps 9–11 remain.
-This document is the brief, and the build order in §12 carries what is
-done and what each step actually settled.
+Decided 2026-09-20, **built 2026-09-21** — all eleven steps. This
+document is the brief, and the build order in §12 carries what each step
+actually settled, including the one place the implementation
+deliberately left a question open for Alex.
 
 ---
 
@@ -255,10 +256,17 @@ rather than misleading.
 
 ## 11. Search Lab
 
-`SearchPreviewRequestSchema` gains an optional `q`, and the lab gains a
-query box showing normalization → interpretation → candidates →
+**Built.** `SearchPreviewRequestSchema` takes a category **or** a `q`,
+and the lab shows normalization → interpretation → candidates →
 admission → per-component scores → final order. It reuses
-`previewRanking`. Consumer responses continue to carry no explanations.
+`previewRanking`, which for a text query calls `textCandidates()` — the
+same function the consumer door calls, so the lab explains the search
+people actually get rather than a second one built to be explainable.
+Consumer responses continue to carry no explanations.
+
+The miss log from §10 lives on the same screen, and a failed query can
+be clicked straight into the query box: the two halves of the same
+question, which is *why did this not work*.
 
 ---
 
@@ -361,7 +369,27 @@ Each step is shippable and testable alone.
     Read at `GET /hq/search-misses`, HQ-only and enforced by RLS proved
     against `velnes_api` rather than the admin role. **It never touches
     ranking**, and nothing in the ranking code has heard of it.
-11. Search Lab extension, and docs.
+11. ~~Search Lab extension, and docs.~~ — **done 2026-09-21.**
+    `SearchPreviewRequestSchema` takes a category **or** a query, never
+    both and never neither, and the lab gained a query box beside the
+    category picker.
+
+    The important part is what it runs: the consumer door's own
+    candidate builder, extracted to `textCandidates()` and called by
+    both. A lab with its own retrieval would be explaining a search
+    nobody performs, which is the failure this phase was told to avoid.
+
+    It reports the half of the story the lab could not previously tell —
+    normalization, how the text was read, every way it met the platform
+    with scores, which categories that resolved to, and how many
+    treatments were gathered against how many survived admission. That
+    last gap is usually the answer to "why is this not showing". The
+    step 10 miss log is surfaced in the same screen, and clicking a
+    failed query drops it into the box.
+
+    Consumer responses still carry no explanations: weights and
+    component scores stay inside HQ, and a test asserts the public
+    response contains neither.
 
 Steps 1–3 are invisible to customers. Steps 4–5 are useful before any
 ranking changes.

@@ -203,6 +203,98 @@ describe('the HQ Search lab', () => {
     expect(res.statusCode).toBe(404);
   });
 
+  describe('the query box — step 11 of docs/SEARCH.md', () => {
+    const ask = (q: string | null, categoryId: string | null = null) =>
+      call('POST', '/hq/search-config/preview', {
+        q,
+        categoryId,
+        payload: DEFAULT_SEARCH_CONFIG,
+        lat: null,
+        lng: null,
+      });
+
+    it('shows how the text was read, not only how it ranked', async () => {
+      // Most surprising orders are decided before the scorer runs: the
+      // text meant something other than what was intended. That half of
+      // the story is the one the lab could not previously tell.
+      const out = SearchPreviewSchema.parse((await ask('fizio')).json());
+      const i = out.interpretation!;
+      expect(i.normalized).toBe('fizio');
+      expect(i.how).toBe('category');
+      expect(i.categories.length).toBeGreaterThan(1);
+      expect(i.gathered).toBeGreaterThan(0);
+      expect(i.admitted).toBe(out.rows.length);
+      expect(out.category, 'labelled by what was asked').toBe('fizio');
+    });
+
+    it('shows every way the text met the platform, best first', async () => {
+      const out = SearchPreviewSchema.parse((await ask('Sports massage')).json());
+      const i = out.interpretation!;
+      expect(i.matches[0]!.how).toBe('exact');
+      expect(i.matches.map((m) => m.display)).toContain('Sports massage');
+      for (let n = 1; n < i.matches.length; n += 1)
+        expect(i.matches[n]!.score).toBeLessThanOrEqual(i.matches[n - 1]!.score);
+    });
+
+    it('says when the text would have opened a salon instead', async () => {
+      // No results page happens at all in that case, and a lab that
+      // silently showed an empty ranking would be hiding the reason.
+      const out = SearchPreviewSchema.parse((await ask('Velnes Fizio Centar')).json());
+      expect(out.interpretation!.how).toBe('salon');
+      expect(out.interpretation!.directSalon).toBe('Velnes Fizio Centar');
+    });
+
+    it('explains a query that understood nothing', async () => {
+      const out = SearchPreviewSchema.parse((await ask('qqzzxw')).json());
+      expect(out.interpretation!.how).toBe('none');
+      expect(out.interpretation!.gathered).toBe(0);
+      expect(out.rows).toEqual([]);
+    });
+
+    it('ranks the same candidates the consumer door ranks', async () => {
+      // The instruction for this phase was one search system. A lab
+      // that built its own candidates would explain a search nobody
+      // performs.
+      const out = SearchPreviewSchema.parse((await ask('fizio')).json());
+      const live = await app.inject({
+        method: 'POST',
+        url: `${API_PREFIX}/public/discovery/search`,
+        payload: { q: 'fizio' },
+      });
+      const ids = (xs: { id: string }[]) => xs.map((x) => x.id).sort();
+      expect(ids(out.rows)).toEqual(ids(live.json().services));
+    });
+
+    it('carries the explanations the consumer response never does', async () => {
+      const out = SearchPreviewSchema.parse((await ask('fizio')).json());
+      expect(Object.keys(out.rows[0]!.components)).toContain('textRelevance');
+      const live = await app.inject({
+        method: 'POST',
+        url: `${API_PREFIX}/public/discovery/search`,
+        payload: { q: 'fizio' },
+      });
+      // Weights and component scores stay inside HQ: a salon that could
+      // read them could game them.
+      expect(JSON.stringify(live.json())).not.toMatch(/components|textRelevance|proximity/);
+    });
+
+    it('insists on one entrance or the other', async () => {
+      // Both would be two questions; neither is none.
+      expect((await ask('fizio', await anyCategoryId())).statusCode).toBe(400);
+      expect((await ask(null, null)).statusCode).toBe(400);
+    });
+
+    it('changes nothing', async () => {
+      await ask('fizio');
+      const live = await app.inject({
+        method: 'POST',
+        url: `${API_PREFIX}/public/discovery/categories/${await anyCategoryId()}/services`,
+        payload: {},
+      });
+      expect(live.json().rankVersion).toBe(baseVersion);
+    });
+  });
+
   /** A category the seed really publishes services in. */
   async function anyCategoryId() {
     const cats = await app.inject({

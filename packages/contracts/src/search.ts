@@ -198,14 +198,25 @@ export const SearchConfigDraftSchema = z.object({
  * looked at before it is live. A number that only reveals itself in
  * production is a number nobody will dare touch.
  */
-export const SearchPreviewRequestSchema = z.object({
-  categoryId: z.uuid(),
-  payload: SearchConfigPayloadSchema,
-  /** Rank as though standing here, since proximity is usually the
-   *  weight being argued about. */
-  lat: z.number().min(-90).max(90).nullable().default(null),
-  lng: z.number().min(-180).max(180).nullable().default(null),
-});
+export const SearchPreviewRequestSchema = z
+  .object({
+    /** A category card's entrance. */
+    categoryId: z.uuid().nullable().default(null),
+    /**
+     * Or the text entrance — step 11. The lab runs the real door's own
+     * candidate builder, so what it explains is the search people
+     * actually get rather than a second one built to be explainable.
+     */
+    q: z.string().min(1).max(120).nullable().default(null),
+    payload: SearchConfigPayloadSchema,
+    /** Rank as though standing here, since proximity is usually the
+     *  weight being argued about. */
+    lat: z.number().min(-90).max(90).nullable().default(null),
+    lng: z.number().min(-180).max(180).nullable().default(null),
+  })
+  .refine((v) => Boolean(v.categoryId) !== Boolean(v.q), {
+    message: 'Give a category or a query, not both and not neither',
+  });
 
 export const SearchPreviewRowSchema = z.object({
   id: z.uuid(),
@@ -222,12 +233,50 @@ export const SearchPreviewRowSchema = z.object({
   components: z.record(z.string(), z.number()),
 });
 
+/**
+ * How a typed query was read, before anything was ranked — step 11.
+ *
+ * The lab's whole job is that a surprising order can be explained, and
+ * most surprises happen before the scorer runs: the text meant
+ * something other than what was intended. This is that half of the
+ * story, and it is **HQ-only** — consumer responses carry no
+ * explanations at all.
+ */
+export const SearchInterpretationSchema = z.object({
+  /** What `search_norm` made of it — the form the index matched. */
+  normalized: z.string(),
+  how: z.enum(['salon', 'category', 'service', 'fuzzy', 'none']),
+  ambiguous: z.boolean(),
+  /** A salon the strict rule would have opened outright, so no results
+   *  page would have been shown at all. */
+  directSalon: z.string().nullable(),
+  /** Every way the text met the platform, best first. */
+  matches: z.array(
+    z.object({
+      kind: z.enum(['salon', 'service', 'category']),
+      display: z.string(),
+      how: z.enum(['exact', 'prefix', 'fuzzy']),
+      score: z.number(),
+    }),
+  ),
+  /** The categories the text resolved to, which is where candidates
+   *  come from. */
+  categories: z.array(z.string()),
+  /** How many treatments were gathered, and how many survived
+   *  admission. The gap between them is usually the answer to "why is
+   *  this not showing". */
+  gathered: z.number().int(),
+  admitted: z.number().int(),
+});
+
 export const SearchPreviewSchema = z.object({
   category: z.string(),
   activeVersion: z.number().int(),
   rows: z.array(SearchPreviewRowSchema),
   /** How many results changed place at all. */
   moved: z.number().int(),
+  /** Present only for a text query. */
+  interpretation: SearchInterpretationSchema.nullable().default(null),
 });
 
 /**

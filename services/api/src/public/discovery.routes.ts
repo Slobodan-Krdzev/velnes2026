@@ -27,7 +27,12 @@ import {
   viewerHistory,
 } from '../modules/search/search.service.js';
 import { lookupMatches, MIN_QUERY, topMatches } from '../modules/search/lookup.js';
-import { interpret, textRelevanceOf } from '../modules/search/interpret.js';
+import {
+  interpret,
+  textRelevanceOf,
+  type Interpretation,
+  type SearchMatch,
+} from '../modules/search/interpret.js';
 import { applyFilters, priceTercilesOf } from '../modules/search/filters.js';
 import { db, withClient, withTenant } from '../db/index.js';
 
@@ -180,6 +185,77 @@ async function categoryIdsOnOffer(admitted: ListedBusiness[]): Promise<Set<strin
 
 /** What the filters can offer when there is no answer to describe. */
 const NO_FACETS: SearchFacets = { categories: [], price: null };
+
+/** Everything typed text becomes, on the way to being ranked. */
+export interface TextCandidates {
+  matches: SearchMatch[];
+  read: Interpretation;
+  services: DiscoveryServiceCard[];
+  byCategory: RankCandidate[];
+  facetCategories: { id: string; name: string; count: number }[];
+  /** Salons the text reached that the strict rule would not open on
+   *  their own. Offered rather than guessed between. */
+  nearMisses: { id: string; slug: string; name: string; city: string | null }[];
+}
+
+/**
+ * Typed text to candidates — the first half of a search.
+ *
+ * Exported, and exported for one reason: the HQ Search lab runs text
+ * queries too (step 11), and a lab that built its candidates a second
+ * way would be explaining a search nobody performs. The instruction for
+ * this phase was one search system; this function is where the "one"
+ * lives for the text entrance, exactly as `candidatesOf` is for the
+ * category one.
+ */
+export async function textCandidates(q: string): Promise<TextCandidates> {
+  const admitted = await admittedBusinesses();
+  const matches = await lookupMatches(
+    q,
+    admitted.map((b) => b.id),
+  );
+  const read = interpret(matches);
+
+  const bySlug = new Map(admitted.map((b) => [b.slug, b]));
+  const nearMisses = topMatches(matches, 'salon', 5).map((m) => ({
+    id: m.id,
+    slug: m.salonSlug ?? '',
+    name: m.display,
+    city: bySlug.get(m.salonSlug ?? '')?.city ?? null,
+  }));
+
+  // Candidates come from the categories the text meant. A treatment
+  // named outright has its own category included by `interpret`, so
+  // gathering by category picks it up along with its siblings — which
+  // is also the only honest way to fill a page for a query that named
+  // exactly one thing.
+  //
+  // Gathered one category at a time, and kept that way: a candidate has
+  // to carry its own category id, or affinity, diversity and the
+  // category filter are all reasoning about a category the treatment is
+  // not in. "fizio" is four categories at once.
+  const seen = new Map<string, DiscoveryServiceCard>();
+  const byCategory: RankCandidate[] = [];
+  const facetCategories: { id: string; name: string; count: number }[] = [];
+  for (const id of read.categoryIds) {
+    const got = await gatherCategory(id);
+    if (!got) continue;
+    const fresh = got.services.filter((svc) => !seen.has(svc.id));
+    for (const svc of fresh) seen.set(svc.id, svc);
+    if (!fresh.length) continue;
+    byCategory.push(...candidatesOf(got.category.id, fresh, got.meta));
+    facetCategories.push({ id: got.category.id, name: got.category.name, count: fresh.length });
+  }
+  return { matches, read, services: [...seen.values()], byCategory, facetCategories, nearMisses };
+}
+
+/** The one thing a text query knows that a category card does not. */
+export function withTextRelevance(
+  candidates: RankCandidate[],
+  matches: SearchMatch[],
+): RankCandidate[] {
+  return candidates.map((c) => ({ ...c, textRelevance: textRelevanceOf(c.id, matches) }));
+}
 
 /**
  * At or below this many results, the page is thin enough that the
@@ -711,52 +787,16 @@ export async function discoveryRoutes(app: FastifyInstance) {
       };
       if (q.length < MIN_QUERY) return empty;
 
-      const admitted = await admittedBusinesses();
-      const matches = await lookupMatches(
-        q,
-        admitted.map((b) => b.id),
-      );
-      const read = interpret(matches);
+      const { matches, read, services, byCategory, facetCategories, nearMisses } =
+        await textCandidates(q);
 
       const cfg = await activeSearchConfig();
-      // Salons the text reached but that the strict rule would not open
-      // on its own. Offered rather than guessed between.
-      const bySlug = new Map(admitted.map((b) => [b.slug, b]));
-      const nearMisses = topMatches(matches, 'salon', 5).map((m) => ({
-        id: m.id,
-        slug: m.salonSlug ?? '',
-        name: m.display,
-        city: bySlug.get(m.salonSlug ?? '')?.city ?? null,
-      }));
       // A salon named outright: the client navigates and never sees a
       // results page. Nothing is ranked, because there is nothing to
       // rank — this is not a search, it is an address.
       if (read.directSalon)
         return { ...empty, directSalon: read.directSalon, how: 'salon' as const, rankVersion: cfg.version };
 
-      // Candidates come from the categories the text meant. A treatment
-      // named outright has its own category included by `interpret`, so
-      // gathering by category picks it up along with its siblings —
-      // which is also the only honest way to fill a page for a query
-      // that named exactly one thing.
-      //
-      // Gathered one category at a time, and kept that way: a candidate
-      // has to carry its own category id or affinity, diversity and the
-      // category filter are all reasoning about a category the
-      // treatment is not in. "fizio" is four categories at once.
-      const seen = new Map<string, DiscoveryServiceCard>();
-      const byCategory: RankCandidate[] = [];
-      const facetCategories: { id: string; name: string; count: number }[] = [];
-      for (const id of read.categoryIds) {
-        const got = await gatherCategory(id);
-        if (!got) continue;
-        const fresh = got.services.filter((svc) => !seen.has(svc.id));
-        for (const svc of fresh) seen.set(svc.id, svc);
-        if (!fresh.length) continue;
-        byCategory.push(...candidatesOf(got.category.id, fresh, got.meta));
-        facetCategories.push({ id: got.category.id, name: got.category.name, count: fresh.length });
-      }
-      const services = [...seen.values()];
       if (!services.length) {
         await noteMiss(q, 0, read.how);
         return {
@@ -791,11 +831,7 @@ export async function discoveryRoutes(app: FastifyInstance) {
         }
       }
 
-      const candidates = byCategory.map((c) => ({
-        ...c,
-        // The one thing a text query knows that a category card does not.
-        textRelevance: textRelevanceOf(c.id, matches),
-      }));
+      const candidates = withTextRelevance(byCategory, matches);
 
       // Facets describe the answer before anybody narrowed it, so
       // choosing a band does not move the boundaries underneath the

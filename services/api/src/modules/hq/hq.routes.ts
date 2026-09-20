@@ -284,14 +284,20 @@ export function hqRoutes(app: FastifyInstance) {
     },
     handler: async (req, reply) => {
       if (!labWriteGate(reply, req.hqClaims.rol)) return reply;
-      // A dry run changes nothing: it ranks one category twice and says
-      // how the order would move. A weight nobody can look at before
-      // shipping is a weight nobody will dare touch.
-      const out = await previewRanking(req.body.categoryId, req.body.payload, {
-        lat: req.body.lat,
-        lng: req.body.lng,
-      });
-      if (!out) return reply.code(404).send({ error: 'NOT_FOUND', message: 'No category here' });
+      // A dry run changes nothing: it ranks the same candidates twice
+      // and says how the order would move. A weight nobody can look at
+      // before shipping is a weight nobody will dare touch.
+      //
+      // Either entrance — a category, or (step 11) a typed query, built
+      // through the consumer door's own candidate builder so what is
+      // explained here is the search people actually get.
+      const out = await previewRanking(
+        { categoryId: req.body.categoryId, q: req.body.q },
+        req.body.payload,
+        { lat: req.body.lat, lng: req.body.lng },
+      );
+      if (!out)
+        return reply.code(404).send({ error: 'NOT_FOUND', message: 'No category here' });
       return out;
     },
   });

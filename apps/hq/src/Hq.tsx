@@ -34,6 +34,7 @@ import {
   DiscoveryCategoriesSchema,
   SearchConfigListSchema,
   SearchConfigVersionSchema,
+  SearchMissesSchema,
   SearchPreviewSchema,
   type SearchConfigPayload,
 } from '@velnes/contracts';
@@ -345,6 +346,83 @@ async function fileToDataUrl(file: File, maxEdge: number, kind: 'card' | 'icon')
  * against a real category before it is live. A weight nobody can look
  * at before shipping is a weight nobody will dare touch.
  */
+/**
+ * How a typed query was read, before anything was ranked — step 11 of
+ * docs/SEARCH.md.
+ *
+ * The lab exists so a surprising order can be explained, and most
+ * surprises are decided here rather than in the scorer: the text meant
+ * something other than what was intended. Normalization, what it
+ * matched, which categories that resolved to, and how many treatments
+ * survived admission — the gap between gathered and admitted is usually
+ * the answer to "why is this not showing".
+ *
+ * HQ-only, like every other explanation in this file. A consumer
+ * response carries none of it.
+ */
+function Interpretation({
+  i,
+}: {
+  i: NonNullable<z.infer<typeof SearchPreviewSchema>['interpretation']>;
+}) {
+  return (
+    <div
+      className="card"
+      style={{ padding: '12px', marginTop: '12px', background: 'var(--soft, #fafafa)' }}
+    >
+      <div style={{ display: 'flex', gap: '18px', flexWrap: 'wrap', marginBottom: '8px' }}>
+        <span>
+          <b>Normalized</b> <code>{i.normalized}</code>
+        </span>
+        <span>
+          <b>Read as</b> {i.how === 'none' ? 'nothing we recognise' : i.how}
+          {i.ambiguous ? ' (several salons matched exactly)' : ''}
+        </span>
+        <span>
+          <b>Gathered</b> {i.gathered} → <b>admitted</b> {i.admitted}
+        </span>
+      </div>
+      {i.directSalon ? (
+        <p className="sub" style={{ margin: '0 0 8px' }}>
+          This text opens <b>{i.directSalon}</b> outright — a customer typing it never
+          sees a results page at all.
+        </p>
+      ) : null}
+      {i.categories.length ? (
+        <p className="sub" style={{ margin: '0 0 8px' }}>
+          Candidates come from: {i.categories.join(' · ')}
+        </p>
+      ) : null}
+      {i.matches.length ? (
+        <table style={{ width: '100%' }}>
+          <thead>
+            <tr>
+              <th style={{ textAlign: 'left' }}>Matched</th>
+              <th style={{ textAlign: 'left' }}>Kind</th>
+              <th style={{ textAlign: 'left' }}>How</th>
+              <th>Score</th>
+            </tr>
+          </thead>
+          <tbody>
+            {i.matches.map((m) => (
+              <tr key={`${m.kind}-${m.display}-${m.how}`}>
+                <td>{m.display}</td>
+                <td>{m.kind}</td>
+                <td>{m.how}</td>
+                <td style={{ textAlign: 'right' }}>{m.score.toFixed(3)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      ) : (
+        <p className="sub" style={{ margin: 0 }}>
+          Nothing on the platform resembled this text.
+        </p>
+      )}
+    </div>
+  );
+}
+
 function SearchLab({ say, canWrite }: { say: (m: string) => void; canWrite: boolean }) {
   const [versions, setVersions] = useState<
     z.infer<typeof SearchConfigListSchema>['versions']
@@ -355,6 +433,10 @@ function SearchLab({ say, canWrite }: { say: (m: string) => void; canWrite: bool
   const [catId, setCatId] = useState('');
   const [preview, setPreview] = useState<z.infer<typeof SearchPreviewSchema> | null>(null);
   const [busy, setBusy] = useState(false);
+  /** Step 11: the lab can now be asked a question the way a customer
+   *  asks one, instead of only being pointed at a category. */
+  const [q, setQ] = useState('');
+  const [misses, setMisses] = useState<z.infer<typeof SearchMissesSchema> | null>(null);
 
   const load = useCallback(
     () =>
@@ -385,11 +467,14 @@ function SearchLab({ say, canWrite }: { say: (m: string) => void; canWrite: bool
   const setWeight = (k: keyof SearchConfigPayload['weights'], v: number) =>
     setDraft({ ...draft, weights: { ...draft.weights, [k]: v } });
 
-  const dryRun = async () => {
+  const dryRun = async (asText: boolean) => {
     setBusy(true);
     try {
       const out = await hqPost(SearchPreviewSchema, '/hq/search-config/preview', {
-        categoryId: catId,
+        // One entrance or the other, never both: they are two different
+        // questions and the door refuses to guess which was meant.
+        categoryId: asText ? null : catId,
+        q: asText ? q.trim() : null,
         payload: draft,
         // Skopje: proximity is usually the weight being argued about,
         // and a dry run with no position could not show it moving.
@@ -521,10 +606,37 @@ function SearchLab({ say, canWrite }: { say: (m: string) => void; canWrite: bool
               </option>
             ))}
           </select>
-          <button className="btn" disabled={busy || !catId || !canWrite} onClick={dryRun}>
+          <button className="btn" disabled={busy || !catId || !canWrite} onClick={() => void dryRun(false)}>
             Run
           </button>
         </div>
+
+        {/* Step 11: the same dry run, asked the way a customer asks —
+            because most surprising orders are decided before the scorer
+            ever runs, by the text meaning something else. */}
+        <p className="sub" style={{ marginBottom: '6px', marginTop: '16px' }}>
+          Or ask it as a customer would. This runs the consumer door&rsquo;s own
+          candidate builder, so what you see explained is the search people get.
+        </p>
+        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+          <input
+            value={q}
+            placeholder="masaza, deep tissue, fizio…"
+            onChange={(e) => setQ(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && q.trim().length >= 2 && canWrite) void dryRun(true);
+            }}
+          />
+          <button
+            className="btn"
+            disabled={busy || q.trim().length < 2 || !canWrite}
+            onClick={() => void dryRun(true)}
+          >
+            Run query
+          </button>
+        </div>
+
+        {preview?.interpretation ? <Interpretation i={preview.interpretation} /> : null}
         {preview ? (
           <table style={{ width: '100%', marginTop: '12px' }}>
             <thead>
@@ -552,6 +664,66 @@ function SearchLab({ say, canWrite }: { say: (m: string) => void; canWrite: bool
               ))}
             </tbody>
           </table>
+        ) : null}
+      </div>
+
+      {/* Step 10, surfaced. Not a lever — a list of gaps: what people
+          asked for and did not find. */}
+      <div className="card" style={{ padding: '16px', marginTop: '14px' }}>
+        <h3 style={{ marginTop: 0 }}>Not found</h3>
+        <p className="sub" style={{ marginTop: 0 }}>
+          Searches that came back empty or nearly empty, last 30 days. Aggregate
+          counts only — no identity was recorded. &ldquo;Not understood&rdquo; is a
+          synonym to add; anything else is a salon to recruit.
+        </p>
+        <button
+          className="btn"
+          disabled={busy}
+          onClick={() => {
+            void hqGet(SearchMissesSchema, '/hq/search-misses?days=30&limit=50').then(setMisses);
+          }}
+        >
+          Show
+        </button>
+        {misses ? (
+          misses.misses.length ? (
+            <table style={{ width: '100%', marginTop: '12px' }}>
+              <thead>
+                <tr>
+                  <th style={{ textAlign: 'left' }}>Query</th>
+                  <th style={{ textAlign: 'left' }}>Read as</th>
+                  <th>Asked</th>
+                  <th>Results</th>
+                  <th style={{ textAlign: 'left' }}>Day</th>
+                </tr>
+              </thead>
+              <tbody>
+                {misses.misses.map((m) => (
+                  <tr key={`${m.norm}-${m.day}`}>
+                    <td>
+                      <button
+                        className="btn btn-ghost"
+                        style={{ padding: '2px 6px' }}
+                        title="Put it in the query box"
+                        onClick={() => setQ(m.norm)}
+                      >
+                        {m.norm}
+                      </button>
+                    </td>
+                    <td>{m.how === 'none' ? 'Not understood' : m.how}</td>
+                    <td style={{ textAlign: 'center' }}>{m.asked}</td>
+                    <td style={{ textAlign: 'center' }}>{m.results}</td>
+                    <td>{m.day}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <p className="sub" style={{ marginTop: '12px' }}>
+              Nothing recorded. Either every search is landing, or nobody has
+              searched yet — both are real answers.
+            </p>
+          )
         ) : null}
       </div>
 
