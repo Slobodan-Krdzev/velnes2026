@@ -103,12 +103,25 @@ matter. The two inert components are seeded at **zero** rather than at
 their intended weight, so that "inert" is a fact about the data and not
 a promise about the code.
 
-When a component is unavailable for a given viewer — no location, no
-history, signed out — it is **dropped and the remaining weights are
-renormalised**, never substituted with a neutral 0.5. Substituting a
-midpoint silently moves every result toward the middle and makes the
-other components weaker for no stated reason; renormalising keeps the
-components that do apply at full strength.
+There are two different kinds of "missing", and they are handled
+differently. The distinction was sharpened while building the ranker,
+because treating them the same is a real bug either way round.
+
+**A component the _viewer_ cannot supply** — no location, no history,
+signed out — is **dropped and the remaining weights renormalised**, never
+substituted with a midpoint. Substituting one silently moves every result
+toward the middle and weakens the components that do apply, for no stated
+reason. This is a per-request decision, so every candidate is still
+scored on the same denominator and the scores stay comparable.
+
+**A component a _candidate_ has no input for** — a salon that publishes
+no prices, or has no pin — keeps its weight and scores the **neutral
+midpoint**. Scoring it zero would make hiding a price a ranking penalty,
+which §2.4 explicitly rules out, and the same reasoning covers a missing
+pin: absence of an input is not evidence against a salon. Renormalising
+per candidate instead would be worse still — it changes the denominator
+per row, so a salon missing two components could out-score a complete one
+by having less to be judged on.
 
 #### 2.1 `proximity`
 
@@ -187,6 +200,16 @@ knows for free:
 bookable (live widget)  1.00
 not bookable            0.00
 ```
+
+A consequence worth stating outright, because it surprised the golden
+test: at `proximity` 0.30 against `availability` 0.20, a salon on your
+street that takes no online bookings **outranks** an equivalent one 70km
+away that does. That follows from the weights and is not a bug. If
+"bookable first, always" is what we want, it belongs in Stage 1 as an
+admission rule, not as a heavier weight — a weight can always be
+out-argued by another weight, which is exactly what a hard rule is for.
+Left as a weight for now; a test pins the behaviour so the choice is
+visible rather than incidental.
 
 The full version needs a projection — a `next_free_slot` per
 (location, category) refreshed on booking and on schedule changes —
@@ -490,9 +513,15 @@ endpoint, UI, tests, seed, docs note.
    `TRUNCATE ... hq_users CASCADE` reaches through it and a seeded world
    then comes up with no config in force at all. The columns keep the
    id and the name, and no FK.
-2. **The ranker** — one pure function: `(candidates, viewer, config) →
-   ordered`. No database, no Fastify; it is the piece worth unit-testing
-   hardest, and the golden-order test from §7 lives against it.
+2. ~~**The ranker**~~ — **done 2026-09-20.**
+   `(candidates, viewer, config, now) → ordered`, in
+   `services/api/src/modules/search/rank.ts`. No database, no Fastify,
+   and no clock it does not own — `now` is injected, so recency and the
+   new-salon window are tested against a fixed date rather than the day
+   the suite happens to run. Nineteen tests: the golden order, each
+   component alone, affinity's decay and its max-not-sum rule, the inert
+   pair proven inert by turning their weights to 1 and watching nothing
+   move, renormalisation, chain dedup, and the cold-start promotion.
 3. **Consent** — the `client_users` boolean, the My Velnes › General
    switch, and the door honouring it.
 4. **The door** — Phase A's `GET .../categories/:id/services` gains a
