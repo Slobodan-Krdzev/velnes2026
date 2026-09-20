@@ -4,6 +4,8 @@ import {
   DiscoveryCategoryServicesSchema,
   DiscoverySalonDetailSchema,
   DiscoveryRankedServicesSchema,
+  SearchRequestSchema,
+  SearchResultsSchema,
   SearchSuggestionsSchema,
   SearchSuggestRequestSchema,
   DiscoverySalonsSchema,
@@ -19,6 +21,7 @@ import { ClientClaimsSchema } from '@velnes/contracts';
 import { distanceKm, rank, type RankCandidate } from '../modules/search/rank.js';
 import { activeSearchConfig, viewerHistory } from '../modules/search/search.service.js';
 import { lookupMatches, MIN_QUERY, topMatches } from '../modules/search/lookup.js';
+import { interpret, textRelevanceOf } from '../modules/search/interpret.js';
 import { db, withClient, withTenant } from '../db/index.js';
 
 const ErrorSchema = z.object({ error: z.string(), message: z.string() });
@@ -167,6 +170,13 @@ async function categoryIdsOnOffer(admitted: ListedBusiness[]): Promise<Set<strin
   }
   return out;
 }
+
+/**
+ * Below this many results, a distance limit has done more harm than
+ * good. The original search proposal reached for the same number when
+ * it widened a geographic pool once — five is few enough to feel empty.
+ */
+const WIDEN_BELOW = 5;
 
 /** What the ranker needs that a result card does not carry. */
 interface CandidateMeta {
@@ -563,6 +573,159 @@ export async function discoveryRoutes(app: FastifyInstance) {
           name: m.display,
           salonCount: m.salonCount ?? 0,
         })),
+        q: req.body.q,
+      };
+    },
+  });
+
+  /**
+   * A submitted search — step 7 of docs/SEARCH.md.
+   *
+   * Text becomes an interpretation, the interpretation becomes
+   * candidates, and from there it is the pipeline Phases A–C already
+   * built: the same admission, the same ranker, the same diversity, the
+   * same consent. A category card and a typed query are two entrances to
+   * one room.
+   *
+   * The only thing this adds to the ordering is `textRelevance`, which
+   * the category door cannot supply and therefore does not carry.
+   */
+  r.route({
+    method: 'POST',
+    url: '/discovery/search',
+    schema: {
+      body: SearchRequestSchema,
+      response: { 200: SearchResultsSchema },
+    },
+    handler: async (req) => {
+      const q = req.body.q.trim();
+      const empty = {
+        directSalon: null,
+        services: [],
+        salons: [],
+        rankVersion: 0,
+        personalised: false,
+        how: 'none' as const,
+        ambiguous: false,
+        widened: null,
+        q: req.body.q,
+      };
+      if (q.length < MIN_QUERY) return empty;
+
+      const admitted = await admittedBusinesses();
+      const matches = await lookupMatches(
+        q,
+        admitted.map((b) => b.id),
+      );
+      const read = interpret(matches);
+
+      const cfg = await activeSearchConfig();
+      // Salons the text reached but that the strict rule would not open
+      // on its own. Offered rather than guessed between.
+      const bySlug = new Map(admitted.map((b) => [b.slug, b]));
+      const nearMisses = topMatches(matches, 'salon', 5).map((m) => ({
+        id: m.id,
+        slug: m.salonSlug ?? '',
+        name: m.display,
+        city: bySlug.get(m.salonSlug ?? '')?.city ?? null,
+      }));
+      // A salon named outright: the client navigates and never sees a
+      // results page. Nothing is ranked, because there is nothing to
+      // rank — this is not a search, it is an address.
+      if (read.directSalon)
+        return { ...empty, directSalon: read.directSalon, how: 'salon' as const, rankVersion: cfg.version };
+
+      // Candidates come from the categories the text meant. A treatment
+      // named outright has its own category included by `interpret`, so
+      // gathering by category picks it up along with its siblings —
+      // which is also the only honest way to fill a page for a query
+      // that named exactly one thing.
+      const seen = new Map<string, DiscoveryServiceCard>();
+      const meta = new Map<string, CandidateMeta>();
+      let categoryId: string | null = null;
+      for (const id of read.categoryIds) {
+        const got = await gatherCategory(id);
+        if (!got) continue;
+        categoryId = categoryId ?? got.category.id;
+        for (const svc of got.services) if (!seen.has(svc.id)) seen.set(svc.id, svc);
+        for (const [k, v] of got.meta) meta.set(k, v);
+      }
+      const services = [...seen.values()];
+      if (!services.length)
+        return {
+          ...empty,
+          salons: nearMisses,
+          how: read.how,
+          ambiguous: read.ambiguous,
+          rankVersion: cfg.version,
+        };
+
+      const now = new Date();
+      const position =
+        req.body.lat != null && req.body.lng != null
+          ? { lat: req.body.lat, lng: req.body.lng }
+          : null;
+
+      let history = null;
+      let personalised = false;
+      const claims = await clientClaimsOf(req);
+      if (claims) {
+        const me = await withClient(claims.sub, (trx) =>
+          trx
+            .selectFrom('clientUsers')
+            .select('personalisedResults')
+            .where('id', '=', claims.sub)
+            .executeTakeFirst(),
+        );
+        if (me?.personalisedResults) {
+          history = await viewerHistory(claims.sub, now);
+          personalised = true;
+        }
+      }
+
+      const candidates = candidatesOf(categoryId ?? '', services, meta).map((c) => ({
+        ...c,
+        // The one thing a text query knows that a category card does not.
+        textRelevance: textRelevanceOf(c.id, matches),
+      }));
+
+      // A radius the viewer set is a hard filter — until it would leave
+      // them with almost nothing, at which point it is dropped once and
+      // said out loud. Silently pretending a widened answer was the
+      // narrow one is the only unacceptable option.
+      let widened: 'category' | 'radius' | null = null;
+      let admittedCandidates = candidates;
+      if (position && req.body.radiusKm) {
+        const within = candidates.filter(
+          (c) =>
+            c.salon.lat != null &&
+            c.salon.lng != null &&
+            distanceKm(position, { lat: c.salon.lat, lng: c.salon.lng }) <= req.body.radiusKm!,
+        );
+        if (within.length >= WIDEN_BELOW) admittedCandidates = within;
+        else widened = 'radius';
+      }
+      // The text named particular treatments and we are showing more
+      // than those: their category came too, which is a broadening and
+      // is labelled as one.
+      if (
+        !widened &&
+        read.serviceIds.length &&
+        admittedCandidates.length > read.serviceIds.length
+      )
+        widened = 'category';
+
+      const ranked = rank(admittedCandidates, { position, history }, cfg.payload, { now });
+      const byId = new Map(services.map((s) => [s.id, s]));
+      return {
+        directSalon: null,
+        services: ranked.map((x) => byId.get(x.candidate.id)!),
+        salons: nearMisses,
+        rankVersion: cfg.version,
+        personalised,
+        how: read.how,
+        ambiguous: read.ambiguous,
+        widened,
         q: req.body.q,
       };
     },

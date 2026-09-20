@@ -237,6 +237,68 @@ export const SearchSuggestRequestSchema = z.object({
   q: z.string().max(120),
 });
 
+/**
+ * A submitted search.
+ *
+ * The same viewer context the ranked category door takes, plus the text.
+ * A POST for the same reason: the position travels in a body, never a
+ * URL. The query itself is in the URL, because a search is worth sharing
+ * and a location is not.
+ */
+export const SearchRequestSchema = z.object({
+  q: z.string().min(1).max(120),
+  lat: z.number().min(-90).max(90).nullable().default(null),
+  lng: z.number().min(-180).max(180).nullable().default(null),
+  radiusKm: z.number().positive().max(500).nullable().default(null),
+});
+
+/**
+ * What a submitted search answers with.
+ *
+ * `directSalon` is set only when the strict rule fires — the whole
+ * normalized query equals exactly one admitted salon's whole normalized
+ * name, and is not also a category or treatment term. The client then
+ * navigates there instead of rendering results; a typo must never be
+ * able to do this.
+ */
+export const SearchResultsSchema = z.object({
+  directSalon: z
+    .object({ id: z.uuid(), slug: z.string(), name: z.string() })
+    .nullable(),
+  services: z.array(DiscoveryServiceCardSchema),
+  /**
+   * Salons the text matched but that were not certain enough to open
+   * on their own — two salons sharing a name, or a partial name.
+   *
+   * Without these, typing a salon name that really exists and happens
+   * to be shared, or typed short, answers with an empty page. Offering
+   * the choices is what the strict rule refuses to guess at.
+   */
+  salons: z.array(
+    z.object({ id: z.uuid(), slug: z.string(), name: z.string(), city: z.string().nullable() }),
+  ),
+  rankVersion: z.number().int(),
+  personalised: z.boolean(),
+  /** How the text was read: an intent, a named treatment, something it
+   *  only resembled, or nothing we recognised. */
+  how: z.enum(['salon', 'category', 'service', 'fuzzy', 'none']),
+  /**
+   * Several salons matched the name exactly, so no guess was made. The
+   * page can say "which one did you mean" rather than "no results".
+   */
+  ambiguous: z.boolean(),
+  /**
+   * Set when the answer had to be broadened to fill the page, and it is
+   * always said out loud: `category` when a named treatment's siblings
+   * were included, `radius` when a distance limit was dropped. Never
+   * pretend a widened answer was the narrow one.
+   */
+  widened: z.enum(['category', 'radius']).nullable(),
+  /** Echoed, so a late response can be discarded. */
+  q: z.string(),
+});
+
+export type SearchResults = z.infer<typeof SearchResultsSchema>;
 export type SearchSuggestions = z.infer<typeof SearchSuggestionsSchema>;
 
 export type DiscoveryViewer = z.infer<typeof DiscoveryViewerSchema>;

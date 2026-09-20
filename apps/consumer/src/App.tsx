@@ -43,6 +43,9 @@ export function App() {
             <Routes>
               <Route path="/" element={<Home />} />
               <Route path="/s/:category" element={<Results />} />
+              {/* One results page, two entrances: a category card and a
+                  typed query. */}
+              <Route path="/search" element={<Results />} />
               <Route path="/salon/:slug" element={<Salon />} />
               <Route path="/book/identity" element={<BookIdentity />} />
               <Route path="/book/profile" element={<BookProfile />} />

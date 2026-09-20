@@ -7,6 +7,7 @@ import type {
   DiscoverySalonsSchema,
   DiscoveryCategoryServicesSchema,
   DiscoveryRankedServicesSchema,
+  SearchResultsSchema,
   PublicServicesResponseSchema,
 } from '@velnes/contracts';
 import { pub, pubPost } from './client.js';
@@ -17,6 +18,7 @@ type SalonDetail = z.infer<typeof DiscoverySalonDetailSchema>;
 type Services = z.infer<typeof PublicServicesResponseSchema>;
 type CategoryServices = z.infer<typeof DiscoveryCategoryServicesSchema>;
 type RankedServices = z.infer<typeof DiscoveryRankedServicesSchema>;
+type SearchResults = z.infer<typeof SearchResultsSchema>;
 type Availability = z.infer<typeof AvailabilityResponseSchema>;
 
 export function useCategories() {
@@ -147,5 +149,35 @@ export function useAvailability(args: {
       ),
     enabled: Boolean(key && locationId && serviceId && date),
     staleTime: 30_000,
+  });
+}
+
+
+/**
+ * A submitted search — step 7 of docs/SEARCH.md.
+ *
+ * The same viewer context the category door takes, and the same
+ * treatment of it: the position is rounded here before it is sent, and
+ * travels in the body. Only the query reaches the URL, because a search
+ * is worth sharing and a location is not.
+ */
+export function useSearch(
+  q: string | null,
+  position: { lat: number; lng: number } | null,
+  token: string | null,
+) {
+  const at = position
+    ? { lat: Math.round(position.lat * 1000) / 1000, lng: Math.round(position.lng * 1000) / 1000 }
+    : null;
+  return useQuery({
+    queryKey: ['search', q, at?.lat ?? null, at?.lng ?? null, Boolean(token)],
+    queryFn: () =>
+      pubPost<SearchResults>(
+        '/discovery/search',
+        { q, lat: at?.lat ?? null, lng: at?.lng ?? null, radiusKm: null },
+        token,
+      ),
+    enabled: Boolean(q && q.trim().length >= 2),
+    staleTime: 60_000,
   });
 }

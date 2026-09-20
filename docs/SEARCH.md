@@ -265,15 +265,31 @@ admission → per-component scores → final order. It reuses
 
 Each step is shippable and testable alone.
 
-1. `pg_trgm` + `unaccent` extensions, `search_documents`, triggers,
-   backfill.
-2. `service_category_terms`, seeded from the prototype's synonyms.
-3. `searchNormalize` and entity recognition — pure functions, no HTTP,
-   unit-tested hardest.
-4. `POST /suggest`, plus the `admittedBusinesses()` memoisation.
-5. Autocomplete UI.
-6. `textRelevance` in `search_config` and in the ranker.
-7. `POST /search`, the direct-navigation rule, `/search?q=` route.
+1. ~~`pg_trgm` + `unaccent` extensions, `search_documents`, triggers,
+   backfill.~~ — **done 2026-09-21.**
+2. ~~`service_category_terms`, seeded from the prototype's synonyms.~~ —
+   **done 2026-09-21.**
+3. ~~`searchNormalize` and entity recognition — pure functions, no HTTP,
+   unit-tested hardest.~~ — **done 2026-09-21.** Normalization lives in
+   SQL (`search_norm`) so there is only ever one of it; `interpret()` is
+   the rule set, and is pure.
+4. ~~`POST /suggest`, plus the `admittedBusinesses()` memoisation.~~ —
+   **done 2026-09-21.**
+5. ~~Autocomplete UI.~~ — **done 2026-09-21.**
+6. ~~`textRelevance` in `search_config` and in the ranker.~~ — **done
+   2026-09-21.** Config v2; the component is inferred live, so a
+   category card still renormalises without it.
+7. ~~`POST /search`, the direct-navigation rule, `/search?q=` route.~~ —
+   **done 2026-09-21.** One door, reusing Phase A–C admission, ranker
+   and consent whole; the only thing text adds to the ordering is
+   `textRelevance`. Typing a salon's whole name navigates there and
+   replaces the history entry, so Back returns to where the search was
+   typed. A prefix or a near-miss never navigates — those salons are
+   offered as choices instead, which is what stops a real salon name
+   answering with an empty page. Every broadening the door reports
+   (`widened: category | radius`) gets a sentence on the page, and the
+   "Velnes thinks along with you" banner is hidden when nothing was
+   ranked rather than claiming work that did not happen.
 8. Filters: radius, price band, category — doors, URL, UI; remove the
    inert chips.
 9. "Most chosen" from completed bookings, with its volume floor.
@@ -296,6 +312,13 @@ consent off removes personal signals from search too · suggestions never
 include an unadmitted salon · stale responses discarded in order ·
 filters admit rather than re-sort · "Most chosen" silent below its floor
 · `EXPLAIN` proves the trigram index is used.
+
+The identical-Labi pair is covered as a unit test of `interpret()`
+rather than through the door, and deliberately: neither of those two
+imported salons has a live widget, so Phase B's bookable admission keeps
+them out of consumer discovery entirely and the door never sees the
+pair. The rule they exist to prove is still the one under test — it is
+just tested where it lives.
 
 ---
 

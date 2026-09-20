@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { DHeader } from '../../app/chrome.js';
 import {
   categoryVM,
@@ -8,11 +8,14 @@ import {
   serviceVM,
   type ServiceVM,
 } from '../../lib/api/mappers.js';
-import { useCategories, useRankedCategoryServices } from '../../lib/api/queries.js';
+import { useCategories, useRankedCategoryServices, useSearch } from '../../lib/api/queries.js';
 import { useMyNotifications, useSession } from '../../lib/api/session.js';
 import { distanceKm, distanceLbl, useUserLocation } from '../../lib/geo.js';
 import { SalonMap } from '../../components/SalonMap.js';
 import { IcArr, IcClock, IcPin, IcSpark, IcVok, useSalonLive } from './cards.js';
+
+/** A salon the text matched by name without earning a direct opening. */
+type SalonHit = { id: string; slug: string; name: string; city: string | null };
 
 /**
  * What a category card opens onto: every treatment published in that
@@ -25,42 +28,57 @@ import { IcArr, IcClock, IcPin, IcSpark, IcVok, useSalonLive } from './cards.js'
  * booked before is the §5 work, and it will land behind that one door
  * rather than in this component.
  */
-function useCategoryResults(categorySlug: string | undefined) {
+function useCategoryResults(categorySlug: string | undefined, query: string | null) {
   const catsQ = useCategories();
   const { token } = useSession();
   const { position } = useUserLocation();
   const cats = useMemo(() => (catsQ.data?.categories ?? []).map(categoryVM), [catsQ.data]);
   const cat = cats.find((c) => c.slug === categorySlug);
-  const servicesQ = useRankedCategoryServices(cat?.id, position, token);
+
+  // Two entrances, one room. Only one of these is ever enabled: a
+  // category card knows its id, a typed query knows its text, and both
+  // end up ranked by the same scorer behind the same admission.
+  const byCategory = useRankedCategoryServices(query ? undefined : cat?.id, position, token);
+  const byText = useSearch(query, position, token);
+  const answered = query ? byText.data : byCategory.data;
+
   const rows = useMemo(
-    () => (servicesQ.data?.services ?? []).map(serviceVM),
-    [servicesQ.data],
+    () => (answered?.services ?? []).map(serviceVM),
+    [answered],
   );
   return {
     cat,
     rows,
     best: rows[0],
     alts: rows.slice(1),
-    // Loaded once the category is known and its services have answered
-    // — an unknown slug is settled by the category list alone.
-    loaded: Boolean(catsQ.data) && (!cat || Boolean(servicesQ.data)),
+    loaded: query
+      ? Boolean(byText.data) || byText.isError
+      : Boolean(catsQ.data) && (!cat || Boolean(byCategory.data)),
     /** The slug names nothing browsable: either never a category, or one
      *  no salon publishes in any more, since the shelf now carries only
      *  categories with something behind them. Either way the honest
      *  answer is the same, and it is not "nothing under ''". */
-    unknown: Boolean(catsQ.data) && !cat,
+    unknown: !query && Boolean(catsQ.data) && !cat,
     /** Whether the viewer's own bookings shaped this order. Shown, so
      *  the order is never mysterious. */
-    personalised: servicesQ.data?.personalised ?? false,
+    personalised: answered?.personalised ?? false,
     /** Which config version produced this order. Development only — it
      *  is how a surprising order gets explained, and it is noise to
      *  everybody else. */
-    rankVersion: servicesQ.data?.rankVersion ?? null,
+    rankVersion: answered?.rankVersion ?? null,
+    /** A salon named outright. The page redirects rather than rendering.
+     *  Only a submitted search can produce one. */
+    directSalon: query ? (byText.data?.directSalon ?? null) : null,
+    /** Salons the text reached but that were not certain enough to open
+     *  alone — two sharing a name, or a partial one. Offered rather than
+     *  guessed between. */
+    salons: query ? (byText.data?.salons ?? []) : [],
+    /** Said out loud when the answer had to be broadened to fill a page. */
+    widened: query ? (byText.data?.widened ?? null) : null,
+    how: query ? (byText.data?.how ?? null) : null,
   };
 }
 
-/** The live line under a result: today's first open slot, from-price,
- *  and — once the person has shared where they are — how far it is. */
 function useLiveLine(s: ServiceVM) {
   const { slots } = useSalonLive(s.salon.slug);
   const { position } = useUserLocation();
@@ -86,10 +104,57 @@ function salonHref(s: ServiceVM) {
  *  carries is not the same as one nobody has published in yet, and
  *  saying "nothing under Spa-Inclusive" about a slug that names no
  *  category at all would be a small lie. */
-function emptyLine(title: string, unknown: boolean) {
+function emptyLine(title: string, unknown: boolean, typed: boolean) {
+  if (typed) return `Nothing matched “${title}” — try a treatment, a salon, or a category.`;
   return unknown
     ? 'Nothing to browse under that name — try a category from the home page.'
     : `Nothing published under ${title} yet — new salons join Velnes every week.`;
+}
+
+/**
+ * Said out loud whenever the answer is not literally what was asked
+ * for. A page that quietly broadens a search and presents the result as
+ * the search is the one dishonest thing this surface must never do — so
+ * every broadening the door reports gets a sentence here.
+ */
+function searchNote(
+  how: string | null,
+  widened: 'category' | 'radius' | null,
+  title: string,
+): string | null {
+  if (widened === 'radius') return 'Not much within your distance, so we looked further out.';
+  if (how === 'fuzzy') return `Nothing is called “${title}” — these are the closest we found.`;
+  if (widened === 'category') return `Showing ${title} first, then others like it.`;
+  return null;
+}
+
+/** Salons the text reached but that were not certain enough to open on
+ *  their own — two sharing a name, or half a name typed. Offered rather
+ *  than guessed between. */
+function SalonHits({ salons, title }: { salons: SalonHit[]; title: string }) {
+  return (
+    <div style={{ marginBottom: '18px' }}>
+      <h2 className="serif" style={{ fontSize: '17px', margin: '0 0 2px' }}>
+        {salons.length > 1 ? `Salons called “${title}”` : 'The salon you meant?'}
+      </h2>
+      <div className="sm muted" style={{ marginBottom: '8px' }}>
+        {salons.length > 1
+          ? 'More than one carries that name — pick the one you meant.'
+          : 'Matched by name.'}
+      </div>
+      {salons.map((s) => (
+        <a
+          key={s.id}
+          className="sug-card"
+          href={`/salon/${s.slug}`}
+          style={{ display: 'block', marginBottom: '6px' }}
+        >
+          <b>{s.name}</b>
+          {s.city ? <span className="sm muted">{s.city}</span> : null}
+        </a>
+      ))}
+    </div>
+  );
 }
 
 /** The line under a result's title: which salon, and how far. */
@@ -230,9 +295,25 @@ export function Results() {
   const unread = useMyNotifications().data?.unread ?? 0;
   const geo = useUserLocation();
   const [mapOpen, setMapOpen] = useState(false);
-  const { cat, rows, best, alts, loaded, unknown, personalised, rankVersion } =
-    useCategoryResults(category);
-  const title = cat?.name ?? category ?? '';
+  const [params] = useSearchParams();
+  const query = params.get('q');
+  const {
+    cat, rows, best, alts, loaded, unknown, personalised, rankVersion,
+    directSalon, salons, widened, how,
+  } = useCategoryResults(category, query);
+
+  /**
+   * The text named one salon and nothing else. Go there, replacing this
+   * entry so the back button returns to where the search was typed
+   * rather than to a results page nobody saw.
+   */
+  useEffect(() => {
+    if (directSalon?.slug) nav(`/salon/${directSalon.slug}`, { replace: true });
+  }, [directSalon, nav]);
+  const title = query ?? cat?.name ?? category ?? '';
+  // Only a typed query can have been broadened; a category card asked
+  // for exactly what it got.
+  const note = query ? searchNote(how, widened, title) : null;
   // One pin per salon, not one per treatment: a salon offering four
   // services in this category is still one place on the map. Only
   // salons that really dropped a pin appear — no coordinates guessed
@@ -290,6 +371,10 @@ export function Results() {
           </div>
           <div className="d-wrap res-layout">
             <div>
+              {/* Claiming an order when nothing was ordered — a page
+                  showing only a salon we matched by name — is a small
+                  boast about work that did not happen. */}
+              {rows.length ? (
               <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '14px', marginBottom: '12px' }}>
                 <div>
                   <div className="spark" style={{ display: 'inline-flex', gap: '8px', alignItems: 'center', fontWeight: '700', color: 'var(--ink)', fontSize: '16px' }}>
@@ -307,9 +392,16 @@ export function Results() {
                   </div>
                 </div>
               </div>
+              ) : null}
               <div id="d-reslist">
-                {best ? <BestD s={best} /> : loaded ? (
-                  <div className="sm muted" style={{ padding: '18px 4px' }}>{emptyLine(title, unknown)}</div>
+                {salons.length ? <SalonHits salons={salons} title={title} /> : null}
+                {note ? (
+                  <div className="sm muted" style={{ margin: '0 0 12px' }}>{note}</div>
+                ) : null}
+                {/* "Nothing matched" would be a lie when the salon block
+                    above is standing there having matched. */}
+                {best ? <BestD s={best} /> : loaded && !salons.length ? (
+                  <div className="sm muted" style={{ padding: '18px 4px' }}>{emptyLine(title, unknown, Boolean(query))}</div>
                 ) : null}
                 {alts.length ? (
                   <>
@@ -394,14 +486,24 @@ export function Results() {
               <span className="chip">{IcClock}Now</span>
               <span className="chip">Filters</span>
             </div>
-            <div style={{ padding: '12px 16px 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
-              <span className="spark" style={{ display: 'inline-flex', gap: '7px', alignItems: 'center', fontWeight: '700', color: 'var(--ink)' }}>
-                {IcSpark}Velnes thinks along with you
-              </span>
-            </div>
+            {rows.length ? (
+              <div style={{ padding: '12px 16px 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
+                <span className="spark" style={{ display: 'inline-flex', gap: '7px', alignItems: 'center', fontWeight: '700', color: 'var(--ink)' }}>
+                  {IcSpark}Velnes thinks along with you
+                </span>
+              </div>
+            ) : null}
             <div id="m-reslist">
-              {best ? <BestM s={best} /> : loaded ? (
-                <div className="sm muted" style={{ padding: '18px 16px' }}>{emptyLine(title, unknown)}</div>
+              {salons.length ? (
+                <div style={{ padding: '10px 16px 0' }}>
+                  <SalonHits salons={salons} title={title} />
+                </div>
+              ) : null}
+              {note ? (
+                <div className="sm muted" style={{ padding: '4px 16px 10px' }}>{note}</div>
+              ) : null}
+              {best ? <BestM s={best} /> : loaded && !salons.length ? (
+                <div className="sm muted" style={{ padding: '18px 16px' }}>{emptyLine(title, unknown, Boolean(query))}</div>
               ) : null}
               {alts.length ? (
                 <>
