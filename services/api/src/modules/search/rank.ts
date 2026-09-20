@@ -35,6 +35,16 @@ export interface RankCandidate {
   price: number | null;
   priceFrom: number | null;
   salon: RankSalon;
+  /**
+   * How well this treatment answers what was typed — 0–1, from
+   * `textRelevanceOf`.
+   *
+   * Absent on a category card, where there is no text to answer. The
+   * component then drops out of the weighting for the whole request and
+   * the rest renormalise, exactly as they do for a viewer who gave no
+   * location. Two entry points, one scorer.
+   */
+  textRelevance?: number;
 }
 
 /**
@@ -189,6 +199,12 @@ export function rank(
   };
   if (viewer.position) live.proximity = w.proximity;
   if (viewer.history) live.affinity = w.affinity;
+  // A text query is the only thing that can answer "how well does this
+  // match what they typed", so the component exists for the request or
+  // for none of it. Inferred from the candidates rather than passed as a
+  // flag: it cannot then disagree with what was actually supplied.
+  const textual = candidates.some((c) => c.textRelevance !== undefined);
+  if (textual) live.textRelevance = w.textRelevance ?? 0;
 
   const total = Object.values(live).reduce((a, b) => a + b, 0);
   // Every live weight is zero (a config of all zeroes): fall back to a
@@ -214,6 +230,12 @@ export function rank(
     // Inert until reviews exist; its weight is zero, so this is only
     // ever a placeholder the shape can hang on.
     components.quality = NEUTRAL;
+
+    // A candidate reached through its category on a text query has no
+    // text score of its own; NEUTRAL, not zero, for the same reason a
+    // hidden price is neutral — it was found the ordinary way, which is
+    // not evidence against it.
+    if (textual) components.textRelevance = c.textRelevance ?? NEUTRAL;
 
     if (viewer.position) {
       components.proximity =

@@ -515,7 +515,10 @@ describe('the consumer discovery surface', () => {
 
     it('stamps the config version it ranked under, so an order can be explained later', async () => {
       const { body } = await ranked({ lat: 41.998, lng: 21.425 });
-      expect(body.rankVersion).toBe(1);
+      // Whatever is in force, not a literal: shipping a scoring
+      // component ships a new version, so the number moves.
+      const live = await admin.query(`SELECT version FROM search_config WHERE active`);
+      expect(body.rankVersion).toBe(live.rows[0].version);
       // And the weights themselves never leave the platform.
       expect(JSON.stringify(body)).not.toContain('proximity');
     });

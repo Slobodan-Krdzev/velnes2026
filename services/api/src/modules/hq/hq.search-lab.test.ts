@@ -21,6 +21,12 @@ const app = await buildServer();
 const admin = new pg.Client({ connectionString: ADMIN_URL });
 let superToken = '';
 let supportToken = '';
+/** What was in force, and how far the history went, before this suite
+ *  touched anything. Restored afterwards — a test that edits the
+ *  versioned record is doing the one thing the record exists to
+ *  prevent. */
+let baseVersion = 0;
+let maxVersion = 0;
 
 async function hqToken(email: string) {
   const res = await app.inject({
@@ -49,12 +55,20 @@ describe('the HQ Search lab', () => {
     await admin.connect();
     superToken = await hqToken('ivana@revelapps.com');
     supportToken = await hqToken('tea@revelapps.com');
+    const r = await admin.query(
+      `SELECT max(version)::int AS top,
+              (SELECT version FROM search_config WHERE active)::int AS live
+         FROM search_config`,
+    );
+    maxVersion = r.rows[0].top;
+    baseVersion = r.rows[0].live;
   });
   afterAll(async () => {
-    // Leave v1 in force whatever these tests did.
+    // Put the world back: only the versions this suite created go, and
+    // whatever was in force before is in force again.
     await admin.query(`UPDATE search_config SET active = false WHERE active`);
-    await admin.query(`UPDATE search_config SET active = true WHERE version = 1`);
-    await admin.query(`DELETE FROM search_config WHERE version > 1`);
+    await admin.query(`DELETE FROM search_config WHERE version > $1`, [maxVersion]);
+    await admin.query(`UPDATE search_config SET active = true WHERE version = $1`, [baseVersion]);
     await admin.end();
     await app.close();
     await closeDb();
@@ -104,7 +118,7 @@ describe('the HQ Search lab', () => {
       url: `${API_PREFIX}/public/discovery/categories/${await anyCategoryId()}/services`,
       payload: {},
     });
-    expect(before.json().rankVersion).toBe(1);
+    expect(before.json().rankVersion).toBe(baseVersion);
 
     const on = await call('POST', `/hq/search-config/${v.version}/activate`);
     expect(on.statusCode).toBe(200);
@@ -119,18 +133,20 @@ describe('the HQ Search lab', () => {
     });
     expect(after.json().rankVersion).toBe(v.version);
 
-    // Reversible: put v1 back and the door says so again.
-    expect((await call('POST', '/hq/search-config/1/activate')).statusCode).toBe(200);
+    // Reversible: put the previous version back and the door says so.
+    expect(
+      (await call('POST', `/hq/search-config/${baseVersion}/activate`)).statusCode,
+    ).toBe(200);
     const back = await app.inject({
       method: 'POST',
       url: `${API_PREFIX}/public/discovery/categories/${await anyCategoryId()}/services`,
       payload: {},
     });
-    expect(back.json().rankVersion).toBe(1);
+    expect(back.json().rankVersion).toBe(baseVersion);
   });
 
   it('activating the version already in force is a no-op, not an error', async () => {
-    const res = await call('POST', '/hq/search-config/1/activate');
+    const res = await call('POST', `/hq/search-config/${baseVersion}/activate`);
     expect(res.statusCode).toBe(200);
     expect((res.json() as { active: boolean }).active).toBe(true);
   });
@@ -160,7 +176,7 @@ describe('the HQ Search lab', () => {
     });
     expect(res.statusCode).toBe(200);
     const out = SearchPreviewSchema.parse(res.json());
-    expect(out.activeVersion).toBe(1);
+    expect(out.activeVersion).toBe(baseVersion);
     expect(out.rows.length).toBeGreaterThan(0);
     // was/now/moved agree with each other, or the diff is a lie.
     for (const r of out.rows) expect(r.moved).toBe(r.now - r.was);
@@ -174,7 +190,7 @@ describe('the HQ Search lab', () => {
       url: `${API_PREFIX}/public/discovery/categories/${categoryId}/services`,
       payload: {},
     });
-    expect(live.json().rankVersion).toBe(1);
+    expect(live.json().rankVersion).toBe(baseVersion);
   });
 
   it('refuses a dry run against a category that does not exist', async () => {

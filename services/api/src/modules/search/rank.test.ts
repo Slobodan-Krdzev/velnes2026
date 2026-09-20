@@ -258,6 +258,83 @@ describe('the ranker', () => {
     });
   });
 
+  describe('text relevance', () => {
+    it('is absent entirely when the request carried no text', () => {
+      // A category card has nothing to answer. The component drops out
+      // of the weighting and the rest renormalise — the same mechanism
+      // as a viewer who gave no location.
+      const ranked = rank([candidate({ id: 'a' })], { position: null, history: null }, cfg, {
+        now: NOW,
+      });
+      expect(ranked[0]!.components.textRelevance).toBeUndefined();
+    });
+
+    /** A candidate at a chosen distance due north of Skopje. */
+    const atKm = (id: string, km: number, textRelevance: number) => {
+      const c = candidate({ id });
+      return {
+        ...c,
+        textRelevance,
+        salon: { ...c.salon, lat: SKOPJE.lat + km / 111, lng: SKOPJE.lng },
+      };
+    };
+
+    it('lifts a named treatment over a nearer stranger, across a city', () => {
+      // Someone typed "deep tissue". The deep tissue treatment three
+      // kilometres away should beat a generic massage next door.
+      const ranked = rank(
+        [atKm('nearer', 0.05, 0.5), atKm('named', 3, 1)],
+        { position: SKOPJE, history: null },
+        cfg,
+        { now: NOW },
+      );
+      expect(order(ranked)).toEqual(['named', 'nearer']);
+    });
+
+    it('lets distance win again once the named treatment is far enough away', () => {
+      // The trade-off is real and worth pinning rather than pretending
+      // text always wins: at 0.50 against proximity 0.30 and a 5km
+      // decay, the crossover is about nine kilometres. Forty is well
+      // past it, and at that point "nearest thing that fits" is the
+      // better answer.
+      const ranked = rank(
+        [atKm('nearer', 0.05, 0.5), atKm('named', 40, 1)],
+        { position: SKOPJE, history: null },
+        cfg,
+        { now: NOW },
+      );
+      expect(order(ranked)).toEqual(['nearer', 'named']);
+    });
+
+    it('gives a treatment found through its category the neutral middle', () => {
+      const withText = { ...candidate({ id: 'a' }), textRelevance: 1 };
+      const viaCategory = candidate({ id: 'b' }); // no textRelevance
+      const ranked = rank([withText, viaCategory], { position: null, history: null }, cfg, {
+        now: NOW,
+      });
+      const b = ranked.find((r) => r.candidate.id === 'b')!;
+      // Not zero: being found the ordinary way is not evidence against
+      // a treatment, exactly as a hidden price is not.
+      expect(b.components.textRelevance).toBe(0.5);
+    });
+
+    it('carries no weight in a config written before text search existed', () => {
+      // v1 has no textRelevance at all. Activating it again should roll
+      // the component back to nothing rather than raise.
+      const old: SearchConfigPayload = {
+        ...cfg,
+        weights: { ...cfg.weights, textRelevance: 0 },
+      };
+      const cands = [
+        { ...candidate({ id: 'named' }), textRelevance: 1 },
+        { ...candidate({ id: 'other' }), textRelevance: 0.5, price: 1000 },
+      ];
+      const ranked = rank(cands, { position: null, history: null }, old, { now: NOW });
+      // With the weight at zero the cheaper one leads on value alone.
+      expect(order(ranked)).toEqual(['other', 'named']);
+    });
+  });
+
   describe('the inert components', () => {
     it('change no order, because their weights are zero', () => {
       const cands = [candidate({ id: 'a' }), candidate({ id: 'b', price: 3000 })];

@@ -39,6 +39,17 @@ export const SearchWeightsSchema = z.object({
   quality: z.number().min(0).max(1),
   /** Zero until impressions are counted. Subtracted, never added. */
   exposure: z.number().min(0).max(1),
+  /**
+   * How much answering what was actually typed is worth — the Search
+   * phase's one addition to the scorer.
+   *
+   * Optional, with a default, because versions written before free-text
+   * search existed genuinely had no such weight and must keep parsing.
+   * An old config is not broken; it is a config from before this
+   * mattered, and activating one should roll text relevance back rather
+   * than raise.
+   */
+  textRelevance: z.number().min(0).max(1).default(0),
 });
 
 /**
@@ -129,6 +140,23 @@ export const DEFAULT_SEARCH_CONFIG: z.infer<typeof SearchConfigPayloadSchema> = 
     value: 0.1,
     quality: 0,
     exposure: 0,
+    /**
+     * The heaviest single component on a text query, and deliberately:
+     * someone who typed "deep tissue" wants the deep tissue treatment,
+     * not whatever massage is nearest.
+     *
+     * The number has a meaning that can be stated, which is the only
+     * honest way to pick one. Against proximity's 0.30 and a 5km decay,
+     * 0.50 means **a treatment the customer named beats one merely in
+     * the right category until it is about nine kilometres further
+     * away**. At 0.40 that distance is 5.6km, at 0.55 it is 13km. Nine
+     * is a city.
+     *
+     * It is also the first number to tune in the Search lab once there
+     * are real queries to tune against; arithmetic only buys a starting
+     * point.
+     */
+    textRelevance: 0.5,
   },
   proximity: { decayKm: 5 },
   affinity: {

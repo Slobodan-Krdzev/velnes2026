@@ -25,10 +25,14 @@ const API_URL = (process.env.API_DATABASE_URL ??
 describe('the Search lab config', () => {
   const admin = new pg.Client({ connectionString: ADMIN_URL });
   const api = new pg.Client({ connectionString: API_URL });
+  /** Whatever is in force when the suite starts. Not a literal: adding a
+   *  scoring component ships a new version, so the number moves. */
+  let inForce = 0;
 
   beforeAll(async () => {
     await admin.connect();
     await api.connect();
+    inForce = (await activeSearchConfig()).version;
   });
   afterAll(async () => {
     await admin.end();
@@ -75,7 +79,7 @@ describe('the Search lab config', () => {
       await admin.query('ROLLBACK');
     }
     const still = await activeSearchConfig();
-    expect(still.version).toBe(1);
+    expect(still.version).toBe(inForce);
   });
 
   it('allows a swap when the old version steps down in the same transaction', async () => {
@@ -93,7 +97,7 @@ describe('the Search lab config', () => {
       await admin.query('ROLLBACK');
     }
     const after = await activeSearchConfig();
-    expect(after.version).toBe(1);
+    expect(after.version).toBe(inForce);
   });
 
   it('is unreadable by a tenant, by the public, and with no context at all', async () => {
@@ -119,7 +123,12 @@ describe('the Search lab config', () => {
 
   it('raises rather than ranking on a payload that has drifted', async () => {
     // The config has to be visibly broken to the reader, so this one
-    // commits — and puts it back in a finally that cannot be skipped.
+    // commits — and puts back *what was there*, not what the defaults
+    // happen to say today. Restoring from DEFAULT_SEARCH_CONFIG would
+    // quietly rewrite a historical version into the present, which is
+    // the one thing a versioned record must not let a test do.
+    const before = await admin.query(`SELECT payload FROM search_config WHERE active`);
+    const original = before.rows[0].payload;
     await admin.query(
       `UPDATE search_config SET payload = payload #- '{proximity,decayKm}' WHERE active`,
     );
@@ -127,7 +136,7 @@ describe('the Search lab config', () => {
       await expect(activeSearchConfig()).rejects.toBeInstanceOf(SearchConfigError);
     } finally {
       await admin.query(`UPDATE search_config SET payload = $1::jsonb WHERE active`, [
-        JSON.stringify(DEFAULT_SEARCH_CONFIG),
+        JSON.stringify(original),
       ]);
     }
     const restored = await activeSearchConfig();
