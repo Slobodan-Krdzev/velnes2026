@@ -844,6 +844,20 @@ export interface SchemaMigrations {
   version: string;
 }
 
+export interface SearchConfig {
+  activatedAt: Timestamp | null;
+  activatedBy: string | null;
+  activatedByName: Generated<string>;
+  active: Generated<boolean>;
+  createdAt: Generated<Timestamp>;
+  createdBy: string | null;
+  createdByName: Generated<string>;
+  id: Generated<string>;
+  note: Generated<string>;
+  payload: Json;
+  version: number;
+}
+
 export interface ServiceCategories {
   cardImage: string | null;
   icon: string | null;
@@ -1136,6 +1150,7 @@ export interface DB {
   roles: Roles;
   scheduleExceptions: ScheduleExceptions;
   schemaMigrations: SchemaMigrations;
+  searchConfig: SearchConfig;
   serviceCategories: ServiceCategories;
   serviceModifierGroups: ServiceModifierGroups;
   serviceModifierOptions: ServiceModifierOptions;

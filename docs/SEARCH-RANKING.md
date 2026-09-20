@@ -81,16 +81,27 @@ Weights live in the Search-lab config (§6), not in code.
 | 5 | `quality` | reliability and rating | **inert** |
 | 6 | `exposure` | how much this result has been shown lately | **deferred** |
 
-**Default weights**
+**Default weights** — as seeded in `search_config` v1.
 
 ```
 proximity    0.30
 affinity     0.25
 availability 0.20
 value        0.10
-quality      0.10
-exposure    -0.05     (subtracted)
+quality      0.00     (0.10 once reviews exist)
+exposure     0.00     (0.05 once impressions exist)
 ```
+
+All weights are non-negative magnitudes; `exposure` is **subtracted**
+rather than added, because it is the fairness brake and not a merit. The
+sign lives in the ranker, not in the number — a config document where
+one field silently means the opposite of its neighbours is a trap.
+
+The set does not sum to 1 and does not need to: components a viewer
+cannot supply are dropped and the rest renormalised, so only the ratios
+matter. The two inert components are seeded at **zero** rather than at
+their intended weight, so that "inert" is a fact about the data and not
+a promise about the code.
 
 When a component is unavailable for a given viewer — no location, no
 history, signed out — it is **dropped and the remaining weights are
@@ -380,8 +391,16 @@ uses elsewhere:
 - One `search_config` document, versioned. Columns as the other
   versioned config: id, version, payload `jsonb`, `active`, author,
   `created_at`.
-- Exactly one active version. Activating a version is audited through
-  `audit_log`, like every other lifecycle transition.
+- Exactly one active version, enforced by a partial unique index, so
+  "the config in force" cannot quietly become two rows.
+- **The table is its own audit trail**, rather than writing to
+  `audit_log`. Rows are written once and then only activated or
+  deactivated, and each carries who wrote it, who switched it on and
+  when. `audit_log` is tenant-scoped (`tenant_id NOT NULL`) and ranking
+  config belongs to no business, so recording it there would mean
+  inventing a tenant for a platform-level act. The author is kept as an
+  id *and* a name, with no foreign key: an audit trail that loses its
+  author the day that account is deleted is a worse audit trail.
 - The ranker reads the active version and stamps its `version` onto the
   response as `rankVersion`, so a result set can always be explained
   after the fact: "that order came from config v7".
@@ -457,9 +476,20 @@ Each step is shippable on its own and leaves the app working. Definition
 of done per the engineering guide: contract, migration, service,
 endpoint, UI, tests, seed, docs note.
 
-1. **`search_config`** — migration, versioned rows, one active, HQ-only
-   RLS, activation audited. Seed the default weights from §2. Nothing
-   reads it yet.
+1. ~~**`search_config`**~~ — **done 2026-09-20.** Migration, versioned
+   rows, one active (partial unique index), HQ-only RLS proven against
+   the restricted `velnes_api` role, and the defaults from §2 seeded as
+   v1. `packages/contracts/src/search.ts` carries the payload contract
+   and `DEFAULT_SEARCH_CONFIG`; `activeSearchConfig()` reads and
+   *validates* the active version, raising rather than ranking on a
+   payload that has drifted. Seven tests, including that the two inert
+   components really are zero.
+
+   One thing this turned up: `search_config` must not carry a foreign
+   key to `hq_users`, because the demo seed's
+   `TRUNCATE ... hq_users CASCADE` reaches through it and a seeded world
+   then comes up with no config in force at all. The columns keep the
+   id and the name, and no FK.
 2. **The ranker** — one pure function: `(candidates, viewer, config) →
    ordered`. No database, no Fastify; it is the piece worth unit-testing
    hardest, and the golden-order test from §7 lives against it.
