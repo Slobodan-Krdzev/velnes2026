@@ -219,8 +219,15 @@ export async function seedDemo(adminUrl: string) {
       stock_movements, location_catalog_products, products, product_categories,
       employee_skills, location_catalog_variants, location_catalog_services,
       service_modifier_options, service_modifier_groups, service_variants,
-      services, service_categories,
+      services,
       location_lifecycle_log, locations, employees, roles, businesses CASCADE`);
+    // service_categories is deliberately NOT truncated. It is the global
+    // HQ taxonomy, not demo data: wiping it regenerated every category
+    // id on each seed, which made anything keyed to a category — the
+    // search synonyms, HQ's card artwork — impossible to keep. The seed
+    // re-asserts its categories by name just below, which was always
+    // idempotent; leaving the table alone simply lets the ids hold
+    // still, and lets an HQ-created category survive a demo reseed.
 
     await q(
       `INSERT INTO businesses (id, name, country, vat, plan, since, timing_enabled, assistant_enabled, slug,
