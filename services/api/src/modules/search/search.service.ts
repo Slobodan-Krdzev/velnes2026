@@ -161,6 +161,84 @@ function endOf(date: unknown, startMin: number, durationMin: number): Date {
   return d;
 }
 
+/**
+ * "Most chosen" — step 9 of docs/SEARCH.md, and decision 2.
+ *
+ * The categories the platform actually books most, over the last 90
+ * days. It replaces a label that was previously decoration; Alex chose
+ * to make it real rather than remove it, and a real label has to be
+ * able to say nothing.
+ *
+ * What it counts, and what it refuses to:
+ *
+ *   - **Completed visits only**, by the definition `viewerHistory`
+ *     already uses — booked or confirmed, a real appointment, and the
+ *     end time has passed. There is no `completed` status in the
+ *     lifecycle, so "finished" is inferred from the same three facts in
+ *     both places rather than two ways. A cancellation or a no-show is
+ *     not a choice anybody made.
+ *   - **Aggregates and nothing else.** No client is read, no identity
+ *     is touched and nothing new is tracked. The counts never leave the
+ *     server either: what ships is an order, so no salon can read
+ *     another salon's volumes out of it.
+ *   - **Nothing at all below the floor.** On thin data the honest
+ *     answer is silence: "most chosen" computed from nine bookings is a
+ *     claim about nothing, and a decorative label is exactly what this
+ *     step exists to remove.
+ */
+export const MOST_CHOSEN_WINDOW_DAYS = 90;
+/** Fewer completed visits than this across the whole platform and the
+ *  phrase means nothing. Absent, rather than misleading. */
+export const MOST_CHOSEN_MIN_TOTAL = 40;
+/** And a category needs its own showing before it can be called chosen,
+ *  or one quiet week in one salon decides what the country sees. */
+export const MOST_CHOSEN_MIN_PER_CATEGORY = 5;
+
+export async function mostChosenCategoryIds(tenantIds: string[], now: Date): Promise<string[]> {
+  if (!tenantIds.length) return [];
+  const since = new Date(now);
+  since.setUTCDate(since.getUTCDate() - MOST_CHOSEN_WINDOW_DAYS);
+
+  const counts = new Map<string, number>();
+  let total = 0;
+  // Appointments are tenant-scoped, so this is one pass per salon. That
+  // is why the result is cached rather than computed per request.
+  for (const tenantId of tenantIds) {
+    const visits = await withTenant(tenantId, (trx) =>
+      trx
+        .selectFrom('appointments')
+        .select(['serviceId', 'date', 'startMin', 'durationMin'])
+        .where('status', 'in', ['booked', 'confirmed'])
+        .where('kind', '=', 'appointment')
+        .where('serviceId', 'is not', null)
+        .where('date', '>=', since)
+        .execute(),
+    );
+    const done = visits.filter((v) => endOf(v.date, v.startMin, v.durationMin) <= now);
+    if (!done.length) continue;
+
+    const ids = [...new Set(done.map((v) => v.serviceId).filter((x): x is string => !!x))];
+    const services = await withTenant(tenantId, (trx) =>
+      trx.selectFrom('services').select(['id', 'categoryId']).where('id', 'in', ids).execute(),
+    );
+    const catOf = new Map(services.map((x) => [x.id, x.categoryId]));
+    for (const v of done) {
+      const cat = v.serviceId ? catOf.get(v.serviceId) : null;
+      if (!cat) continue;
+      counts.set(cat, (counts.get(cat) ?? 0) + 1);
+      total += 1;
+    }
+  }
+
+  if (total < MOST_CHOSEN_MIN_TOTAL) return [];
+  return [...counts.entries()]
+    .filter(([, n]) => n >= MOST_CHOSEN_MIN_PER_CATEGORY)
+    // Ties broken by id, so the same data always produces the same
+    // order rather than whatever the Map happened to hold.
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .map(([id]) => id);
+}
+
 /** Only the most recent booking of each kind counts — recency decay is
  *  applied once, to the latest, not compounded over every visit. */
 function keepLatest(into: Record<string, string>, key: string, at: string) {

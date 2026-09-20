@@ -7,6 +7,7 @@ import type {
   DiscoverySalonsSchema,
   DiscoveryCategoryServicesSchema,
   DiscoveryRankedServicesSchema,
+  MostChosenSchema,
   SearchResultsSchema,
   PriceBand,
   PublicServicesResponseSchema,
@@ -34,6 +35,7 @@ export interface SearchFilters {
 }
 export const NO_FILTERS: SearchFilters = { priceBand: null, categoryId: null, radiusKm: null };
 type SearchResults = z.infer<typeof SearchResultsSchema>;
+type MostChosen = z.infer<typeof MostChosenSchema>;
 type Availability = z.infer<typeof AvailabilityResponseSchema>;
 
 export function useCategories() {
@@ -227,5 +229,23 @@ export function useSearch(
       ),
     enabled: Boolean(q && q.trim().length >= 2),
     staleTime: 60_000,
+  });
+}
+
+/**
+ * "Most chosen" — step 9 of docs/SEARCH.md.
+ *
+ * What the platform books most, for the panel that opens before anybody
+ * has typed. An empty list is a real answer and the expected one on
+ * thin data: the panel then shows nothing rather than a label that
+ * means nothing.
+ *
+ * Cached hard. It is a ninety-day aggregate; it does not move.
+ */
+export function useMostChosen() {
+  return useQuery({
+    queryKey: ['most-chosen'],
+    queryFn: () => pub<MostChosen>('/discovery/most-chosen'),
+    staleTime: 600_000,
   });
 }

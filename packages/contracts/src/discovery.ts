@@ -195,6 +195,23 @@ export const SearchFacetsSchema = z.object({
 });
 export type SearchFacets = z.infer<typeof SearchFacetsSchema>;
 
+/**
+ * "Most chosen" — step 9 of docs/SEARCH.md.
+ *
+ * The categories the platform books most, in order. Deliberately no
+ * counts: the order is the whole of what a customer needs, and
+ * publishing volumes would let one salon read another's trade out of a
+ * public door.
+ *
+ * An empty list is a real and expected answer. Below the volume floor
+ * the phrase means nothing, and the label is then absent rather than
+ * decorative — which is the entire point of making it real.
+ */
+export const MostChosenSchema = z.object({
+  categories: z.array(DiscoveryCategorySchema),
+});
+export type MostChosen = z.infer<typeof MostChosenSchema>;
+
 export const DiscoveryViewerSchema = z.object({
   lat: z.number().min(-90).max(90).nullable().default(null),
   lng: z.number().min(-180).max(180).nullable().default(null),

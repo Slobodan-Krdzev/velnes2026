@@ -314,7 +314,28 @@ Each step is shippable and testable alone.
    its rule was not changed as a side effect of adding filters. Whether
    they should converge is Alex's call — `applyFilters` takes the
    behaviour as a parameter, so it is one argument either way.
-9. "Most chosen" from completed bookings, with its volume floor.
+9. ~~"Most chosen" from completed bookings, with its volume floor.~~ —
+   **done 2026-09-21.** `GET /public/discovery/most-chosen`, memoised
+   for ten minutes because it iterates every admitted tenant to build a
+   ninety-day aggregate. "Completed" is not a status the lifecycle has,
+   so it is inferred exactly as `viewerHistory` already infers it —
+   booked or confirmed, kind `appointment`, finished before now — rather
+   than invented a second time. Cancellations and no-shows are not
+   choices anybody made and do not count.
+
+   The door publishes **an order and never the counts**: a key-free
+   surface carrying volumes would let one salon read another's trade
+   straight out of it. Two floors — 40 completed visits platform-wide
+   and 5 per category — and below them the answer is an empty list, so
+   the panel renders nothing at all. That silence is the feature: the
+   label was decoration before, and a label that cannot decline to
+   appear is decoration still.
+
+   It surfaces where the prototype put it: the panel that opens on an
+   empty search box, tagged "Most chosen". The counting is tested
+   against an independent implementation in SQL, so agreement means the
+   window, the statuses, the ordering and both floors are right for a
+   reason rather than by coincidence.
 10. Zero/low-result query logging.
 11. Search Lab extension, and docs.
 

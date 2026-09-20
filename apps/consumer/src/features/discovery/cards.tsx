@@ -1,7 +1,12 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAvailability, useSalonDetail, useSalonServices } from '../../lib/api/queries.js';
-import { fmtMKD, type CategoryVM, type SalonVM } from '../../lib/api/mappers.js';
+import {
+  useAvailability,
+  useMostChosen,
+  useSalonDetail,
+  useSalonServices,
+} from '../../lib/api/queries.js';
+import { fmtMKD, slugify, type CategoryVM, type SalonVM } from '../../lib/api/mappers.js';
 import { useSuggest, type SuggestItem } from './useSuggest.js';
 import {
   rememberPendingFavourite,
@@ -235,17 +240,67 @@ export function NearYouM({ s }: { s: SalonVM }) {
  * "masaza", and never survived a typo. These read the search doors.
  */
 
+/**
+ * What the panel offers before anybody has typed — step 9 of
+ * docs/SEARCH.md, and decision 2.
+ *
+ * The prototype put a "Most chosen" tag here over a fixed list. It now
+ * names the categories the platform really books most, over ninety days
+ * of completed visits, and when there are too few of those to mean
+ * anything the panel renders nothing at all rather than a label that is
+ * decoration again.
+ */
+function MostChosenPanel({ onOpen }: { onOpen: (slug: string) => void }) {
+  const { data } = useMostChosen();
+  const cats = data?.categories ?? [];
+  if (!cats.length) return null;
+  return (
+    <div className="sugg" id="d-sugg" role="listbox" aria-label="Most chosen">
+      <div className="h">
+        <span className="spark" style={{ display: 'inline-flex', gap: '7px', alignItems: 'center' }}>
+          {IcSpark}
+          <span style={{ color: 'var(--ink)' }}>Velnes thinks along with you</span>
+        </span>
+        <span className="tiny-tag">Most chosen</span>
+      </div>
+      {cats.slice(0, 4).map((c) => (
+        <button
+          key={c.id}
+          type="button"
+          role="option"
+          aria-selected={false}
+          className="sug-card"
+          onMouseDown={(e) => {
+            e.preventDefault();
+            onOpen(slugify(c.name));
+          }}
+        >
+          <span className="ph" style={{ backgroundImage: 'var(--im)' }}></span>
+          <span>
+            <b>{c.name}</b>
+          </span>
+          <span className="btn btn-dark" style={{ minHeight: '42px' }}>
+            View options {IcArr}
+          </span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export function SugPanelD({
   q,
   active,
   onChoose,
+  onOpenCategory,
 }: {
   q: string;
   active: number;
   onChoose: (item: SuggestItem) => void;
+  onOpenCategory: (slug: string) => void;
 }) {
   const { data, items, loading, empty, short } = useSuggest(q);
-  if (short) return null;
+  if (short) return <MostChosenPanel onOpen={onOpenCategory} />;
   let i = -1;
   const row = (item: SuggestItem) => {
     i += 1;
@@ -369,18 +424,56 @@ export function SugPanelD({
   );
 }
 
+/** "Most chosen" in the mobile sheet — the same rule as the desktop
+ *  panel, and the same silence below the floor. */
+function MostChosenListM({ onOpen }: { onOpen: (slug: string) => void }) {
+  const { data } = useMostChosen();
+  const cats = data?.categories ?? [];
+  if (!cats.length) return null;
+  return (
+    <>
+      <div className="h" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span className="spark" style={{ display: 'inline-flex', gap: '7px', alignItems: 'center', color: 'var(--ink)', fontWeight: '700' }}>
+          {IcSpark}Velnes thinks along with you
+        </span>
+        <span className="tiny-tag">Most chosen</span>
+      </div>
+      {cats.slice(0, 4).map((c) => (
+        <button
+          key={c.id}
+          type="button"
+          role="option"
+          aria-selected={false}
+          className="m-sug card"
+          onMouseDown={(e) => {
+            e.preventDefault();
+            onOpen(slugify(c.name));
+          }}
+        >
+          <span className="ph" style={{ backgroundImage: 'var(--im)' }}></span>
+          <span>
+            <b>{c.name}</b>
+          </span>
+        </button>
+      ))}
+    </>
+  );
+}
+
 /** The mobile sheet's list — the same three kinds, m-sug flavour. */
 export function SugListM({
   q,
   active,
   onChoose,
+  onOpenCategory,
 }: {
   q: string;
   active: number;
   onChoose: (item: SuggestItem) => void;
+  onOpenCategory: (slug: string) => void;
 }) {
   const { data, items, loading, empty, short } = useSuggest(q);
-  if (short) return null;
+  if (short) return <MostChosenListM onOpen={onOpenCategory} />;
   let i = -1;
   const row = (item: SuggestItem) => {
     i += 1;

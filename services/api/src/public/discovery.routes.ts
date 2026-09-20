@@ -4,6 +4,7 @@ import {
   DiscoveryCategoryServicesSchema,
   DiscoverySalonDetailSchema,
   DiscoveryRankedServicesSchema,
+  MostChosenSchema,
   SearchRequestSchema,
   SearchResultsSchema,
   type SearchFacets,
@@ -20,7 +21,11 @@ import { z } from 'zod';
 import { svcVariants } from '../modules/catalog/catalog.service.js';
 import { ClientClaimsSchema } from '@velnes/contracts';
 import { rank, type RankCandidate } from '../modules/search/rank.js';
-import { activeSearchConfig, viewerHistory } from '../modules/search/search.service.js';
+import {
+  activeSearchConfig,
+  mostChosenCategoryIds,
+  viewerHistory,
+} from '../modules/search/search.service.js';
 import { lookupMatches, MIN_QUERY, topMatches } from '../modules/search/lookup.js';
 import { interpret, textRelevanceOf } from '../modules/search/interpret.js';
 import { applyFilters, priceTercilesOf } from '../modules/search/filters.js';
@@ -233,9 +238,33 @@ async function admittedBusinessesCached(): Promise<ListedBusiness[]> {
   return value;
 }
 
+/**
+ * "Most chosen", memoised — step 9 of docs/SEARCH.md.
+ *
+ * A far longer TTL than the admission cache, and for the opposite
+ * reason: this is a ninety-day aggregate and it iterates every admitted
+ * tenant to build, so computing it per request would be absurd, and it
+ * cannot meaningfully change within ten minutes anyway.
+ */
+const MOST_CHOSEN_TTL_MS = 600_000;
+let mostChosenCache: { at: number; value: string[] } | null = null;
+
+async function mostChosenCached(): Promise<string[]> {
+  if (mostChosenCache && Date.now() - mostChosenCache.at < MOST_CHOSEN_TTL_MS)
+    return mostChosenCache.value;
+  const admitted = await admittedBusinesses();
+  const value = await mostChosenCategoryIds(
+    admitted.map((b) => b.id),
+    new Date(),
+  );
+  mostChosenCache = { at: Date.now(), value };
+  return value;
+}
+
 /** Tests change the world and then expect to see it. */
 export function resetAdmittedCache() {
   admittedCache = null;
+  mostChosenCache = null;
 }
 
 async function admittedBusinesses(): Promise<ListedBusiness[]> {
@@ -433,6 +462,40 @@ export async function discoveryRoutes(app: FastifyInstance) {
         .orderBy('name')
         .execute();
       return { categories: rows.filter((c) => onOffer.has(c.id)) };
+    },
+  });
+
+  /**
+   * "Most chosen" — step 9 of docs/SEARCH.md, and decision 2.
+   *
+   * What the platform actually books most, in order, from completed
+   * visits over ninety days. Empty is a real answer and the common one
+   * early on: below the volume floor the phrase is a claim about
+   * nothing, and the page shows no label rather than a decorative one.
+   *
+   * Still filtered by what is on offer *now*: a category nobody
+   * publishes in any more was popular once and is a dead end today.
+   */
+  r.route({
+    method: 'GET',
+    url: '/discovery/most-chosen',
+    schema: { response: { 200: MostChosenSchema } },
+    handler: async () => {
+      const ranked = await mostChosenCached();
+      if (!ranked.length) return { categories: [] };
+      const onOffer = await categoryIdsOnOffer(await admittedBusinesses());
+      const rows = await db
+        .selectFrom('serviceCategories')
+        .select(['id', 'name', 'cardImage', 'icon'])
+        .where('id', 'in', ranked)
+        .execute();
+      const byId = new Map(rows.map((c) => [c.id, c]));
+      return {
+        categories: ranked
+          .filter((id) => onOffer.has(id))
+          .map((id) => byId.get(id))
+          .filter((c): c is NonNullable<typeof c> => !!c),
+      };
     },
   });
 
