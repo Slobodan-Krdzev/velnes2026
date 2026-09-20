@@ -8,9 +8,15 @@
 
 /* 2026-09-20 (later the same day) — Alex pointed at the prototype: the
    desktop card belongs where the prototype puts it, riding 96px up into
-   the hero so it meets the photograph on the curve. The earlier -54px
-   departure is withdrawn, and with no rule here prototype.css governs
-   again — one source of truth rather than a copy that can drift. */
+   the hero so it meets the photograph on the curve. That settled where
+   the card sits; what it still lacked was room. At the prototype's -96px
+   the card's top edge lands on 421 and the lead line's baseline block
+   ends on 421 too — the words and the card touch, with nothing between
+   them. Twenty pixels is the whole change: the card keeps its ride up
+   over the curve, and the sentence above it gets to finish. */
+.searchcard {
+  margin-top: -76px;
+}
 
 .m-searchcard {
   margin-top: 18px;
@@ -22,7 +28,10 @@
    to browse, not a wall to read. Same behaviour on every size. */
 .catrail {
   position: relative;
-  margin-top: 4px;
+  /* The shelf used to start 4px under the search card, close enough to
+     read as one block with it. It is its own row, so it is given the
+     space to say so. */
+  margin-top: 28px;
 }
 .catrail-track {
   display: flex;
