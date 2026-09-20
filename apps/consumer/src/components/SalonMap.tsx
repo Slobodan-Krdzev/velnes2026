@@ -270,6 +270,16 @@ export function SalonMap({
         overflow: 'hidden',
         border: '1px solid var(--line-soft)',
         position: 'relative',
+        /**
+         * Leaflet numbers its own insides from 400 (panes) to 1000
+         * (controls), and without a stacking context here those compete
+         * with the rest of the page directly — so a map in a card
+         * painted straight over the sticky "Book now" bar, which sits at
+         * 70. Isolating keeps Leaflet's numbers a private matter between
+         * Leaflet and this box.
+         */
+        isolation: 'isolate',
+        zIndex: 0,
       }}
     >
       {!pins.length && emptyNote ? <span className="map-note">{emptyNote}</span> : null}
