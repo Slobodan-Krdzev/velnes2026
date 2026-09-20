@@ -22,10 +22,22 @@ export async function pub<T>(path: string): Promise<T> {
   return res.json() as Promise<T>;
 }
 
-export async function pubPost<T>(path: string, body: unknown): Promise<T> {
+/**
+ * A public POST that carries the client's token when there is one.
+ *
+ * The doors it reaches are key-free and answer a signed-out visitor
+ * perfectly well; the token only lets them recognise a returning client
+ * and order results by that client's own bookings. A stale or missing
+ * token is not an error there — it simply means no history to rank with,
+ * which is why this never refuses to send.
+ */
+export async function pubPost<T>(path: string, body: unknown, token?: string | null): Promise<T> {
   const res = await fetch(`${P}${path}`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: {
+      'content-type': 'application/json',
+      ...(token ? { authorization: `Bearer ${token}` } : {}),
+    },
     body: JSON.stringify(body),
   });
   if (!res.ok) {

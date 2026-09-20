@@ -150,6 +150,52 @@ export const DiscoveryCategoryServicesSchema = z.object({
   services: z.array(DiscoveryServiceCardSchema),
 });
 
+/**
+ * What the viewer brings to a ranked request — §5, and §5's rule about
+ * where a location may travel.
+ *
+ * This is a POST body and not a query string on purpose. A precise
+ * location in a URL ends up in access logs, proxy logs and referrers;
+ * in a body it does not. The coordinates are rounded to three decimals
+ * (~110m) in the browser before they are sent — finer than ranking
+ * needs, coarse enough that an exact position never leaves the device —
+ * and they are used to order one response and then discarded. Nothing
+ * here is stored against the account.
+ */
+export const DiscoveryViewerSchema = z.object({
+  lat: z.number().min(-90).max(90).nullable().default(null),
+  lng: z.number().min(-180).max(180).nullable().default(null),
+  /**
+   * When set, a hard admission filter: results further than this are
+   * absent, not merely demoted. Unset means "Near me" only sorts — a
+   * toggle that silently hides a salon 6km away is a bug report waiting
+   * to happen.
+   */
+  radiusKm: z.number().positive().max(500).nullable().default(null),
+});
+
+/** The ranked form of a category's services. Same rows as the
+ *  unpersonalised door, ordered by the ranker. */
+export const DiscoveryRankedServicesSchema = z.object({
+  category: DiscoveryCategorySchema,
+  services: z.array(DiscoveryServiceCardSchema),
+  /**
+   * The config version the order came from, so a result set can always
+   * be explained after the fact. The weights themselves never leave the
+   * platform — a salon that could read them could game them.
+   */
+  rankVersion: z.number().int(),
+  /**
+   * Whether the viewer's own bookings were used. False for a signed-out
+   * visitor, and false when a client has switched personalisation off —
+   * so the app can say plainly why an order is what it is, rather than
+   * leaving it mysterious.
+   */
+  personalised: z.boolean(),
+});
+
+export type DiscoveryViewer = z.infer<typeof DiscoveryViewerSchema>;
+export type DiscoveryRankedServices = z.infer<typeof DiscoveryRankedServicesSchema>;
 export type DiscoveryCategory = z.infer<typeof DiscoveryCategorySchema>;
 export type DiscoveryServiceCard = z.infer<typeof DiscoveryServiceCardSchema>;
 export type DiscoveryCategoryServices = z.infer<typeof DiscoveryCategoryServicesSchema>;

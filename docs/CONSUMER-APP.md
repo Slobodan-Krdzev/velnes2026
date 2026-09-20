@@ -327,12 +327,13 @@ before it can be real:
   no map until someone drops a pin in the workspace.
 - **Search.** The search field filters the categories and salons already
   loaded. Real search/discovery is still blocked on the §5 answers.
-- **Personalised results.** A category now lists its treatments, but in
-  a fixed order. Ranking them by the customer's location and by what
-  they have booked before — most-booked service, favourites, similar
-  treatments — is specified and decided in `docs/SEARCH-RANKING.md`, and
-  is Phase B. Favourites are not one of its v1 signals for the reason
-  above: they are not persisted yet. Two of its
+- **Personalised results.** Live as of Phase B: results are ordered by
+  where the viewer is and, for a signed-in client who has not switched it
+  off, by what they have booked before. `docs/SEARCH-RANKING.md` has the
+  rules. Still absent from that ordering, and honestly so: favourites
+  (not persisted — see above), real availability (the component only
+  knows whether a salon takes online bookings at all, so the app must not
+  claim "available today" on its strength), reviews, and exposure decay. Two of its
   inputs do not exist yet either: favourites are not persisted anywhere
   (the heart on a card is component state), and there is no geo search
   or distance sort. The cross-salon half is ready: `withClient` already

@@ -259,6 +259,9 @@ export async function clientRoutes(app: FastifyInstance) {
               ...(b.dob !== undefined ? { dob: b.dob } : {}),
               ...(b.lang !== undefined ? { lang: b.lang } : {}),
               ...(b.avatar !== undefined ? { avatar: b.avatar } : {}),
+              ...(b.personalisedResults !== undefined
+                ? { personalisedResults: b.personalisedResults }
+                : {}),
             })
             .where('id', '=', id)
             .execute(),

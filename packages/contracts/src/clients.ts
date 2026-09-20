@@ -47,6 +47,16 @@ export const ClientProfileSchema = z.object({
   lang: z.enum(['en', 'mk', 'sq']),
   avatar: z.string().nullable(),
   since: z.iso.date(),
+  /**
+   * Whether search results are ordered using this client's own booking
+   * history — §5, docs/SEARCH-RANKING.md. On by default; one switch in
+   * My Velnes › General turns it off.
+   *
+   * It governs only the viewer's own data, used server-side for the
+   * viewer's own eyes: no salon learns why it ranked where it did, and
+   * no other client's behaviour is ever involved.
+   */
+  personalisedResults: z.boolean(),
 });
 export type ClientProfile = z.infer<typeof ClientProfileSchema>;
 
@@ -67,6 +77,7 @@ export const ClientProfilePatchSchema = z.object({
   dob: z.iso.date().nullable().optional(),
   lang: z.enum(['en', 'mk', 'sq']).optional(),
   avatar: z.string().max(AVATAR_MAX_CHARS).nullable().optional(),
+  personalisedResults: z.boolean().optional(),
 });
 
 export const ClientPasswordSchema = z.object({

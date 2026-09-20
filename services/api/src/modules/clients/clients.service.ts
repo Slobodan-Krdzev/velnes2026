@@ -33,6 +33,7 @@ interface ClientRow {
   avatar: string | null;
   emailVerifiedAt: Date | null;
   createdAt: Date;
+  personalisedResults: boolean;
 }
 
 export function toProfile(c: ClientRow): ClientProfile {
@@ -47,6 +48,7 @@ export function toProfile(c: ClientRow): ClientProfile {
     lang: (['en', 'mk', 'sq'].includes(c.lang) ? c.lang : 'en') as 'en' | 'mk' | 'sq',
     avatar: c.avatar,
     since: isoDate(c.createdAt)!,
+    personalisedResults: c.personalisedResults,
   };
 }
 

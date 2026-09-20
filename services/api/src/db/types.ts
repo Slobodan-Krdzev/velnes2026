@@ -260,6 +260,7 @@ export interface ClientUsers {
   lang: Generated<string>;
   last: Generated<string>;
   passwordHash: string;
+  personalisedResults: Generated<boolean>;
   phone: string | null;
 }
 

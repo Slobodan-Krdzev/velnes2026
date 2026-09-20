@@ -3,7 +3,9 @@ import {
   DiscoveryCategoriesSchema,
   DiscoveryCategoryServicesSchema,
   DiscoverySalonDetailSchema,
+  DiscoveryRankedServicesSchema,
   DiscoverySalonsSchema,
+  DiscoveryViewerSchema,
 } from '@velnes/contracts';
 import type { DiscoveryServiceCard } from '@velnes/contracts';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
@@ -11,6 +13,9 @@ import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { sql } from 'kysely';
 import { z } from 'zod';
 import { svcVariants } from '../modules/catalog/catalog.service.js';
+import { ClientClaimsSchema } from '@velnes/contracts';
+import { distanceKm, rank, type RankCandidate } from '../modules/search/rank.js';
+import { activeSearchConfig, viewerHistory } from '../modules/search/search.service.js';
 import { db, withTenant } from '../db/index.js';
 
 const ErrorSchema = z.object({ error: z.string(), message: z.string() });
@@ -160,6 +165,129 @@ async function categoryIdsOnOffer(listed: ListedBusiness[]): Promise<Set<string>
   return out;
 }
 
+/** What the ranker needs that a result card does not carry. */
+interface CandidateMeta {
+  businessId: string;
+  createdAt: string;
+}
+
+/**
+ * Everything published in one category, across every listed salon —
+ * the candidates both doors work from.
+ *
+ * One gatherer, so the ranked and unranked forms can never disagree
+ * about who is in the running. They differ only in the order they put
+ * them in.
+ */
+async function gatherCategory(categoryId: string): Promise<
+  | {
+      category: { id: string; name: string; cardImage: string | null; icon: string | null };
+      services: DiscoveryServiceCard[];
+      meta: Map<string, CandidateMeta>;
+    }
+  | null
+> {
+  const category = await db
+    .selectFrom('serviceCategories')
+    .select(['id', 'name', 'cardImage', 'icon'])
+    .where('id', '=', categoryId)
+    .executeTakeFirst();
+  if (!category) return null;
+
+  const listed = await listedBusinesses();
+  const widgets = await liveWidgets(listed.map((b) => b.id));
+  const bookable = new Set(widgets.map((w) => w.tenantId));
+  // An empty IN list is not valid SQL to build, and "no salon is listed"
+  // is an ordinary state — a category page with nothing on it, not an
+  // error. The same guard liveWidgets already uses.
+  const created = listed.length
+    ? await db.transaction().execute(async (trx) => {
+        await sql`select set_config('app.public', '1', true)`.execute(trx);
+        return trx
+          .selectFrom('businesses')
+          .select(['id', 'createdAt'])
+          .where(
+            'id',
+            'in',
+            listed.map((b) => b.id),
+          )
+          .execute();
+      })
+    : [];
+  const createdAt = new Map(created.map((b) => [b.id, b.createdAt]));
+
+  const services: DiscoveryServiceCard[] = [];
+  const meta = new Map<string, CandidateMeta>();
+  for (const b of listed) {
+    const photo = cardPhoto(b.gallery);
+    const pin = await firstPin(b.id);
+    const rows = await withTenant(b.id, async (trx) => {
+      const found = await trx
+        .selectFrom('services as s')
+        .select(['s.id', 's.name', 's.durationMin', 's.price', 's.sort'])
+        .where('s.categoryId', '=', category.id)
+        .where('s.status', '=', 'active')
+        // POS-only treatments are not on offer to the public.
+        .where('s.online', '=', true)
+        .orderBy('s.sort')
+        .orderBy('s.name')
+        .execute();
+      // A variant's price can undercut the master's, and the card says
+      // "from" when it does. No location here, so this is the salon-wide
+      // price before any per-location override.
+      return Promise.all(
+        found.map(async (s) => {
+          const vs = (await svcVariants(trx, s.id, null)).filter((v) => v.active);
+          return { ...s, priceFrom: vs.length ? Math.min(...vs.map((v) => v.price)) : null };
+        }),
+      );
+    });
+    const show = b.marketplace.showPrices;
+    for (const s of rows) {
+      services.push({
+        id: s.id,
+        name: s.name,
+        category: category.name,
+        durationMin: s.durationMin,
+        price: show ? s.price : null,
+        priceFrom: show ? s.priceFrom : null,
+        salon: {
+          slug: b.slug,
+          name: b.name,
+          city: b.city,
+          photo,
+          lat: pin.lat,
+          lng: pin.lng,
+          bookable: bookable.has(b.id),
+          showPrices: show,
+        },
+      });
+      meta.set(s.id, {
+        businessId: b.id,
+        createdAt: (createdAt.get(b.id) ?? new Date()).toISOString(),
+      });
+    }
+  }
+  return { category, services, meta };
+}
+
+/**
+ * The signed-in client, if there is one.
+ *
+ * Deliberately never throws and never answers 401: these are key-free
+ * public doors, and being signed out is not an error. A token that has
+ * expired or does not parse means the same thing as no token at all —
+ * rank without a history.
+ */
+async function clientClaimsOf(req: FastifyRequest) {
+  if (!req.headers.authorization) return null;
+  try {
+    return ClientClaimsSchema.parse(await req.jwtVerify());
+  } catch {
+    return null;
+  }
+}
+
 export async function discoveryRoutes(app: FastifyInstance) {
   const r = app.withTypeProvider<ZodTypeProvider>();
 
@@ -245,76 +373,18 @@ export async function discoveryRoutes(app: FastifyInstance) {
       response: { 200: DiscoveryCategoryServicesSchema, 404: ErrorSchema },
     },
     handler: async (req, reply) => {
-      const category = await db
-        .selectFrom('serviceCategories')
-        .select(['id', 'name', 'cardImage', 'icon'])
-        .where('id', '=', req.params.id)
-        .executeTakeFirst();
-      if (!category)
+      const found = await gatherCategory(req.params.id);
+      if (!found)
         return reply.code(404).send({ error: 'UNKNOWN_CATEGORY', message: 'No category here' });
+      const { category, services } = found;
 
-      const listed = await listedBusinesses();
-      const widgets = await liveWidgets(listed.map((b) => b.id));
-      const bookable = new Set(widgets.map((w) => w.tenantId));
-
-      const services: DiscoveryServiceCard[] = [];
-      for (const b of listed) {
-        const photo = cardPhoto(b.gallery);
-        const pin = await firstPin(b.id);
-        const rows = await withTenant(b.id, async (trx) => {
-          const found = await trx
-            .selectFrom('services as s')
-            .select(['s.id', 's.name', 's.durationMin', 's.price', 's.sort'])
-            .where('s.categoryId', '=', category.id)
-            .where('s.status', '=', 'active')
-            // POS-only treatments are not on offer to the public.
-            .where('s.online', '=', true)
-            .orderBy('s.sort')
-            .orderBy('s.name')
-            .execute();
-          // A variant's price can undercut the master's, and the card
-          // says "from" when it does. No location here, so this is the
-          // salon-wide price before any per-location override.
-          return Promise.all(
-            found.map(async (s) => {
-              const vs = (await svcVariants(trx, s.id, null)).filter((v) => v.active);
-              return {
-                ...s,
-                priceFrom: vs.length ? Math.min(...vs.map((v) => v.price)) : null,
-              };
-            }),
-          );
-        });
-        const show = b.marketplace.showPrices;
-        for (const s of rows) {
-          services.push({
-            id: s.id,
-            name: s.name,
-            category: category.name,
-            durationMin: s.durationMin,
-            price: show ? s.price : null,
-            priceFrom: show ? s.priceFrom : null,
-            salon: {
-              slug: b.slug,
-              name: b.name,
-              city: b.city,
-              photo,
-              lat: pin.lat,
-              lng: pin.lng,
-              bookable: bookable.has(b.id),
-              showPrices: show,
-            },
-          });
-        }
-      }
-
-      // The stated order, and the whole of it: something you can book
-      // leads; then the cheaper treatment; then alphabetical, so the
+      // The unpersonalised order, and the whole of it: something you can
+      // book leads; then the cheaper treatment; then alphabetical, so the
       // list is stable between requests. A salon that hides its prices
       // sorts after the ones that publish them rather than as free.
       const askingPrice = (s: DiscoveryServiceCard) =>
         s.priceFrom ?? s.price ?? Number.POSITIVE_INFINITY;
-      services.sort(
+      const sorted = [...services].sort(
         (a, z) =>
           Number(z.salon.bookable) - Number(a.salon.bookable) ||
           askingPrice(a) - askingPrice(z) ||
@@ -322,7 +392,106 @@ export async function discoveryRoutes(app: FastifyInstance) {
           a.salon.name.localeCompare(z.salon.name),
       );
 
-      return { category, services };
+      return { category, services: sorted };
+    },
+  });
+
+  /**
+   * The ranked form of the same results — §5, Phase B.
+   *
+   * A POST and not a GET because the viewer's position travels in the
+   * body: a precise location in a query string ends up in access logs,
+   * proxy logs and referrers. The coordinates arrive already rounded to
+   * ~110m, are used to order one response, and are not stored.
+   *
+   * Authentication is optional on purpose. A signed-out visitor is an
+   * ordinary caller and gets a perfectly good page — proximity, value
+   * and availability, with the personal component simply absent rather
+   * than substituted for.
+   */
+  r.route({
+    method: 'POST',
+    url: '/discovery/categories/:id/services',
+    schema: {
+      params: z.object({ id: z.uuid() }),
+      body: DiscoveryViewerSchema,
+      response: { 200: DiscoveryRankedServicesSchema, 404: ErrorSchema },
+    },
+    handler: async (req, reply) => {
+      const found = await gatherCategory(req.params.id);
+      if (!found)
+        return reply.code(404).send({ error: 'UNKNOWN_CATEGORY', message: 'No category here' });
+      const { category, services, meta } = found;
+
+      const cfg = await activeSearchConfig();
+      const now = new Date();
+      const position =
+        req.body.lat != null && req.body.lng != null
+          ? { lat: req.body.lat, lng: req.body.lng }
+          : null;
+
+      // Personalisation is for signed-in clients who have not switched
+      // it off. A bad or absent token is not an error here — it simply
+      // means there is no history to rank with.
+      let history = null;
+      let personalised = false;
+      const claims = await clientClaimsOf(req);
+      if (claims) {
+        const me = await db
+          .selectFrom('clientUsers')
+          .select('personalisedResults')
+          .where('id', '=', claims.sub)
+          .executeTakeFirst();
+        if (me?.personalisedResults) {
+          history = await viewerHistory(claims.sub, now);
+          personalised = true;
+        }
+      }
+
+      const candidates: RankCandidate[] = services.map((s) => {
+        const m = meta.get(s.id)!;
+        return {
+          id: s.id,
+          name: s.name,
+          categoryId: category.id,
+          durationMin: s.durationMin,
+          price: s.price,
+          priceFrom: s.priceFrom,
+          salon: {
+            slug: s.salon.slug,
+            businessId: m.businessId,
+            name: s.salon.name,
+            lat: s.salon.lat,
+            lng: s.salon.lng,
+            bookable: s.salon.bookable,
+            createdAt: m.createdAt,
+          },
+        };
+      });
+
+      // Admission: a radius the viewer explicitly set is a hard filter,
+      // and results outside it are absent rather than demoted. Without
+      // one, "Near me" only sorts — a toggle that silently hides a salon
+      // 6km away is a bug report waiting to happen.
+      const admitted =
+        position && req.body.radiusKm
+          ? candidates.filter(
+              (c) =>
+                c.salon.lat != null &&
+                c.salon.lng != null &&
+                distanceKm(position, { lat: c.salon.lat, lng: c.salon.lng }) <=
+                  req.body.radiusKm!,
+            )
+          : candidates;
+
+      const ranked = rank(admitted, { position, history }, cfg.payload, { now });
+      const byId = new Map(services.map((s) => [s.id, s]));
+      return {
+        category,
+        services: ranked.map((r) => byId.get(r.candidate.id)!),
+        rankVersion: cfg.version,
+        personalised,
+      };
     },
   });
 

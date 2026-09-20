@@ -1,5 +1,6 @@
 import { SearchConfigPayloadSchema, type SearchConfigPayload } from '@velnes/contracts';
-import { withHq } from '../../db/index.js';
+import { withClient, withHq, withTenant } from '../../db/index.js';
+import type { ViewerHistory } from './rank.js';
 
 /**
  * The Search lab's config — §5, docs/SEARCH-RANKING.md.
@@ -58,4 +59,96 @@ export async function activeSearchConfig(): Promise<ActiveSearchConfig> {
         .join('; ')}`,
     );
   return { version: row.version, payload: parsed.data };
+}
+
+
+/**
+ * The viewer's own history, shaped for the ranker — §2.2.
+ *
+ * Read across every salon through `withClient`, which is the context
+ * built for exactly this: a client reading their own appointments,
+ * never a tenant reading its customers. Nothing here is another
+ * client's behaviour, and nothing about it is shown to a salon.
+ *
+ * "Completed" uses the same predicate the Customer Insights engine
+ * already uses for a visit that happened — booked or confirmed, kind
+ * `appointment`, and finished before now. A cancelled or no-show visit
+ * is not a preference, and neither is one that has not happened yet.
+ */
+export async function viewerHistory(clientUserId: string, now: Date): Promise<ViewerHistory> {
+  const rows = await withClient(clientUserId, (trx) =>
+    trx
+      .selectFrom('appointments')
+      .select(['tenantId', 'serviceId', 'date', 'startMin', 'durationMin', 'status', 'kind'])
+      .where('clientUserId', '=', clientUserId)
+      .where('status', 'in', ['booked', 'confirmed'])
+      .where('kind', '=', 'appointment')
+      .execute(),
+  );
+
+  const history: ViewerHistory = {
+    services: {},
+    businesses: {},
+    categories: {},
+    durationsByCategory: {},
+    // Favourites are not persisted yet (Phase C). Empty rather than
+    // absent, so the ranker needs no special case the day they land.
+    favouriteServiceIds: [],
+    favouriteBusinessIds: [],
+  };
+
+  const done = rows.filter((a) => endOf(a.date, a.startMin, a.durationMin) <= now);
+  if (!done.length) return history;
+
+  // Services are tenant-scoped, so the category of one has to be read
+  // inside its own tenant's context — one pass per salon, not per visit.
+  const byTenant = new Map<string, typeof done>();
+  for (const a of done) {
+    const list = byTenant.get(a.tenantId) ?? [];
+    list.push(a);
+    byTenant.set(a.tenantId, list);
+  }
+
+  for (const [tenantId, visits] of byTenant) {
+    const ids = [...new Set(visits.map((v) => v.serviceId).filter((x): x is string => !!x))];
+    const services = ids.length
+      ? await withTenant(tenantId, (trx) =>
+          trx
+            .selectFrom('services')
+            .select(['id', 'categoryId', 'durationMin'])
+            .where('id', 'in', ids)
+            .execute(),
+        )
+      : [];
+    const catOf = new Map(services.map((x) => [x.id, x.categoryId]));
+
+    for (const v of visits) {
+      const at = endOf(v.date, v.startMin, v.durationMin).toISOString();
+      keepLatest(history.businesses, tenantId, at);
+      if (!v.serviceId) continue;
+      keepLatest(history.services, v.serviceId, at);
+      const cat = catOf.get(v.serviceId);
+      if (!cat) continue;
+      keepLatest(history.categories, cat, at);
+      const ds = history.durationsByCategory[cat] ?? [];
+      if (!ds.includes(v.durationMin)) ds.push(v.durationMin);
+      history.durationsByCategory[cat] = ds;
+    }
+  }
+  return history;
+}
+
+/** When a visit finished, in real time. */
+function endOf(date: unknown, startMin: number, durationMin: number): Date {
+  const iso = date instanceof Date ? date.toISOString().slice(0, 10) : String(date).slice(0, 10);
+  const d = new Date(`${iso}T00:00:00Z`);
+  d.setUTCMinutes(d.getUTCMinutes() + startMin + durationMin);
+  return d;
+}
+
+/** Only the most recent booking of each kind counts — recency decay is
+ *  applied once, to the latest, not compounded over every visit. */
+function keepLatest(into: Record<string, string>, key: string, at: string) {
+  const had = into[key];
+  if (!had || at > had) into[key] = at;
 }

@@ -268,4 +268,65 @@ describe('client users — the consumer account', () => {
     expect(res.json().first).toBe('Testina');
     expect(res.json().email).toBe(EMAIL.toLowerCase());
   });
+
+  it('starts with personalised results on, and lets the client switch them off', async () => {
+    // §5, decided: on by default. The setting governs the viewer's own
+    // history, used for the viewer's own eyes — but it must be theirs to
+    // turn off, and it must stick.
+    const me = await app.inject({
+      method: 'GET',
+      url: `${C}/me`,
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(me.json().personalisedResults).toBe(true);
+
+    const off = await app.inject({
+      method: 'PATCH',
+      url: `${C}/me`,
+      headers: { authorization: `Bearer ${token}` },
+      payload: { personalisedResults: false },
+    });
+    expect(off.statusCode).toBe(200);
+    expect(off.json().personalisedResults).toBe(false);
+
+    // Read back through a fresh request, not just the patch's own echo.
+    const again = await app.inject({
+      method: 'GET',
+      url: `${C}/me`,
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(again.json().personalisedResults).toBe(false);
+
+    const on = await app.inject({
+      method: 'PATCH',
+      url: `${C}/me`,
+      headers: { authorization: `Bearer ${token}` },
+      payload: { personalisedResults: true },
+    });
+    expect(on.json().personalisedResults).toBe(true);
+  });
+
+  it('leaves the switch alone when other fields are edited', async () => {
+    await app.inject({
+      method: 'PATCH',
+      url: `${C}/me`,
+      headers: { authorization: `Bearer ${token}` },
+      payload: { personalisedResults: false },
+    });
+    // An unrelated edit must not quietly turn personalisation back on —
+    // a consent setting that resets itself is not consent.
+    const res = await app.inject({
+      method: 'PATCH',
+      url: `${C}/me`,
+      headers: { authorization: `Bearer ${token}` },
+      payload: { first: 'Testina' },
+    });
+    expect(res.json().personalisedResults).toBe(false);
+    await app.inject({
+      method: 'PATCH',
+      url: `${C}/me`,
+      headers: { authorization: `Bearer ${token}` },
+      payload: { personalisedResults: true },
+    });
+  });
 });

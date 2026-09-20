@@ -6,6 +6,7 @@ import type {
   DiscoverySalonDetailSchema,
   DiscoverySalonsSchema,
   DiscoveryCategoryServicesSchema,
+  DiscoveryRankedServicesSchema,
   PublicServicesResponseSchema,
 } from '@velnes/contracts';
 import { pub, pubPost } from './client.js';
@@ -15,6 +16,7 @@ type Salons = z.infer<typeof DiscoverySalonsSchema>;
 type SalonDetail = z.infer<typeof DiscoverySalonDetailSchema>;
 type Services = z.infer<typeof PublicServicesResponseSchema>;
 type CategoryServices = z.infer<typeof DiscoveryCategoryServicesSchema>;
+type RankedServices = z.infer<typeof DiscoveryRankedServicesSchema>;
 type Availability = z.infer<typeof AvailabilityResponseSchema>;
 
 export function useCategories() {
@@ -49,6 +51,40 @@ export function useCategoryServices(categoryId: string | undefined) {
   return useQuery({
     queryKey: ['category-services', categoryId],
     queryFn: () => pub<CategoryServices>(`/discovery/categories/${categoryId}/services`),
+    enabled: Boolean(categoryId),
+    staleTime: 60_000,
+  });
+}
+
+/**
+ * The ranked form of the same results — §5.
+ *
+ * A POST because the position travels in the body: a precise location in
+ * a URL ends up in access logs, proxy logs and referrers. The
+ * coordinates are rounded to three decimals (~110m) here, before they
+ * are sent — finer than ranking needs, and coarse enough that the exact
+ * position never leaves the device. The rounding is also what keeps this
+ * cacheable: a viewer who shifts a few metres is not a new query.
+ */
+export function useRankedCategoryServices(
+  categoryId: string | undefined,
+  position: { lat: number; lng: number } | null,
+  token: string | null,
+) {
+  const at = position
+    ? { lat: Math.round(position.lat * 1000) / 1000, lng: Math.round(position.lng * 1000) / 1000 }
+    : null;
+  return useQuery({
+    // Whether there is a token belongs in the key, because signing in or
+    // out changes the order. The token's value does not — a cache key is
+    // no place for a credential.
+    queryKey: ['ranked-services', categoryId, at?.lat ?? null, at?.lng ?? null, Boolean(token)],
+    queryFn: () =>
+      pubPost<RankedServices>(
+        `/discovery/categories/${categoryId}/services`,
+        { lat: at?.lat ?? null, lng: at?.lng ?? null, radiusKm: null },
+        token,
+      ),
     enabled: Boolean(categoryId),
     staleTime: 60_000,
   });

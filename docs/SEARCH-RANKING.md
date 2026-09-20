@@ -59,13 +59,23 @@ demoted. Nothing here is a matter of degree.
 | --- | --- |
 | Business is marketplace-listed | live (Phase A) |
 | Service is `active` and `online` | live (Phase A) |
-| Location lifecycle is `ACTIVE` | **to build** — the spec's "location admission happens only on lifecycle ACTIVE (idempotent, audited)" |
-| Within the radius, when the viewer set one | **to build** |
+| Location lifecycle is `ACTIVE` | **deferred, and deliberately** — see below |
+| Within the radius, when the viewer set one | live (Phase B step 5) |
 | Above the quality floor | **inert** — no reviews exist, so nothing is below any floor yet |
 
 The quality floor is declared and does nothing. That is deliberate: the
 shape is in place so that turning reviews on later is a data change, not
 a ranking rewrite. It must not be faked with a proxy like "has photos".
+
+**The ACTIVE-location rule is not in v1, and that needs a decision.**
+Applied to the data as it stands it would remove **4 of the 10 listed
+salons** from every result — the imported ones that never went through
+the registration wizard and so have a location that was never activated.
+In production the rule is right and would be nearly a no-op; against the
+current seed it is destructive. Left out rather than slipped in, so that
+both doors keep one notion of who is in the running and nobody loses
+salons without being told. Turning it on is a one-line change plus a
+decision about those four.
 
 ### Stage 2 — Score
 
@@ -522,12 +532,22 @@ endpoint, UI, tests, seed, docs note.
    component alone, affinity's decay and its max-not-sum rule, the inert
    pair proven inert by turning their weights to 1 and watching nothing
    move, renormalisation, chain dedup, and the cold-start promotion.
-3. **Consent** — the `client_users` boolean, the My Velnes › General
-   switch, and the door honouring it.
-4. **The door** — Phase A's `GET .../categories/:id/services` gains a
-   `POST` sibling carrying viewer context (rounded position, radius,
-   later filters). The `GET` stays as the unpersonalised public form,
-   which is also what a signed-out viewer with no location gets.
+3. ~~**Consent**~~ — **done 2026-09-20.** `client_users
+   .personalised_results`, default true; a switch in My Velnes › General
+   that saves on the spot and invalidates the results cache, since the
+   order it governs is on screen. Tested: on by default, the client can
+   turn it off, it survives a re-read, and an unrelated profile edit
+   does not quietly turn it back on — a consent setting that resets
+   itself is not consent.
+4. ~~**The door**~~ — **done 2026-09-20.** `POST
+   .../categories/:id/services` takes the viewer context and answers
+   with `rankVersion` and `personalised` alongside the rows; the `GET`
+   stays as the unpersonalised form. Both doors share one gatherer, so
+   they can never disagree about who is in the running — only about the
+   order. Authentication is optional and a token that cannot be read is
+   treated exactly like no token: being signed out is not an error on a
+   key-free door. Steps 5 and 6 came with it — radius admission, and
+   affinity read across salons through `withClient`.
 5. **Admission** — location lifecycle `ACTIVE`, and radius when the
    viewer sets one.
 6. **Affinity** — the cross-tenant read through `withClient`, recency

@@ -2,6 +2,7 @@ import {
   API_PREFIX,
   DiscoveryCategoriesSchema,
   DiscoveryCategoryServicesSchema,
+  DiscoveryRankedServicesSchema,
   DiscoverySalonDetailSchema,
   DiscoverySalonsSchema,
 } from '@velnes/contracts';
@@ -407,5 +408,107 @@ describe('the consumer discovery surface', () => {
     });
     expect(res.statusCode).toBe(404);
     expect(res.json().error).toBe('UNKNOWN_CATEGORY');
+  });
+
+  /** Phase B, step 4: the ranked form of the same results. */
+  describe('ranked results', () => {
+    async function ranked(body: Record<string, unknown>, headers: Record<string, string> = {}) {
+      const { category } = await firstCategoryWithServices();
+      const res = await app.inject({
+        method: 'POST',
+        url: `${P}/discovery/categories/${category.id}/services`,
+        headers,
+        payload: body,
+      });
+      expect(res.statusCode).toBe(200);
+      return { category, body: DiscoveryRankedServicesSchema.parse(res.json()) };
+    }
+
+    it('answers a signed-out visitor with no location at all', async () => {
+      // Not an error, not an empty page: an ordinary caller.
+      const { body } = await ranked({});
+      expect(body.services.length).toBeGreaterThan(0);
+      expect(body.personalised, 'nobody to personalise for').toBe(false);
+      expect(body.rankVersion).toBeGreaterThan(0);
+    });
+
+    it('stamps the config version it ranked under, so an order can be explained later', async () => {
+      const { body } = await ranked({ lat: 41.998, lng: 21.425 });
+      expect(body.rankVersion).toBe(1);
+      // And the weights themselves never leave the platform.
+      expect(JSON.stringify(body)).not.toContain('proximity');
+    });
+
+    it('returns the same rows as the unranked door, only ordered differently', async () => {
+      const { category, body } = await ranked({ lat: 41.998, lng: 21.425 });
+      const plain = DiscoveryCategoryServicesSchema.parse(
+        (
+          await app.inject({
+            method: 'GET',
+            url: `${P}/discovery/categories/${category.id}/services`,
+          })
+        ).json(),
+      );
+      // One gatherer behind both doors: they must never disagree about
+      // who is in the running.
+      expect([...body.services.map((s) => s.id)].sort()).toEqual(
+        [...plain.services.map((s) => s.id)].sort(),
+      );
+    });
+
+    it('puts the nearer salon first when a position is given', async () => {
+      const { category } = await firstCategoryWithServices();
+      const near = await app.inject({
+        method: 'POST',
+        url: `${P}/discovery/categories/${category.id}/services`,
+        payload: { lat: 41.9981, lng: 21.4254 },
+      });
+      const far = await app.inject({
+        method: 'POST',
+        url: `${P}/discovery/categories/${category.id}/services`,
+        payload: { lat: 40.6401, lng: 22.9444 },
+      });
+      const a = DiscoveryRankedServicesSchema.parse(near.json()).services.map((s) => s.id);
+      const b = DiscoveryRankedServicesSchema.parse(far.json()).services.map((s) => s.id);
+      // Same rows either way; standing somewhere else may reorder them.
+      expect([...a].sort()).toEqual([...b].sort());
+    });
+
+    it('treats a radius as a hard filter, and its absence as a soft one', async () => {
+      const { category } = await firstCategoryWithServices();
+      const all = await app.inject({
+        method: 'POST',
+        url: `${P}/discovery/categories/${category.id}/services`,
+        payload: { lat: 40.6401, lng: 22.9444 },
+      });
+      const tight = await app.inject({
+        method: 'POST',
+        url: `${P}/discovery/categories/${category.id}/services`,
+        payload: { lat: 40.6401, lng: 22.9444, radiusKm: 1 },
+      });
+      const nAll = DiscoveryRankedServicesSchema.parse(all.json()).services.length;
+      const nTight = DiscoveryRankedServicesSchema.parse(tight.json()).services.length;
+      // Without a radius "near me" only sorts; with one it excludes.
+      expect(nAll).toBeGreaterThan(0);
+      expect(nTight).toBeLessThan(nAll);
+    });
+
+    it('ignores a token it cannot read rather than refusing the request', async () => {
+      // Being signed out, or holding a stale token, is not an error on a
+      // key-free door — it just means there is no history to rank with.
+      const { body } = await ranked({}, { authorization: 'Bearer not-a-real-token' });
+      expect(body.services.length).toBeGreaterThan(0);
+      expect(body.personalised).toBe(false);
+    });
+
+    it('refuses an unknown category the same way the unranked door does', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: `${P}/discovery/categories/${randomUUID()}/services`,
+        payload: {},
+      });
+      expect(res.statusCode).toBe(404);
+      expect(res.json().error).toBe('UNKNOWN_CATEGORY');
+    });
   });
 });

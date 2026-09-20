@@ -8,8 +8,8 @@ import {
   serviceVM,
   type ServiceVM,
 } from '../../lib/api/mappers.js';
-import { useCategories, useCategoryServices } from '../../lib/api/queries.js';
-import { useMyNotifications } from '../../lib/api/session.js';
+import { useCategories, useRankedCategoryServices } from '../../lib/api/queries.js';
+import { useMyNotifications, useSession } from '../../lib/api/session.js';
 import { distanceKm, distanceLbl, useUserLocation } from '../../lib/geo.js';
 import { SalonMap } from '../../components/SalonMap.js';
 import { IcArr, IcClock, IcPin, IcSpark, IcVok, useSalonLive } from './cards.js';
@@ -27,9 +27,11 @@ import { IcArr, IcClock, IcPin, IcSpark, IcVok, useSalonLive } from './cards.js'
  */
 function useCategoryResults(categorySlug: string | undefined) {
   const catsQ = useCategories();
+  const { token } = useSession();
+  const { position } = useUserLocation();
   const cats = useMemo(() => (catsQ.data?.categories ?? []).map(categoryVM), [catsQ.data]);
   const cat = cats.find((c) => c.slug === categorySlug);
-  const servicesQ = useCategoryServices(cat?.id);
+  const servicesQ = useRankedCategoryServices(cat?.id, position, token);
   const rows = useMemo(
     () => (servicesQ.data?.services ?? []).map(serviceVM),
     [servicesQ.data],
@@ -47,6 +49,9 @@ function useCategoryResults(categorySlug: string | undefined) {
      *  categories with something behind them. Either way the honest
      *  answer is the same, and it is not "nothing under ''". */
     unknown: Boolean(catsQ.data) && !cat,
+    /** Whether the viewer's own bookings shaped this order. Shown, so
+     *  the order is never mysterious. */
+    personalised: servicesQ.data?.personalised ?? false,
   };
 }
 
@@ -221,7 +226,7 @@ export function Results() {
   const unread = useMyNotifications().data?.unread ?? 0;
   const geo = useUserLocation();
   const [mapOpen, setMapOpen] = useState(false);
-  const { cat, rows, best, alts, loaded, unknown } = useCategoryResults(category);
+  const { cat, rows, best, alts, loaded, unknown, personalised } = useCategoryResults(category);
   const title = cat?.name ?? category ?? '';
   // One pin per salon, not one per treatment: a salon offering four
   // services in this category is still one place on the map. Only
@@ -285,7 +290,13 @@ export function Results() {
                   <div className="spark" style={{ display: 'inline-flex', gap: '8px', alignItems: 'center', fontWeight: '700', color: 'var(--ink)', fontSize: '16px' }}>
                     {IcSpark}Velnes thinks along with you
                   </div>
-                  <div className="sm muted" style={{ marginTop: '2px' }}>Only live bookable options – carefully selected for you.</div>
+                  <div className="sm muted" style={{ marginTop: '2px' }}>
+                    {personalised
+                      ? 'Ordered using your own bookings and where you are — you can turn this off in My Velnes.'
+                      : geo.status === 'on'
+                        ? 'Ordered by how near they are, and what they cost.'
+                        : 'Ordered by what they cost, and how soon you can book.'}
+                  </div>
                 </div>
               </div>
               <div id="d-reslist">

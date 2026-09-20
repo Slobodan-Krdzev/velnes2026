@@ -557,7 +557,27 @@ function General() {
     lang: profile?.lang ?? 'en',
   });
   const [pw, setPw] = useState({ current: '', next: '' });
+  const [savingPers, setSavingPers] = useState(false);
   if (!profile) return null;
+
+  /** The personalisation switch saves on the spot — a toggle that needs
+   *  an Edit button and a Save button is a toggle nobody trusts. */
+  const setPersonalised = async (on: boolean) => {
+    setErr('');
+    setMsg('');
+    setSavingPers(true);
+    try {
+      await api('/me', { method: 'PATCH', body: JSON.stringify({ personalisedResults: on }) });
+      await qc.invalidateQueries({ queryKey: ['me'] });
+      // Results are ordered with this, so what is on screen is now stale.
+      await qc.invalidateQueries({ queryKey: ['category-services'] });
+      setMsg(on ? 'Results will use your bookings.' : 'Results will ignore your bookings.');
+    } catch (e) {
+      setErr(e instanceof ApiError ? e.message : 'Could not save that — please try again.');
+    } finally {
+      setSavingPers(false);
+    }
+  };
 
   const save = async () => {
     setErr('');
@@ -710,6 +730,32 @@ function General() {
             {msg}
           </div>
         ) : null}
+      </div>
+
+      <div className="acc-card">
+        <div className="acc-lbl">Search results</div>
+        <div className="acc-kv" style={{ alignItems: 'flex-start' }}>
+          <span style={{ maxWidth: '62%' }}>
+            Use my bookings to order results
+            <br />
+            <span className="sm muted">
+              Treatments you have booked before, and the salons you booked them at, come
+              first. Only your own bookings are used, and no salon is told about them.
+            </span>
+          </span>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={profile.personalisedResults}
+            aria-label="Use my bookings to order results"
+            disabled={savingPers}
+            className={`btn ${profile.personalisedResults ? 'btn-p' : 'btn-g'}`}
+            style={{ minHeight: '34px', padding: '6px 14px', fontSize: '13px' }}
+            onClick={() => setPersonalised(!profile.personalisedResults)}
+          >
+            {profile.personalisedResults ? 'On' : 'Off'}
+          </button>
+        </div>
       </div>
     </>
   );
