@@ -869,6 +869,18 @@ export interface SearchConfig {
   version: number;
 }
 
+export interface SearchDocuments {
+  categoryId: string | null;
+  display: string;
+  kind: string;
+  norm: string;
+  refId: string;
+  salonName: string;
+  salonSlug: string;
+  tenantId: string;
+  updatedAt: Generated<Timestamp>;
+}
+
 export interface ServiceCategories {
   cardImage: string | null;
   icon: string | null;
@@ -1163,6 +1175,7 @@ export interface DB {
   scheduleExceptions: ScheduleExceptions;
   schemaMigrations: SchemaMigrations;
   searchConfig: SearchConfig;
+  searchDocuments: SearchDocuments;
   serviceCategories: ServiceCategories;
   serviceModifierGroups: ServiceModifierGroups;
   serviceModifierOptions: ServiceModifierOptions;
