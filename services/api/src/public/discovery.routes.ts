@@ -133,25 +133,57 @@ async function liveWidgets(tenantIds: string[]) {
   });
 }
 
+/**
+ * The categories something is actually published in.
+ *
+ * A category card is a promise that there is something behind it, so
+ * the shelf only carries categories a listed salon really offers an
+ * active, online service in. The predicate is deliberately the same one
+ * the services door filters on — if the two ever drifted apart, a card
+ * would open onto an empty page, which is the one thing the shelf must
+ * not do.
+ */
+async function categoryIdsOnOffer(listed: ListedBusiness[]): Promise<Set<string>> {
+  const out = new Set<string>();
+  for (const b of listed) {
+    const rows = await withTenant(b.id, (trx) =>
+      trx
+        .selectFrom('services')
+        .select('categoryId')
+        .distinct()
+        .where('status', '=', 'active')
+        .where('online', '=', true)
+        .execute(),
+    );
+    for (const r of rows) if (r.categoryId) out.add(r.categoryId);
+  }
+  return out;
+}
+
 export async function discoveryRoutes(app: FastifyInstance) {
   const r = app.withTypeProvider<ZodTypeProvider>();
 
   r.addHook('onRequest', async (req, reply) => openCors(req, reply));
 
-  // The Velnes taxonomy as browsable cards — same open read the salon
-  // registration wizard already uses, plus the HQ-provided media.
+  // The Velnes taxonomy as browsable cards, plus the HQ-provided media
+  // — but only the part of it that has anything behind it. A salon
+  // registering still picks from the whole taxonomy; that is the
+  // registration wizard's own door (/registrations/service-categories),
+  // so a category nobody serves yet stays choosable there while staying
+  // off the shelf here.
   r.route({
     method: 'GET',
     url: '/discovery/categories',
     schema: { response: { 200: DiscoveryCategoriesSchema } },
     handler: async () => {
+      const onOffer = await categoryIdsOnOffer(await listedBusinesses());
       const rows = await db
         .selectFrom('serviceCategories')
         .select(['id', 'name', 'cardImage', 'icon'])
         .orderBy('sort')
         .orderBy('name')
         .execute();
-      return { categories: rows };
+      return { categories: rows.filter((c) => onOffer.has(c.id)) };
     },
   });
 

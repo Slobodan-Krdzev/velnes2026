@@ -50,6 +50,46 @@ describe('the consumer discovery surface', () => {
     }
   });
 
+  it('carries only categories with something behind them — every card opens onto a result', async () => {
+    const { categories } = DiscoveryCategoriesSchema.parse(
+      (await app.inject({ method: 'GET', url: `${P}/discovery/categories` })).json(),
+    );
+    // The promise the shelf makes: no card is a dead end.
+    for (const c of categories) {
+      const res = await app.inject({
+        method: 'GET',
+        url: `${P}/discovery/categories/${c.id}/services`,
+      });
+      const body = DiscoveryCategoryServicesSchema.parse(res.json());
+      expect(body.services.length, `${c.name} has something behind it`).toBeGreaterThan(0);
+    }
+  });
+
+  it('drops a category from the shelf once nothing is published in it', async () => {
+    const { categories } = DiscoveryCategoriesSchema.parse(
+      (await app.inject({ method: 'GET', url: `${P}/discovery/categories` })).json(),
+    );
+    const victim = categories[0]!;
+    // Take everything in that category off offer, the way a salon would.
+    await admin.query(`UPDATE services SET online = false WHERE category_id = $1`, [victim.id]);
+    try {
+      const after = DiscoveryCategoriesSchema.parse(
+        (await app.inject({ method: 'GET', url: `${P}/discovery/categories` })).json(),
+      );
+      expect(after.categories.some((c) => c.id === victim.id)).toBe(false);
+      // The door behind it still answers — it is simply empty now, and
+      // the taxonomy row itself is untouched.
+      const res = await app.inject({
+        method: 'GET',
+        url: `${P}/discovery/categories/${victim.id}/services`,
+      });
+      expect(res.statusCode).toBe(200);
+      expect(DiscoveryCategoryServicesSchema.parse(res.json()).services).toEqual([]);
+    } finally {
+      await admin.query(`UPDATE services SET online = true WHERE category_id = $1`, [victim.id]);
+    }
+  });
+
   it('lists only marketplace-listed salons, with the categories they really serve', async () => {
     const res = await app.inject({ method: 'GET', url: `${P}/discovery/salons` });
     expect(res.statusCode).toBe(200);

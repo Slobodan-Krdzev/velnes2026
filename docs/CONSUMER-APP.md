@@ -38,7 +38,7 @@ subsystem does not exist yet, the surface is simply absent.
 
 | Surface | Source |
 |---|---|
-| Category cards | `GET /public/discovery/categories` — the HQ taxonomy plus the card image and icon HQ uploads (null until HQ dresses a category) |
+| Category cards | `GET /public/discovery/categories` — the part of the HQ taxonomy something is published in, plus the card image and icon HQ uploads (null until HQ dresses a category) |
 | Salon cards, results | `GET /public/discovery/salons` — only businesses with `settings.marketplace.listed` |
 | Salon page | `GET /public/discovery/salons/:slug` — gallery, description, team (honoring `showTeam`), sellable products, live locations |
 | Treatments, prices, durations | the existing `GET /public/services` (per location) |
@@ -265,6 +265,17 @@ the salon comes with it, rather than choosing a salon and hunting for the
 treatment inside it. Clicking a result opens the salon page with that
 service already in the cart, through the `?service=<id>` link the page
 has always understood.
+
+**The shelf only carries categories with something behind them.** A
+category card is a promise that there is a result on the other side, so
+`GET /public/discovery/categories` now returns only the categories a
+listed salon has an active, online service in — filtered on exactly the
+predicate the services door lists by, because if the two ever drifted a
+card would open onto an empty page. The taxonomy row is untouched and
+the registration wizard still offers the whole of it through its own
+door (`/registrations/service-categories`), so a category nobody serves
+yet stays choosable by a salon while staying off the shelf. A test walks
+every card on the shelf and asserts its door returns something.
 
 Prices are withheld rather than hidden. A salon that clears
 `marketplace.showPrices` has its numbers nulled at the door and the card

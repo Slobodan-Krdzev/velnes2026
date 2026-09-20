@@ -42,6 +42,11 @@ function useCategoryResults(categorySlug: string | undefined) {
     // Loaded once the category is known and its services have answered
     // — an unknown slug is settled by the category list alone.
     loaded: Boolean(catsQ.data) && (!cat || Boolean(servicesQ.data)),
+    /** The slug names nothing browsable: either never a category, or one
+     *  no salon publishes in any more, since the shelf now carries only
+     *  categories with something behind them. Either way the honest
+     *  answer is the same, and it is not "nothing under ''". */
+    unknown: Boolean(catsQ.data) && !cat,
   };
 }
 
@@ -66,6 +71,16 @@ function useLiveLine(s: ServiceVM) {
  *  already named so the salon page can open on it. */
 function salonHref(s: ServiceVM) {
   return `/salon/${s.salon.slug}?service=${encodeURIComponent(s.id)}`;
+}
+
+/** What an empty result page says. A category the shelf no longer
+ *  carries is not the same as one nobody has published in yet, and
+ *  saying "nothing under Spa-Inclusive" about a slug that names no
+ *  category at all would be a small lie. */
+function emptyLine(title: string, unknown: boolean) {
+  return unknown
+    ? 'Nothing to browse under that name — try a category from the home page.'
+    : `Nothing published under ${title} yet — new salons join Velnes every week.`;
 }
 
 /** The line under a result's title: which salon, and how far. */
@@ -206,8 +221,8 @@ export function Results() {
   const unread = useMyNotifications().data?.unread ?? 0;
   const geo = useUserLocation();
   const [mapOpen, setMapOpen] = useState(false);
-  const { cat, rows, best, alts, loaded } = useCategoryResults(category);
-  const title = cat?.name ?? '';
+  const { cat, rows, best, alts, loaded, unknown } = useCategoryResults(category);
+  const title = cat?.name ?? category ?? '';
   // One pin per salon, not one per treatment: a salon offering four
   // services in this category is still one place on the map. Only
   // salons that really dropped a pin appear — no coordinates guessed
@@ -275,7 +290,7 @@ export function Results() {
               </div>
               <div id="d-reslist">
                 {best ? <BestD s={best} /> : loaded ? (
-                  <div className="sm muted" style={{ padding: '18px 4px' }}>Nothing published under {title} yet — new salons join Velnes every week.</div>
+                  <div className="sm muted" style={{ padding: '18px 4px' }}>{emptyLine(title, unknown)}</div>
                 ) : null}
                 {alts.length ? (
                   <>
@@ -367,7 +382,7 @@ export function Results() {
             </div>
             <div id="m-reslist">
               {best ? <BestM s={best} /> : loaded ? (
-                <div className="sm muted" style={{ padding: '18px 16px' }}>No salons offer {title} yet — new salons join Velnes every week.</div>
+                <div className="sm muted" style={{ padding: '18px 16px' }}>{emptyLine(title, unknown)}</div>
               ) : null}
               {alts.length ? (
                 <>
