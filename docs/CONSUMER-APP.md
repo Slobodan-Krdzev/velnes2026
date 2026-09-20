@@ -330,7 +330,8 @@ before it can be real:
 - **Personalised results.** A category now lists its treatments, but in
   a fixed order. Ranking them by the customer's location and by what
   they have booked before — most-booked service, favourites, similar
-  treatments — is agreed as the next step and waits on §5. Two of its
+  treatments — is specified in `docs/SEARCH-RANKING.md` and waits on the
+  four decisions still open there. Two of its
   inputs do not exist yet either: favourites are not persisted anywhere
   (the heart on a card is component state), and there is no geo search
   or distance sort. The cross-salon half is ready: `withClient` already
