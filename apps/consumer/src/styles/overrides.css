@@ -1,0 +1,91 @@
+/* Deliberate departures from the prototype, asked for by Alex while
+   reviewing the running app. They live here rather than in
+   prototype.css so that file stays the untouched reference the design
+   is measured against.
+
+   2026-09-20 — the search card needs air above and below; the category
+   shelf becomes one sliding row instead of a grid. */
+
+/* The card used to ride 96px up into the hero, covering the lead line
+   and sitting flush against the categories. It still overlaps the
+   curve, just not the words, and the shelf below gets room. */
+.searchcard {
+  margin: -54px auto 40px;
+}
+@media (max-width: 1100px) {
+  .searchcard {
+    margin: -40px auto 32px;
+  }
+}
+.m-searchcard {
+  margin-top: 18px;
+  margin-bottom: 22px;
+}
+
+/* ── The category shelf ───────────────────────────────────────────
+   One row that slides, and keeps going round: the taxonomy is a shelf
+   to browse, not a wall to read. Same behaviour on every size. */
+.catrail {
+  position: relative;
+  margin-top: 4px;
+}
+.catrail-track {
+  display: flex;
+  gap: 14px;
+  overflow-x: auto;
+  scroll-behavior: smooth;
+  scrollbar-width: none;
+  padding: 4px 2px 10px;
+}
+.catrail-track::-webkit-scrollbar {
+  display: none;
+}
+.catrail-track > .catcard {
+  flex: 0 0 210px;
+  width: 210px;
+}
+/* The mobile shelf keeps the page's own gutter. */
+.m-env .catrail {
+  margin: 0;
+}
+.m-env .catrail-track {
+  padding: 4px 16px 10px;
+  gap: 12px;
+}
+.m-env .catrail-track > .catcard {
+  flex: 0 0 168px;
+  width: 168px;
+}
+
+.catrail-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 4;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--line-soft);
+  border-radius: 50%;
+  background: #fff;
+  color: var(--ink);
+  box-shadow: 0 8px 20px rgba(45, 26, 18, 0.16);
+  cursor: pointer;
+}
+.catrail-nav:hover {
+  border-color: var(--brand);
+  color: var(--brand-hover);
+}
+.catrail-nav.prev {
+  left: -14px;
+}
+.catrail-nav.next {
+  right: -14px;
+}
+/* On a touch screen the row is swiped, so the arrows step aside. */
+@media (hover: none) {
+  .catrail-nav {
+    display: none;
+  }
+}

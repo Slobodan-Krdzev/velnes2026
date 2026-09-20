@@ -14,6 +14,22 @@ the bundle stays small. Screen markup is spliced from the prototype's
 own DOM, not retyped: same class names, same structure, same inline
 styles, per the pixel-fidelity rule.
 
+## Departures from the prototype
+
+The prototype's stylesheet ships verbatim; deliberate changes asked for
+during review live in `src/styles/overrides.css`, so the reference file
+stays the thing the design is measured against. So far: the search card
+has air above and below it (it used to ride up over the hero's own lead
+line), and the category taxonomy is one sliding row rather than a grid.
+
+The shelf loops. Rather than cloning state or fighting momentum
+scrolling, the list is laid out three times and the scroll position is
+stepped back a lap whenever it drifts into the copy on either side — so
+it runs on for ever in both directions with no visible seam. A list of
+three or fewer is left alone, since a loop that short is a jitter. The
+same row serves every width: arrows on pointer devices, a swipe on
+touch.
+
 ## What is real
 
 Every value on screen comes from the platform through its own door. The
