@@ -312,10 +312,15 @@ before it can be real:
   the same mail decision.
 - **Phone verification.** Phones are collected and shown to the salon
   but never verified — SMS has no provider either.
-- **Favourites, Billing, Loyalty and Premium.** The prototype's other
-  account sections are absent from the menu rather than shown empty:
-  loyalty ledgers and premium are per-tenant mirrors today, and nothing
-  backs a consumer-side view of them.
+- **Favourites.** Planned and specified in `docs/FAVOURITES.md` (Phase
+  C, decided 2026-09-20): salons, services and professionals, on the
+  client's own account, feeding the ranking seam that already waits for
+  them. Not built yet — the heart on a salon card is still component
+  state and still forgets.
+- **Billing, Loyalty and Premium.** The prototype's other account
+  sections are absent from the menu rather than shown empty: loyalty
+  ledgers and premium are per-tenant mirrors today, and nothing backs a
+  consumer-side view of them.
 - **Reviews and ratings.** No tables exist, so every star, review count
   and "top rated" badge from the prototype is omitted rather than
   invented.
