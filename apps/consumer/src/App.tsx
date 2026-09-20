@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { BrowserRouter, Route, Routes } from 'react-router-dom';
+import { BrowserRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { Login, Register } from './features/account/Auth.js';
 import { MyVelnes } from './features/account/MyVelnes.js';
 import { BookingProvider } from './features/booking/store.js';
@@ -32,6 +32,28 @@ function PendingFavourite() {
   return null;
 }
 
+/**
+ * Every route starts at the top.
+ *
+ * The browser restores the previous scroll position on a history
+ * change, which is right for a back button and wrong for everything
+ * else: following a result three screens down would open the salon page
+ * three screens down, in the middle of its gallery.
+ *
+ * Keyed on the path rather than the whole location, so changing a
+ * filter — which writes `?price=low` into the URL — does not throw the
+ * reader back to the top of the list they were reading.
+ */
+function ScrollToTop() {
+  const { pathname } = useLocation();
+  useEffect(() => {
+    window.scrollTo(0, 0);
+    // The phone layout scrolls its own panel rather than the window.
+    for (const el of document.querySelectorAll('.m-page, .d-env')) el.scrollTop = 0;
+  }, [pathname]);
+  return null;
+}
+
 export function App() {
   return (
     <QueryClientProvider client={qc}>
@@ -40,6 +62,7 @@ export function App() {
         <GeoProvider>
           <BookingProvider>
           <BrowserRouter>
+            <ScrollToTop />
             <Routes>
               <Route path="/" element={<Home />} />
               <Route path="/s/:category" element={<Results />} />

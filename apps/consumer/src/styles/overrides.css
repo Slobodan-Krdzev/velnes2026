@@ -334,3 +334,74 @@ a.pop-go {
 a.pop-go:hover {
   background: var(--brand-hover);
 }
+
+/* ── The dim behind an open suggestion list ─────────────────────────
+   While the panel is open the rest of the page is not what anybody is
+   looking at. The scrim sits under the search box and over everything
+   else; clicking it closes the panel through the same outside-click
+   handler that was already there, so it needs no handler of its own. */
+.sug-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  background: rgba(45, 26, 18, 0.28);
+  backdrop-filter: blur(1.5px);
+  animation: sug-fade 0.14s ease-out;
+}
+@keyframes sug-fade {
+  from {
+    opacity: 0;
+  }
+}
+/* Both search boxes have to sit above it while open. The home card
+   already makes a stacking context (z-index:4), so raising the card
+   lifts its panel with it. */
+.searchcard.open,
+.pillsearch-wrap.open {
+  z-index: 40;
+}
+
+/* Softer corners on the panel, and on the card it hangs from. The
+   prototype squared off the join between card and panel; with a dim
+   behind them they read as one floating object, so both ends round. */
+.searchcard .sugg {
+  border-radius: 0 0 20px 20px;
+}
+.searchcard.open .field2 {
+  border-radius: 20px 20px 0 0;
+}
+.pillsearch-wrap .sugg {
+  border-radius: 18px;
+}
+.sug-card,
+.m-sug {
+  border-radius: 14px;
+}
+
+/* ── The filter chips ───────────────────────────────────────────────
+   The prototype's `.chips` gap of 6px was for tiny meta-chips inside a
+   suggestion row. These are full-size controls that wrap onto several
+   lines, and at 6px they read as one run-on strip rather than as
+   separate choices. */
+.filterbar.chips {
+  gap: 10px 12px;
+  margin: 0 0 16px;
+}
+
+/* ── Headings inside the mobile search sheet ────────────────────────
+   The prototype only ever styled `.h` inside `.sugg` (the desktop
+   panel), so the same heading in the phone's sheet inherited nothing
+   and sat flush against the cards above and below it. */
+.m-sheet .list > .h {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 4px 2px 12px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ink);
+}
+.m-sheet .list > .h:not(:first-child) {
+  margin-top: 18px;
+}
