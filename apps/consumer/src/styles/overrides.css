@@ -208,3 +208,20 @@
 .m-sug b {
   display: block;
 }
+
+/* A chosen filter has to look chosen. The prototype styles `.daychip.on`
+   for exactly this — a chip the customer has picked — but never needed
+   the same state on `.chip`, because in the prototype no chip did
+   anything. Step 8's filters do, so the state borrows that idiom rather
+   than inventing a second one. */
+.chip.on {
+  background: var(--brand);
+  border-color: var(--brand);
+  color: #fff;
+}
+.chip.on .muted {
+  color: rgba(255, 255, 255, 0.85);
+}
+.chip {
+  cursor: pointer;
+}

@@ -8,6 +8,7 @@ import type {
   DiscoveryCategoryServicesSchema,
   DiscoveryRankedServicesSchema,
   SearchResultsSchema,
+  PriceBand,
   PublicServicesResponseSchema,
 } from '@velnes/contracts';
 import { pub, pubPost } from './client.js';
@@ -18,6 +19,20 @@ type SalonDetail = z.infer<typeof DiscoverySalonDetailSchema>;
 type Services = z.infer<typeof PublicServicesResponseSchema>;
 type CategoryServices = z.infer<typeof DiscoveryCategoryServicesSchema>;
 type RankedServices = z.infer<typeof DiscoveryRankedServicesSchema>;
+
+/**
+ * What the viewer narrowed the answer to — step 8 of docs/SEARCH.md.
+ *
+ * Carried to the door and never applied here: filters are admission,
+ * and a page that re-filtered what it was given would be showing a
+ * different answer from the one the ranker produced.
+ */
+export interface SearchFilters {
+  priceBand: PriceBand | null;
+  categoryId: string | null;
+  radiusKm: number | null;
+}
+export const NO_FILTERS: SearchFilters = { priceBand: null, categoryId: null, radiusKm: null };
 type SearchResults = z.infer<typeof SearchResultsSchema>;
 type Availability = z.infer<typeof AvailabilityResponseSchema>;
 
@@ -72,6 +87,7 @@ export function useRankedCategoryServices(
   categoryId: string | undefined,
   position: { lat: number; lng: number } | null,
   token: string | null,
+  filters: SearchFilters = NO_FILTERS,
 ) {
   const at = position
     ? { lat: Math.round(position.lat * 1000) / 1000, lng: Math.round(position.lng * 1000) / 1000 }
@@ -80,11 +96,24 @@ export function useRankedCategoryServices(
     // Whether there is a token belongs in the key, because signing in or
     // out changes the order. The token's value does not — a cache key is
     // no place for a credential.
-    queryKey: ['ranked-services', categoryId, at?.lat ?? null, at?.lng ?? null, Boolean(token)],
+    queryKey: [
+      'ranked-services',
+      categoryId,
+      at?.lat ?? null,
+      at?.lng ?? null,
+      Boolean(token),
+      filters.priceBand,
+      filters.radiusKm,
+    ],
     queryFn: () =>
       pubPost<RankedServices>(
         `/discovery/categories/${categoryId}/services`,
-        { lat: at?.lat ?? null, lng: at?.lng ?? null, radiusKm: null },
+        {
+          lat: at?.lat ?? null,
+          lng: at?.lng ?? null,
+          radiusKm: at ? filters.radiusKm : null,
+          priceBand: filters.priceBand,
+        },
         token,
       ),
     enabled: Boolean(categoryId),
@@ -165,16 +194,35 @@ export function useSearch(
   q: string | null,
   position: { lat: number; lng: number } | null,
   token: string | null,
+  filters: SearchFilters = NO_FILTERS,
 ) {
   const at = position
     ? { lat: Math.round(position.lat * 1000) / 1000, lng: Math.round(position.lng * 1000) / 1000 }
     : null;
   return useQuery({
-    queryKey: ['search', q, at?.lat ?? null, at?.lng ?? null, Boolean(token)],
+    queryKey: [
+      'search',
+      q,
+      at?.lat ?? null,
+      at?.lng ?? null,
+      Boolean(token),
+      filters.priceBand,
+      filters.categoryId,
+      filters.radiusKm,
+    ],
     queryFn: () =>
       pubPost<SearchResults>(
         '/discovery/search',
-        { q, lat: at?.lat ?? null, lng: at?.lng ?? null, radiusKm: null },
+        {
+          q,
+          lat: at?.lat ?? null,
+          lng: at?.lng ?? null,
+          // A distance without a position filters nothing, and sending
+          // one would only invite the door to think otherwise.
+          radiusKm: at ? filters.radiusKm : null,
+          priceBand: filters.priceBand,
+          categoryId: filters.categoryId,
+        },
         token,
       ),
     enabled: Boolean(q && q.trim().length >= 2),

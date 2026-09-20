@@ -166,6 +166,35 @@ export const DiscoveryCategoryServicesSchema = z.object({
  * and they are used to order one response and then discarded. Nothing
  * here is stored against the account.
  */
+/**
+ * A price band — step 8 of docs/SEARCH.md.
+ *
+ * Bands are terciles across the admitted candidates for *this* query,
+ * so "low" means low for what was asked for rather than low against
+ * every treatment on the platform. The boundaries come back in the
+ * response, because a band with no number attached is a guess.
+ */
+export const PriceBandSchema = z.enum(['low', 'mid', 'high']);
+export type PriceBand = z.infer<typeof PriceBandSchema>;
+
+/**
+ * What the filters could offer, computed before any of them was
+ * applied — so choosing one does not move the others underneath the
+ * person choosing.
+ */
+export const SearchFacetsSchema = z.object({
+  /** Categories present in the unfiltered answer, with how many
+   *  treatments each carries. One entry means there is nothing to
+   *  narrow and the control should not appear. */
+  categories: z.array(
+    z.object({ id: z.uuid(), name: z.string(), count: z.number().int() }),
+  ),
+  /** Tercile boundaries in whole denars. Null when too few treatments
+   *  publish a price to divide them honestly. */
+  price: z.object({ lowMax: z.number().int(), midMax: z.number().int() }).nullable(),
+});
+export type SearchFacets = z.infer<typeof SearchFacetsSchema>;
+
 export const DiscoveryViewerSchema = z.object({
   lat: z.number().min(-90).max(90).nullable().default(null),
   lng: z.number().min(-180).max(180).nullable().default(null),
@@ -176,6 +205,9 @@ export const DiscoveryViewerSchema = z.object({
    * to happen.
    */
   radiusKm: z.number().positive().max(500).nullable().default(null),
+  /** Hard admission, like the radius: a band the viewer chose removes
+   *  what falls outside it rather than demoting it. */
+  priceBand: PriceBandSchema.nullable().default(null),
 });
 
 /** The ranked form of a category's services. Same rows as the
@@ -196,6 +228,15 @@ export const DiscoveryRankedServicesSchema = z.object({
    * leaving it mysterious.
    */
   personalised: z.boolean(),
+  /** What the filters could offer for this category — step 8. */
+  facets: SearchFacetsSchema,
+  /** A distance limit dropped because keeping it would have left almost
+   *  nothing. Reported, never silent. */
+  widened: z.enum(['radius']).nullable(),
+  /** Treatments a price band removed for publishing no price at all. A
+   *  salon that hides its prices vanishing from a price filter looks
+   *  like a missing salon unless the page says why. */
+  hiddenUnpriced: z.number().int(),
 });
 
 /**
@@ -250,6 +291,11 @@ export const SearchRequestSchema = z.object({
   lat: z.number().min(-90).max(90).nullable().default(null),
   lng: z.number().min(-180).max(180).nullable().default(null),
   radiusKm: z.number().positive().max(500).nullable().default(null),
+  priceBand: PriceBandSchema.nullable().default(null),
+  /** Narrows a query that spanned several categories — "fizio" is four.
+   *  Must be one the answer actually contains; anything else simply
+   *  matches nothing, which is the honest result of asking for it. */
+  categoryId: z.uuid().nullable().default(null),
 });
 
 /**
@@ -294,6 +340,10 @@ export const SearchResultsSchema = z.object({
    * pretend a widened answer was the narrow one.
    */
   widened: z.enum(['category', 'radius']).nullable(),
+  /** What the filters could offer, before any was applied. */
+  facets: SearchFacetsSchema,
+  /** Treatments a price band removed for publishing no price at all. */
+  hiddenUnpriced: z.number().int(),
   /** Echoed, so a late response can be discarded. */
   q: z.string(),
 });

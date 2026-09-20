@@ -6,6 +6,7 @@ import {
   DiscoveryRankedServicesSchema,
   SearchRequestSchema,
   SearchResultsSchema,
+  type SearchFacets,
   SearchSuggestionsSchema,
   SearchSuggestRequestSchema,
   DiscoverySalonsSchema,
@@ -18,10 +19,11 @@ import { sql } from 'kysely';
 import { z } from 'zod';
 import { svcVariants } from '../modules/catalog/catalog.service.js';
 import { ClientClaimsSchema } from '@velnes/contracts';
-import { distanceKm, rank, type RankCandidate } from '../modules/search/rank.js';
+import { rank, type RankCandidate } from '../modules/search/rank.js';
 import { activeSearchConfig, viewerHistory } from '../modules/search/search.service.js';
 import { lookupMatches, MIN_QUERY, topMatches } from '../modules/search/lookup.js';
 import { interpret, textRelevanceOf } from '../modules/search/interpret.js';
+import { applyFilters, priceTercilesOf } from '../modules/search/filters.js';
 import { db, withClient, withTenant } from '../db/index.js';
 
 const ErrorSchema = z.object({ error: z.string(), message: z.string() });
@@ -171,12 +173,8 @@ async function categoryIdsOnOffer(admitted: ListedBusiness[]): Promise<Set<strin
   return out;
 }
 
-/**
- * Below this many results, a distance limit has done more harm than
- * good. The original search proposal reached for the same number when
- * it widened a geographic pool once — five is few enough to feel empty.
- */
-const WIDEN_BELOW = 5;
+/** What the filters can offer when there is no answer to describe. */
+const NO_FACETS: SearchFacets = { categories: [], price: null };
 
 /** What the ranker needs that a result card does not carry. */
 interface CandidateMeta {
@@ -608,6 +606,8 @@ export async function discoveryRoutes(app: FastifyInstance) {
         how: 'none' as const,
         ambiguous: false,
         widened: null,
+        facets: NO_FACETS,
+        hiddenUnpriced: 0,
         q: req.body.q,
       };
       if (q.length < MIN_QUERY) return empty;
@@ -640,15 +640,22 @@ export async function discoveryRoutes(app: FastifyInstance) {
       // gathering by category picks it up along with its siblings —
       // which is also the only honest way to fill a page for a query
       // that named exactly one thing.
+      //
+      // Gathered one category at a time, and kept that way: a candidate
+      // has to carry its own category id or affinity, diversity and the
+      // category filter are all reasoning about a category the
+      // treatment is not in. "fizio" is four categories at once.
       const seen = new Map<string, DiscoveryServiceCard>();
-      const meta = new Map<string, CandidateMeta>();
-      let categoryId: string | null = null;
+      const byCategory: RankCandidate[] = [];
+      const facetCategories: { id: string; name: string; count: number }[] = [];
       for (const id of read.categoryIds) {
         const got = await gatherCategory(id);
         if (!got) continue;
-        categoryId = categoryId ?? got.category.id;
-        for (const svc of got.services) if (!seen.has(svc.id)) seen.set(svc.id, svc);
-        for (const [k, v] of got.meta) meta.set(k, v);
+        const fresh = got.services.filter((svc) => !seen.has(svc.id));
+        for (const svc of fresh) seen.set(svc.id, svc);
+        if (!fresh.length) continue;
+        byCategory.push(...candidatesOf(got.category.id, fresh, got.meta));
+        facetCategories.push({ id: got.category.id, name: got.category.name, count: fresh.length });
       }
       const services = [...seen.values()];
       if (!services.length)
@@ -683,39 +690,46 @@ export async function discoveryRoutes(app: FastifyInstance) {
         }
       }
 
-      const candidates = candidatesOf(categoryId ?? '', services, meta).map((c) => ({
+      const candidates = byCategory.map((c) => ({
         ...c,
         // The one thing a text query knows that a category card does not.
         textRelevance: textRelevanceOf(c.id, matches),
       }));
 
-      // A radius the viewer set is a hard filter — until it would leave
-      // them with almost nothing, at which point it is dropped once and
-      // said out loud. Silently pretending a widened answer was the
-      // narrow one is the only unacceptable option.
-      let widened: 'category' | 'radius' | null = null;
-      let admittedCandidates = candidates;
-      if (position && req.body.radiusKm) {
-        const within = candidates.filter(
-          (c) =>
-            c.salon.lat != null &&
-            c.salon.lng != null &&
-            distanceKm(position, { lat: c.salon.lat, lng: c.salon.lng }) <= req.body.radiusKm!,
-        );
-        if (within.length >= WIDEN_BELOW) admittedCandidates = within;
-        else widened = 'radius';
-      }
+      // Facets describe the answer before anybody narrowed it, so
+      // choosing a band does not move the boundaries underneath the
+      // person who chose it, and a category can always be unchosen.
+      const terciles = priceTercilesOf(candidates);
+      const facets = {
+        // Nothing to narrow when the query only ever meant one thing.
+        categories: facetCategories.length > 1 ? facetCategories : [],
+        price: terciles,
+      };
+
+      const cut = applyFilters(
+        candidates,
+        {
+          radiusKm: req.body.radiusKm,
+          priceBand: req.body.priceBand,
+          categoryId: req.body.categoryId,
+        },
+        position,
+        terciles,
+        true,
+      );
+      let widened: 'category' | 'radius' | null = cut.widened;
       // The text named particular treatments and we are showing more
       // than those: their category came too, which is a broadening and
       // is labelled as one.
       if (
         !widened &&
+        !req.body.categoryId &&
         read.serviceIds.length &&
-        admittedCandidates.length > read.serviceIds.length
+        cut.admitted.length > read.serviceIds.length
       )
         widened = 'category';
 
-      const ranked = rank(admittedCandidates, { position, history }, cfg.payload, { now });
+      const ranked = rank(cut.admitted, { position, history }, cfg.payload, { now });
       const byId = new Map(services.map((s) => [s.id, s]));
       return {
         directSalon: null,
@@ -726,6 +740,8 @@ export async function discoveryRoutes(app: FastifyInstance) {
         how: read.how,
         ambiguous: read.ambiguous,
         widened,
+        facets,
+        hiddenUnpriced: cut.hiddenUnpriced,
         q: req.body.q,
       };
     },
@@ -792,28 +808,32 @@ export async function discoveryRoutes(app: FastifyInstance) {
 
       const candidates = candidatesOf(category.id, services, meta);
 
-      // Admission: a radius the viewer explicitly set is a hard filter,
-      // and results outside it are absent rather than demoted. Without
-      // one, "Near me" only sorts — a toggle that silently hides a salon
+      // Admission, through the same function the text door uses. A
+      // radius the viewer explicitly set is a hard filter and results
+      // outside it are absent rather than demoted; without one, "Near
+      // me" only sorts, because a toggle that silently hides a salon
       // 6km away is a bug report waiting to happen.
-      const admitted =
-        position && req.body.radiusKm
-          ? candidates.filter(
-              (c) =>
-                c.salon.lat != null &&
-                c.salon.lng != null &&
-                distanceKm(position, { lat: c.salon.lat, lng: c.salon.lng }) <=
-                  req.body.radiusKm!,
-            )
-          : candidates;
+      //
+      // There is no category facet here: a category card already is the
+      // category.
+      const terciles = priceTercilesOf(candidates);
+      const cut = applyFilters(
+        candidates,
+        { radiusKm: req.body.radiusKm, priceBand: req.body.priceBand, categoryId: null },
+        position,
+        terciles,
+      );
 
-      const ranked = rank(admitted, { position, history }, cfg.payload, { now });
+      const ranked = rank(cut.admitted, { position, history }, cfg.payload, { now });
       const byId = new Map(services.map((s) => [s.id, s]));
       return {
         category,
         services: ranked.map((r) => byId.get(r.candidate.id)!),
         rankVersion: cfg.version,
         personalised,
+        facets: { categories: [], price: terciles },
+        widened: cut.widened,
+        hiddenUnpriced: cut.hiddenUnpriced,
       };
     },
   });

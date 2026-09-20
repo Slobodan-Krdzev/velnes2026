@@ -5,8 +5,9 @@ whether that is a salon, a treatment or an intent, and answers
 accordingly. Nobody should have to know how our database is arranged in
 order to find a massage.
 
-Decided 2026-09-20, **not yet built**. This document is the brief; the
-build order is §12.
+Decided 2026-09-20. **Steps 1–8 built 2026-09-21**; steps 9–11 remain.
+This document is the brief, and the build order in §12 carries what is
+done and what each step actually settled.
 
 ---
 
@@ -290,8 +291,29 @@ Each step is shippable and testable alone.
    (`widened: category | radius`) gets a sentence on the page, and the
    "Velnes thinks along with you" banner is hidden when nothing was
    ranked rather than claiming work that did not happen.
-8. Filters: radius, price band, category — doors, URL, UI; remove the
-   inert chips.
+8. ~~Filters: radius, price band, category — doors, URL, UI; remove the
+   inert chips.~~ — **done 2026-09-21.** One pure module
+   (`modules/search/filters.ts`) both doors share, so "under 1.000 MKD"
+   cannot mean two things depending on how somebody arrived. Bands are
+   terciles of *this* answer, computed before any filter is applied so
+   choosing one does not move the boundaries underneath the person
+   choosing; absent entirely when fewer than six treatments carry a
+   price, or when they carry too few different ones. Filters live in the
+   URL (`price`, `cat`, `km`) so a narrowed answer is what gets shared
+   and Back undoes one choice at a time; the position stays out of it,
+   per §9. The **Now** chip and the inert **Filters** chip are gone
+   rather than decorative — a dead control is the same failure as a fake
+   availability badge. Two honesty lines were added: what a dropped
+   radius did, and how many treatments a price band hid for publishing
+   no price at all.
+
+   **Left deliberately inconsistent, for a product decision:** the two
+   doors treat a radius differently. Text search widens once and says so
+   (§8); a category card keeps Phase B's contract, where a radius is
+   hard and results outside it are simply absent. Phase B is closed, so
+   its rule was not changed as a side effect of adding filters. Whether
+   they should converge is Alex's call — `applyFilters` takes the
+   behaviour as a parameter, so it is one argument either way.
 9. "Most chosen" from completed bookings, with its volume floor.
 10. Zero/low-result query logging.
 11. Search Lab extension, and docs.

@@ -163,6 +163,92 @@ describe('a submitted search', () => {
     expect(r.rankVersion).toBeGreaterThan(0);
   });
 
+  describe('filters — step 8', () => {
+    it('offers the categories a query spanned, so it can be narrowed', async () => {
+      // "fizio" means four categories at once; that is exactly when a
+      // category control has something to do.
+      const r = await q('fizio');
+      expect(r.facets.categories.length).toBeGreaterThan(1);
+      const total = r.facets.categories.reduce((n, c) => n + c.count, 0);
+      expect(total, 'the counts describe the answer they came with').toBe(r.services.length);
+    });
+
+    it('offers no category control when the query only ever meant one thing', async () => {
+      const r = await q('rehab training');
+      expect(r.facets.categories).toEqual([]);
+    });
+
+    it('narrows to one category, and the others go entirely', async () => {
+      const all = await q('fizio');
+      const pick = all.facets.categories[0]!;
+      const one = await search({ q: 'fizio', categoryId: pick.id });
+      expect(one.services).toHaveLength(pick.count);
+      for (const s of one.services) expect(s.category).toBe(pick.name);
+      // Facets still describe the whole answer, so the choice can be
+      // undone without reloading a different page.
+      expect(one.facets.categories.length).toBe(all.facets.categories.length);
+    });
+
+    it('treats a category that is not in the answer as the empty answer it is', async () => {
+      const r = await search({ q: 'fizio', categoryId: '00000000-0000-4000-8000-000000000000' });
+      expect(r.services).toEqual([]);
+      // Not widened back to everything: an explicit choice is honoured
+      // even when honouring it is disappointing.
+      expect(r.widened).toBeNull();
+    });
+
+    it('bands prices within this query, and admits only the band', async () => {
+      const all = await q('fizio');
+      // Asserted rather than skipped over: a seed change that made the
+      // bands too thin to offer would otherwise turn every price test
+      // below into a silent no-op that still reports green.
+      expect(all.facets.price, 'the seeded world has prices enough to band').not.toBeNull();
+      const { lowMax } = all.facets.price!;
+      const low = await search({ q: 'fizio', priceBand: 'low' });
+      expect(low.services.length).toBeGreaterThan(0);
+      expect(low.services.length).toBeLessThan(all.services.length);
+      for (const s of low.services) {
+        const p = s.priceFrom ?? s.price;
+        expect(p, 'an unpriced treatment is in no band').not.toBeNull();
+        expect(p).toBeLessThanOrEqual(lowMax);
+      }
+      // Choosing a band does not move the boundaries underneath it.
+      expect(low.facets.price).toEqual(all.facets.price);
+    });
+
+    it('is admission, not a re-sort: the bands partition the answer', async () => {
+      const all = await q('fizio');
+      if (!all.facets.price) return;
+      const parts = await Promise.all(
+        (['low', 'mid', 'high'] as const).map((b) => search({ q: 'fizio', priceBand: b })),
+      );
+      const seen = parts.flatMap((p) => p.services.map((s) => s.id));
+      // Every priced treatment in exactly one band, none in two.
+      expect(new Set(seen).size).toBe(seen.length);
+      const priced = all.services.filter((s) => (s.priceFrom ?? s.price) != null);
+      expect(seen.length).toBe(priced.length);
+    });
+
+    it('carries the same filters on the category card entrance', async () => {
+      // One implementation of "under this much", reached two ways.
+      const cats = await app.inject({ method: 'GET', url: `${P}/discovery/categories` });
+      const first = (cats.json() as { categories: { id: string }[] }).categories[0]!;
+      const res = await app.inject({
+        method: 'POST',
+        url: `${P}/discovery/categories/${first.id}/services`,
+        payload: { priceBand: 'low' },
+      });
+      expect(res.statusCode).toBe(200);
+      const body = res.json();
+      // A category card is already its category — nothing to narrow.
+      expect(body.facets.categories).toEqual([]);
+      expect(body).toHaveProperty('hiddenUnpriced');
+      if (body.facets.price)
+        for (const s of body.services)
+          expect(s.priceFrom ?? s.price).toBeLessThanOrEqual(body.facets.price.lowMax);
+    });
+  });
+
   it('admits only what the consumer surface admits', async () => {
     // Every result is bookable and belongs to the one listed salon —
     // the Phase B admission, unchanged by the text door.

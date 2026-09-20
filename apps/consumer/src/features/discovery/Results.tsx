@@ -1,14 +1,21 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { DHeader } from '../../app/chrome.js';
 import {
   categoryVM,
+  fmtMKD,
   minutesLbl,
   priceLbl,
   serviceVM,
   type ServiceVM,
 } from '../../lib/api/mappers.js';
-import { useCategories, useRankedCategoryServices, useSearch } from '../../lib/api/queries.js';
+import {
+  useCategories,
+  useRankedCategoryServices,
+  useSearch,
+  type SearchFilters,
+} from '../../lib/api/queries.js';
+import type { SearchFacets } from '@velnes/contracts';
 import { useMyNotifications, useSession } from '../../lib/api/session.js';
 import { distanceKm, distanceLbl, useUserLocation } from '../../lib/geo.js';
 import { SalonMap } from '../../components/SalonMap.js';
@@ -28,7 +35,11 @@ type SalonHit = { id: string; slug: string; name: string; city: string | null };
  * booked before is the §5 work, and it will land behind that one door
  * rather than in this component.
  */
-function useCategoryResults(categorySlug: string | undefined, query: string | null) {
+function useCategoryResults(
+  categorySlug: string | undefined,
+  query: string | null,
+  filters: SearchFilters,
+) {
   const catsQ = useCategories();
   const { token } = useSession();
   const { position } = useUserLocation();
@@ -38,8 +49,13 @@ function useCategoryResults(categorySlug: string | undefined, query: string | nu
   // Two entrances, one room. Only one of these is ever enabled: a
   // category card knows its id, a typed query knows its text, and both
   // end up ranked by the same scorer behind the same admission.
-  const byCategory = useRankedCategoryServices(query ? undefined : cat?.id, position, token);
-  const byText = useSearch(query, position, token);
+  const byCategory = useRankedCategoryServices(
+    query ? undefined : cat?.id,
+    position,
+    token,
+    filters,
+  );
+  const byText = useSearch(query, position, token, filters);
   const answered = query ? byText.data : byCategory.data;
 
   const rows = useMemo(
@@ -73,8 +89,15 @@ function useCategoryResults(categorySlug: string | undefined, query: string | nu
      *  alone — two sharing a name, or a partial one. Offered rather than
      *  guessed between. */
     salons: query ? (byText.data?.salons ?? []) : [],
+    /** What could be narrowed, described before anything was — so a
+     *  choice can always be undone without reloading a different page. */
+    facets: answered?.facets ?? { categories: [], price: null },
+    /** Treatments a price band removed for publishing no price at all.
+     *  Said out loud: a salon that hides its prices disappearing from a
+     *  price filter looks like a missing salon. */
+    hiddenUnpriced: answered?.hiddenUnpriced ?? 0,
     /** Said out loud when the answer had to be broadened to fill a page. */
-    widened: query ? (byText.data?.widened ?? null) : null,
+    widened: query ? (byText.data?.widened ?? null) : (byCategory.data?.widened ?? null),
     how: query ? (byText.data?.how ?? null) : null,
   };
 }
@@ -128,6 +151,20 @@ function searchNote(
   return null;
 }
 
+/**
+ * What a price filter did to salons that publish no prices.
+ *
+ * They cannot be in any band, so they are gone — and a salon
+ * disappearing from a list looks like a missing salon unless the page
+ * says which of its own controls removed it.
+ */
+function unpricedNote(n: number): string | null {
+  if (!n) return null;
+  return n === 1
+    ? 'One treatment is hidden while a price filter is on, because its salon does not publish prices.'
+    : `${n} treatments are hidden while a price filter is on, because their salons do not publish prices.`;
+}
+
 /** Salons the text reached but that were not certain enough to open on
  *  their own — two sharing a name, or half a name typed. Offered rather
  *  than guessed between. */
@@ -154,6 +191,106 @@ function SalonHits({ salons, title }: { salons: SalonHit[]; title: string }) {
         </a>
       ))}
     </div>
+  );
+}
+
+/**
+ * The filter bar — step 8 of docs/SEARCH.md.
+ *
+ * Every control here is a *server-side admission*: choosing one asks
+ * the door a narrower question and the door answers it. Nothing is
+ * re-sorted or hidden on this side, because the order is the product
+ * and a page that quietly re-filters it is showing an answer nobody can
+ * explain afterwards.
+ *
+ * A control appears only when it can do something. Bands the door was
+ * unable to compute honestly, and a category list with one entry in it,
+ * are absent rather than inert — leaving a dead control on the page is
+ * the same failure as a fake availability badge.
+ *
+ * Deliberately missing, and staying missing until the data behind them
+ * is real: **Now** (needs live availability) and any rating filter
+ * (needs reviews).
+ */
+function FilterBar({
+  facets,
+  filters,
+  set,
+  canDistance,
+}: {
+  facets: SearchFacets;
+  filters: SearchFilters;
+  set: (patch: Partial<SearchFilters>) => void;
+  canDistance: boolean;
+}) {
+  const bands = facets.price;
+  const cats = facets.categories;
+  if (!bands && !cats.length && !canDistance) return null;
+  return (
+    <div className="chips" style={{ margin: '0 0 14px', rowGap: '8px' }}>
+      {cats.length ? (
+        <>
+          <Pick on={!filters.categoryId} set={() => set({ categoryId: null })}>
+            All
+          </Pick>
+          {cats.map((c) => (
+            <Pick
+              key={c.id}
+              on={filters.categoryId === c.id}
+              set={() => set({ categoryId: c.id })}
+            >
+              {c.name} <span className="muted">{c.count}</span>
+            </Pick>
+          ))}
+        </>
+      ) : null}
+      {bands ? (
+        <>
+          <Pick on={!filters.priceBand} set={() => set({ priceBand: null })}>
+            Any price
+          </Pick>
+          <Pick on={filters.priceBand === 'low'} set={() => set({ priceBand: 'low' })}>
+            Up to {fmtMKD(bands.lowMax)}
+          </Pick>
+          <Pick on={filters.priceBand === 'mid'} set={() => set({ priceBand: 'mid' })}>
+            {fmtMKD(bands.lowMax)}&ndash;{fmtMKD(bands.midMax)}
+          </Pick>
+          <Pick on={filters.priceBand === 'high'} set={() => set({ priceBand: 'high' })}>
+            Over {fmtMKD(bands.midMax)}
+          </Pick>
+        </>
+      ) : null}
+      {/* A distance only means something once somebody has said where
+          they are, so it appears with their location and not before. */}
+      {canDistance ? (
+        <>
+          <Pick on={!filters.radiusKm} set={() => set({ radiusKm: null })}>
+            Any distance
+          </Pick>
+          {[2, 5, 10].map((km) => (
+            <Pick key={km} on={filters.radiusKm === km} set={() => set({ radiusKm: km })}>
+              Within {km} km
+            </Pick>
+          ))}
+        </>
+      ) : null}
+    </div>
+  );
+}
+
+function Pick({
+  on,
+  set,
+  children,
+}: {
+  on: boolean;
+  set: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button className={`chip${on ? ' on' : ''}`} onClick={set} aria-pressed={on}>
+      {children}
+    </button>
   );
 }
 
@@ -295,12 +432,44 @@ export function Results() {
   const unread = useMyNotifications().data?.unread ?? 0;
   const geo = useUserLocation();
   const [mapOpen, setMapOpen] = useState(false);
-  const [params] = useSearchParams();
+  const [params, setParams] = useSearchParams();
   const query = params.get('q');
+
+  /**
+   * Filters live in the URL, so a narrowed answer is the thing that
+   * gets shared and the back button undoes one choice at a time. The
+   * viewer's position deliberately stays out of it — §9 — so `km` here
+   * is only a preference, and means nothing until they say where they
+   * are.
+   */
+  const filters = useMemo<SearchFilters>(() => {
+    const band = params.get('price');
+    const km = Number(params.get('km'));
+    return {
+      priceBand: band === 'low' || band === 'mid' || band === 'high' ? band : null,
+      categoryId: params.get('cat'),
+      radiusKm: Number.isFinite(km) && km > 0 ? km : null,
+    };
+  }, [params]);
+  const setFilters = useCallback(
+    (patch: Partial<SearchFilters>) => {
+      const next = new URLSearchParams(params);
+      const put = (k: string, v: string | number | null) => {
+        if (v === null) next.delete(k);
+        else next.set(k, String(v));
+      };
+      if ('priceBand' in patch) put('price', patch.priceBand ?? null);
+      if ('categoryId' in patch) put('cat', patch.categoryId ?? null);
+      if ('radiusKm' in patch) put('km', patch.radiusKm ?? null);
+      setParams(next, { replace: true });
+    },
+    [params, setParams],
+  );
+
   const {
     cat, rows, best, alts, loaded, unknown, personalised, rankVersion,
-    directSalon, salons, widened, how,
-  } = useCategoryResults(category, query);
+    directSalon, salons, widened, how, facets, hiddenUnpriced,
+  } = useCategoryResults(category, query, filters);
 
   /**
    * The text named one salon and nothing else. Go there, replacing this
@@ -313,7 +482,8 @@ export function Results() {
   const title = query ?? cat?.name ?? category ?? '';
   // Only a typed query can have been broadened; a category card asked
   // for exactly what it got.
-  const note = query ? searchNote(how, widened, title) : null;
+  const note = query ? searchNote(how, widened, title) : searchNote(null, widened, title);
+  const unpriced = unpricedNote(hiddenUnpriced);
   // One pin per salon, not one per treatment: a salon offering four
   // services in this category is still one place on the map. Only
   // salons that really dropped a pin appear — no coordinates guessed
@@ -362,11 +532,6 @@ export function Results() {
                 {IcPin}
                 {geo.status === 'asking' ? 'Locating…' : 'Near me'}
               </button>
-              <span className="chip">{IcClock}Now</span>
-              <span style={{ width: '1px', alignSelf: 'stretch', background: 'var(--line-soft)' }}></span>
-              <button className="chip">
-                Adjust filters <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 9.5l6 6 6-6" /></svg>
-              </button>
             </div>
           </div>
           <div className="d-wrap res-layout">
@@ -393,10 +558,19 @@ export function Results() {
                 </div>
               </div>
               ) : null}
+              <FilterBar
+                facets={facets}
+                filters={filters}
+                set={setFilters}
+                canDistance={geo.status === 'on'}
+              />
               <div id="d-reslist">
                 {salons.length ? <SalonHits salons={salons} title={title} /> : null}
                 {note ? (
                   <div className="sm muted" style={{ margin: '0 0 12px' }}>{note}</div>
+                ) : null}
+                {unpriced ? (
+                  <div className="sm muted" style={{ margin: '0 0 12px' }}>{unpriced}</div>
                 ) : null}
                 {/* "Nothing matched" would be a lie when the salon block
                     above is standing there having matched. */}
@@ -483,8 +657,7 @@ export function Results() {
                 {IcPin}
                 {geo.status === 'asking' ? 'Locating…' : 'Near me'}
               </button>
-              <span className="chip">{IcClock}Now</span>
-              <span className="chip">Filters</span>
+
             </div>
             {rows.length ? (
               <div style={{ padding: '12px 16px 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
@@ -493,6 +666,14 @@ export function Results() {
                 </span>
               </div>
             ) : null}
+            <div style={{ padding: '10px 16px 0' }}>
+              <FilterBar
+                facets={facets}
+                filters={filters}
+                set={setFilters}
+                canDistance={geo.status === 'on'}
+              />
+            </div>
             <div id="m-reslist">
               {salons.length ? (
                 <div style={{ padding: '10px 16px 0' }}>
@@ -501,6 +682,9 @@ export function Results() {
               ) : null}
               {note ? (
                 <div className="sm muted" style={{ padding: '4px 16px 10px' }}>{note}</div>
+              ) : null}
+              {unpriced ? (
+                <div className="sm muted" style={{ padding: '4px 16px 10px' }}>{unpriced}</div>
               ) : null}
               {best ? <BestM s={best} /> : loaded && !salons.length ? (
                 <div className="sm muted" style={{ padding: '18px 16px' }}>{emptyLine(title, unknown, Boolean(query))}</div>
