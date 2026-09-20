@@ -42,6 +42,7 @@ import {
 import {
   SearchConfigDraftSchema,
   SearchConfigListSchema,
+  SearchMissesSchema,
   SearchConfigVersionSchema,
   SearchPreviewRequestSchema,
   SearchPreviewSchema,
@@ -50,6 +51,7 @@ import {
   activateSearchConfig,
   createSearchConfig,
   listSearchConfigs,
+  recentSearchMisses,
   previewRanking,
   SearchConfigError,
 } from '../search/search.service.js';
@@ -200,6 +202,32 @@ export function hqRoutes(app: FastifyInstance) {
     // The whole history, not just the active one: the table is the
     // audit trail, so hiding rows would defeat the point of it.
     handler: async () => ({ versions: await listSearchConfigs() }),
+  });
+
+  /**
+   * What people asked for and did not find — step 10 of docs/SEARCH.md.
+   *
+   * Readable by every HQ role, unlike the config below. This is not a
+   * lever, it is a list of gaps: queries that came back empty or nearly
+   * empty. Somebody onboarding salons needs it more than whoever tunes
+   * the weights does, and there is nothing here to get wrong — the rows
+   * carry no identity because none was ever recorded.
+   */
+  r.route({
+    method: 'GET',
+    url: '/hq/search-misses',
+    preHandler: [app.authenticateHq],
+    schema: {
+      querystring: z.object({
+        days: z.coerce.number().int().min(1).max(365).default(30),
+        limit: z.coerce.number().int().min(1).max(200).default(50),
+      }),
+      response: { 200: SearchMissesSchema },
+    },
+    handler: async (req) => ({
+      misses: await recentSearchMisses(req.query.days, req.query.limit),
+      days: req.query.days,
+    }),
   });
 
   r.route({

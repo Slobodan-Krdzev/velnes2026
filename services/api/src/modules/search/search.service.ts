@@ -4,6 +4,7 @@ import {
   type SearchConfigVersion,
   type SearchPreview,
 } from '@velnes/contracts';
+import { sql } from 'kysely';
 import { withClient, withHq, withTenant } from '../../db/index.js';
 import type { ViewerHistory } from './rank.js';
 import { rank } from './rank.js';
@@ -246,6 +247,42 @@ function keepLatest(into: Record<string, string>, key: string, at: string) {
   if (!had || at > had) into[key] = at;
 }
 
+
+/**
+ * What people asked for and did not find — step 10 of docs/SEARCH.md.
+ *
+ * Read under `app.hq`, which is the only context the table's policy
+ * admits. A salon that could read this would be reading a market
+ * research report about its competitors: what the country is asking for
+ * and nobody is selling.
+ */
+const HOWS = ['salon', 'category', 'service', 'fuzzy', 'none'] as const;
+type MissHow = (typeof HOWS)[number];
+
+export async function recentSearchMisses(days: number, limit: number) {
+  const rows = await withHq((trx) =>
+    trx
+      .selectFrom('searchMisses')
+      .select(['norm', 'day', 'asked', 'results', 'how'])
+      .where('day', '>=', sql<Date>`current_date - ${sql.lit(days)}::int`)
+      // Worst first: asked most often, and emptiest when it was.
+      .orderBy('asked', 'desc')
+      .orderBy('results', 'asc')
+      .orderBy('norm', 'asc')
+      .limit(limit)
+      .execute(),
+  );
+  return rows.map((r) => ({
+    norm: r.norm,
+    day: r.day instanceof Date ? r.day.toISOString().slice(0, 10) : String(r.day).slice(0, 10),
+    asked: r.asked,
+    results: r.results,
+    // The column is free text at the database level; the contract is an
+    // enum. Anything that is not one of the five reads as "none" rather
+    // than failing a whole page of otherwise good rows.
+    how: HOWS.includes(r.how as MissHow) ? (r.how as MissHow) : 'none',
+  }));
+}
 
 /** Every version, newest first. Read-only, and the whole history —
  *  the table is the audit trail, so hiding rows would defeat it. */

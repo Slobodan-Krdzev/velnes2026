@@ -230,5 +230,42 @@ export const SearchPreviewSchema = z.object({
   moved: z.number().int(),
 });
 
+/**
+ * What people asked for and did not find — step 10 of docs/SEARCH.md,
+ * decision 3.
+ *
+ * HQ-only, and aggregate by construction. There is no client, no
+ * session and no moment here because none was recorded: one row per
+ * normalized query per day, carrying a count. It is a list of gaps in
+ * what the platform sells, and it is deliberately unable to be anything
+ * else.
+ *
+ * It never touches ranking. Ranking reads `search_config` and has never
+ * heard of this.
+ */
+export const SearchMissSchema = z.object({
+  /** The normalized form, which is also the form the index matched —
+   *  so a miss can be replayed exactly as it was asked. */
+  norm: z.string(),
+  day: z.string(),
+  /** How many times it was submitted that day. */
+  asked: z.number().int(),
+  /** What it last came back with. Zero is the interesting case; one or
+   *  two is the other one. */
+  results: z.number().int(),
+  /** How the text was read. The difference between "we did not
+   *  understand it" and "we understood it and have nothing" is the
+   *  whole value of the log: the first is a synonym to add, the second
+   *  is a salon to recruit. */
+  how: z.enum(['salon', 'category', 'service', 'fuzzy', 'none']),
+});
+
+export const SearchMissesSchema = z.object({
+  misses: z.array(SearchMissSchema),
+  /** The window these cover, in days. */
+  days: z.number().int(),
+});
+
+export type SearchMisses = z.infer<typeof SearchMissesSchema>;
 export type SearchConfigDraft = z.infer<typeof SearchConfigDraftSchema>;
 export type SearchPreview = z.infer<typeof SearchPreviewSchema>;

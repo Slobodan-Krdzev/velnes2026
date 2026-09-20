@@ -181,6 +181,42 @@ async function categoryIdsOnOffer(admitted: ListedBusiness[]): Promise<Set<strin
 /** What the filters can offer when there is no answer to describe. */
 const NO_FACETS: SearchFacets = { categories: [], price: null };
 
+/**
+ * At or below this many results, the page is thin enough that the
+ * customer went away with nothing — worth knowing about even though the
+ * query technically worked.
+ */
+const LOW_RESULTS = 2;
+
+/**
+ * Record a search that found nothing, or nearly nothing — step 10 of
+ * docs/SEARCH.md, decision 3.
+ *
+ * Three properties, all deliberate:
+ *
+ *  - It **cannot break a search.** Analytics that can take the product
+ *    down with it is a worse trade than analytics nobody has. Every
+ *    failure here is swallowed, and the customer's results go out.
+ *  - It **writes through one SECURITY DEFINER function**, never through
+ *    a table grant. This is a key-free public door; an INSERT policy
+ *    here would hand a pen to the whole internet.
+ *  - It **records nothing about who asked.** No client, no session, no
+ *    IP, and a day rather than a moment. The normalization happens in
+ *    SQL, so what lands is the same form the index matched against.
+ */
+async function noteMiss(raw: string, results: number, how: string): Promise<void> {
+  if (results > LOW_RESULTS) return;
+  try {
+    await db.transaction().execute(async (trx) => {
+      await sql`select set_config('app.public', '1', true)`.execute(trx);
+      await sql`select log_search_miss(${raw}, ${results}, ${how})`.execute(trx);
+    });
+  } catch {
+    // Deliberately silent. Knowing what people could not find is worth
+    // having; it is not worth an error page.
+  }
+}
+
 /** What the ranker needs that a result card does not carry. */
 interface CandidateMeta {
   businessId: string;
@@ -721,7 +757,8 @@ export async function discoveryRoutes(app: FastifyInstance) {
         facetCategories.push({ id: got.category.id, name: got.category.name, count: fresh.length });
       }
       const services = [...seen.values()];
-      if (!services.length)
+      if (!services.length) {
+        await noteMiss(q, 0, read.how);
         return {
           ...empty,
           salons: nearMisses,
@@ -729,6 +766,7 @@ export async function discoveryRoutes(app: FastifyInstance) {
           ambiguous: read.ambiguous,
           rankVersion: cfg.version,
         };
+      }
 
       const now = new Date();
       const position =
@@ -793,6 +831,13 @@ export async function discoveryRoutes(app: FastifyInstance) {
         widened = 'category';
 
       const ranked = rank(cut.admitted, { position, history }, cfg.payload, { now });
+      // A page with almost nothing on it is a miss the customer feels,
+      // even though the query technically worked. Only recorded when
+      // they did not narrow it themselves: an empty answer to "under
+      // 700 MKD within 2 km" is a filter doing its job, not a gap in
+      // what the platform sells.
+      const narrowed = Boolean(req.body.priceBand || req.body.categoryId || req.body.radiusKm);
+      if (!narrowed) await noteMiss(q, ranked.length, read.how);
       const byId = new Map(services.map((s) => [s.id, s]));
       return {
         directSalon: null,

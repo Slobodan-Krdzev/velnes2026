@@ -336,7 +336,31 @@ Each step is shippable and testable alone.
    against an independent implementation in SQL, so agreement means the
    window, the statuses, the ordering and both floors are right for a
    reason rather than by coincidence.
-10. Zero/low-result query logging.
+10. ~~Zero/low-result query logging.~~ — **done 2026-09-21.**
+    `search_misses`, one row per normalized query per day carrying a
+    counter. The privacy property is the *shape*, not a promise: there
+    is no column for a client, a session or an address, and no timestamp
+    finer than a day, so the table cannot answer "who searched this"
+    because the data to answer it was never recorded.
+
+    Written only through `log_search_miss()`, a SECURITY DEFINER
+    function — the consumer search door is key-free, and an INSERT
+    policy there would hand a pen to the internet. The function
+    normalizes the text itself (`search_norm`, the same one the index
+    uses, so a miss is replayable against what missed it) and refuses
+    anything outside the search box's own bounds. Logging can never fail
+    a search: every error is swallowed and the results go out.
+
+    Recorded at zero results and at two or fewer, but **not** when the
+    customer narrowed the query themselves — an empty answer to "under
+    700 MKD within 2 km" is a filter doing its job, not a gap in what
+    the platform sells. `how` is stored alongside, because "we did not
+    understand it" is a synonym to add and "we understood it and have
+    nothing" is a salon to recruit.
+
+    Read at `GET /hq/search-misses`, HQ-only and enforced by RLS proved
+    against `velnes_api` rather than the admin role. **It never touches
+    ranking**, and nothing in the ranking code has heard of it.
 11. Search Lab extension, and docs.
 
 Steps 1–3 are invisible to customers. Steps 4–5 are useful before any

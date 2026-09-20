@@ -881,6 +881,16 @@ export interface SearchDocuments {
   updatedAt: Generated<Timestamp>;
 }
 
+export interface SearchMisses {
+  asked: Generated<number>;
+  day: Generated<Timestamp>;
+  firstAt: Generated<Timestamp>;
+  how: string;
+  lastAt: Generated<Timestamp>;
+  norm: string;
+  results: number;
+}
+
 export interface ServiceCategories {
   cardImage: string | null;
   icon: string | null;
@@ -888,6 +898,16 @@ export interface ServiceCategories {
   name: string;
   parentId: string | null;
   sort: Generated<number>;
+}
+
+export interface ServiceCategoryTerms {
+  categoryId: string;
+  createdAt: Generated<Timestamp>;
+  id: Generated<string>;
+  kind: string;
+  lang: string;
+  norm: Generated<string>;
+  term: string;
 }
 
 export interface ServiceModifierGroups {
@@ -1176,7 +1196,9 @@ export interface DB {
   schemaMigrations: SchemaMigrations;
   searchConfig: SearchConfig;
   searchDocuments: SearchDocuments;
+  searchMisses: SearchMisses;
   serviceCategories: ServiceCategories;
+  serviceCategoryTerms: ServiceCategoryTerms;
   serviceModifierGroups: ServiceModifierGroups;
   serviceModifierOptions: ServiceModifierOptions;
   serviceRecipes: ServiceRecipes;
