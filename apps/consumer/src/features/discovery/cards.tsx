@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAvailability, useSalonDetail, useSalonServices } from '../../lib/api/queries.js';
 import { fmtMKD, type CategoryVM, type SalonVM } from '../../lib/api/mappers.js';
+import { useSuggest, type SuggestItem } from './useSuggest.js';
 import {
   rememberPendingFavourite,
   useFavourites,
@@ -221,134 +222,252 @@ export function NearYouM({ s }: { s: SalonVM }) {
   );
 }
 
-/** Search suggestions, desktop panel flavor — real categories and salons
- *  matching the query (or the head of each list while it's empty). */
-export function useSuggestions(q: string, cats: CategoryVM[], salons: SalonVM[]) {
-  const needle = q.toLowerCase().trim();
-  const mc = needle ? cats.filter((c) => c.name.toLowerCase().includes(needle)) : cats;
-  const ms = needle ? salons.filter((s) => s.name.toLowerCase().includes(needle)) : salons;
-  return { cats: mc.slice(0, 2), salons: ms.slice(0, 2), salonCount: (cat: CategoryVM) => salons.filter((s) => s.serviceCategories.includes(cat.name)).length };
-}
+/**
+ * The suggestion panels — step 5 of docs/SEARCH.md.
+ *
+ * Both render one list containing three kinds of thing, because there is
+ * one search bar and the customer never chooses an entity type. The
+ * headings are informational: they say what a row is, they are not
+ * controls and they cannot be selected.
+ *
+ * What used to be here filtered the categories and salons the page had
+ * already loaded. It could never see a treatment, never understood
+ * "masaza", and never survived a typo. These read the search doors.
+ */
 
-export function SugPanelD({ q, cats, salons }: { q: string; cats: CategoryVM[]; salons: SalonVM[] }) {
-  const nav = useNavigate();
-  const sug = useSuggestions(q, cats, salons);
+export function SugPanelD({
+  q,
+  active,
+  onChoose,
+}: {
+  q: string;
+  active: number;
+  onChoose: (item: SuggestItem) => void;
+}) {
+  const { data, items, loading, empty, short } = useSuggest(q);
+  if (short) return null;
+  let i = -1;
+  const row = (item: SuggestItem) => {
+    i += 1;
+    const mine = i;
+    return {
+      id: `sug-${item.key}`,
+      className: `sug-card${mine === active ? ' on' : ''}`,
+      onMouseDown: (e: React.MouseEvent) => {
+        // mousedown, not click: the input blurs first otherwise and the
+        // panel is gone before the click lands.
+        e.preventDefault();
+        onChoose(item);
+      },
+    };
+  };
+
   return (
-    <div className="sugg" id="d-sugg">
-      {sug.cats.length ? (
+    <div className="sugg" id="d-sugg" role="listbox" aria-label="Suggestions">
+      {loading && !items.length ? (
+        <div className="sug-foot" style={{ justifyContent: 'flex-start' }}>
+          <span className="sm muted">Looking…</span>
+        </div>
+      ) : null}
+
+      {data.categories.length ? (
         <div className="h">
           <span className="spark" style={{ display: 'inline-flex', gap: '7px', alignItems: 'center' }}>
             {IcSpark}
             <span style={{ color: 'var(--ink)' }}>Velnes thinks along with you</span>
           </span>
-          <span className="tiny-tag">Most chosen</span>
         </div>
       ) : null}
-      {sug.cats.map((c) => (
-        <button key={c.id} className="sug-card" onClick={() => nav(`/s/${c.slug}`)}>
-          <span className="ph" style={{ backgroundImage: c.img }}></span>
-          <span>
-            <b>{c.name}</b>
-            <span className="sm muted">{sug.salonCount(c)} salons available</span>
+      {data.categories.map((c) => {
+        const item = items.find((x) => x.key === `category-${c.id}`)!;
+        return (
+          <button key={c.id} type="button" role="option" aria-selected={false} {...row(item)}>
+            <span className="ph" style={{ backgroundImage: 'var(--im)' }}></span>
+            <span>
+              <b>{c.name}</b>
+              <span className="sm muted">
+                {c.salonCount} {c.salonCount === 1 ? 'salon' : 'salons'} available
+              </span>
+            </span>
+            <span className="btn btn-dark" style={{ minHeight: '42px' }}>
+              View options {IcArr}
+            </span>
+          </button>
+        );
+      })}
+
+      {data.services.length ? (
+        <div className="h" style={{ paddingTop: '4px' }}>
+          <span style={{ display: 'inline-flex', gap: '7px', alignItems: 'center', color: 'var(--muted)', fontWeight: '600' }}>
+            {IcSpark}Treatments
           </span>
-          <span className="btn btn-dark" style={{ minHeight: '42px' }}>
-            View options {IcArr}
-          </span>
-        </button>
-      ))}
-      {sug.salons.length ? (
+        </div>
+      ) : null}
+      {data.services.map((sv) => {
+        const item = items.find((x) => x.key === `service-${sv.id}`)!;
+        return (
+          <button key={sv.id} type="button" role="option" aria-selected={false} {...row(item)}>
+            <span className="ph" style={{ backgroundImage: 'var(--im)' }}></span>
+            <span>
+              <b>{sv.name}</b>
+              <span className="sm muted">at {sv.salonName}</span>
+            </span>
+            <span className="btn btn-g" style={{ minHeight: '42px' }}>
+              Book {IcArr}
+            </span>
+          </button>
+        );
+      })}
+
+      {data.salons.length ? (
         <div className="h" style={{ paddingTop: '4px' }}>
           <span style={{ display: 'inline-flex', gap: '7px', alignItems: 'center', color: 'var(--muted)', fontWeight: '600' }}>
             {IcSearch}Search a specific salon
           </span>
         </div>
       ) : null}
-      {sug.salons.map((s) => (
-        <button key={s.slug} className="sug-card" onClick={() => nav(`/salon/${s.slug}`)}>
-          <span className="ph" style={{ backgroundImage: s.photo }}></span>
-          <span>
-            <b>{s.name}</b>
-            <span className="sm muted" style={{ display: 'inline-flex', gap: '6px', alignItems: 'center', marginTop: '4px' }}>
-              <span className="vok">{IcVok}</span>
-              Book directly at this salon
+      {data.salons.map((sa) => {
+        const item = items.find((x) => x.key === `salon-${sa.id}`)!;
+        return (
+          <button key={sa.id} type="button" role="option" aria-selected={false} {...row(item)}>
+            <span className="ph" style={{ backgroundImage: 'var(--im)' }}></span>
+            <span>
+              <b>{sa.name}</b>
+              <span className="sm muted" style={{ display: 'inline-flex', gap: '6px', alignItems: 'center', marginTop: '4px' }}>
+                <span className="vok">{IcVok}</span>
+                {sa.city ?? 'Book directly at this salon'}
+              </span>
             </span>
+            <span className="btn btn-g" style={{ minHeight: '42px' }}>
+              View salon {IcArr}
+            </span>
+          </button>
+        );
+      })}
+
+      {empty ? (
+        <div className="sug-foot" style={{ justifyContent: 'flex-start' }}>
+          <span className="sm muted">
+            Nothing matched &ldquo;{q.trim()}&rdquo; — try a treatment, or a salon name.
           </span>
-          <span className="btn btn-g" style={{ minHeight: '42px' }}>
-            View salon {IcArr}
+        </div>
+      ) : null}
+
+      {items.length ? (
+        <div className="sug-foot">
+          <span style={{ display: 'inline-flex', gap: '6px', alignItems: 'center' }}>
+            <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: 'var(--ok)' }}></span>
+            Every option is live &amp; bookable
           </span>
-        </button>
-      ))}
-      <div className="sug-foot">
-        <span style={{ display: 'inline-flex', gap: '6px', alignItems: 'center' }}>
-          <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: 'var(--ok)' }}></span>Every option is live &amp; bookable
-        </span>
-        <span style={{ display: 'inline-flex', gap: '6px', alignItems: 'center' }} className="spark">
-          {IcSpark}
-          <span className="muted">No match? We&rsquo;ll show smart alternatives.</span>
-        </span>
-      </div>
+          <span style={{ display: 'inline-flex', gap: '6px', alignItems: 'center' }} className="spark">
+            {IcSpark}
+            <span className="muted">No match? We&rsquo;ll show smart alternatives.</span>
+          </span>
+        </div>
+      ) : null}
     </div>
   );
 }
 
-/** The mobile sheet's suggestion list — m-sug flavor of the same data. */
-export function SugListM({ q, cats, salons, onGo }: { q: string; cats: CategoryVM[]; salons: SalonVM[]; onGo: () => void }) {
-  const nav = useNavigate();
-  const sug = useSuggestions(q, cats, salons);
+/** The mobile sheet's list — the same three kinds, m-sug flavour. */
+export function SugListM({
+  q,
+  active,
+  onChoose,
+}: {
+  q: string;
+  active: number;
+  onChoose: (item: SuggestItem) => void;
+}) {
+  const { data, items, loading, empty, short } = useSuggest(q);
+  if (short) return null;
+  let i = -1;
+  const row = (item: SuggestItem) => {
+    i += 1;
+    const mine = i;
+    return {
+      className: `m-sug card${mine === active ? ' on' : ''}`,
+      onMouseDown: (e: React.MouseEvent) => {
+        e.preventDefault();
+        onChoose(item);
+      },
+    };
+  };
+
   return (
-    <div className="list">
-      {sug.cats.length ? (
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+    <div className="list" role="listbox" aria-label="Suggestions">
+      {loading && !items.length ? (
+        <div className="sm muted" style={{ padding: '6px 0' }}>Looking…</div>
+      ) : null}
+
+      {data.categories.length ? (
+        <div style={{ display: 'flex', alignItems: 'center', marginBottom: '12px' }}>
           <span className="spark" style={{ display: 'inline-flex', gap: '7px', alignItems: 'center', fontWeight: '700', color: 'var(--ink)' }}>
             {IcSpark}Velnes thinks along with you
           </span>
-          <span className="tiny-tag">Most chosen</span>
         </div>
       ) : null}
-      {sug.cats.map((c) => (
-        <button
-          key={c.id}
-          className="m-sug card"
-          onClick={() => {
-            onGo();
-            nav(`/s/${c.slug}`);
-          }}
-        >
-          <span className="ph" style={{ backgroundImage: c.img }}></span>
-          <span>
-            <b>{c.name}</b>
-            <span className="sm muted">
-              {sug.salonCount(c)} salons · <span className="avail" style={{ fontSize: '12px' }}>instantly bookable</span>
+      {data.categories.map((c) => {
+        const item = items.find((x) => x.key === `category-${c.id}`)!;
+        return (
+          <button key={c.id} type="button" role="option" aria-selected={false} {...row(item)}>
+            <span className="ph" style={{ backgroundImage: 'var(--im)' }}></span>
+            <span>
+              <b>{c.name}</b>
+              <span className="sm muted">
+                {c.salonCount} {c.salonCount === 1 ? 'salon' : 'salons'} ·{' '}
+                <span className="avail" style={{ fontSize: '12px' }}>instantly bookable</span>
+              </span>
             </span>
-          </span>
-        </button>
-      ))}
-      {sug.salons.length ? (
+          </button>
+        );
+      })}
+
+      {data.services.length ? (
+        <div className="sm muted" style={{ display: 'flex', gap: '6px', alignItems: 'center', margin: '6px 0 10px' }}>
+          {IcSpark}Treatments
+        </div>
+      ) : null}
+      {data.services.map((sv) => {
+        const item = items.find((x) => x.key === `service-${sv.id}`)!;
+        return (
+          <button key={sv.id} type="button" role="option" aria-selected={false} {...row(item)}>
+            <span className="ph" style={{ backgroundImage: 'var(--im)' }}></span>
+            <span>
+              <b>{sv.name}</b>
+              <span className="sm muted" style={{ display: 'block', marginTop: '4px' }}>
+                at {sv.salonName}
+              </span>
+            </span>
+          </button>
+        );
+      })}
+
+      {data.salons.length ? (
         <div className="sm muted" style={{ display: 'flex', gap: '6px', alignItems: 'center', margin: '6px 0 10px' }}>
           {IcSearch}Search a specific salon
         </div>
       ) : null}
-      {sug.salons.map((s) => (
-        <button
-          key={s.slug}
-          className="m-sug card"
-          onClick={() => {
-            onGo();
-            nav(`/salon/${s.slug}`);
-          }}
-        >
-          <span className="ph" style={{ backgroundImage: s.photo }}></span>
-          <span>
-            <b>{s.name}</b>
-            <span className="sm muted" style={{ display: 'block', marginTop: '4px' }}>
-              Book directly at this salon
+      {data.salons.map((sa) => {
+        const item = items.find((x) => x.key === `salon-${sa.id}`)!;
+        return (
+          <button key={sa.id} type="button" role="option" aria-selected={false} {...row(item)}>
+            <span className="ph" style={{ backgroundImage: 'var(--im)' }}></span>
+            <span>
+              <b>{sa.name}</b>
+              <span className="sm muted" style={{ display: 'block', marginTop: '4px' }}>
+                {sa.city ?? 'Book directly at this salon'}
+              </span>
             </span>
-            <span className="vok" style={{ marginTop: '4px' }}>
-              {IcVok} Verified
-            </span>
-          </span>
-        </button>
-      ))}
+          </button>
+        );
+      })}
+
+      {empty ? (
+        <div className="sm muted" style={{ padding: '8px 0' }}>
+          Nothing matched &ldquo;{q.trim()}&rdquo; — try a treatment, or a salon name.
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -32,6 +32,7 @@ interface Row {
   salonSlug: string | null;
   salonName: string | null;
   categoryId: string | null;
+  salonCount: number | null;
 }
 
 /**
@@ -66,7 +67,8 @@ export async function lookupMatches(raw: string, tenantIds: string[]): Promise<S
                       ELSE word_similarity(q.nq, d.norm) END AS "score",
                  d.salon_slug AS "salonSlug",
                  d.salon_name AS "salonName",
-                 d.category_id::text AS "categoryId"
+                 d.category_id::text AS "categoryId",
+                 NULL::int AS "salonCount"
             FROM search_documents d, q
            WHERE d.tenant_id = ANY(${tenantIds}::uuid[])
              AND (d.norm = q.nq OR d.norm LIKE '%' || q.nq || '%' OR q.nq <% d.norm)
@@ -92,7 +94,12 @@ export async function lookupMatches(raw: string, tenantIds: string[]): Promise<S
                           ELSE word_similarity(q.nq, t.norm) END AS "score",
                      NULL::text AS "salonSlug",
                      NULL::text AS "salonName",
-                     NULL::text AS "categoryId"
+                     NULL::text AS "categoryId",
+                     (SELECT count(DISTINCT sd.tenant_id)::int
+                        FROM search_documents sd
+                       WHERE sd.kind = 'service'
+                         AND sd.category_id = t.category_id
+                         AND sd.tenant_id = ANY(${tenantIds}::uuid[])) AS "salonCount"
                 FROM service_category_terms t
                 JOIN service_categories c ON c.id = t.category_id, q
                WHERE (t.norm = q.nq OR t.norm LIKE '%' || q.nq || '%' OR q.nq <% t.norm)
@@ -128,6 +135,7 @@ export async function lookupMatches(raw: string, tenantIds: string[]): Promise<S
     categoryId: r.categoryId,
     ...(r.salonSlug ? { salonSlug: r.salonSlug } : {}),
     ...(r.salonName ? { salonName: r.salonName } : {}),
+    ...(r.salonCount != null ? { salonCount: Number(r.salonCount) } : {}),
   }));
 }
 

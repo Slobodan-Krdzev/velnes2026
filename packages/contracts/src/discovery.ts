@@ -219,7 +219,16 @@ export const SearchSuggestionsSchema = z.object({
       categoryId: z.uuid().nullable(),
     }),
   ),
-  categories: z.array(z.object({ id: z.uuid(), name: z.string() })),
+  categories: z.array(
+    z.object({
+      id: z.uuid(),
+      name: z.string(),
+      /** How many admitted salons sell something in it. The prototype's
+       *  card says "N salons available"; this is that number, counted
+       *  rather than guessed. */
+      salonCount: z.number().int(),
+    }),
+  ),
   /** Echoed back so a client can discard a response that arrived late. */
   q: z.string(),
 });

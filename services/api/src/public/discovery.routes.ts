@@ -561,6 +561,7 @@ export async function discoveryRoutes(app: FastifyInstance) {
         categories: topMatches(matches, 'category', 4).map((m) => ({
           id: m.id,
           name: m.display,
+          salonCount: m.salonCount ?? 0,
         })),
         q: req.body.q,
       };

@@ -181,3 +181,30 @@
 .pro-wrap .fav-pro.on {
   color: var(--brand);
 }
+
+
+/* ── The suggestion panel was never visible ──────────────────────
+   prototype.css carries the older salon prototype's rules for this:
+   `.sugg{display:none}` turned back on by `.d-search.open .sugg`. No
+   element in this app has the class `d-search` — the search card is
+   `.searchcard`, and `d-search` is only an id — so the panel has been
+   rendered and hidden since the day it was written. Nobody noticed it
+   because there was nothing worth seeing in it.
+
+   The client prototype, which is this app's authority, simply says
+   `.sugg{display:block}` and controls the panel by rendering it. React
+   does exactly that, so this restores the intended behaviour rather
+   than inventing one. Scoped to the real card so the dead rule above
+   stays dead. */
+.searchcard .sugg {
+  display: block;
+}
+
+/* In the prototype the line under a suggestion's name is `.chips`,
+   which is display:flex and therefore takes its own line. Ours is a
+   plain `.sm.muted` span, so the name and its detail ran together —
+   "Massage1 salon available". Same result, said in one rule. */
+.sug-card b,
+.m-sug b {
+  display: block;
+}

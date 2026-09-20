@@ -31,6 +31,8 @@ export interface SearchMatch {
   salonName?: string;
   /** The category a service belongs to, where it has one. */
   categoryId?: string | null;
+  /** For a category: how many admitted salons sell something in it. */
+  salonCount?: number;
 }
 
 export interface Interpretation {
