@@ -1,6 +1,13 @@
-import { SearchConfigPayloadSchema, type SearchConfigPayload } from '@velnes/contracts';
+import {
+  SearchConfigPayloadSchema,
+  type SearchConfigPayload,
+  type SearchConfigVersion,
+  type SearchPreview,
+} from '@velnes/contracts';
 import { withClient, withHq, withTenant } from '../../db/index.js';
 import type { ViewerHistory } from './rank.js';
+import { rank } from './rank.js';
+import { candidatesOf, gatherCategory } from '../../public/discovery.routes.js';
 
 /**
  * The Search lab's config — §5, docs/SEARCH-RANKING.md.
@@ -151,4 +158,161 @@ function endOf(date: unknown, startMin: number, durationMin: number): Date {
 function keepLatest(into: Record<string, string>, key: string, at: string) {
   const had = into[key];
   if (!had || at > had) into[key] = at;
+}
+
+
+/** Every version, newest first. Read-only, and the whole history —
+ *  the table is the audit trail, so hiding rows would defeat it. */
+export async function listSearchConfigs(): Promise<SearchConfigVersion[]> {
+  const rows = await withHq((trx) =>
+    trx
+      .selectFrom('searchConfig')
+      .select(['version', 'payload', 'note', 'active', 'createdAt', 'activatedAt'])
+      .orderBy('version', 'desc')
+      .execute(),
+  );
+  return rows.map((r) => ({
+    version: r.version,
+    payload: SearchConfigPayloadSchema.parse(r.payload),
+    note: r.note,
+    active: r.active,
+    createdAt: r.createdAt.toISOString(),
+    activatedAt: r.activatedAt ? r.activatedAt.toISOString() : null,
+  }));
+}
+
+/**
+ * Write a new version, optionally activating it.
+ *
+ * Versions are never edited in place: tuning is a new row, so the
+ * history stays a history. Activation deactivates the old one in the
+ * same transaction, which is the only way past the partial unique index
+ * — the index is what makes "the config in force" mean exactly one row
+ * even if two people press the button at once.
+ */
+export async function createSearchConfig(
+  draft: { payload: SearchConfigPayload; note: string; activate: boolean },
+  actor: { id: string; name: string },
+): Promise<SearchConfigVersion> {
+  return withHq(async (trx) => {
+    const top = await trx
+      .selectFrom('searchConfig')
+      .select('version')
+      .orderBy('version', 'desc')
+      .executeTakeFirst();
+    const version = (top?.version ?? 0) + 1;
+    if (draft.activate)
+      await trx.updateTable('searchConfig').set({ active: false }).where('active', '=', true).execute();
+    const row = await trx
+      .insertInto('searchConfig')
+      .values({
+        version,
+        payload: JSON.stringify(draft.payload),
+        note: draft.note,
+        active: draft.activate,
+        createdBy: actor.id,
+        createdByName: actor.name,
+        activatedBy: draft.activate ? actor.id : null,
+        activatedByName: draft.activate ? actor.name : '',
+        activatedAt: draft.activate ? new Date() : null,
+      })
+      .returning(['version', 'payload', 'note', 'active', 'createdAt', 'activatedAt'])
+      .executeTakeFirstOrThrow();
+    return {
+      version: row.version,
+      payload: SearchConfigPayloadSchema.parse(row.payload),
+      note: row.note,
+      active: row.active,
+      createdAt: row.createdAt.toISOString(),
+      activatedAt: row.activatedAt ? row.activatedAt.toISOString() : null,
+    };
+  });
+}
+
+/** Put an existing version back in force. Idempotent: activating the
+ *  version already active is a no-op rather than an error. */
+export async function activateSearchConfig(
+  version: number,
+  actor: { id: string; name: string },
+): Promise<SearchConfigVersion> {
+  return withHq(async (trx) => {
+    const target = await trx
+      .selectFrom('searchConfig')
+      .selectAll()
+      .where('version', '=', version)
+      .executeTakeFirst();
+    if (!target) throw new SearchConfigError(`No search config v${version}`);
+    if (!target.active) {
+      await trx.updateTable('searchConfig').set({ active: false }).where('active', '=', true).execute();
+      await trx
+        .updateTable('searchConfig')
+        .set({
+          active: true,
+          activatedBy: actor.id,
+          activatedByName: actor.name,
+          activatedAt: new Date(),
+        })
+        .where('version', '=', version)
+        .execute();
+    }
+    const row = await trx
+      .selectFrom('searchConfig')
+      .select(['version', 'payload', 'note', 'active', 'createdAt', 'activatedAt'])
+      .where('version', '=', version)
+      .executeTakeFirstOrThrow();
+    return {
+      version: row.version,
+      payload: SearchConfigPayloadSchema.parse(row.payload),
+      note: row.note,
+      active: row.active,
+      createdAt: row.createdAt.toISOString(),
+      activatedAt: row.activatedAt ? row.activatedAt.toISOString() : null,
+    };
+  });
+}
+
+/**
+ * The dry run: what a draft would do to one category's order.
+ *
+ * Ranks the same candidates the real door ranks — anything else would
+ * tell whoever is tuning the weights a comfortable lie. Personalisation
+ * is deliberately absent: a diff has to be reproducible, and "how it
+ * looks to one particular person's history" is not.
+ */
+export async function previewRanking(
+  categoryId: string,
+  draft: SearchConfigPayload,
+  at: { lat: number | null; lng: number | null },
+): Promise<SearchPreview | null> {
+  const found = await gatherCategory(categoryId);
+  if (!found) return null;
+  const { category, services, meta } = found;
+  const active = await activeSearchConfig();
+  const candidates = candidatesOf(category.id, services, meta);
+  const position = at.lat != null && at.lng != null ? { lat: at.lat, lng: at.lng } : null;
+  const viewer = { position, history: null };
+
+  const before = rank(candidates, viewer, active.payload).map((r) => r.candidate.id);
+  const after = rank(candidates, viewer, draft);
+  const wasAt = new Map(before.map((id, i) => [id, i]));
+
+  const rows = after.map((r, i) => {
+    const was = wasAt.get(r.candidate.id) ?? i;
+    return {
+      id: r.candidate.id,
+      name: r.candidate.name,
+      salon: r.candidate.salon.name,
+      was,
+      now: i,
+      moved: i - was,
+      score: r.score,
+      components: r.components,
+    };
+  });
+  return {
+    category: category.name,
+    activeVersion: active.version,
+    rows,
+    moved: rows.filter((r) => r.moved !== 0).length,
+  };
 }

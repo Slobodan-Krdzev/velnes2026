@@ -566,19 +566,47 @@ endpoint, UI, tests, seed, docs note.
    treated exactly like no token: being signed out is not an error on a
    key-free door. Steps 5 and 6 came with it — radius admission, and
    affinity read across salons through `withClient`.
-5. **Admission** — location lifecycle `ACTIVE`, and radius when the
-   viewer sets one.
-6. **Affinity** — the cross-tenant read through `withClient`, recency
-   decay, the three live sub-signals.
-7. **Diversify** — chain dedup, the new-salon window, stable tiebreak.
-8. **The UI** — the results page sends position and radius, shows
-   `rankVersion` in dev only, and says plainly when results are
-   personalised so the order is never mysterious.
-9. **HQ Search lab** — edit the config, dry-run a draft against the
-   active version, diff the order.
+5. ~~**Admission**~~ — **done 2026-09-20.** Location lifecycle `ACTIVE`,
+   bookability, and radius when the viewer sets one. The first two are
+   hard rules in one predicate shared by the shelf and both doors.
+6. ~~**Affinity**~~ — **done 2026-09-20.** Read across every salon
+   through `withClient`, using the same completed-visit predicate the
+   Customer Insights engine already uses, with recency decay applied
+   once to the most recent qualifying booking rather than compounded.
+7. ~~**Diversify**~~ — **done 2026-09-20.** Chain dedup, the new-salon
+   window and the stable tiebreak run inside the ranker, so both the
+   unit tests and a door test hold them: no business takes more than two
+   of the first ten, and nothing is dropped to achieve it.
+8. ~~**The UI**~~ — **done 2026-09-20.** The results page sends a
+   rounded position, shows `rankVersion` in development only, and says
+   in one line what actually ordered the page — your bookings and where
+   you are, or distance and price, or price and bookability. The old
+   "carefully selected for you" was replaced: it was the kind of line
+   that means nothing and sounds like it means something.
+9. ~~**HQ Search lab**~~ — **done 2026-09-20.** Four doors under
+   `/hq/search-config`: read the whole history, write a new version
+   (optionally live), activate any version, and dry-run a draft against
+   one real category. The HQ app's "search" tab, until now a coming-soon
+   placeholder, is the lab: sliders for the six weights, the two decay
+   constants, a dry run that shows every result's was/now/move and
+   score, and the version history with a Make live button.
 
-Steps 1–2 can be built and tested with no user-visible change at all,
-which makes them the safe place to start.
+   Reading is open to every HQ role, including the read-only auditor —
+   an auditor who cannot see the ranking rules cannot audit them.
+   Writing is `hq_super` and `hq_tech` only: it decides what every
+   consumer sees, and it is neither an onboarding nor a support
+   decision. The dry run ranks the same candidates the real door ranks,
+   because a preview of a different shape would be a comfortable lie,
+   and it deliberately ranks without personalisation — a diff has to be
+   reproducible, and "how it looks to one person's history" is not.
+
+Steps 1–2 were built and tested with no user-visible change at all,
+which made them the safe place to start. **All nine are done.**
+
+What is still absent, and honestly so: favourites as an affinity signal
+(Phase C), real first-free-slot availability, reviews behind `quality`,
+impressions behind `exposure`, and free-text search. Each is listed in
+§9 with what it waits on.
 
 ## 10. Honest deferrals
 

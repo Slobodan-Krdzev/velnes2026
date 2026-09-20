@@ -52,6 +52,10 @@ function useCategoryResults(categorySlug: string | undefined) {
     /** Whether the viewer's own bookings shaped this order. Shown, so
      *  the order is never mysterious. */
     personalised: servicesQ.data?.personalised ?? false,
+    /** Which config version produced this order. Development only — it
+     *  is how a surprising order gets explained, and it is noise to
+     *  everybody else. */
+    rankVersion: servicesQ.data?.rankVersion ?? null,
   };
 }
 
@@ -226,7 +230,8 @@ export function Results() {
   const unread = useMyNotifications().data?.unread ?? 0;
   const geo = useUserLocation();
   const [mapOpen, setMapOpen] = useState(false);
-  const { cat, rows, best, alts, loaded, unknown, personalised } = useCategoryResults(category);
+  const { cat, rows, best, alts, loaded, unknown, personalised, rankVersion } =
+    useCategoryResults(category);
   const title = cat?.name ?? category ?? '';
   // One pin per salon, not one per treatment: a salon offering four
   // services in this category is still one place on the map. Only
@@ -296,6 +301,9 @@ export function Results() {
                       : geo.status === 'on'
                         ? 'Ordered by how near they are, and what they cost.'
                         : 'Ordered by what they cost, and how soon you can book.'}
+                    {import.meta.env.DEV && rankVersion ? (
+                      <span style={{ opacity: 0.6 }}> · ranking v{rankVersion}</span>
+                    ) : null}
                   </div>
                 </div>
               </div>

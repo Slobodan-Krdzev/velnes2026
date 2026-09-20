@@ -221,7 +221,7 @@ async function admittedBusinesses(): Promise<ListedBusiness[]> {
  * about who is in the running. They differ only in the order they put
  * them in.
  */
-async function gatherCategory(categoryId: string): Promise<
+export async function gatherCategory(categoryId: string): Promise<
   | {
       category: { id: string; name: string; cardImage: string | null; icon: string | null };
       services: DiscoveryServiceCard[];
@@ -312,6 +312,40 @@ async function gatherCategory(categoryId: string): Promise<
     }
   }
   return { category, services, meta };
+}
+
+/**
+ * Result cards as the ranker wants them.
+ *
+ * Exported because the HQ Search lab ranks the same candidates the real
+ * door ranks — a dry run that scored a different shape would be telling
+ * whoever is tuning the weights a comfortable lie.
+ */
+export function candidatesOf(
+  categoryId: string,
+  services: DiscoveryServiceCard[],
+  meta: Map<string, CandidateMeta>,
+): RankCandidate[] {
+  return services.map((s) => {
+    const m = meta.get(s.id)!;
+    return {
+      id: s.id,
+      name: s.name,
+      categoryId,
+      durationMin: s.durationMin,
+      price: s.price,
+      priceFrom: s.priceFrom,
+      salon: {
+        slug: s.salon.slug,
+        businessId: m.businessId,
+        name: s.salon.name,
+        lat: s.salon.lat,
+        lng: s.salon.lng,
+        bookable: s.salon.bookable,
+        createdAt: m.createdAt,
+      },
+    };
+  });
 }
 
 /**
@@ -491,26 +525,7 @@ export async function discoveryRoutes(app: FastifyInstance) {
         }
       }
 
-      const candidates: RankCandidate[] = services.map((s) => {
-        const m = meta.get(s.id)!;
-        return {
-          id: s.id,
-          name: s.name,
-          categoryId: category.id,
-          durationMin: s.durationMin,
-          price: s.price,
-          priceFrom: s.priceFrom,
-          salon: {
-            slug: s.salon.slug,
-            businessId: m.businessId,
-            name: s.salon.name,
-            lat: s.salon.lat,
-            lng: s.salon.lng,
-            bookable: s.salon.bookable,
-            createdAt: m.createdAt,
-          },
-        };
-      });
+      const candidates = candidatesOf(category.id, services, meta);
 
       // Admission: a radius the viewer explicitly set is a hard filter,
       // and results outside it are absent rather than demoted. Without

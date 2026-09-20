@@ -30,6 +30,13 @@ import { useTranslation } from 'react-i18next';
 import { z } from 'zod';
 import { PlatformNoticeListSchema } from '@velnes/contracts';
 import { HqApiError, hqDelete, hqGet, hqPatch, hqPost } from './api.js';
+import {
+  DiscoveryCategoriesSchema,
+  SearchConfigListSchema,
+  SearchConfigVersionSchema,
+  SearchPreviewSchema,
+  type SearchConfigPayload,
+} from '@velnes/contracts';
 
 /** The prototype's viewHQ: the customers pane is the intake table —
  *  new locations, new registrations, then every business on the
@@ -291,10 +298,7 @@ export function Hq({
           ) : null}
           {tab === 'team' ? <Team say={say} me={user} /> : null}
           {tab === 'search' ? (
-            <div className="empty">
-              <h3>{t('hq.comingSoon')}</h3>
-              <p>{t('hq.searchSoon')}</p>
-            </div>
+            <SearchLab say={say} canWrite={user.role === 'hq_super' || user.role === 'hq_tech'} />
           ) : null}
           {tab === 'audit' ? <PlatformLog /> : null}
         </main>
@@ -329,6 +333,286 @@ async function fileToDataUrl(file: File, maxEdge: number, kind: 'card' | 'icon')
   } finally {
     URL.revokeObjectURL(url);
   }
+}
+
+/**
+ * The Search lab — §5, docs/SEARCH-RANKING.md.
+ *
+ * Every constant the ranker uses is a knob, and this is where they are
+ * turned. Two things make that safe enough to do: a change is a new
+ * version rather than an edit, so the history stays a history and an
+ * order can always be explained afterwards; and a draft can be dry-run
+ * against a real category before it is live. A weight nobody can look
+ * at before shipping is a weight nobody will dare touch.
+ */
+function SearchLab({ say, canWrite }: { say: (m: string) => void; canWrite: boolean }) {
+  const [versions, setVersions] = useState<
+    z.infer<typeof SearchConfigListSchema>['versions']
+  >([]);
+  const [draft, setDraft] = useState<SearchConfigPayload | null>(null);
+  const [note, setNote] = useState('');
+  const [cats, setCats] = useState<{ id: string; name: string }[]>([]);
+  const [catId, setCatId] = useState('');
+  const [preview, setPreview] = useState<z.infer<typeof SearchPreviewSchema> | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(
+    () =>
+      void hqGet(SearchConfigListSchema, '/hq/search-config').then((r) => {
+        setVersions(r.versions);
+        const live = r.versions.find((v) => v.active);
+        if (live) setDraft(structuredClone(live.payload));
+      }),
+    [],
+  );
+  useEffect(() => {
+    load();
+    // The lab ranks real categories, so it needs the real list.
+    void fetch(`${import.meta.env.VITE_API_URL ?? '/api/v1'}/public/discovery/categories`)
+      .then((r) => r.json())
+      .then((j) => {
+        const parsed = DiscoveryCategoriesSchema.safeParse(j);
+        if (!parsed.success) return;
+        setCats(parsed.data.categories.map((c) => ({ id: c.id, name: c.name })));
+        setCatId((prev) => prev || (parsed.data.categories[0]?.id ?? ''));
+      })
+      .catch(() => undefined);
+  }, [load]);
+
+  const active = versions.find((v) => v.active);
+  if (!draft || !active) return <div className="empty"><h3>Loading…</h3></div>;
+
+  const setWeight = (k: keyof SearchConfigPayload['weights'], v: number) =>
+    setDraft({ ...draft, weights: { ...draft.weights, [k]: v } });
+
+  const dryRun = async () => {
+    setBusy(true);
+    try {
+      const out = await hqPost(SearchPreviewSchema, '/hq/search-config/preview', {
+        categoryId: catId,
+        payload: draft,
+        // Skopje: proximity is usually the weight being argued about,
+        // and a dry run with no position could not show it moving.
+        lat: 41.9981,
+        lng: 21.4254,
+      });
+      setPreview(out);
+      say(out.moved ? `${out.moved} result(s) would move.` : 'Nothing would move.');
+    } catch (e) {
+      say(e instanceof HqApiError ? e.message : 'Could not run that.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const publish = async (activate: boolean) => {
+    setBusy(true);
+    try {
+      const v = await hqPost(SearchConfigVersionSchema, '/hq/search-config', {
+        payload: draft,
+        note,
+        activate,
+      });
+      setNote('');
+      say(activate ? `v${v.version} is live.` : `v${v.version} saved, not live.`);
+      load();
+    } catch (e) {
+      say(e instanceof HqApiError ? e.message : 'Could not save that.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const activateVersion = async (version: number) => {
+    setBusy(true);
+    try {
+      await hqPost(SearchConfigVersionSchema, `/hq/search-config/${version}/activate`);
+      say(`v${version} is live.`);
+      load();
+    } catch (e) {
+      say(e instanceof HqApiError ? e.message : 'Could not activate that.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const WEIGHTS: [keyof SearchConfigPayload['weights'], string][] = [
+    ['proximity', 'How near'],
+    ['affinity', 'What they booked before'],
+    ['availability', 'Bookable'],
+    ['value', 'Price against the category median'],
+    ['quality', 'Quality — inert until reviews exist'],
+    ['exposure', 'Exposure — inert until impressions exist'],
+  ];
+
+  return (
+    <>
+      <div className="head">
+        <h2>Search lab</h2>
+        <span className="sub">
+          Ranking v{active.version} is live. Changes are new versions, never edits.
+        </span>
+      </div>
+
+      <div className="card" style={{ padding: '16px' }}>
+        <h3 style={{ marginTop: 0 }}>Weights</h3>
+        <p className="sub" style={{ marginTop: 0 }}>
+          Components a viewer cannot supply are dropped and the rest renormalised, so only the
+          ratios matter. Exposure is subtracted, not added.
+        </p>
+        {WEIGHTS.map(([k, label]) => (
+          <div key={k} style={{ display: 'flex', alignItems: 'center', gap: '12px', margin: '8px 0' }}>
+            <label style={{ width: '280px' }}>{label}</label>
+            <input
+              type="range"
+              min={0}
+              max={1}
+              step={0.05}
+              value={draft.weights[k]}
+              disabled={!canWrite}
+              onChange={(e) => setWeight(k, Number(e.target.value))}
+              style={{ flex: 1 }}
+            />
+            <b style={{ width: '48px', textAlign: 'right' }}>{draft.weights[k].toFixed(2)}</b>
+          </div>
+        ))}
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', margin: '14px 0 4px' }}>
+          <label style={{ width: '280px' }}>Distance decay (km)</label>
+          <input
+            type="number"
+            min={0.5}
+            step={0.5}
+            value={draft.proximity.decayKm}
+            disabled={!canWrite}
+            onChange={(e) =>
+              setDraft({ ...draft, proximity: { decayKm: Number(e.target.value) || 1 } })
+            }
+          />
+          <label style={{ width: '220px' }}>Recency half-life (days)</label>
+          <input
+            type="number"
+            min={1}
+            value={draft.affinity.recencyHalfLifeDays}
+            disabled={!canWrite}
+            onChange={(e) =>
+              setDraft({
+                ...draft,
+                affinity: {
+                  ...draft.affinity,
+                  recencyHalfLifeDays: Number(e.target.value) || 1,
+                },
+              })
+            }
+          />
+        </div>
+      </div>
+
+      <div className="card" style={{ padding: '16px', marginTop: '14px' }}>
+        <h3 style={{ marginTop: 0 }}>Dry run</h3>
+        <p className="sub" style={{ marginTop: 0 }}>
+          Score one category under this draft and see how the order moves. Changes nothing.
+        </p>
+        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+          <select value={catId} onChange={(e) => setCatId(e.target.value)}>
+            {cats.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+          <button className="btn" disabled={busy || !catId || !canWrite} onClick={dryRun}>
+            Run
+          </button>
+        </div>
+        {preview ? (
+          <table style={{ width: '100%', marginTop: '12px' }}>
+            <thead>
+              <tr>
+                <th style={{ textAlign: 'left' }}>Treatment</th>
+                <th style={{ textAlign: 'left' }}>Salon</th>
+                <th>Was</th>
+                <th>Now</th>
+                <th>Move</th>
+                <th>Score</th>
+              </tr>
+            </thead>
+            <tbody>
+              {preview.rows.map((r) => (
+                <tr key={r.id}>
+                  <td>{r.name}</td>
+                  <td>{r.salon}</td>
+                  <td style={{ textAlign: 'center' }}>{r.was + 1}</td>
+                  <td style={{ textAlign: 'center' }}>{r.now + 1}</td>
+                  <td style={{ textAlign: 'center' }}>
+                    {r.moved === 0 ? '—' : r.moved < 0 ? `▲ ${-r.moved}` : `▼ ${r.moved}`}
+                  </td>
+                  <td style={{ textAlign: 'right' }}>{r.score.toFixed(3)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : null}
+      </div>
+
+      {canWrite ? (
+        <div className="card" style={{ padding: '16px', marginTop: '14px' }}>
+          <h3 style={{ marginTop: 0 }}>Publish</h3>
+          <input
+            placeholder="What changed, and why"
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            style={{ width: '100%', marginBottom: '10px' }}
+          />
+          <div style={{ display: 'flex', gap: '10px' }}>
+            <button className="btn" disabled={busy} onClick={() => publish(false)}>
+              Save, not live
+            </button>
+            <button className="btn primary" disabled={busy} onClick={() => publish(true)}>
+              Save and make live
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="sub" style={{ marginTop: '14px' }}>
+          Ranking config is read-only for your role. It decides what every consumer sees, so only
+          the super and technical roles change it.
+        </div>
+      )}
+
+      <div className="card" style={{ padding: '16px', marginTop: '14px' }}>
+        <h3 style={{ marginTop: 0 }}>History</h3>
+        <table style={{ width: '100%' }}>
+          <thead>
+            <tr>
+              <th style={{ textAlign: 'left' }}>Version</th>
+              <th style={{ textAlign: 'left' }}>Note</th>
+              <th style={{ textAlign: 'left' }}>Created</th>
+              <th />
+            </tr>
+          </thead>
+          <tbody>
+            {versions.map((v) => (
+              <tr key={v.version}>
+                <td>
+                  v{v.version} {v.active ? <b>· live</b> : null}
+                </td>
+                <td>{v.note || '—'}</td>
+                <td>{v.createdAt.slice(0, 10)}</td>
+                <td style={{ textAlign: 'right' }}>
+                  {!v.active && canWrite ? (
+                    <button className="btn" disabled={busy} onClick={() => activateVersion(v.version)}>
+                      Make live
+                    </button>
+                  ) : null}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </>
+  );
 }
 
 function Categories({ say }: { say: (m: string) => void }) {

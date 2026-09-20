@@ -39,6 +39,20 @@ import {
   SupportTicketReplySchema,
   SupportTicketStatusSchema,
 } from '@velnes/contracts';
+import {
+  SearchConfigDraftSchema,
+  SearchConfigListSchema,
+  SearchConfigVersionSchema,
+  SearchPreviewRequestSchema,
+  SearchPreviewSchema,
+} from '@velnes/contracts';
+import {
+  activateSearchConfig,
+  createSearchConfig,
+  listSearchConfigs,
+  previewRanking,
+  SearchConfigError,
+} from '../search/search.service.js';
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { sql as sql2 } from 'kysely';
@@ -153,6 +167,105 @@ export function hqRoutes(app: FastifyInstance) {
           }),
         };
       }),
+  });
+
+  /**
+   * The Search lab — §5, docs/SEARCH-RANKING.md.
+   *
+   * Ranking config is platform-level, so it lives here and nowhere a
+   * tenant can reach: a salon that could read the weights could game
+   * them, and one that could write them would not need to.
+   *
+   * Reading is open to any HQ user, including the read-only auditor —
+   * an auditor who cannot see the ranking rules cannot audit them.
+   * Writing is for hq_super and hq_tech: it changes what every consumer
+   * sees, and it is not an onboarding or support decision.
+   */
+  const labWriteGate = (reply: FastifyReply, rol: string) => {
+    if (rol !== 'hq_super' && rol !== 'hq_tech') {
+      void reply.code(403).send({
+        error: 'FORBIDDEN',
+        message: 'Only HQ super and technical roles change ranking config',
+      });
+      return false;
+    }
+    return true;
+  };
+
+  r.route({
+    method: 'GET',
+    url: '/hq/search-config',
+    preHandler: [app.authenticateHq],
+    schema: { response: { 200: SearchConfigListSchema } },
+    // The whole history, not just the active one: the table is the
+    // audit trail, so hiding rows would defeat the point of it.
+    handler: async () => ({ versions: await listSearchConfigs() }),
+  });
+
+  r.route({
+    method: 'POST',
+    url: '/hq/search-config',
+    preHandler: [app.authenticateHq],
+    schema: {
+      body: SearchConfigDraftSchema,
+      response: { 200: SearchConfigVersionSchema, 403: Err },
+    },
+    handler: async (req, reply) => {
+      if (!labWriteGate(reply, req.hqClaims.rol)) return reply;
+      const me = await hqUserById(req.hqClaims.sub);
+      // Never edited in place: tuning is a new version, so the history
+      // stays a history and an order can be explained after the fact.
+      return createSearchConfig(req.body, {
+        id: req.hqClaims.sub,
+        name: me?.name ?? 'HQ',
+      });
+    },
+  });
+
+  r.route({
+    method: 'POST',
+    url: '/hq/search-config/:version/activate',
+    preHandler: [app.authenticateHq],
+    schema: {
+      params: z.object({ version: z.coerce.number().int().positive() }),
+      response: { 200: SearchConfigVersionSchema, 403: Err, 404: Err },
+    },
+    handler: async (req, reply) => {
+      if (!labWriteGate(reply, req.hqClaims.rol)) return reply;
+      const me = await hqUserById(req.hqClaims.sub);
+      try {
+        return await activateSearchConfig(req.params.version, {
+          id: req.hqClaims.sub,
+          name: me?.name ?? 'HQ',
+        });
+      } catch (e) {
+        if (e instanceof SearchConfigError)
+          return reply.code(404).send({ error: 'NOT_FOUND', message: e.message });
+        throw e;
+      }
+    },
+  });
+
+  r.route({
+    method: 'POST',
+    url: '/hq/search-config/preview',
+    preHandler: [app.authenticateHq],
+    schema: {
+      body: SearchPreviewRequestSchema,
+      response: { 200: SearchPreviewSchema, 403: Err, 404: Err },
+    },
+    handler: async (req, reply) => {
+      if (!labWriteGate(reply, req.hqClaims.rol)) return reply;
+      // A dry run changes nothing: it ranks one category twice and says
+      // how the order would move. A weight nobody can look at before
+      // shipping is a weight nobody will dare touch.
+      const out = await previewRanking(req.body.categoryId, req.body.payload, {
+        lat: req.body.lat,
+        lng: req.body.lng,
+      });
+      if (!out) return reply.code(404).send({ error: 'NOT_FOUND', message: 'No category here' });
+      return out;
+    },
   });
 
   const reviewGate = (reply: FastifyReply, rol: string) => {

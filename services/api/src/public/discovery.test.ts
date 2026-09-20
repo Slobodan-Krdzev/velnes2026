@@ -582,6 +582,31 @@ describe('the consumer discovery surface', () => {
       expect(body.personalised).toBe(false);
     });
 
+    it('does not let one salon own the first page', async () => {
+      // Chain dedup, at the door rather than only in the ranker's own
+      // tests: with exposure decay deferred this and the new-salon
+      // window are the only things stopping one business from being the
+      // whole category.
+      const { category } = await firstCategoryWithServices();
+      const res = await app.inject({
+        method: 'POST',
+        url: `${P}/discovery/categories/${category.id}/services`,
+        payload: { lat: 41.9981, lng: 21.4254 },
+      });
+      const body = DiscoveryRankedServicesSchema.parse(res.json());
+      const WINDOW = 10;
+      const CAP = 2;
+      if (body.services.length <= WINDOW) return; // nothing to cap
+      const counts = new Map<string, number>();
+      for (const s of body.services.slice(0, WINDOW))
+        counts.set(s.salon.slug, (counts.get(s.salon.slug) ?? 0) + 1);
+      for (const [slug, n] of counts)
+        expect(n, `${slug} in the first ${WINDOW}`).toBeLessThanOrEqual(CAP);
+      // Capped, not dropped: everything still comes back.
+      const all = new Set(body.services.map((s) => s.id));
+      expect(all.size).toBe(body.services.length);
+    });
+
     it('refuses an unknown category the same way the unranked door does', async () => {
       const res = await app.inject({
         method: 'POST',

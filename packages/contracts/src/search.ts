@@ -152,3 +152,55 @@ export const DEFAULT_SEARCH_CONFIG: z.infer<typeof SearchConfigPayloadSchema> = 
 export type SearchWeights = z.infer<typeof SearchWeightsSchema>;
 export type SearchConfigPayload = z.infer<typeof SearchConfigPayloadSchema>;
 export type SearchConfigVersion = z.infer<typeof SearchConfigVersionSchema>;
+
+
+/** A new version, as HQ writes it. */
+export const SearchConfigDraftSchema = z.object({
+  payload: SearchConfigPayloadSchema,
+  note: z.string().max(400).default(''),
+  /** Activate it now, or leave it parked for a dry run first. */
+  activate: z.boolean().default(false),
+});
+
+/**
+ * A dry run: score one category under a draft and say how the order
+ * would move, without anybody's results changing.
+ *
+ * The whole point of the Search lab is that a weight change can be
+ * looked at before it is live. A number that only reveals itself in
+ * production is a number nobody will dare touch.
+ */
+export const SearchPreviewRequestSchema = z.object({
+  categoryId: z.uuid(),
+  payload: SearchConfigPayloadSchema,
+  /** Rank as though standing here, since proximity is usually the
+   *  weight being argued about. */
+  lat: z.number().min(-90).max(90).nullable().default(null),
+  lng: z.number().min(-180).max(180).nullable().default(null),
+});
+
+export const SearchPreviewRowSchema = z.object({
+  id: z.uuid(),
+  name: z.string(),
+  salon: z.string(),
+  /** Position under the active config, and under the draft. */
+  was: z.number().int(),
+  now: z.number().int(),
+  /** now - was: negative means it moved up. */
+  moved: z.number().int(),
+  score: z.number(),
+  /** Per-component, so a move can be explained rather than guessed at.
+   *  HQ-only: these never reach a consumer response. */
+  components: z.record(z.string(), z.number()),
+});
+
+export const SearchPreviewSchema = z.object({
+  category: z.string(),
+  activeVersion: z.number().int(),
+  rows: z.array(SearchPreviewRowSchema),
+  /** How many results changed place at all. */
+  moved: z.number().int(),
+});
+
+export type SearchConfigDraft = z.infer<typeof SearchConfigDraftSchema>;
+export type SearchPreview = z.infer<typeof SearchPreviewSchema>;
