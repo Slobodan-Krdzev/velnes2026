@@ -417,6 +417,39 @@ just tested where it lives.
 
 ---
 
+## 13a. The results page, after the fact
+
+Three things Alex asked for on 2026-09-21, once the phase was built and
+he had used it:
+
+**The results-page search bar is a real one.** It was `readOnly` — a
+label showing what had been asked. It now carries the same suggestions,
+the same keyboard handling and the same Enter behaviour as the home
+page, because they are literally the same code: `useSearchBox()`, which
+both pages call. Asking a second question no longer means going home
+first. On a phone it opens the full-screen sheet the home page opens,
+since typing into a strip under a sticky header is not the same feature.
+
+**The map zooms to the wheel**, wherever the map is interactive. A
+static thumbnail still does not, because a thumbnail that resized under
+the page scroll would be a trap.
+
+**A pin opens a card before it opens a salon.** One tap to look, one to
+go: the salon's photograph if it has one, where it is, whether it can be
+booked, the cheapest treatment there, and a button. The link is a real
+`href` so it can be middle-clicked, with a plain click intercepted to
+stay inside the app.
+
+**There is no rating on that card, and this is deliberate.** Alex asked
+for one; reviews do not exist on this platform (§14 below, and
+`docs/CONSUMER-APP.md`), so the only way to show a rating today is to
+invent it. Stars nobody earned are exactly what the honest-emptiness
+rule exists to prevent, and the slot is waiting for the reviews
+subsystem rather than being filled with a number. Everything else on the
+card is real.
+
+---
+
 ## 14. Deliberately not in this phase
 
 Professionals as a searchable entity · impressions and exposure decay ·

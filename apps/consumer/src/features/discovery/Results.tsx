@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { DHeader } from '../../app/chrome.js';
 import {
@@ -19,7 +19,8 @@ import type { SearchFacets } from '@velnes/contracts';
 import { useMyNotifications, useSession } from '../../lib/api/session.js';
 import { distanceKm, distanceLbl, useUserLocation } from '../../lib/geo.js';
 import { SalonMap } from '../../components/SalonMap.js';
-import { IcArr, IcClock, IcPin, IcSpark, IcVok, useSalonLive } from './cards.js';
+import { IcArr, IcClock, IcPin, IcSpark, IcVok, SugListM, SugPanelD, useSalonLive } from './cards.js';
+import { useSearchBox } from './useSearchBox.js';
 
 /** A salon the text matched by name without earning a direct opening. */
 type SalonHit = { id: string; slug: string; name: string; city: string | null };
@@ -432,6 +433,9 @@ export function Results() {
   const unread = useMyNotifications().data?.unread ?? 0;
   const geo = useUserLocation();
   const [mapOpen, setMapOpen] = useState(false);
+  /** The mobile search sheet, which is where typing happens on a phone. */
+  const [sheet, setSheet] = useState(false);
+  const sheetInput = useRef<HTMLInputElement>(null);
   const [params, setParams] = useSearchParams();
   const query = params.get('q');
 
@@ -480,6 +484,36 @@ export function Results() {
     if (directSalon?.slug) nav(`/salon/${directSalon.slug}`, { replace: true });
   }, [directSalon, nav]);
   const title = query ?? cat?.name ?? category ?? '';
+
+  /**
+   * The results page carries the same search bar the home page does,
+   * and it is a real one: the box shows what was asked, and asking
+   * something else from here does not mean going home first.
+   *
+   * Seeded from the URL, and re-seeded whenever the URL changes under
+   * it — but never while somebody is mid-edit, which is why this
+   * watches the derived title rather than the input.
+   */
+  const box = useSearchBox(() => setSheet(false));
+  const seeded = useRef<string | null>(null);
+  const setBoxQ = box.setQ;
+  useEffect(() => {
+    if (seeded.current === title) return;
+    seeded.current = title;
+    setBoxQ(title);
+  }, [title, setBoxQ]);
+
+  /**
+   * The sheet is always mounted and merely hidden, so `autoFocus` never
+   * fires — it only applies when an element first mounts. Without this
+   * the sheet opens onto a keyboard with nowhere to type.
+   */
+  useEffect(() => {
+    if (!sheet) return;
+    const el = sheetInput.current;
+    el?.focus();
+    el?.select();
+  }, [sheet]);
   // Only a typed query can have been broadened; a category card asked
   // for exactly what it got.
   const note = query ? searchNote(how, widened, title) : searchNote(null, widened, title);
@@ -503,6 +537,15 @@ export function Results() {
         label: s.salon.name,
         sub: s.salon.city,
         here: i === 0,
+        // The card the pin opens. Everything on it is something the
+        // platform actually knows — the salon's own photograph, whether
+        // it can be booked, and what this treatment costs there. No
+        // rating: there are no reviews yet, and a star nobody earned is
+        // worse than no star at all.
+        photo: s.salon.hasPhoto ? s.salon.photo : null,
+        badge: s.salon.bookable ? 'Instant booking' : null,
+        price: priceLbl(s),
+        href: `/salon/${s.salon.slug}`,
         onClick: () => nav(`/salon/${s.salon.slug}`),
       }));
   }, [rows, nav]);
@@ -513,12 +556,26 @@ export function Results() {
         <section data-screen="results">
           <div className="d-topbar">
             <div className="d-wrap in">
-              <div className="pillsearch">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="M20 20l-4.2-4.2" /></svg>
-                <input value={title} data-res="q" readOnly />
-                <button style={{ border: '0', background: 'none', color: 'var(--muted)' }} onClick={() => nav('/')} aria-label="Clear">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 6l12 12M18 6 6 18" /></svg>
-                </button>
+              <div className="pillsearch-wrap" ref={box.boxRef}>
+                <div className="pillsearch">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="M20 20l-4.2-4.2" /></svg>
+                  <input data-res="q" aria-label="Search" aria-controls="d-sugg" {...box.inputProps} />
+                  <button
+                    style={{ border: '0', background: 'none', color: 'var(--muted)' }}
+                    onClick={() => nav('/')}
+                    aria-label="Clear"
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 6l12 12M18 6 6 18" /></svg>
+                  </button>
+                </div>
+                {box.open ? (
+                  <SugPanelD
+                    q={box.q}
+                    active={box.keys.active}
+                    onChoose={box.choose}
+                    onOpenCategory={box.openCat}
+                  />
+                ) : null}
               </div>
               <button
                 className={`chip${geo.status === 'on' ? ' on' : ''}`}
@@ -631,10 +688,24 @@ export function Results() {
           <div className="m-page">
             <div className="m-topbar">
               <div className="searchrow">
-                <div className="m-search" style={{ boxShadow: 'none', border: '1px solid var(--line)' }}>
+                {/* On a phone the bar opens the full-screen sheet, exactly
+                    as it does on the home page — typing into a 40px strip
+                    under a sticky header is not the same feature. */}
+                <div
+                  className="m-search"
+                  style={{ boxShadow: 'none', border: '1px solid var(--line)' }}
+                  onClick={() => setSheet(true)}
+                >
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="M20 20l-4.2-4.2" /></svg>
-                  <input value={title} data-res="q" readOnly />
-                  <button style={{ border: '0', background: 'none', color: 'var(--muted)' }} onClick={() => nav('/')}>
+                  <input value={title} data-res="q" readOnly aria-label="Search" />
+                  <button
+                    style={{ border: '0', background: 'none', color: 'var(--muted)' }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      nav('/');
+                    }}
+                    aria-label="Clear"
+                  >
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 6l12 12M18 6 6 18" /></svg>
                   </button>
                 </div>
@@ -750,6 +821,34 @@ export function Results() {
                 Profile
               </button>
             </nav>
+
+            {/* The same sheet the home page opens, and the same one
+                search behind it. A results page nobody can search from
+                is a dead end with a search bar drawn on it. */}
+            <div className={sheet ? 'm-sheet open' : 'm-sheet'}>
+              <div className="top">
+                <div className="m-search">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="M20 20l-4.2-4.2" /></svg>
+                  <input
+                    ref={sheetInput}
+                    placeholder="What are you looking for?"
+                    aria-label="Search"
+                    {...box.inputProps}
+                  />
+                </div>
+                <button className="iconb" onClick={() => setSheet(false)} aria-label="Close">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 6l12 12M18 6 6 18" /></svg>
+                </button>
+              </div>
+              <div className="list">
+                <SugListM
+                  q={box.q}
+                  active={box.keys.active}
+                  onChoose={box.choose}
+                  onOpenCategory={box.openCat}
+                />
+              </div>
+            </div>
           </div>
         </section>
       </div>

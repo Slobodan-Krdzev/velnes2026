@@ -52,6 +52,22 @@ export interface MapPin {
   sub?: string;
   /** The subject of the page — rendered in brand colour. */
   here?: boolean;
+  /**
+   * A card for the pin: the salon's own photograph, a line about it,
+   * and a way into its page. Supplied together or not at all — a pin
+   * with `href` opens this instead of navigating on the first click,
+   * because a map you cannot touch without leaving it is a map you
+   * cannot explore.
+   */
+  /** A ready-to-use CSS `background-image` value, or null for no
+   *  photograph at all — see `hasPhoto` in the mappers. */
+  photo?: string | null;
+  /** Something true about the salon. Never a rating: there are no
+   *  reviews on this platform yet, and a star nobody earned is worse
+   *  than no star. */
+  badge?: string | null;
+  price?: string | null;
+  href?: string;
   onClick?: () => void;
 }
 
@@ -108,7 +124,10 @@ export function SalonMap({
       map = L.map(box, {
         attributionControl: true,
         zoomControl: interactive,
-        scrollWheelZoom: false,
+        // The map zooms to the wheel like every other map anybody has
+        // used. Only where the map is interactive at all — a static
+        // thumbnail that resized under the page scroll would be a trap.
+        scrollWheelZoom: interactive,
         dragging: interactive,
         doubleClickZoom: interactive,
         touchZoom: interactive,
@@ -134,11 +153,27 @@ export function SalonMap({
           },
         );
       if (labels && !p.here) labelled.push(m);
-      else
+      // A pin that can show a card shows one, and the card is what
+      // carries you onward. Clicking the pin itself never navigates:
+      // one tap to look, one to go.
+      if (p.href) {
+        m.bindPopup(pinCard(p), { className: 'velnes-pop', minWidth: 218, offset: [0, -6] });
+        // A real href, so the row can be middle-clicked or copied — but
+        // a plain click stays inside the app instead of reloading it.
+        m.on('popupopen', (e) => {
+          const go = e.popup.getElement()?.querySelector<HTMLAnchorElement>('.pop-go');
+          go?.addEventListener('click', (ev) => {
+            if (ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.button !== 0) return;
+            ev.preventDefault();
+            p.onClick?.();
+          });
+        });
+      }
+      else if (!labels || p.here)
         m.bindPopup(
           `<b style="font-family:inherit">${escapeHtml(p.label)}</b>${p.sub ? `<br><span>${escapeHtml(p.sub)}</span>` : ''}`,
         );
-      if (p.onClick) {
+      if (p.onClick && !p.href) {
         m.on('click', p.onClick);
         m.getElement()?.style.setProperty('cursor', 'pointer');
       }
@@ -239,6 +274,41 @@ export function SalonMap({
     >
       {!pins.length && emptyNote ? <span className="map-note">{emptyNote}</span> : null}
     </div>
+  );
+}
+
+/**
+ * The card a pin opens.
+ *
+ * Built as a string because Leaflet popups take HTML, so every value
+ * that came from a salon goes through `escapeHtml` on the way in — a
+ * salon names itself, and a salon naming itself `<script>` must be a
+ * salon with an odd name rather than an incident.
+ *
+ * What it shows is what the platform actually knows: the photograph the
+ * salon uploaded, where it is, whether it can be booked, and its
+ * cheapest treatment here. There is deliberately no rating — reviews do
+ * not exist yet (docs/SEARCH.md §14, docs/CONSUMER-APP.md), and stars
+ * nobody earned would be the exact failure the honest-emptiness rule
+ * exists to prevent.
+ */
+function pinCard(p: MapPin): string {
+  // No photograph, no strip. An empty grey box is not a placeholder for
+  // a picture, it is a picture of nothing — and plenty of salons have
+  // not uploaded a gallery yet.
+  const photo = p.photo
+    ? `<span class="pop-ph" style="background-image:${escapeHtml(p.photo)}"></span>`
+    : '';
+  const badge = p.badge ? `<span class="pop-badge">${escapeHtml(p.badge)}</span>` : '';
+  const price = p.price ? `<span class="pop-price">${escapeHtml(p.price)}</span>` : '';
+  return (
+    `<span class="pop-card">${photo}` +
+    `<b class="pop-name">${escapeHtml(p.label)}</b>` +
+    (p.sub ? `<span class="pop-sub">${escapeHtml(p.sub)}</span>` : '') +
+    (badge || price ? `<span class="pop-meta">${badge}${price}</span>` : '') +
+    `<a class="pop-go" href="${escapeHtml(p.href ?? '#')}">View salon` +
+    '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h13M13 6l6 6-6 6"/></svg>' +
+    '</a></span>'
   );
 }
 

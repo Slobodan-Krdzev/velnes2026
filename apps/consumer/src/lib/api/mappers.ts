@@ -96,8 +96,13 @@ export interface ServiceVM {
     slug: string;
     name: string;
     city: string;
-    /** CSS background-image value, as the cards want it. */
+    /** CSS background-image value, as the cards want it — the
+     *  decorative default when the salon uploaded nothing. */
     photo: string;
+    /** Whether that value is a real photograph. A card can fall back to
+     *  the decorative tile happily; a map pin's little card cannot, and
+     *  would show an empty box where a picture is meant to be. */
+    hasPhoto: boolean;
     lat: number | null;
     lng: number | null;
     bookable: boolean;
@@ -118,6 +123,7 @@ export function serviceVM(s: DiscoveryServiceCard): ServiceVM {
       name: s.salon.name,
       city: s.salon.city ?? '',
       photo: s.salon.photo ? `url("${s.salon.photo}")` : 'var(--im)',
+      hasPhoto: Boolean(s.salon.photo),
       lat: s.salon.lat,
       lng: s.salon.lng,
       bookable: s.salon.bookable,
