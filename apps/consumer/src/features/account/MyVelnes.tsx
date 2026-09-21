@@ -1,6 +1,8 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { DHeader } from '../../app/chrome.js';
+import { TabBar } from '../../app/TabBar.js';
 import type { z } from 'zod';
 import type { ClientAppointmentSchema } from '@velnes/contracts';
 import { SalonMap } from '../../components/SalonMap.js';
@@ -127,9 +129,13 @@ export function MyVelnes({ section = 'over' }: { section?: SecId }) {
 
   if (!signedIn || !profile) {
     return (
-      <div className="a-env">
-        <section className="acc">
-          <div className="auth-wrap">
+      <>
+        <div className="only-d">
+          <DHeader />
+        </div>
+        <div className="a-env">
+          <section className="acc">
+            <div className="auth-wrap">
             <div className="acc-empty">
               <b>Sign in to see your Velnes</b>
               Your appointments, notifications and account live here.
@@ -137,10 +143,14 @@ export function MyVelnes({ section = 'over' }: { section?: SecId }) {
               <button className="btn btn-p" onClick={() => nav('/login')}>
                 Log in
               </button>
+              </div>
             </div>
-          </div>
-        </section>
-      </div>
+          </section>
+        </div>
+        <div className="only-m">
+          <TabBar active="profile" />
+        </div>
+      </>
     );
   }
 
@@ -170,9 +180,16 @@ export function MyVelnes({ section = 'over' }: { section?: SecId }) {
   const parent = sec === 'appt' ? 'appts' : '';
 
   return (
-    <div className="a-env">
-      <section className="acc">
-        <div className="acc-shell" id="acc-shell">
+    <>
+      {/* The account page had no chrome at all: signing in dropped you
+          somewhere with no way back to anything but the browser's own
+          back button. */}
+      <div className="only-d">
+        <DHeader />
+      </div>
+      <div className="a-env">
+        <section className="acc">
+          <div className="acc-shell" id="acc-shell">
           <aside className="acc-side">
             <div className="acc-me" onClick={() => go('over')}>
               <Avatar size={46} fs={15} />
@@ -541,9 +558,13 @@ export function MyVelnes({ section = 'over' }: { section?: SecId }) {
               ) : null}
             </div>
           </main>
-        </div>
-      </section>
-    </div>
+          </div>
+        </section>
+      </div>
+      <div className="only-m">
+        <TabBar active="profile" unread={unread} />
+      </div>
+    </>
   );
 }
 

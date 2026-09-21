@@ -620,3 +620,34 @@ a.pop-go:hover {
   z-index: 60;
   box-shadow: 0 18px 44px rgba(45, 26, 18, 0.18);
 }
+
+/* ── Chrome on the account page ─────────────────────────────────────
+   Every other screen lives inside `.d-env` or `.m-env`, which the
+   prototype switches at 900px. The account shell is responsive on its
+   own and sits in neither, so it had no header and no tab bar at all —
+   signing in dropped you somewhere with no way back. These two carry
+   the same 900px line, so the chrome appears exactly where it does
+   everywhere else. */
+.only-d {
+  display: none;
+}
+@media (min-width: 900px) {
+  .only-d {
+    display: block;
+  }
+}
+.only-m {
+  display: block;
+}
+@media (min-width: 900px) {
+  .only-m {
+    display: none;
+  }
+}
+/* The bar is fixed, so the page has to stop above it rather than
+   running underneath. */
+@media (max-width: 899.98px) {
+  .a-env section.acc {
+    padding-bottom: calc(76px + env(safe-area-inset-bottom));
+  }
+}

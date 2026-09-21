@@ -34,6 +34,7 @@ import {
   useSalonLive,
 } from './cards.js';
 import { useSearchBox } from './useSearchBox.js';
+import { TabBar } from '../../app/TabBar.js';
 
 /** A salon the text matched by name without earning a direct opening. */
 type SalonHit = { id: string; slug: string; name: string; city: string | null };
@@ -878,27 +879,7 @@ export function Results() {
                 </div>
               </div>
             ) : null}
-            <nav className="tabbar">
-              <button className="tab-i" onClick={() => nav('/')}>
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 11 12 4l8 7v8a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 19z" /></svg>Home
-              </button>
-              <button className="tab-i on">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="M20 20l-4.2-4.2" /></svg>Search
-              </button>
-              <button className="tab-i" onClick={() => nav('/account/appts')}>
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"><rect x="3.5" y="5" width="17" height="15" rx="2.5" /><path d="M3.5 10h17M8 3.5v3M16 3.5v3" /></svg>Bookings
-              </button>
-              <button className="tab-i">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round"><path d="M12 20s-7.4-4.6-7.4-9.4A4.3 4.3 0 0 1 12 8a4.3 4.3 0 0 1 7.4 2.6C19.4 15.4 12 20 12 20z" /></svg>Favorites
-              </button>
-              <button className="tab-i" onClick={() => nav('/account')}>
-                <span className="vnav-ic">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><circle cx="12" cy="8" r="3.5" /><path d="M5 20a7.2 7.2 0 0 1 14 0" /></svg>
-                  <span className="acc-bdg" hidden={unread === 0}>{unread}</span>
-                </span>
-                Profile
-              </button>
-            </nav>
+            <TabBar active="search" unread={unread} />
 
             {/* The same sheet the home page opens, and the same one
                 search behind it. A results page nobody can search from
