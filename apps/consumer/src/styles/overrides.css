@@ -420,3 +420,26 @@ a.pop-go:hover {
   color: var(--brand);
   cursor: pointer;
 }
+
+/* ── Everything there is to browse, on the search screen ────────────
+   The shelf on the home page is a sliding rail because it sits between
+   other sections. Here the categories are the content, so they lay out
+   as a grid and all of them are reachable without dragging. */
+.catgrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
+  gap: 12px;
+  margin-bottom: 26px;
+}
+.catgrid .catcard {
+  width: auto;
+  min-width: 0;
+  flex: none;
+}
+
+/* The search screen has no answer to put on a map, so the results
+   page's two-column grid collapses to one and the categories get the
+   whole width. */
+.res-layout.solo {
+  grid-template-columns: 1fr;
+}

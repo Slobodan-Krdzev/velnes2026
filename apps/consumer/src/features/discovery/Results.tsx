@@ -4,6 +4,7 @@ import { DHeader } from '../../app/chrome.js';
 import {
   categoryVM,
   fmtMKD,
+  type CategoryVM,
   minutesLbl,
   priceLbl,
   serviceVM,
@@ -11,6 +12,7 @@ import {
 } from '../../lib/api/mappers.js';
 import {
   useCategories,
+  useMostChosen,
   useRankedCategoryServices,
   useSearch,
   type SearchFilters,
@@ -20,6 +22,7 @@ import { useMyNotifications, useSession } from '../../lib/api/session.js';
 import { distanceKm, distanceLbl, useUserLocation } from '../../lib/geo.js';
 import { SalonMap } from '../../components/SalonMap.js';
 import {
+  CatCard,
   IcArr,
   IcClock,
   IcMark,
@@ -75,6 +78,8 @@ function useCategoryResults(
   );
   return {
     cat,
+    /** Every category on offer, for the landing screen below. */
+    cats,
     rows,
     best: rows[0],
     alts: rows.slice(1),
@@ -305,6 +310,36 @@ function Pick({
   );
 }
 
+/**
+ * What the search screen shows before anything has been asked.
+ *
+ * Tapping Search used to open whichever category sorted first, so the
+ * phone ran a search nobody typed. This is the honest alternative: the
+ * field is up there waiting, and underneath is everything there is to
+ * browse — ordered by what the platform actually books most, which is
+ * the same aggregate the suggestion panel uses and the only ordering
+ * here that is not arbitrary.
+ */
+function SearchLanding({ cats }: { cats: CategoryVM[] }) {
+  if (!cats.length) return null;
+  return (
+    <>
+      <h2 className="serif" style={{ fontSize: '19px', margin: '0 0 2px' }}>
+        Browse treatments
+      </h2>
+      <div className="sm muted" style={{ marginBottom: '14px' }}>
+        Or type what you are after — a treatment, a salon, or the thing you
+        would call it.
+      </div>
+      <div className="catgrid">
+        {cats.map((c) => (
+          <CatCard key={c.id} c={c} />
+        ))}
+      </div>
+    </>
+  );
+}
+
 /** The line under a result's title: which salon, and how far. */
 function whereLine(s: ServiceVM, away: string | null) {
   return `${s.salon.name}${away ?? s.salon.city ? ` · ${away ?? s.salon.city}` : ''}`;
@@ -481,9 +516,27 @@ export function Results() {
   );
 
   const {
-    cat, rows, best, alts, loaded, unknown, personalised, rankVersion,
+    cat, cats, rows, best, alts, loaded, unknown, personalised, rankVersion,
     directSalon, salons, widened, how, facets, hiddenUnpriced,
   } = useCategoryResults(category, query, filters);
+
+  /**
+   * Nothing has been asked yet — this is the search screen itself
+   * rather than an answer to anything, so it offers what there is to
+   * browse instead of reporting an empty result.
+   */
+  const landing = !query && !category;
+  const chosen = useMostChosen().data?.categories ?? [];
+  const browse = useMemo(() => {
+    if (!landing) return [];
+    const order = new Map(chosen.map((c, i) => [c.id, i]));
+    // Most booked first, then the rest in the taxonomy's own order —
+    // and every category the shelf carries is here, so the screen is a
+    // way in rather than a shortlist.
+    return [...cats].sort(
+      (a, b) => (order.get(a.id) ?? 999) - (order.get(b.id) ?? 999),
+    );
+  }, [landing, cats, chosen]);
 
   /**
    * The text named one salon and nothing else. Go there, replacing this
@@ -570,7 +623,7 @@ export function Results() {
               <div className={`pillsearch-wrap${box.open ? ' open' : ''}`} ref={box.boxRef}>
                 <div className="pillsearch">
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="M20 20l-4.2-4.2" /></svg>
-                  <input data-res="q" aria-label="Search" aria-controls="d-sugg" {...box.inputProps} />
+                  <input data-res="q" placeholder="What are you looking for?" aria-label="Search" aria-controls="d-sugg" {...box.inputProps} />
                   <button
                     style={{ border: '0', background: 'none', color: 'var(--muted)' }}
                     onClick={() => nav('/')}
@@ -602,7 +655,7 @@ export function Results() {
               </button>
             </div>
           </div>
-          <div className="d-wrap res-layout">
+          <div className={`d-wrap res-layout${landing ? ' solo' : ''}`}>
             <div>
               {/* Claiming an order when nothing was ordered — a page
                   showing only a salon we matched by name — is a small
@@ -626,13 +679,16 @@ export function Results() {
                 </div>
               </div>
               ) : null}
-              <FilterBar
-                facets={facets}
-                filters={filters}
-                set={setFilters}
-                canDistance={geo.status === 'on'}
-              />
-              <div id="d-reslist">
+              {landing ? <SearchLanding cats={browse} /> : null}
+              {landing ? null : (
+                <FilterBar
+                  facets={facets}
+                  filters={filters}
+                  set={setFilters}
+                  canDistance={geo.status === 'on'}
+                />
+              )}
+              <div id="d-reslist" hidden={landing}>
                 {salons.length ? <SalonHits salons={salons} title={title} /> : null}
                 {note ? (
                   <div className="sm muted" style={{ margin: '0 0 12px' }}>{note}</div>
@@ -674,7 +730,7 @@ export function Results() {
                 </span>
               </div>
             </div>
-            <aside className="res-map">
+            <aside className="res-map" hidden={landing}>
               <SalonMap
                 pins={pins}
                 you={geo.position}
@@ -713,7 +769,7 @@ export function Results() {
                   onClick={() => setSheet(true)}
                 >
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="M20 20l-4.2-4.2" /></svg>
-                  <input value={title} data-res="q" readOnly aria-label="Search" />
+                  <input value={title} placeholder="What are you looking for?" data-res="q" readOnly aria-label="Search" />
                   <button
                     style={{ border: '0', background: 'none', color: 'var(--muted)' }}
                     onClick={(e) => {
@@ -753,15 +809,21 @@ export function Results() {
                 </span>
               </div>
             ) : null}
-            <div style={{ padding: '10px 16px 0' }}>
-              <FilterBar
-                facets={facets}
-                filters={filters}
-                set={setFilters}
-                canDistance={geo.status === 'on'}
-              />
-            </div>
-            <div id="m-reslist">
+            {landing ? (
+              <div style={{ padding: '10px 16px 0' }}>
+                <SearchLanding cats={browse} />
+              </div>
+            ) : (
+              <div style={{ padding: '10px 16px 0' }}>
+                <FilterBar
+                  facets={facets}
+                  filters={filters}
+                  set={setFilters}
+                  canDistance={geo.status === 'on'}
+                />
+              </div>
+            )}
+            <div id="m-reslist" hidden={landing}>
               {salons.length ? (
                 <div style={{ padding: '10px 16px 0' }}>
                   <SalonHits salons={salons} title={title} />

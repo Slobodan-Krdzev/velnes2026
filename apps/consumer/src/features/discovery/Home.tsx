@@ -30,9 +30,16 @@ export function Home() {
   const salonsQ = useSalons();
   const cats = useMemo(() => (catsQ.data?.categories ?? []).map(categoryVM), [catsQ.data]);
   const salons = useMemo(() => (salonsQ.data?.salons ?? []).map(salonVM), [salonsQ.data]);
-  const goAll = () => {
-    if (cats[0]) nav(`/s/${cats[0].slug}`);
-  };
+  /**
+   * Where "Search" goes.
+   *
+   * It used to open whichever category happened to sort first, which
+   * made tapping Search silently run a search for Assessment — a
+   * different answer every time the taxonomy changed, and never one
+   * anybody asked for. `/search` with no query is the search screen
+   * itself: the field, and everything there is to browse.
+   */
+  const goAll = () => nav('/search');
   const openWith = (v: string) => {
     d.setQ(v);
     d.setOpen(true);

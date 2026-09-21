@@ -440,6 +440,15 @@ booked, the cheapest treatment there, and a button. The link is a real
 `href` so it can be middle-clicked, with a plain click intercepted to
 stay inside the app.
 
+**Tapping "Search" opens a search screen, not a search.** It briefly
+opened whichever category sorted first, so a phone ran a query for
+"Assessment" that nobody typed — a different answer every time the
+taxonomy changed. `/search` with no query is now a real landing: the
+field, and every category on offer ordered by what the platform actually
+books most (the same aggregate behind "Most chosen", which is the only
+ordering here that is not arbitrary). The map is absent, because a
+screen with no answer has nothing to put on one.
+
 **There is no rating on that card, and this is deliberate.** Alex asked
 for one; reviews do not exist on this platform (§14 below, and
 `docs/CONSUMER-APP.md`), so the only way to show a rating today is to
