@@ -791,3 +791,12 @@ a.pop-go:hover {
   flex: 1;
   min-height: 44px;
 }
+
+/* A completed step shows a check in place of its number. The prototype
+   only darkens the circle; the glyph is Alex's ask (2026-09-21). */
+.step.done .n {
+  background: var(--brand);
+}
+.step.done .n svg {
+  display: block;
+}

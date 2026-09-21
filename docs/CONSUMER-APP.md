@@ -111,6 +111,24 @@ half the visit can keep. Offer and booking share one `freeFor()` helper,
 including the existing "skip anyone slower than the catalog quote" rule
 — which is what keeps a later treatment's start time true.
 
+**Nothing in the past is offered.** Both slot doors (`availableSlots`
+for one treatment, `availableChainSlots` for a visit) cut the day at
+"now" in the *salon's* clock (`locations.tz`, default Europe/Skopje):
+a day already over has no slots, a future day is untouched, and today
+loses what has passed. A past slot is not marked busy — nobody holds it
+— it is simply left out. This is the offer side only: `bookingCheck`
+still says nothing about the past, because the front desk records
+walk-ins after the fact and shares that gate. The slot grid itself
+stays inside the platform's `08:00–19:00` day (`DAY_START`/`DAY_END`,
+shared with the workspace calendar); a salon's own opening hours narrow
+it, never widen it — widening is an open scheduling question (§below).
+
+On the salon page the time is the person's to pick: nothing is
+pre-selected, "Book now" waits for a tap, and the stepper ticks
+**Treatment** once something is in the visit and **Date & time** once
+a time is chosen (a check in place of the number — the prototype only
+darkened the circle).
+
 Idempotency is per visit: keys are derived per leg (`key:1`, `key:2`),
 and a retried visit answers with the visit it already made rather than
 colliding with its own appointments.

@@ -7,6 +7,7 @@ import type { DaySchedule } from '@velnes/contracts';
 import {
   clipPrep,
   localIso,
+  nowAt,
   DAY_FULL,
   hhmm,
   mins,
@@ -309,6 +310,28 @@ export async function bookingCheck(trx: Trx, req: CheckReq): Promise<Refusal | n
   return null;
 }
 
+/**
+ * Where "now" cuts the day, in the salon's own clock.
+ *
+ * Returns the minute-of-day below which nothing is offered on `date`:
+ * a day already over cuts everything, a day still to come cuts nothing,
+ * and today cuts what has passed. A past slot is not "taken" — nobody
+ * holds it — it is simply gone, so the slot doors leave it out rather
+ * than mark it busy. Only the offer side: `bookingCheck` stays silent
+ * on the past because the front desk records walk-ins after the fact.
+ */
+async function pastCutoff(trx: Trx, locationId: string, date: string, now?: Date): Promise<number> {
+  const loc = await trx
+    .selectFrom('locations')
+    .select('tz')
+    .where('id', '=', locationId)
+    .executeTakeFirst();
+  const clock = nowAt(loc?.tz ?? 'Europe/Skopje', now);
+  if (date < clock.date) return Number.POSITIVE_INFINITY;
+  if (date > clock.date) return Number.NEGATIVE_INFINITY;
+  return clock.min;
+}
+
 /** The only place free times come from. */
 export async function availableSlots(
   trx: Trx,
@@ -319,9 +342,12 @@ export async function availableSlots(
     date: string;
     variantId?: string | null | undefined;
     key?: string | undefined;
+    /** The clock, for tests; the wall clock otherwise. */
+    now?: Date | undefined;
   },
 ) {
   if (!(await locLive(trx, q.locationId))) return []; // non-live locations do not exist here
+  const cut = await pastCutoff(trx, q.locationId, q.date, q.now);
   const cfg = await svcAt(trx, q.serviceId, q.locationId).catch(() => null);
   if (!cfg?.active) return [];
   const pool =
@@ -348,6 +374,7 @@ export async function availableSlots(
   const sch = await scheduleFor(trx, q.locationId, q.date);
   const out: { t: string; emp: string | null; free: boolean }[] = [];
   for (let m = DAY_START; m + quoted + quotedLine.resetMin <= DAY_END; m += 30) {
+    if (m <= cut) continue;
     if (m - clipPrep(quotedLine.prepMin, m, sch) < DAY_START) continue;
     let who: string | null = null;
     for (const id of pool) {
@@ -940,10 +967,13 @@ export async function availableChainSlots(
     employeeId: string | 'any';
     date: string;
     key?: string | undefined;
+    /** The clock, for tests; the wall clock otherwise. */
+    now?: Date | undefined;
   },
 ) {
   if (!q.items.length) return [];
   if (!(await locLive(trx, q.locationId))) return [];
+  const cut = await pastCutoff(trx, q.locationId, q.date, q.now);
   for (const it of q.items) {
     const cfg = await svcAt(trx, it.serviceId, q.locationId).catch(() => null);
     if (!cfg?.active) return [];
@@ -963,6 +993,7 @@ export async function availableChainSlots(
   for (let m = DAY_START; ; m += 30) {
     const span = chainSpan(legs, m);
     if (span.to > DAY_END) break;
+    if (m <= cut) continue;
     if (m - clipPrep(legs[0]!.prepMin, m, sch) < DAY_START) continue;
     // Whoever takes the first treatment is the face of the slot.
     let first: string | null = null;

@@ -63,6 +63,10 @@ function initials(name: string): string {
     .toUpperCase();
 }
 
+const IcStepDone = (
+  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-label="done"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>
+);
+
 const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -198,10 +202,16 @@ function useSalonPage() {
     items: lines.map((l) => ({ serviceId: l.serviceId, variantId: l.variantId })),
   });
   const free = useMemo(() => (availQ.data?.slots ?? []).filter((s) => s.free).map((s) => s.t), [availQ.data]);
+  // The time is the person's to pick — nothing is chosen for them, so
+  // "Date & time" is ticked only once they have tapped one (Alex,
+  // 2026-09-21). A pick that stopped being free — another day, a hold
+  // elsewhere — is dropped, so a stale time can never reach the door.
+  // Only once the door has answered: an empty list while it loads is
+  // not "your time is gone".
+  const answered = availQ.data !== undefined;
   useEffect(() => {
-    if (free.length && !free.includes(time)) setTime(free[0]!);
-    if (!free.length) setTime('');
-  }, [free, time]);
+    if (answered && time && !free.includes(time)) setTime('');
+  }, [answered, free, time]);
   // What the door will actually charge for the visit: every line at the
   // price its own option carries. Never a "from" price.
   const price = lines.reduce((n, l) => n + l.price, 0);
@@ -316,10 +326,19 @@ function BookCard({ p, desktop }: { p: Page; desktop: boolean }) {
   const rest = p.services.slice(4);
   return (
     <div className="card bookcard" style={desktop ? undefined : { margin: '14px 16px 0' }} id={desktop ? undefined : 'm-book'}>
+      {/* Each step ticks as it is actually completed: a treatment in the
+          visit, then a time tapped. The prototype's "done" state only
+          darkened the number; Alex asked for a check mark in its place. */}
       <div className="stepper">
-        <span className="step done" data-step="1"><span className="n">1</span>Treatment</span>
-        <span className={`step ${p.time ? 'done' : 'on'}`} data-step="2"><span className="n">2</span>Date &amp; time</span>
-        <span className={`step ${p.time ? 'on' : ''}`} data-step="3"><span className="n">3</span>Confirm</span>
+        <span className={`step ${p.lines.length ? 'done' : 'on'}`} data-step="1">
+          <span className="n">{p.lines.length ? IcStepDone : 1}</span>Treatment
+        </span>
+        <span className={`step ${p.lines.length && p.time ? 'done' : p.lines.length ? 'on' : ''}`} data-step="2">
+          <span className="n">{p.lines.length && p.time ? IcStepDone : 2}</span>Date &amp; time
+        </span>
+        <span className={`step ${p.lines.length && p.time ? 'on' : ''}`} data-step="3">
+          <span className="n">3</span>Confirm
+        </span>
       </div>
       {d.locations.length > 1 ? (
         <>
