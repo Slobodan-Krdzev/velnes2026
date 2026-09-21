@@ -33,6 +33,7 @@ import { businessCategoriesRoutes } from './modules/business-categories/business
 import { registrationsRoutes } from './modules/registrations/registrations.routes.js';
 import { assistantRoutes } from './modules/assistant/assistant.routes.js';
 import { authPlugin } from './plugins/auth.js';
+import { clientRoutes } from './modules/clients/clients.routes.js';
 import { publicRoutes } from './public/public.routes.js';
 
 export async function buildServer() {
@@ -87,6 +88,10 @@ export async function buildServer() {
   // The widget's public surface: its own narrow plugin scope with its
   // own rate limiting, CORS-per-domain and caching (docs §2, §7).
   await app.register(publicRoutes, { prefix: `${API_PREFIX}/public` });
+  // The consumer surface: its own scope, its own limiter, its own token
+  // shape — a fourth principal that reaches neither the staff API nor
+  // any other salon's data.
+  await app.register(clientRoutes, { prefix: `${API_PREFIX}/client` });
 
   return app;
 }

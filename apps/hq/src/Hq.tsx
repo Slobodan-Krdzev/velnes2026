@@ -30,6 +30,14 @@ import { useTranslation } from 'react-i18next';
 import { z } from 'zod';
 import { PlatformNoticeListSchema } from '@velnes/contracts';
 import { HqApiError, hqDelete, hqGet, hqPatch, hqPost } from './api.js';
+import {
+  DiscoveryCategoriesSchema,
+  SearchConfigListSchema,
+  SearchConfigVersionSchema,
+  SearchMissesSchema,
+  SearchPreviewSchema,
+  type SearchConfigPayload,
+} from '@velnes/contracts';
 
 /** The prototype's viewHQ: the customers pane is the intake table —
  *  new locations, new registrations, then every business on the
@@ -291,10 +299,7 @@ export function Hq({
           ) : null}
           {tab === 'team' ? <Team say={say} me={user} /> : null}
           {tab === 'search' ? (
-            <div className="empty">
-              <h3>{t('hq.comingSoon')}</h3>
-              <p>{t('hq.searchSoon')}</p>
-            </div>
+            <SearchLab say={say} canWrite={user.role === 'hq_super' || user.role === 'hq_tech'} />
           ) : null}
           {tab === 'audit' ? <PlatformLog /> : null}
         </main>
@@ -329,6 +334,457 @@ async function fileToDataUrl(file: File, maxEdge: number, kind: 'card' | 'icon')
   } finally {
     URL.revokeObjectURL(url);
   }
+}
+
+/**
+ * The Search lab — §5, docs/SEARCH-RANKING.md.
+ *
+ * Every constant the ranker uses is a knob, and this is where they are
+ * turned. Two things make that safe enough to do: a change is a new
+ * version rather than an edit, so the history stays a history and an
+ * order can always be explained afterwards; and a draft can be dry-run
+ * against a real category before it is live. A weight nobody can look
+ * at before shipping is a weight nobody will dare touch.
+ */
+/**
+ * How a typed query was read, before anything was ranked — step 11 of
+ * docs/SEARCH.md.
+ *
+ * The lab exists so a surprising order can be explained, and most
+ * surprises are decided here rather than in the scorer: the text meant
+ * something other than what was intended. Normalization, what it
+ * matched, which categories that resolved to, and how many treatments
+ * survived admission — the gap between gathered and admitted is usually
+ * the answer to "why is this not showing".
+ *
+ * HQ-only, like every other explanation in this file. A consumer
+ * response carries none of it.
+ */
+function Interpretation({
+  i,
+}: {
+  i: NonNullable<z.infer<typeof SearchPreviewSchema>['interpretation']>;
+}) {
+  return (
+    <div
+      className="card"
+      style={{ padding: '12px', marginTop: '12px', background: 'var(--soft, #fafafa)' }}
+    >
+      <div style={{ display: 'flex', gap: '18px', flexWrap: 'wrap', marginBottom: '8px' }}>
+        <span>
+          <b>Normalized</b> <code>{i.normalized}</code>
+        </span>
+        <span>
+          <b>Read as</b> {i.how === 'none' ? 'nothing we recognise' : i.how}
+          {i.ambiguous ? ' (several salons matched exactly)' : ''}
+        </span>
+        <span>
+          <b>Gathered</b> {i.gathered} → <b>admitted</b> {i.admitted}
+        </span>
+      </div>
+      {i.directSalon ? (
+        <p className="sub" style={{ margin: '0 0 8px' }}>
+          This text opens <b>{i.directSalon}</b> outright — a customer typing it never
+          sees a results page at all.
+        </p>
+      ) : null}
+      {i.categories.length ? (
+        <p className="sub" style={{ margin: '0 0 8px' }}>
+          Candidates come from: {i.categories.join(' · ')}
+        </p>
+      ) : null}
+      {i.matches.length ? (
+        <table style={{ width: '100%' }}>
+          <thead>
+            <tr>
+              <th style={{ textAlign: 'left' }}>Matched</th>
+              <th style={{ textAlign: 'left' }}>Kind</th>
+              <th style={{ textAlign: 'left' }}>How</th>
+              <th>Score</th>
+            </tr>
+          </thead>
+          <tbody>
+            {i.matches.map((m) => (
+              <tr key={`${m.kind}-${m.display}-${m.how}`}>
+                <td>{m.display}</td>
+                <td>{m.kind}</td>
+                <td>{m.how}</td>
+                <td style={{ textAlign: 'right' }}>{m.score.toFixed(3)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      ) : (
+        <p className="sub" style={{ margin: 0 }}>
+          Nothing on the platform resembled this text.
+        </p>
+      )}
+    </div>
+  );
+}
+
+function SearchLab({ say, canWrite }: { say: (m: string) => void; canWrite: boolean }) {
+  const [versions, setVersions] = useState<
+    z.infer<typeof SearchConfigListSchema>['versions']
+  >([]);
+  const [draft, setDraft] = useState<SearchConfigPayload | null>(null);
+  const [note, setNote] = useState('');
+  const [cats, setCats] = useState<{ id: string; name: string }[]>([]);
+  const [catId, setCatId] = useState('');
+  const [preview, setPreview] = useState<z.infer<typeof SearchPreviewSchema> | null>(null);
+  const [busy, setBusy] = useState(false);
+  /** Step 11: the lab can now be asked a question the way a customer
+   *  asks one, instead of only being pointed at a category. */
+  const [q, setQ] = useState('');
+  const [misses, setMisses] = useState<z.infer<typeof SearchMissesSchema> | null>(null);
+
+  const load = useCallback(
+    () =>
+      void hqGet(SearchConfigListSchema, '/hq/search-config').then((r) => {
+        setVersions(r.versions);
+        const live = r.versions.find((v) => v.active);
+        if (live) setDraft(structuredClone(live.payload));
+      }),
+    [],
+  );
+  useEffect(() => {
+    load();
+    // The lab ranks real categories, so it needs the real list.
+    void fetch(`${import.meta.env.VITE_API_URL ?? '/api/v1'}/public/discovery/categories`)
+      .then((r) => r.json())
+      .then((j) => {
+        const parsed = DiscoveryCategoriesSchema.safeParse(j);
+        if (!parsed.success) return;
+        setCats(parsed.data.categories.map((c) => ({ id: c.id, name: c.name })));
+        setCatId((prev) => prev || (parsed.data.categories[0]?.id ?? ''));
+      })
+      .catch(() => undefined);
+  }, [load]);
+
+  const active = versions.find((v) => v.active);
+  if (!draft || !active) return <div className="empty"><h3>Loading…</h3></div>;
+
+  const setWeight = (k: keyof SearchConfigPayload['weights'], v: number) =>
+    setDraft({ ...draft, weights: { ...draft.weights, [k]: v } });
+
+  const dryRun = async (asText: boolean) => {
+    setBusy(true);
+    try {
+      const out = await hqPost(SearchPreviewSchema, '/hq/search-config/preview', {
+        // One entrance or the other, never both: they are two different
+        // questions and the door refuses to guess which was meant.
+        categoryId: asText ? null : catId,
+        q: asText ? q.trim() : null,
+        payload: draft,
+        // Skopje: proximity is usually the weight being argued about,
+        // and a dry run with no position could not show it moving.
+        lat: 41.9981,
+        lng: 21.4254,
+      });
+      setPreview(out);
+      say(out.moved ? `${out.moved} result(s) would move.` : 'Nothing would move.');
+    } catch (e) {
+      say(e instanceof HqApiError ? e.message : 'Could not run that.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const publish = async (activate: boolean) => {
+    setBusy(true);
+    try {
+      const v = await hqPost(SearchConfigVersionSchema, '/hq/search-config', {
+        payload: draft,
+        note,
+        activate,
+      });
+      setNote('');
+      say(activate ? `v${v.version} is live.` : `v${v.version} saved, not live.`);
+      load();
+    } catch (e) {
+      say(e instanceof HqApiError ? e.message : 'Could not save that.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const activateVersion = async (version: number) => {
+    setBusy(true);
+    try {
+      await hqPost(SearchConfigVersionSchema, `/hq/search-config/${version}/activate`);
+      say(`v${version} is live.`);
+      load();
+    } catch (e) {
+      say(e instanceof HqApiError ? e.message : 'Could not activate that.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const WEIGHTS: [keyof SearchConfigPayload['weights'], string][] = [
+    ['proximity', 'How near'],
+    ['affinity', 'What they booked before'],
+    ['availability', 'Bookable'],
+    ['value', 'Price against the category median'],
+    ['quality', 'Quality — inert until reviews exist'],
+    ['exposure', 'Exposure — inert until impressions exist'],
+  ];
+
+  return (
+    <>
+      <div className="head">
+        <h2>Search lab</h2>
+        <span className="sub">
+          Ranking v{active.version} is live. Changes are new versions, never edits.
+        </span>
+      </div>
+
+      <div className="card" style={{ padding: '16px' }}>
+        <h3 style={{ marginTop: 0 }}>Weights</h3>
+        <p className="sub" style={{ marginTop: 0 }}>
+          Components a viewer cannot supply are dropped and the rest renormalised, so only the
+          ratios matter. Exposure is subtracted, not added.
+        </p>
+        {WEIGHTS.map(([k, label]) => (
+          <div key={k} style={{ display: 'flex', alignItems: 'center', gap: '12px', margin: '8px 0' }}>
+            <label style={{ width: '280px' }}>{label}</label>
+            <input
+              type="range"
+              min={0}
+              max={1}
+              step={0.05}
+              value={draft.weights[k]}
+              disabled={!canWrite}
+              onChange={(e) => setWeight(k, Number(e.target.value))}
+              style={{ flex: 1 }}
+            />
+            <b style={{ width: '48px', textAlign: 'right' }}>{draft.weights[k].toFixed(2)}</b>
+          </div>
+        ))}
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', margin: '14px 0 4px' }}>
+          <label style={{ width: '280px' }}>Distance decay (km)</label>
+          <input
+            type="number"
+            min={0.5}
+            step={0.5}
+            value={draft.proximity.decayKm}
+            disabled={!canWrite}
+            onChange={(e) =>
+              setDraft({ ...draft, proximity: { decayKm: Number(e.target.value) || 1 } })
+            }
+          />
+          <label style={{ width: '220px' }}>Recency half-life (days)</label>
+          <input
+            type="number"
+            min={1}
+            value={draft.affinity.recencyHalfLifeDays}
+            disabled={!canWrite}
+            onChange={(e) =>
+              setDraft({
+                ...draft,
+                affinity: {
+                  ...draft.affinity,
+                  recencyHalfLifeDays: Number(e.target.value) || 1,
+                },
+              })
+            }
+          />
+        </div>
+      </div>
+
+      <div className="card" style={{ padding: '16px', marginTop: '14px' }}>
+        <h3 style={{ marginTop: 0 }}>Dry run</h3>
+        <p className="sub" style={{ marginTop: 0 }}>
+          Score one category under this draft and see how the order moves. Changes nothing.
+        </p>
+        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+          <select value={catId} onChange={(e) => setCatId(e.target.value)}>
+            {cats.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+          <button className="btn" disabled={busy || !catId || !canWrite} onClick={() => void dryRun(false)}>
+            Run
+          </button>
+        </div>
+
+        {/* Step 11: the same dry run, asked the way a customer asks —
+            because most surprising orders are decided before the scorer
+            ever runs, by the text meaning something else. */}
+        <p className="sub" style={{ marginBottom: '6px', marginTop: '16px' }}>
+          Or ask it as a customer would. This runs the consumer door&rsquo;s own
+          candidate builder, so what you see explained is the search people get.
+        </p>
+        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+          <input
+            value={q}
+            placeholder="masaza, deep tissue, fizio…"
+            onChange={(e) => setQ(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && q.trim().length >= 2 && canWrite) void dryRun(true);
+            }}
+          />
+          <button
+            className="btn"
+            disabled={busy || q.trim().length < 2 || !canWrite}
+            onClick={() => void dryRun(true)}
+          >
+            Run query
+          </button>
+        </div>
+
+        {preview?.interpretation ? <Interpretation i={preview.interpretation} /> : null}
+        {preview ? (
+          <table style={{ width: '100%', marginTop: '12px' }}>
+            <thead>
+              <tr>
+                <th style={{ textAlign: 'left' }}>Treatment</th>
+                <th style={{ textAlign: 'left' }}>Salon</th>
+                <th>Was</th>
+                <th>Now</th>
+                <th>Move</th>
+                <th>Score</th>
+              </tr>
+            </thead>
+            <tbody>
+              {preview.rows.map((r) => (
+                <tr key={r.id}>
+                  <td>{r.name}</td>
+                  <td>{r.salon}</td>
+                  <td style={{ textAlign: 'center' }}>{r.was + 1}</td>
+                  <td style={{ textAlign: 'center' }}>{r.now + 1}</td>
+                  <td style={{ textAlign: 'center' }}>
+                    {r.moved === 0 ? '—' : r.moved < 0 ? `▲ ${-r.moved}` : `▼ ${r.moved}`}
+                  </td>
+                  <td style={{ textAlign: 'right' }}>{r.score.toFixed(3)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : null}
+      </div>
+
+      {/* Step 10, surfaced. Not a lever — a list of gaps: what people
+          asked for and did not find. */}
+      <div className="card" style={{ padding: '16px', marginTop: '14px' }}>
+        <h3 style={{ marginTop: 0 }}>Not found</h3>
+        <p className="sub" style={{ marginTop: 0 }}>
+          Searches that came back empty or nearly empty, last 30 days. Aggregate
+          counts only — no identity was recorded. &ldquo;Not understood&rdquo; is a
+          synonym to add; anything else is a salon to recruit.
+        </p>
+        <button
+          className="btn"
+          disabled={busy}
+          onClick={() => {
+            void hqGet(SearchMissesSchema, '/hq/search-misses?days=30&limit=50').then(setMisses);
+          }}
+        >
+          Show
+        </button>
+        {misses ? (
+          misses.misses.length ? (
+            <table style={{ width: '100%', marginTop: '12px' }}>
+              <thead>
+                <tr>
+                  <th style={{ textAlign: 'left' }}>Query</th>
+                  <th style={{ textAlign: 'left' }}>Read as</th>
+                  <th>Asked</th>
+                  <th>Results</th>
+                  <th style={{ textAlign: 'left' }}>Day</th>
+                </tr>
+              </thead>
+              <tbody>
+                {misses.misses.map((m) => (
+                  <tr key={`${m.norm}-${m.day}`}>
+                    <td>
+                      <button
+                        className="btn btn-ghost"
+                        style={{ padding: '2px 6px' }}
+                        title="Put it in the query box"
+                        onClick={() => setQ(m.norm)}
+                      >
+                        {m.norm}
+                      </button>
+                    </td>
+                    <td>{m.how === 'none' ? 'Not understood' : m.how}</td>
+                    <td style={{ textAlign: 'center' }}>{m.asked}</td>
+                    <td style={{ textAlign: 'center' }}>{m.results}</td>
+                    <td>{m.day}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <p className="sub" style={{ marginTop: '12px' }}>
+              Nothing recorded. Either every search is landing, or nobody has
+              searched yet — both are real answers.
+            </p>
+          )
+        ) : null}
+      </div>
+
+      {canWrite ? (
+        <div className="card" style={{ padding: '16px', marginTop: '14px' }}>
+          <h3 style={{ marginTop: 0 }}>Publish</h3>
+          <input
+            placeholder="What changed, and why"
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            style={{ width: '100%', marginBottom: '10px' }}
+          />
+          <div style={{ display: 'flex', gap: '10px' }}>
+            <button className="btn" disabled={busy} onClick={() => publish(false)}>
+              Save, not live
+            </button>
+            <button className="btn primary" disabled={busy} onClick={() => publish(true)}>
+              Save and make live
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="sub" style={{ marginTop: '14px' }}>
+          Ranking config is read-only for your role. It decides what every consumer sees, so only
+          the super and technical roles change it.
+        </div>
+      )}
+
+      <div className="card" style={{ padding: '16px', marginTop: '14px' }}>
+        <h3 style={{ marginTop: 0 }}>History</h3>
+        <table style={{ width: '100%' }}>
+          <thead>
+            <tr>
+              <th style={{ textAlign: 'left' }}>Version</th>
+              <th style={{ textAlign: 'left' }}>Note</th>
+              <th style={{ textAlign: 'left' }}>Created</th>
+              <th />
+            </tr>
+          </thead>
+          <tbody>
+            {versions.map((v) => (
+              <tr key={v.version}>
+                <td>
+                  v{v.version} {v.active ? <b>· live</b> : null}
+                </td>
+                <td>{v.note || '—'}</td>
+                <td>{v.createdAt.slice(0, 10)}</td>
+                <td style={{ textAlign: 'right' }}>
+                  {!v.active && canWrite ? (
+                    <button className="btn" disabled={busy} onClick={() => activateVersion(v.version)}>
+                      Make live
+                    </button>
+                  ) : null}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </>
+  );
 }
 
 function Categories({ say }: { say: (m: string) => void }) {
@@ -431,10 +887,21 @@ function Categories({ say }: { say: (m: string) => void }) {
     }
   };
 
+  /**
+   * A native file input is wide — a couple of hundred pixels of button
+   * and filename before it will shrink at all — and it carries
+   * `min-width: auto` like every other flex item. Two of them side by
+   * side burst a 420px modal, and the second one (the icon) was pushed
+   * clean off the edge where nobody could reach it. Since saving
+   * requires both, the Save button could never enable: the category
+   * images dialog was unusable rather than merely cramped.
+   *
+   * So the pickers stack, and the input is allowed to shrink.
+   */
   const imgPicker = (label: string, value: string | null, kind: 'card' | 'icon', onPick: (v: string) => void) => (
-    <label className="field" style={{ flex: 1 }}>
+    <label className="field" style={{ flex: 1, minWidth: 0 }}>
       <span>{label}</span>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
         {value ? (
           <img
             src={value}
@@ -449,6 +916,7 @@ function Categories({ say }: { say: (m: string) => void }) {
         <input
           type="file"
           accept="image/*"
+          style={{ flex: 1, minWidth: 0, maxWidth: '100%' }}
           onChange={async (e) => {
             const f = e.target.files?.[0];
             if (f) onPick(await fileToDataUrl(f, kind === 'card' ? 720 : 128, kind));
@@ -666,7 +1134,7 @@ function Categories({ say }: { say: (m: string) => void }) {
                   <span className="muted" style={{ fontSize: 12, fontWeight: 500 }}>
                     {t('hq.categoryMediaHint')}
                   </span>
-                  <div style={{ display: 'flex', gap: 14 }}>
+                  <div style={{ display: 'grid', gap: 14 }}>
                     {imgPicker(t('hq.categoryCard'), cardImage, 'card', setCardImage)}
                     {imgPicker(t('hq.categoryIcon'), icon, 'icon', setIcon)}
                   </div>
@@ -700,7 +1168,7 @@ function Categories({ say }: { say: (m: string) => void }) {
             </div>
             <div className="modal-body" style={{ display: 'grid', gap: 14 }}>
               <span className="muted" style={{ fontSize: 12, fontWeight: 500 }}>{t('hq.categoryMediaHint')}</span>
-              <div style={{ display: 'flex', gap: 14 }}>
+              <div style={{ display: 'grid', gap: 14 }}>
                 {imgPicker(t('hq.categoryCard'), imgEdit.cardImage, 'card', (v) => setImgEdit({ ...imgEdit, cardImage: v }))}
                 {imgPicker(t('hq.categoryIcon'), imgEdit.icon, 'icon', (v) => setImgEdit({ ...imgEdit, icon: v }))}
               </div>

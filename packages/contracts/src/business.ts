@@ -152,6 +152,10 @@ export const LocationPatchSchema = z.object({
   tz: z.string().min(1).optional(),
   rooms: z.number().int().min(1).max(50).optional(),
   online: z.boolean().optional(),
+  // The map pin. Sent together (a half-set coordinate is meaningless);
+  // null clears it back to "no pin".
+  lat: z.number().min(-90).max(90).nullable().optional(),
+  lng: z.number().min(-180).max(180).nullable().optional(),
 });
 
 /** Copy setup between EXISTING locations — the prototype's

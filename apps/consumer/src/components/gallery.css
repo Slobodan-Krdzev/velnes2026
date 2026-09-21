@@ -1,0 +1,116 @@
+/* The salon gallery, on top of the prototype's .gal / .m-gal. The
+   prototype showed a still frame with decorative dots; these are the
+   few rules that make it browsable without touching its stylesheet. */
+
+/* The active dot is wherever you are, not always the first one. */
+.gal .dots i.on,
+.m-gal .dots i.on {
+  background: #fff;
+}
+.gal .dots i:first-child:not(.on),
+.m-gal .dots i:first-child:not(.on) {
+  background: rgba(255, 255, 255, 0.55);
+}
+.gal .dots i,
+.m-gal .dots i {
+  cursor: pointer;
+  transition: transform 0.15s;
+}
+.gal .dots i:hover,
+.m-gal .dots i:hover {
+  transform: scale(1.35);
+}
+
+.galnav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 3;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(255, 249, 247, 0.92);
+  color: var(--ink);
+  box-shadow: 0 6px 18px rgba(45, 26, 18, 0.22);
+  cursor: pointer;
+}
+.galnav:hover {
+  background: #fff;
+}
+.galnav.prev {
+  left: 10px;
+}
+.galnav.next {
+  right: 10px;
+}
+.gal .ph-open,
+.m-gal .ph-open {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  background: none;
+  cursor: zoom-in;
+}
+
+/* Full-size view. The photos are the salon's showcase, so they get a
+   proper look rather than a 300px crop. */
+.gallightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  display: grid;
+  place-items: center;
+  background: rgba(29, 17, 12, 0.96);
+  padding: 28px;
+}
+/* A stage rather than a frame: photos imported by onboarding are small
+   (a few hundred pixels), uploads are up to 1600px. contain fits either
+   to the same space without distorting or cropping. */
+.gallightbox img {
+  width: min(1100px, 92vw);
+  height: 78vh;
+  border-radius: 14px;
+  object-fit: contain;
+}
+.gallightbox .cap {
+  position: absolute;
+  left: 50%;
+  bottom: 22px;
+  transform: translateX(-50%);
+  color: #fff9f7;
+  font-size: 13px;
+  font-weight: 600;
+  text-align: center;
+}
+.gallightbox .close {
+  position: absolute;
+  top: 18px;
+  right: 20px;
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(255, 249, 247, 0.14);
+  color: #fff9f7;
+  cursor: pointer;
+}
+.gallightbox .close:hover {
+  background: rgba(255, 249, 247, 0.26);
+}
+
+/* A named space with no photograph yet: the salon's own tile colour,
+   the same stand-in its workspace gallery shows. */
+.galtile {
+  position: absolute;
+  inset: auto 0 0;
+  padding: 14px 16px;
+  color: #fff9f7;
+  font-family: var(--fd);
+  font-size: 19px;
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.35);
+}

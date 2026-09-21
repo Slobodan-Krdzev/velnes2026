@@ -22,6 +22,20 @@ CREATE SCHEMA app;
 
 
 --
+-- Name: pg_trgm; Type: EXTENSION; Schema: -; Owner: -
+--
+
+CREATE EXTENSION IF NOT EXISTS pg_trgm WITH SCHEMA public;
+
+
+--
+-- Name: EXTENSION pg_trgm; Type: COMMENT; Schema: -; Owner: -
+--
+
+COMMENT ON EXTENSION pg_trgm IS 'text similarity measurement and index searching based on trigrams';
+
+
+--
 -- Name: pgcrypto; Type: EXTENSION; Schema: -; Owner: -
 --
 
@@ -33,6 +47,20 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA public;
 --
 
 COMMENT ON EXTENSION pgcrypto IS 'cryptographic functions';
+
+
+--
+-- Name: unaccent; Type: EXTENSION; Schema: -; Owner: -
+--
+
+CREATE EXTENSION IF NOT EXISTS unaccent WITH SCHEMA public;
+
+
+--
+-- Name: EXTENSION unaccent; Type: COMMENT; Schema: -; Owner: -
+--
+
+COMMENT ON EXTENSION unaccent IS 'text search dictionary that removes accents';
 
 
 --
@@ -313,9 +341,207 @@ CREATE FUNCTION app.current_tenant() RETURNS uuid
 $$;
 
 
+--
+-- Name: log_search_miss(text, integer, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.log_search_miss(p_raw text, p_results integer, p_how text) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+DECLARE
+  v_norm text := search_norm(p_raw);
+BEGIN
+  -- Two characters is the search threshold itself; 120 is the contract's
+  -- maximum query length. Anything outside that did not come from the
+  -- search box, and this function is the boundary that says so rather
+  -- than trusting the caller to have checked.
+  IF v_norm IS NULL OR length(v_norm) < 2 OR length(v_norm) > 120 THEN
+    RETURN;
+  END IF;
+
+  INSERT INTO search_misses (norm, day, asked, results, how)
+  VALUES (v_norm, current_date, 1, greatest(p_results, 0), p_how)
+  ON CONFLICT (norm, day) DO UPDATE
+    SET asked   = search_misses.asked + 1,
+        -- The latest answer, not the first: a query stops being a miss
+        -- the day a salon publishes something for it, and the log
+        -- should show that rather than preserving the complaint.
+        results = excluded.results,
+        how     = excluded.how,
+        last_at = now();
+END $$;
+
+
 SET default_tablespace = '';
 
 SET default_table_access_method = heap;
+
+--
+-- Name: businesses; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.businesses (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    name text NOT NULL,
+    country text NOT NULL,
+    vat text,
+    plan text DEFAULT 'Business'::text NOT NULL,
+    since date,
+    owner_employee_id uuid,
+    timing_enabled boolean DEFAULT false NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    slug text,
+    address text,
+    city text,
+    phone text,
+    description text DEFAULT ''::text NOT NULL,
+    gallery jsonb DEFAULT '[]'::jsonb NOT NULL,
+    settings jsonb DEFAULT '{}'::jsonb NOT NULL,
+    assistant_enabled boolean DEFAULT false NOT NULL
+);
+
+ALTER TABLE ONLY public.businesses FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: search_business_publishable(public.businesses); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.search_business_publishable(b public.businesses) RETURNS boolean
+    LANGUAGE sql STABLE
+    AS $$
+  SELECT b.slug IS NOT NULL
+     AND COALESCE(b.settings->'marketplace'->>'listed', 'true') = 'true'
+$$;
+
+
+--
+-- Name: search_documents_clear(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.search_documents_clear() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+BEGIN
+  DELETE FROM search_documents;
+  RETURN NULL;
+END $$;
+
+
+--
+-- Name: search_documents_sync_business(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.search_documents_sync_business() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+BEGIN
+  IF TG_OP = 'DELETE' THEN
+    DELETE FROM search_documents WHERE tenant_id = OLD.id;
+    RETURN OLD;
+  END IF;
+
+  IF NOT search_business_publishable(NEW) THEN
+    -- Unlisting a salon takes its treatments out of the index with it.
+    DELETE FROM search_documents WHERE tenant_id = NEW.id;
+    RETURN NEW;
+  END IF;
+
+  INSERT INTO search_documents
+    (kind, ref_id, tenant_id, display, norm, salon_slug, salon_name, updated_at)
+  VALUES
+    ('salon', NEW.id, NEW.id, NEW.name, search_norm(NEW.name), NEW.slug, NEW.name, now())
+  ON CONFLICT (kind, ref_id) DO UPDATE SET
+    display = EXCLUDED.display, norm = EXCLUDED.norm,
+    salon_slug = EXCLUDED.salon_slug, salon_name = EXCLUDED.salon_name,
+    updated_at = now();
+
+  -- A rename has to reach the treatments that carry the salon's name.
+  UPDATE search_documents
+     SET salon_slug = NEW.slug, salon_name = NEW.name, updated_at = now()
+   WHERE kind = 'service' AND tenant_id = NEW.id;
+
+  -- And a salon that has just become listed brings its catalogue back.
+  INSERT INTO search_documents
+    (kind, ref_id, tenant_id, display, norm, salon_slug, salon_name, category_id, updated_at)
+  SELECT 'service', s.id, s.tenant_id, s.name, search_norm(s.name),
+         NEW.slug, NEW.name, s.category_id, now()
+    FROM services s
+   WHERE s.tenant_id = NEW.id AND s.status = 'active' AND s.online
+  ON CONFLICT (kind, ref_id) DO NOTHING;
+
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: search_documents_sync_service(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.search_documents_sync_service() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+DECLARE b businesses;
+BEGIN
+  IF TG_OP = 'DELETE' THEN
+    DELETE FROM search_documents WHERE kind = 'service' AND ref_id = OLD.id;
+    RETURN OLD;
+  END IF;
+
+  SELECT * INTO b FROM businesses WHERE id = NEW.tenant_id;
+
+  -- Only what is on offer to the public: a draft or POS-only treatment
+  -- is not something a search box should ever suggest.
+  IF b.id IS NULL
+     OR NOT search_business_publishable(b)
+     OR NEW.status <> 'active'
+     OR NOT NEW.online THEN
+    DELETE FROM search_documents WHERE kind = 'service' AND ref_id = NEW.id;
+    RETURN NEW;
+  END IF;
+
+  INSERT INTO search_documents
+    (kind, ref_id, tenant_id, display, norm, salon_slug, salon_name, category_id, updated_at)
+  VALUES
+    ('service', NEW.id, NEW.tenant_id, NEW.name, search_norm(NEW.name),
+     b.slug, b.name, NEW.category_id, now())
+  ON CONFLICT (kind, ref_id) DO UPDATE SET
+    display = EXCLUDED.display, norm = EXCLUDED.norm,
+    salon_slug = EXCLUDED.salon_slug, salon_name = EXCLUDED.salon_name,
+    category_id = EXCLUDED.category_id, tenant_id = EXCLUDED.tenant_id,
+    updated_at = now();
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: search_norm(text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.search_norm(t text) RETURNS text
+    LANGUAGE sql STABLE STRICT PARALLEL SAFE
+    AS $$
+  SELECT btrim(regexp_replace(
+    lower(unaccent('unaccent'::regdictionary, t)), '[^[:alnum:]]+', ' ', 'g'))
+$$;
+
+
+--
+-- Name: service_category_terms_norm(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.service_category_terms_norm() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  NEW.norm := search_norm(NEW.term);
+  RETURN NEW;
+END $$;
+
 
 --
 -- Name: appointment_history; Type: TABLE; Schema: public; Owner: -
@@ -367,10 +593,48 @@ CREATE TABLE public.appointments (
     pmo_id uuid,
     widget_id uuid,
     idempotency_key text,
-    created_at timestamp with time zone DEFAULT now() NOT NULL
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    client_user_id uuid
 );
 
 ALTER TABLE ONLY public.appointments FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: assistant_actions; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.assistant_actions (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    tenant_id uuid NOT NULL,
+    actor_employee_id uuid,
+    app text NOT NULL,
+    action_id text NOT NULL,
+    draft_id uuid,
+    change jsonb NOT NULL,
+    fingerprint jsonb,
+    result text NOT NULL,
+    reason text,
+    ts timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: assistant_drafts; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.assistant_drafts (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    tenant_id uuid NOT NULL,
+    created_by uuid,
+    app text NOT NULL,
+    action_id text NOT NULL,
+    status text NOT NULL,
+    draft jsonb NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    expires_at timestamp with time zone NOT NULL
+);
 
 
 --
@@ -424,32 +688,6 @@ CREATE TABLE public.business_categories (
 );
 
 ALTER TABLE ONLY public.business_categories FORCE ROW LEVEL SECURITY;
-
-
---
--- Name: businesses; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.businesses (
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    name text NOT NULL,
-    country text NOT NULL,
-    vat text,
-    plan text DEFAULT 'Business'::text NOT NULL,
-    since date,
-    owner_employee_id uuid,
-    timing_enabled boolean DEFAULT false NOT NULL,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    slug text,
-    address text,
-    city text,
-    phone text,
-    description text DEFAULT ''::text NOT NULL,
-    gallery jsonb DEFAULT '[]'::jsonb NOT NULL,
-    settings jsonb DEFAULT '{}'::jsonb NOT NULL
-);
-
-ALTER TABLE ONLY public.businesses FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -508,6 +746,89 @@ CREATE TABLE public.checkouts (
 );
 
 ALTER TABLE ONLY public.checkouts FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: client_customer_links; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.client_customer_links (
+    client_user_id uuid NOT NULL,
+    tenant_id uuid NOT NULL,
+    customer_id uuid NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+ALTER TABLE ONLY public.client_customer_links FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: client_favourites; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.client_favourites (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    client_user_id uuid NOT NULL,
+    kind text NOT NULL,
+    tenant_id uuid NOT NULL,
+    ref_id uuid NOT NULL,
+    missing_since timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT client_favourites_kind_check CHECK ((kind = ANY (ARRAY['salon'::text, 'service'::text, 'pro'::text])))
+);
+
+ALTER TABLE ONLY public.client_favourites FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: client_notifications; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.client_notifications (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    client_user_id uuid NOT NULL,
+    kind text NOT NULL,
+    title text NOT NULL,
+    body text DEFAULT ''::text NOT NULL,
+    ref_type text,
+    ref_id text,
+    read_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+ALTER TABLE ONLY public.client_notifications FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: client_users; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.client_users (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    email text NOT NULL,
+    password_hash text NOT NULL,
+    first text DEFAULT ''::text NOT NULL,
+    last text DEFAULT ''::text NOT NULL,
+    phone text,
+    dob date,
+    lang text DEFAULT 'en'::text NOT NULL,
+    avatar text,
+    email_verified_at timestamp with time zone,
+    email_code text,
+    email_code_sent_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    personalised_results boolean DEFAULT true NOT NULL,
+    location_allowed boolean
+);
+
+ALTER TABLE ONLY public.client_users FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: COLUMN client_users.location_allowed; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.client_users.location_allowed IS 'Whether the customer allowed location use. NULL = never asked. A decision only — no position is ever stored.';
 
 
 --
@@ -676,7 +997,8 @@ CREATE TABLE public.employees (
     color text,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     hours jsonb,
-    lang text DEFAULT 'en'::text NOT NULL
+    lang text DEFAULT 'en'::text NOT NULL,
+    avatar text
 );
 
 ALTER TABLE ONLY public.employees FORCE ROW LEVEL SECURITY;
@@ -1029,7 +1351,9 @@ CREATE TABLE public.locations (
     lifecycle public.location_lifecycle DEFAULT 'DRAFT'::public.location_lifecycle NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     zip text,
-    country text DEFAULT 'North Macedonia'::text NOT NULL
+    country text DEFAULT 'North Macedonia'::text NOT NULL,
+    lat double precision,
+    lng double precision
 );
 
 ALTER TABLE ONLY public.locations FORCE ROW LEVEL SECURITY;
@@ -1408,6 +1732,62 @@ CREATE TABLE public.schema_migrations (
 
 
 --
+-- Name: search_config; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.search_config (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    version integer NOT NULL,
+    payload jsonb NOT NULL,
+    active boolean DEFAULT false NOT NULL,
+    note text DEFAULT ''::text NOT NULL,
+    created_by uuid,
+    created_by_name text DEFAULT 'Velnes'::text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    activated_by uuid,
+    activated_by_name text DEFAULT ''::text NOT NULL,
+    activated_at timestamp with time zone
+);
+
+ALTER TABLE ONLY public.search_config FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: search_documents; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.search_documents (
+    kind text NOT NULL,
+    ref_id uuid NOT NULL,
+    tenant_id uuid NOT NULL,
+    display text NOT NULL,
+    norm text NOT NULL,
+    salon_slug text NOT NULL,
+    salon_name text NOT NULL,
+    category_id uuid,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT search_documents_kind_check CHECK ((kind = ANY (ARRAY['salon'::text, 'service'::text])))
+);
+
+ALTER TABLE ONLY public.search_documents FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: search_misses; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.search_misses (
+    norm text NOT NULL,
+    day date DEFAULT CURRENT_DATE NOT NULL,
+    asked integer DEFAULT 1 NOT NULL,
+    results integer NOT NULL,
+    how text NOT NULL,
+    first_at timestamp with time zone DEFAULT now() NOT NULL,
+    last_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
 -- Name: service_categories; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1415,10 +1795,31 @@ CREATE TABLE public.service_categories (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     name text NOT NULL,
     parent_id uuid,
-    sort integer DEFAULT 0 NOT NULL
+    sort integer DEFAULT 0 NOT NULL,
+    card_image text,
+    icon text
 );
 
 ALTER TABLE ONLY public.service_categories FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: service_category_terms; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.service_category_terms (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    category_id uuid NOT NULL,
+    lang text NOT NULL,
+    kind text NOT NULL,
+    term text NOT NULL,
+    norm text DEFAULT ''::text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT service_category_terms_kind_check CHECK ((kind = ANY (ARRAY['name'::text, 'synonym'::text]))),
+    CONSTRAINT service_category_terms_lang_check CHECK ((lang = ANY (ARRAY['en'::text, 'mk'::text, 'sq'::text])))
+);
+
+ALTER TABLE ONLY public.service_category_terms FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -1686,7 +2087,8 @@ CREATE TABLE public.suppliers (
     contact text DEFAULT ''::text NOT NULL,
     manager text DEFAULT ''::text NOT NULL,
     rating numeric(3,1),
-    created_at timestamp with time zone DEFAULT now() NOT NULL
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    avatar text
 );
 
 ALTER TABLE ONLY public.suppliers FORCE ROW LEVEL SECURITY;
@@ -1791,6 +2193,22 @@ ALTER TABLE ONLY public.appointments
 
 
 --
+-- Name: assistant_actions assistant_actions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.assistant_actions
+    ADD CONSTRAINT assistant_actions_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: assistant_drafts assistant_drafts_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.assistant_drafts
+    ADD CONSTRAINT assistant_drafts_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: audit_log audit_log_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1868,6 +2286,38 @@ ALTER TABLE ONLY public.checkout_items
 
 ALTER TABLE ONLY public.checkouts
     ADD CONSTRAINT checkouts_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: client_customer_links client_customer_links_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.client_customer_links
+    ADD CONSTRAINT client_customer_links_pkey PRIMARY KEY (client_user_id, tenant_id);
+
+
+--
+-- Name: client_favourites client_favourites_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.client_favourites
+    ADD CONSTRAINT client_favourites_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: client_notifications client_notifications_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.client_notifications
+    ADD CONSTRAINT client_notifications_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: client_users client_users_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.client_users
+    ADD CONSTRAINT client_users_pkey PRIMARY KEY (id);
 
 
 --
@@ -2303,6 +2753,38 @@ ALTER TABLE ONLY public.schema_migrations
 
 
 --
+-- Name: search_config search_config_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.search_config
+    ADD CONSTRAINT search_config_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: search_config search_config_version_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.search_config
+    ADD CONSTRAINT search_config_version_key UNIQUE (version);
+
+
+--
+-- Name: search_documents search_documents_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.search_documents
+    ADD CONSTRAINT search_documents_pkey PRIMARY KEY (kind, ref_id);
+
+
+--
+-- Name: search_misses search_misses_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.search_misses
+    ADD CONSTRAINT search_misses_pkey PRIMARY KEY (norm, day);
+
+
+--
 -- Name: service_categories service_categories_name_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2316,6 +2798,22 @@ ALTER TABLE ONLY public.service_categories
 
 ALTER TABLE ONLY public.service_categories
     ADD CONSTRAINT service_categories_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: service_category_terms service_category_terms_category_id_lang_kind_norm_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.service_category_terms
+    ADD CONSTRAINT service_category_terms_category_id_lang_kind_norm_key UNIQUE (category_id, lang, kind, norm);
+
+
+--
+-- Name: service_category_terms service_category_terms_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.service_category_terms
+    ADD CONSTRAINT service_category_terms_pkey PRIMARY KEY (id);
 
 
 --
@@ -2486,6 +2984,13 @@ CREATE INDEX appointment_history_tenant ON public.appointment_history USING btre
 
 
 --
+-- Name: appointments_client; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX appointments_client ON public.appointments USING btree (client_user_id, date DESC);
+
+
+--
 -- Name: appointments_day; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2514,6 +3019,20 @@ CREATE INDEX appointments_widget_idx ON public.appointments USING btree (widget_
 
 
 --
+-- Name: assistant_actions_tenant; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX assistant_actions_tenant ON public.assistant_actions USING btree (tenant_id, ts DESC);
+
+
+--
+-- Name: assistant_drafts_owner; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX assistant_drafts_owner ON public.assistant_drafts USING btree (tenant_id, created_by, updated_at DESC);
+
+
+--
 -- Name: audit_log_tenant; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2539,6 +3058,48 @@ CREATE INDEX checkout_items_tenant ON public.checkout_items USING btree (tenant_
 --
 
 CREATE INDEX checkouts_tenant ON public.checkouts USING btree (tenant_id, ts DESC);
+
+
+--
+-- Name: client_favourites_mine; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX client_favourites_mine ON public.client_favourites USING btree (client_user_id, created_at DESC);
+
+
+--
+-- Name: client_favourites_missing; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX client_favourites_missing ON public.client_favourites USING btree (missing_since) WHERE (missing_since IS NOT NULL);
+
+
+--
+-- Name: client_favourites_one; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX client_favourites_one ON public.client_favourites USING btree (client_user_id, kind, ref_id);
+
+
+--
+-- Name: client_links_tenant; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX client_links_tenant ON public.client_customer_links USING btree (tenant_id, customer_id);
+
+
+--
+-- Name: client_notifications_feed; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX client_notifications_feed ON public.client_notifications USING btree (client_user_id, created_at DESC);
+
+
+--
+-- Name: client_users_email; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX client_users_email ON public.client_users USING btree (lower(email));
 
 
 --
@@ -2787,6 +3348,62 @@ CREATE INDEX schedule_exceptions_tenant ON public.schedule_exceptions USING btre
 
 
 --
+-- Name: search_config_one_active; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX search_config_one_active ON public.search_config USING btree (active) WHERE active;
+
+
+--
+-- Name: search_config_version; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX search_config_version ON public.search_config USING btree (version DESC);
+
+
+--
+-- Name: search_documents_kind; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX search_documents_kind ON public.search_documents USING btree (kind);
+
+
+--
+-- Name: search_documents_norm_trgm; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX search_documents_norm_trgm ON public.search_documents USING gin (norm public.gin_trgm_ops);
+
+
+--
+-- Name: search_documents_tenant; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX search_documents_tenant ON public.search_documents USING btree (tenant_id);
+
+
+--
+-- Name: search_misses_day; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX search_misses_day ON public.search_misses USING btree (day DESC, asked DESC);
+
+
+--
+-- Name: service_category_terms_category; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX service_category_terms_category ON public.service_category_terms USING btree (category_id);
+
+
+--
+-- Name: service_category_terms_norm_trgm; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX service_category_terms_norm_trgm ON public.service_category_terms USING gin (norm public.gin_trgm_ops);
+
+
+--
 -- Name: service_modifier_groups_tenant; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2864,6 +3481,34 @@ CREATE INDEX widgets_tenant ON public.widgets USING btree (tenant_id, status);
 
 
 --
+-- Name: businesses search_documents_businesses; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER search_documents_businesses AFTER INSERT OR DELETE OR UPDATE ON public.businesses FOR EACH ROW EXECUTE FUNCTION public.search_documents_sync_business();
+
+
+--
+-- Name: services search_documents_services; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER search_documents_services AFTER INSERT OR DELETE OR UPDATE ON public.services FOR EACH ROW EXECUTE FUNCTION public.search_documents_sync_service();
+
+
+--
+-- Name: businesses search_documents_truncate; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER search_documents_truncate AFTER TRUNCATE ON public.businesses FOR EACH STATEMENT EXECUTE FUNCTION public.search_documents_clear();
+
+
+--
+-- Name: service_category_terms service_category_terms_norm; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER service_category_terms_norm BEFORE INSERT OR UPDATE ON public.service_category_terms FOR EACH ROW EXECUTE FUNCTION public.service_category_terms_norm();
+
+
+--
 -- Name: appointment_history appointment_history_appointment_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2877,6 +3522,14 @@ ALTER TABLE ONLY public.appointment_history
 
 ALTER TABLE ONLY public.appointment_history
     ADD CONSTRAINT appointment_history_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.businesses(id);
+
+
+--
+-- Name: appointments appointments_client_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.appointments
+    ADD CONSTRAINT appointments_client_user_id_fkey FOREIGN KEY (client_user_id) REFERENCES public.client_users(id);
 
 
 --
@@ -2933,6 +3586,38 @@ ALTER TABLE ONLY public.appointments
 
 ALTER TABLE ONLY public.appointments
     ADD CONSTRAINT appointments_widget_fk FOREIGN KEY (widget_id) REFERENCES public.widgets(id) ON DELETE SET NULL;
+
+
+--
+-- Name: assistant_actions assistant_actions_actor_employee_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.assistant_actions
+    ADD CONSTRAINT assistant_actions_actor_employee_id_fkey FOREIGN KEY (actor_employee_id) REFERENCES public.employees(id);
+
+
+--
+-- Name: assistant_actions assistant_actions_tenant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.assistant_actions
+    ADD CONSTRAINT assistant_actions_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.businesses(id);
+
+
+--
+-- Name: assistant_drafts assistant_drafts_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.assistant_drafts
+    ADD CONSTRAINT assistant_drafts_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.employees(id);
+
+
+--
+-- Name: assistant_drafts assistant_drafts_tenant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.assistant_drafts
+    ADD CONSTRAINT assistant_drafts_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.businesses(id);
 
 
 --
@@ -3021,6 +3706,46 @@ ALTER TABLE ONLY public.checkouts
 
 ALTER TABLE ONLY public.checkouts
     ADD CONSTRAINT checkouts_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.businesses(id);
+
+
+--
+-- Name: client_customer_links client_customer_links_client_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.client_customer_links
+    ADD CONSTRAINT client_customer_links_client_user_id_fkey FOREIGN KEY (client_user_id) REFERENCES public.client_users(id) ON DELETE CASCADE;
+
+
+--
+-- Name: client_customer_links client_customer_links_customer_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.client_customer_links
+    ADD CONSTRAINT client_customer_links_customer_id_fkey FOREIGN KEY (customer_id) REFERENCES public.customers(id);
+
+
+--
+-- Name: client_customer_links client_customer_links_tenant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.client_customer_links
+    ADD CONSTRAINT client_customer_links_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.businesses(id);
+
+
+--
+-- Name: client_favourites client_favourites_client_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.client_favourites
+    ADD CONSTRAINT client_favourites_client_user_id_fkey FOREIGN KEY (client_user_id) REFERENCES public.client_users(id) ON DELETE CASCADE;
+
+
+--
+-- Name: client_notifications client_notifications_client_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.client_notifications
+    ADD CONSTRAINT client_notifications_client_user_id_fkey FOREIGN KEY (client_user_id) REFERENCES public.client_users(id) ON DELETE CASCADE;
 
 
 --
@@ -3824,6 +4549,14 @@ ALTER TABLE ONLY public.service_categories
 
 
 --
+-- Name: service_category_terms service_category_terms_category_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.service_category_terms
+    ADD CONSTRAINT service_category_terms_category_id_fkey FOREIGN KEY (category_id) REFERENCES public.service_categories(id) ON DELETE CASCADE;
+
+
+--
 -- Name: service_modifier_groups service_modifier_groups_service_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -4098,6 +4831,18 @@ ALTER TABLE public.appointment_history ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.appointments ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: assistant_actions; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.assistant_actions ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: assistant_drafts; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.assistant_drafts ENABLE ROW LEVEL SECURITY;
+
+--
 -- Name: audit_log; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -4154,6 +4899,79 @@ ALTER TABLE public.checkout_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.checkouts ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: client_customer_links; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.client_customer_links ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: client_favourites; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.client_favourites ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: client_users client_login_lookup; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY client_login_lookup ON public.client_users FOR SELECT USING ((current_setting('app.auth'::text, true) = 'client_login'::text));
+
+
+--
+-- Name: client_users client_login_verify; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY client_login_verify ON public.client_users FOR UPDATE USING ((current_setting('app.auth'::text, true) = 'client_login'::text)) WITH CHECK ((current_setting('app.auth'::text, true) = 'client_login'::text));
+
+
+--
+-- Name: client_notifications; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.client_notifications ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: appointments client_own_appointments; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY client_own_appointments ON public.appointments FOR SELECT USING (((client_user_id)::text = current_setting('app.client_id'::text, true)));
+
+
+--
+-- Name: client_users client_self; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY client_self ON public.client_users USING (((id)::text = current_setting('app.client_id'::text, true))) WITH CHECK (((id)::text = current_setting('app.client_id'::text, true)));
+
+
+--
+-- Name: client_users client_signup; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY client_signup ON public.client_users FOR INSERT WITH CHECK ((current_setting('app.auth'::text, true) = 'client_login'::text));
+
+
+--
+-- Name: mail_outbox client_signup_mail; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY client_signup_mail ON public.mail_outbox FOR INSERT WITH CHECK (((current_setting('app.auth'::text, true) = 'client_login'::text) AND (tenant_id IS NULL)));
+
+
+--
+-- Name: client_users; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.client_users ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: client_users client_users_hq; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY client_users_hq ON public.client_users USING ((current_setting('app.hq'::text, true) = '1'::text)) WITH CHECK ((current_setting('app.hq'::text, true) = '1'::text));
+
+
+--
 -- Name: combos; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -4200,6 +5018,20 @@ ALTER TABLE public.employee_skills ENABLE ROW LEVEL SECURITY;
 --
 
 ALTER TABLE public.employees ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: client_favourites fav_client; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY fav_client ON public.client_favourites USING (((client_user_id)::text = current_setting('app.client_id'::text, true))) WITH CHECK (((client_user_id)::text = current_setting('app.client_id'::text, true)));
+
+
+--
+-- Name: client_favourites fav_hq; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY fav_hq ON public.client_favourites FOR SELECT USING ((current_setting('app.hq'::text, true) = '1'::text));
+
 
 --
 -- Name: gift_cards; Type: ROW SECURITY; Schema: public; Owner: -
@@ -4258,6 +5090,13 @@ CREATE POLICY hq_all ON public.mail_outbox USING ((current_setting('app.hq'::tex
 --
 
 CREATE POLICY hq_all ON public.registrations USING ((current_setting('app.hq'::text, true) = '1'::text)) WITH CHECK ((current_setting('app.hq'::text, true) = '1'::text));
+
+
+--
+-- Name: search_config hq_all; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY hq_all ON public.search_config USING ((current_setting('app.hq'::text, true) = '1'::text)) WITH CHECK ((current_setting('app.hq'::text, true) = '1'::text));
 
 
 --
@@ -4511,6 +5350,27 @@ ALTER TABLE public.legal_entities ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.legal_entity_locations ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: client_customer_links links_client; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY links_client ON public.client_customer_links FOR SELECT USING (((client_user_id)::text = current_setting('app.client_id'::text, true)));
+
+
+--
+-- Name: client_customer_links links_hq; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY links_hq ON public.client_customer_links USING ((current_setting('app.hq'::text, true) = '1'::text)) WITH CHECK ((current_setting('app.hq'::text, true) = '1'::text));
+
+
+--
+-- Name: client_customer_links links_tenant; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY links_tenant ON public.client_customer_links USING (((tenant_id)::text = current_setting('app.tenant_id'::text, true))) WITH CHECK (((tenant_id)::text = current_setting('app.tenant_id'::text, true)));
+
+
+--
 -- Name: location_catalog_products; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -4569,6 +5429,27 @@ ALTER TABLE public.member_recs ENABLE ROW LEVEL SECURITY;
 --
 
 ALTER TABLE public.merchant_transactions ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: client_notifications notif_client; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY notif_client ON public.client_notifications USING (((client_user_id)::text = current_setting('app.client_id'::text, true))) WITH CHECK (((client_user_id)::text = current_setting('app.client_id'::text, true)));
+
+
+--
+-- Name: client_notifications notif_hq; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY notif_hq ON public.client_notifications USING ((current_setting('app.hq'::text, true) = '1'::text)) WITH CHECK ((current_setting('app.hq'::text, true) = '1'::text));
+
+
+--
+-- Name: client_notifications notif_tenant; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY notif_tenant ON public.client_notifications FOR INSERT WITH CHECK ((current_setting('app.tenant_id'::text, true) IS NOT NULL));
+
 
 --
 -- Name: payment_accounts; Type: ROW SECURITY; Schema: public; Owner: -
@@ -4748,10 +5629,62 @@ ALTER TABLE public.roles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.schedule_exceptions ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: search_config; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.search_config ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: search_documents; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.search_documents ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: search_documents search_documents_read; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY search_documents_read ON public.search_documents FOR SELECT USING (true);
+
+
+--
+-- Name: search_misses; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.search_misses ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: search_misses search_misses_hq; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY search_misses_hq ON public.search_misses FOR SELECT USING ((current_setting('app.hq'::text, true) = '1'::text));
+
+
+--
 -- Name: service_categories; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
 ALTER TABLE public.service_categories ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: service_category_terms; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.service_category_terms ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: service_category_terms service_category_terms_hq; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY service_category_terms_hq ON public.service_category_terms USING ((current_setting('app.hq'::text, true) = '1'::text)) WITH CHECK ((current_setting('app.hq'::text, true) = '1'::text));
+
+
+--
+-- Name: service_category_terms service_category_terms_read; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY service_category_terms_read ON public.service_category_terms FOR SELECT USING (true);
+
 
 --
 -- Name: service_modifier_groups; Type: ROW SECURITY; Schema: public; Owner: -
@@ -4930,6 +5863,13 @@ CREATE POLICY supplier_read ON public.supplier_roles FOR SELECT USING ((current_
 ALTER TABLE public.supplier_roles ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: suppliers supplier_self_update; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY supplier_self_update ON public.suppliers FOR UPDATE USING (((current_setting('app.supplier_id'::text, true) IS NOT NULL) AND (id = (current_setting('app.supplier_id'::text, true))::uuid))) WITH CHECK (((current_setting('app.supplier_id'::text, true) IS NOT NULL) AND (id = (current_setting('app.supplier_id'::text, true))::uuid)));
+
+
+--
 -- Name: supplier_users; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -5017,6 +5957,13 @@ CREATE POLICY tenant_append ON public.stock_movements FOR INSERT WITH CHECK ((te
 
 
 --
+-- Name: assistant_actions tenant_insert; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY tenant_insert ON public.assistant_actions FOR INSERT WITH CHECK ((tenant_id = app.current_tenant()));
+
+
+--
 -- Name: appointment_history tenant_isolation; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -5028,6 +5975,13 @@ CREATE POLICY tenant_isolation ON public.appointment_history USING ((tenant_id =
 --
 
 CREATE POLICY tenant_isolation ON public.appointments USING ((tenant_id = app.current_tenant())) WITH CHECK ((tenant_id = app.current_tenant()));
+
+
+--
+-- Name: assistant_drafts tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY tenant_isolation ON public.assistant_drafts USING ((tenant_id = app.current_tenant())) WITH CHECK ((tenant_id = app.current_tenant()));
 
 
 --
@@ -5360,6 +6314,13 @@ CREATE POLICY tenant_own ON public.mail_outbox USING ((tenant_id = app.current_t
 
 
 --
+-- Name: assistant_actions tenant_read; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY tenant_read ON public.assistant_actions FOR SELECT USING ((tenant_id = app.current_tenant()));
+
+
+--
 -- Name: audit_log tenant_read; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -5399,6 +6360,13 @@ CREATE POLICY tenant_read ON public.stock_movements FOR SELECT USING ((tenant_id
 --
 
 CREATE POLICY tenant_ring_hq ON public.platform_notices FOR INSERT WITH CHECK ((audience = 'hq'::text));
+
+
+--
+-- Name: platform_notices tenant_ring_self; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY tenant_ring_self ON public.platform_notices FOR INSERT WITH CHECK (((audience = 'salons'::text) AND (tenant_id = app.current_tenant())));
 
 
 --
@@ -5473,4 +6441,21 @@ INSERT INTO public.schema_migrations (version) VALUES
     ('20260904190039'),
     ('20260904200040'),
     ('20260905090041'),
-    ('20260906120042');
+    ('20260906120042'),
+    ('20260914120050'),
+    ('20260915120100'),
+    ('20260916150200'),
+    ('20260916170300'),
+    ('20260916180400'),
+    ('20260918120500'),
+    ('20260918140600'),
+    ('20260919090700'),
+    ('20260920120800'),
+    ('20260920140900'),
+    ('20260920160000'),
+    ('20260920180000'),
+    ('20260921090000'),
+    ('20260921100000'),
+    ('20260921120000'),
+    ('20260921140000'),
+    ('20260921160000');

@@ -314,6 +314,10 @@ export async function approveRegistration(id: string, reviewer: string) {
         cancelHours: 24,
         lifecycle: 'APPROVED', // verified here; activation stays with the owner
         hours: JSON.stringify(hoursFromDraft(draft)),
+        // The pin the owner dropped on the map in the wizard — kept, not
+        // discarded: it is what the consumer app's map obeys.
+        lat: draft.loc.lat,
+        lng: draft.loc.lng,
       })
       .execute();
     await trx

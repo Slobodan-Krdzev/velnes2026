@@ -1,0 +1,832 @@
+/* Deliberate departures from the prototype, asked for by Alex while
+   reviewing the running app. They live here rather than in
+   prototype.css so that file stays the untouched reference the design
+   is measured against.
+
+   2026-09-20 — the category shelf becomes one sliding row instead of a
+   grid, and slides under the mouse wheel. */
+
+/* 2026-09-20 (later the same day) — Alex pointed at the prototype: the
+   desktop card belongs where the prototype puts it, riding 96px up into
+   the hero so it meets the photograph on the curve. That settled where
+   the card sits; what it still lacked was room. At the prototype's -96px
+   the card's top edge lands on 421 and the lead line's baseline block
+   ends on 421 too — the words and the card touch, with nothing between
+   them. Twenty pixels is the whole change: the card keeps its ride up
+   over the curve, and the sentence above it gets to finish. */
+.searchcard {
+  margin-top: -76px;
+}
+
+.m-searchcard {
+  margin-top: 18px;
+  margin-bottom: 22px;
+}
+
+/* ── The category shelf ───────────────────────────────────────────
+   One row that slides, and keeps going round: the taxonomy is a shelf
+   to browse, not a wall to read. Same behaviour on every size. */
+.catrail {
+  position: relative;
+  /* The shelf used to start 4px under the search card, close enough to
+     read as one block with it. It is its own row, so it is given the
+     space to say so. */
+  margin-top: 28px;
+}
+.catrail-track {
+  display: flex;
+  gap: 14px;
+  overflow-x: auto;
+  scroll-behavior: smooth;
+  scrollbar-width: none;
+  padding: 4px 2px 10px;
+}
+.catrail-track::-webkit-scrollbar {
+  display: none;
+}
+.catrail-track > .catcard {
+  flex: 0 0 210px;
+  width: 210px;
+}
+/* The mobile shelf keeps the page's own gutter. */
+.m-env .catrail {
+  margin: 0;
+}
+.m-env .catrail-track {
+  padding: 4px 16px 10px;
+  gap: 12px;
+}
+.m-env .catrail-track > .catcard {
+  flex: 0 0 168px;
+  width: 168px;
+}
+
+.catrail-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 4;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--line-soft);
+  border-radius: 50%;
+  background: #fff;
+  color: var(--ink);
+  box-shadow: 0 8px 20px rgba(45, 26, 18, 0.16);
+  cursor: pointer;
+}
+.catrail-nav:hover {
+  border-color: var(--brand);
+  color: var(--brand-hover);
+}
+.catrail-nav.prev {
+  left: -14px;
+}
+.catrail-nav.next {
+  right: -14px;
+}
+/* On a touch screen the row is swiped, so the arrows step aside. */
+@media (hover: none) {
+  .catrail-nav {
+    display: none;
+  }
+}
+
+/* The shelf runs off both edges rather than stopping at one: fading the
+   ends says "there is more this way" without a hard cut. Masked rather
+   than overlaid, so it works over the page's own background whatever
+   sits behind it. */
+.catrail-track {
+  --fade: 34px;
+  -webkit-mask-image: linear-gradient(
+    to right,
+    transparent 0,
+    #000 var(--fade),
+    #000 calc(100% - var(--fade)),
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to right,
+    transparent 0,
+    #000 var(--fade),
+    #000 calc(100% - var(--fade)),
+    transparent 100%
+  );
+}
+.m-env .catrail-track {
+  --fade: 24px;
+}
+
+
+/* ── Saving a treatment or a professional ─────────────────────────
+   A departure, and a deliberate one. The prototype's account section
+   lists favourite services and professionals, but its only heart is on
+   a salon card — there is nowhere in it to save either. So Phase C adds
+   two placements the prototype does not have, in the prototype's own
+   visual language: the same mark, the same brand colour when on, the
+   same quiet grey when off.
+
+   `.fav` itself is only styled inside `.rc2`, so outside that card it
+   arrives with no appearance at all and needs its own rules here. */
+
+/* On a treatment row, between the name and the tick. Static rather than
+   absolute: the row is a flex line and the heart is one of its items. */
+.tr-card .fav-inline {
+  position: static;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  margin-left: auto;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+.tr-card .fav-inline:hover,
+.tr-card .fav-inline.on {
+  color: var(--brand);
+}
+/* The tick already sits at the end of the row; with a heart there too,
+   only the heart should be pushed out. */
+.tr-card .row1 .ok {
+  margin-left: 8px;
+}
+
+/* On a team card. The card is a button, so the heart is its sibling and
+   the wrapper is what positions it. */
+.pro-wrap {
+  position: relative;
+  display: block;
+}
+.pro-wrap .fav-pro {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  z-index: 2;
+}
+.pro-wrap .fav-pro:hover,
+.pro-wrap .fav-pro.on {
+  color: var(--brand);
+}
+
+
+/* ── The suggestion panel was never visible ──────────────────────
+   prototype.css carries the older salon prototype's rules for this:
+   `.sugg{display:none}` turned back on by `.d-search.open .sugg`. No
+   element in this app has the class `d-search` — the search card is
+   `.searchcard`, and `d-search` is only an id — so the panel has been
+   rendered and hidden since the day it was written. Nobody noticed it
+   because there was nothing worth seeing in it.
+
+   The client prototype, which is this app's authority, simply says
+   `.sugg{display:block}` and controls the panel by rendering it. React
+   does exactly that, so this restores the intended behaviour rather
+   than inventing one. Scoped to the real card so the dead rule above
+   stays dead. */
+.searchcard .sugg {
+  display: block;
+}
+
+/* In the prototype the line under a suggestion's name is `.chips`,
+   which is display:flex and therefore takes its own line. Ours is a
+   plain `.sm.muted` span, so the name and its detail ran together —
+   "Massage1 salon available". Same result, said in one rule. */
+.sug-card b,
+.m-sug b {
+  display: block;
+}
+
+/* A chosen filter has to look chosen. The prototype styles `.daychip.on`
+   for exactly this — a chip the customer has picked — but never needed
+   the same state on `.chip`, because in the prototype no chip did
+   anything. Step 8's filters do, so the state borrows that idiom rather
+   than inventing a second one. */
+.chip.on {
+  background: var(--brand);
+  border-color: var(--brand);
+  color: #fff;
+}
+.chip.on .muted {
+  color: rgba(255, 255, 255, 0.85);
+}
+.chip {
+  cursor: pointer;
+}
+
+/* ── The search bar on the results page ─────────────────────────────
+   In the prototype the results bar is a display of what was asked —
+   `readOnly`, with no panel to drop. It is a real search box now, so it
+   needs the same anchor the home card gives its panel: something
+   positioned for `.sugg` to hang from, and `display:block` to undo the
+   prototype's `.sugg{display:none}` (which it only ever turned back on
+   under `.searchcard`). React decides when the panel exists, so there
+   is no `.open` class here to match. */
+.pillsearch-wrap {
+  position: relative;
+  /* Wider than the prototype's 280px pill, because the pill was a label
+     and this is a search field — and because the panel hangs from it,
+     so a narrow anchor wraps every suggestion onto three lines. */
+  flex: 1 1 420px;
+  min-width: 280px;
+  max-width: 520px;
+}
+.pillsearch-wrap .sugg {
+  display: block;
+  border-radius: 16px;
+  top: calc(100% + 6px);
+  min-width: 420px;
+}
+
+/* ── The card a map pin opens ───────────────────────────────────────
+   One tap to look, one to go. Leaflet's own popup chrome is replaced
+   rather than themed: its default is a white box with a serif-ish link,
+   and this has to read as the same product as the result cards beside
+   it. There is no rating line, and that is deliberate — reviews do not
+   exist yet, so there is nothing true to put there. */
+.velnes-pop .leaflet-popup-content-wrapper {
+  border-radius: 14px;
+  box-shadow: 0 18px 40px rgba(45, 26, 18, 0.22);
+  padding: 0;
+  overflow: hidden;
+}
+.velnes-pop .leaflet-popup-content {
+  margin: 0;
+  width: auto !important;
+  font: inherit;
+}
+.velnes-pop .leaflet-popup-tip {
+  box-shadow: 0 18px 40px rgba(45, 26, 18, 0.22);
+}
+.pop-card {
+  display: block;
+  width: 218px;
+  padding: 0 0 10px;
+}
+.pop-ph {
+  display: block;
+  height: 96px;
+  background-size: cover;
+  background-position: center;
+  background-color: var(--warm);
+}
+.pop-name {
+  display: block;
+  padding: 11px 12px 0;
+  font-size: 14.5px;
+  font-weight: 700;
+  color: var(--ink);
+  line-height: 1.25;
+}
+.pop-sub {
+  display: block;
+  padding: 2px 12px 0;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.pop-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 7px 12px 0;
+}
+.pop-badge {
+  display: inline-flex;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #eaf2e4;
+  color: #3e5a34;
+  font-size: 11px;
+  font-weight: 700;
+}
+.pop-price {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--ink);
+}
+a.pop-go {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin: 10px 12px 0;
+  min-height: 36px;
+  border-radius: 10px;
+  background: var(--brand);
+  color: #fff !important;
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: none !important;
+}
+a.pop-go:hover {
+  background: var(--brand-hover);
+}
+
+/* ── The dim behind an open suggestion list ─────────────────────────
+   While the panel is open the rest of the page is not what anybody is
+   looking at. The scrim sits under the search box and over everything
+   else; clicking it closes the panel through the same outside-click
+   handler that was already there, so it needs no handler of its own. */
+.sug-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  background: rgba(45, 26, 18, 0.46);
+  backdrop-filter: blur(2.5px);
+  animation: sug-fade 0.14s ease-out;
+}
+@keyframes sug-fade {
+  from {
+    opacity: 0;
+  }
+}
+/* Both search boxes have to sit above it while open. The home card
+   already makes a stacking context (z-index:4), so raising the card
+   lifts its panel with it. */
+.searchcard.open,
+.pillsearch-wrap.open {
+  z-index: 40;
+}
+
+/* Softer corners on the panel, and on the card it hangs from. The
+   prototype squared off the join between card and panel; with a dim
+   behind them they read as one floating object, so both ends round. */
+.searchcard .sugg {
+  border-radius: 0 0 20px 20px;
+}
+.searchcard.open .field2 {
+  border-radius: 20px 20px 0 0;
+}
+.pillsearch-wrap .sugg {
+  border-radius: 18px;
+}
+.sug-card,
+.m-sug {
+  border-radius: 14px;
+}
+
+/* ── The filter chips ───────────────────────────────────────────────
+   The prototype's `.chips` gap of 6px was for tiny meta-chips inside a
+   suggestion row. These are full-size controls that wrap onto several
+   lines, and at 6px they read as one run-on strip rather than as
+   separate choices. */
+/* Three separate questions — what kind, what price, how far — that ran
+   together as one continuous strip of chips, so you could not see where
+   one ended and the next began. Each is its own row now, with a clear
+   gap between them; within a row the chips stay close, because those
+   ones really are alternatives to each other. */
+.filterbar {
+  display: grid;
+  gap: 16px;
+  margin: 0 0 20px;
+}
+/* The prototype only ever makes `.chips` a flex row inside a
+   suggestion card; out here it fell back to `display: block`, so the
+   gap above was never applied and the chips sat one space apart. */
+.filterbar .chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 12px;
+  margin: 0;
+}
+
+/* ── Headings inside the mobile search sheet ────────────────────────
+   The prototype only ever styled `.h` inside `.sugg` (the desktop
+   panel), so the same heading in the phone's sheet inherited nothing
+   and sat flush against the cards above and below it. */
+.m-sheet .list > .h {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 4px 2px 12px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ink);
+}
+.m-sheet .list > .h:not(:first-child) {
+  margin-top: 18px;
+}
+
+/* The mark beside the phone's results search bar — the brand, and the
+   way home, on a screen that has no header to carry either. */
+.m-mark {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 38px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--brand);
+  cursor: pointer;
+}
+
+/* ── Everything there is to browse, on the search screen ────────────
+   The shelf on the home page is a sliding rail because it sits between
+   other sections. Here the categories are the content, so they lay out
+   as a grid and all of them are reachable without dragging. */
+.catgrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
+  gap: 12px;
+  margin-bottom: 26px;
+}
+.catgrid .catcard {
+  width: auto;
+  min-width: 0;
+  flex: none;
+}
+
+/* The search screen has no answer to put on a map, so the results
+   page's two-column grid collapses to one and the categories get the
+   whole width. */
+.res-layout.solo {
+  grid-template-columns: 1fr;
+}
+
+/* A salon with no online booking has no booking panel, and the page's
+   two-column grid was leaving the larger column empty — the content
+   squeezed into 46% of the width beside a blank half-page, which reads
+   as a page that failed to load rather than a salon that has not
+   opened bookings. */
+.d-salon.solo {
+  grid-template-columns: minmax(0, 1fr);
+  max-width: 760px;
+}
+
+/* ── Two-column grids must be allowed to shrink ─────────────────────
+   `1fr` is shorthand for `minmax(auto, 1fr)`, and `auto` as a MINIMUM
+   resolves to the item's min-content width. So one long treatment name
+   or one long employee name sets a floor the track cannot go below, and
+   the grid pushes straight out of its container — which is what the
+   treatment picker and the professional picker were doing inside the
+   booking column.
+
+   `minmax(0, 1fr)` is the same layout whenever the content fits, and
+   the only difference when it does not is that the track is permitted
+   to shrink instead of overflowing. Applied to every two-column grid
+   in the app rather than the two that were reported, because the bug
+   is in the shorthand and not in those two screens. */
+.tr-grid,
+.pro-grid,
+.m-band,
+.m-catgrid,
+.m-trust,
+.forwhom,
+.fld2,
+.m-off,
+.m-foot .cols4,
+.m-foot .cols {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+/* A grid track that can shrink is only half of it: the flex row inside
+   the card has to let its text shrink too, or the name just pushes the
+   card wide from within. */
+.pro-card > span {
+  min-width: 0;
+}
+/* And the name stops before the heart rather than running under it. */
+.pro-card {
+  padding-right: 34px;
+}
+
+/* The other half of the same bug. `minmax(0, 1fr)` above lets the
+   TRACK shrink; a grid item carries its own `min-width: auto`, which is
+   again its min-content width, so the card sat at 219px inside a 173px
+   track and hung out over the edge — the price clipped mid-number and
+   the selected tick stranded outside the column.
+
+   Both ends have to be released: the track to narrow, and the item to
+   be narrowed. */
+.tr-grid > *,
+.pro-grid > * {
+  min-width: 0;
+}
+/* And again one level down, because the card is itself a grid: its
+   rows are grid items carrying the same `min-width: auto`, so releasing
+   only the card left the row inside it pinned at its content width.
+   The floor has to come off the whole chain, down to the span that
+   actually does the ellipsis. */
+.tr-card > *,
+.tr-card .nm,
+.tr-card .nm .t,
+.pro-wrap,
+.pro-card {
+  min-width: 0;
+}
+/* And then the content inside a treatment card has to give somewhere,
+   or it just clips instead of overflowing. The duration can go; the
+   price is the thing nobody may misread, so it keeps its whole width
+   and the minutes yield first. */
+.tr-card .in2 {
+  gap: 8px;
+  min-width: 0;
+}
+.tr-card .in2 > :first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tr-card .in2 > :last-child {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+/* A team card is a <button> inside the wrapper that positions its
+   heart, and a button's auto width is shrink-to-fit — it sizes to its
+   text rather than filling its parent. The "Any professional" card
+   escaped this only because it is a direct grid child, which grid
+   stretches for you. So the wrapped ones hung 80px over the edge with
+   their names running under the heart. */
+.pro-wrap .pro-card {
+  width: 100%;
+}
+
+
+/* ── Names get to be read ───────────────────────────────────────────
+   Ellipsis was the wrong trade here. "Signature Facial" and "Ivana
+   Trajkovska" are the thing the card is FOR, and a card that cuts them
+   off to protect its own width has its priorities backwards. They wrap
+   to a second line instead, and only a genuinely long name is clipped
+   after that. */
+.tr-card .nm .t,
+.pro-card b,
+.pro-card .sm {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+/* The name is no longer a single line, so the row that holds it lines
+   its pieces up from the top rather than centring the heart against two
+   lines of text. */
+.tr-card .row1 {
+  align-items: flex-start;
+}
+.tr-card .row1 .fav-inline {
+  margin-top: -2px;
+}
+
+/* ── A chosen treatment is coloured, not ticked ─────────────────────
+   The tick was a 20px circle competing for the same row as the name and
+   the heart, on a card that has little enough width as it is. The card
+   itself can carry the state: the platform's own green, at a weight
+   that reads as "chosen" without shouting. */
+.tr-card.on {
+  border-color: var(--ok);
+  background: rgba(62, 122, 68, 0.09);
+}
+
+/* ── The products count, on a phone ─────────────────────────────────
+   The pill sits beside a heading that wraps, so on a narrow screen it
+   is squeezed until "3 products" breaks over two lines — and `.tiny-tag`
+   never had to centre anything, because in the prototype it always fit
+   on one. Mobile only, since the desktop pill has the room. */
+.m-env .prod-tg .tiny-tag {
+  text-align: center;
+  justify-content: center;
+  line-height: 1.25;
+}
+
+/* The calendar's Clear. The prototype had no way to un-pick a date, and
+   the field is optional — so it needs one. Kept quiet: it is a way out,
+   not a third control competing with the month and year. */
+.cal-clear {
+  display: block;
+  width: 100%;
+  margin-top: 8px;
+  padding: 6px 0;
+  border: 0;
+  border-top: 1px solid var(--line-soft);
+  background: none;
+  font: inherit;
+  font-size: 12.5px;
+  color: var(--muted);
+  cursor: pointer;
+}
+.cal-clear:hover {
+  color: var(--brand-hover);
+}
+/* It hangs from the field rather than pushing the form around. */
+.acc-inp + .cal,
+.cal[role='dialog'] {
+  position: absolute;
+  left: 0;
+  right: 0;
+  z-index: 60;
+  box-shadow: 0 18px 44px rgba(45, 26, 18, 0.18);
+}
+
+/* ── Chrome on the account page ─────────────────────────────────────
+   Every other screen lives inside `.d-env` or `.m-env`, which the
+   prototype switches at 900px. The account shell is responsive on its
+   own and sits in neither, so it had no header and no tab bar at all —
+   signing in dropped you somewhere with no way back. These two carry
+   the same 900px line, so the chrome appears exactly where it does
+   everywhere else. */
+.only-d {
+  display: none;
+}
+@media (min-width: 900px) {
+  .only-d {
+    display: block;
+  }
+}
+.only-m {
+  display: block;
+}
+@media (min-width: 900px) {
+  .only-m {
+    display: none;
+  }
+}
+/* The bar is fixed, so the page has to stop above it rather than
+   running underneath. */
+@media (max-width: 899.98px) {
+  .a-env section.acc {
+    padding-bottom: calc(76px + env(safe-area-inset-bottom));
+  }
+}
+
+/* The location prompt on a wide screen.
+   The prototype only styles `.gps-card` as a phone bottom sheet — its
+   desktop pages never showed the dialog — so, unaltered, the sheet runs
+   the full width of a 1400px window. Same card, same copy, same
+   buttons; only where it sits: centred, at the width of a phone. */
+@media (min-width: 900px) {
+  .gps-modal {
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+  }
+  .gps-card {
+    width: 100%;
+    max-width: 420px;
+    border-radius: 24px;
+    padding: 32px 28px;
+    box-shadow: 0 24px 60px rgba(45, 26, 18, 0.28);
+  }
+}
+
+/* A location notice beside the control it is about (GeoNotice.tsx).
+   Warm, not muted: it explains why a button stopped working. The
+   prototype has no such state, so nothing to copy. */
+.geo-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: #fff4ee;
+  border: 1px solid #f6d6c8;
+  color: #8a3f22;
+  font-size: 13px;
+  line-height: 1.45;
+}
+.geo-notice svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+.d-topbar .d-wrap > .geo-notice {
+  margin: 10px 0 2px;
+}
+/* A chip that cannot work looks like it cannot — same as the prototype's
+   disabled buttons, which fade rather than vanish. */
+.chip:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* ── The phone's filters button and dropdown ────────────────────────
+   A sliders icon inside the search pill, beside the clear "×"; the
+   filters drop down from the sticky top bar over the results. The
+   prototype has no filters, so nothing to copy — the button takes the
+   pill's own muted colour and the brand when something is applied,
+   like the chips do. */
+.m-filt {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: var(--muted);
+  flex: 0 0 auto;
+}
+.m-filt.on,
+.m-filt[aria-expanded='true'] {
+  color: var(--brand);
+  background: var(--warm);
+}
+.m-filt .n {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--brand);
+  color: #fff;
+  font-size: 10.5px;
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
+}
+/* Fixed within the top bar's own stacking context (z-index 50), so it
+   covers the page and not the bar; the search row stays on top. */
+.m-topbar .searchrow {
+  position: relative;
+  z-index: 3;
+}
+.m-filt-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  background: rgba(45, 26, 18, 0.28);
+}
+.m-filt-panel {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 100%;
+  z-index: 2;
+  background: #fff;
+  border-radius: 0 0 20px 20px;
+  padding: 16px 16px 14px;
+  box-shadow: 0 18px 40px rgba(45, 26, 18, 0.22);
+  max-height: calc(100vh - 120px);
+  overflow-y: auto;
+}
+.m-filt-panel .filterbar {
+  margin-bottom: 14px;
+}
+.m-filt-foot {
+  display: flex;
+  gap: 10px;
+}
+.m-filt-foot .btn {
+  flex: 1;
+  min-height: 44px;
+}
+
+/* A completed step shows a check in place of its number. The prototype
+   only darkens the circle; the glyph is Alex's ask (2026-09-21). */
+.step.done .n {
+  background: var(--brand);
+}
+.step.done .n svg {
+  display: block;
+}
+
+/* ── The salon page's second step, before there is a first ─────────
+   Inert and faded until a treatment is in the visit; the heading says
+   why. Not in the prototype, which pre-filled a treatment. */
+.bk-h .bk-hint {
+  margin-left: 10px;
+  font-weight: 500;
+}
+.bk-off {
+  opacity: 0.45;
+  pointer-events: none;
+  user-select: none;
+}
+/* A blank day with a reason: the door's sentence, and the way out. */
+.bk-why {
+  display: grid;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: #fff4ee;
+  border: 1px solid #f6d6c8;
+  color: #8a3f22;
+  line-height: 1.45;
+}
+.bk-why .btn {
+  justify-self: start;
+  min-height: 38px;
+  padding: 6px 14px;
+  font-size: 13px;
+}

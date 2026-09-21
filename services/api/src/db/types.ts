@@ -11,6 +11,8 @@ export type AppointmentStatus = "booked" | "cancelled" | "confirmed" | "no_show"
 
 export type CheckoutStatus = "FAILED" | "PAID" | "PARTIALLY_PAID";
 
+export type ComboStatus = "active" | "draft";
+
 export type DiscountCodeType = "Fixed amount" | "Percentage";
 
 export type EmployeeAccess = "desk" | "manager" | "owner" | "staff";
@@ -53,10 +55,6 @@ export type PurchaseOrderStatus = "accepted" | "approval" | "cancelled" | "deliv
 
 export type RegistrationStatus = "active" | "changes_required" | "declined" | "pending_review" | "resubmitted" | "under_review";
 
-export type ComboStatus = "active" | "draft";
-
-export type SupportStatus = "open" | "in_progress" | "resolved" | "closed";
-
 export type ScheduleExceptionSource = "MANUAL" | "PUBLIC_HOLIDAY";
 
 export type ScheduleExceptionType = "CLOSED" | "CUSTOM_HOURS";
@@ -64,6 +62,8 @@ export type ScheduleExceptionType = "CLOSED" | "CUSTOM_HOURS";
 export type ServiceStatus = "active" | "draft";
 
 export type StockMovementKind = "adjustment" | "delivery" | "own_use" | "sale" | "transfer_in" | "transfer_out";
+
+export type SupportStatus = "closed" | "in_progress" | "open" | "resolved";
 
 export type Timestamp = ColumnType<Date, Date | string, Date | string>;
 
@@ -83,6 +83,7 @@ export interface AppointmentHistory {
 
 export interface Appointments {
   anyEmp: Generated<boolean>;
+  clientUserId: string | null;
   createdAt: Generated<Timestamp>;
   customerId: string | null;
   date: Timestamp;
@@ -225,6 +226,74 @@ export interface Checkouts {
   tenantId: string;
   total: number;
   ts: Generated<Timestamp>;
+}
+
+export interface ClientCustomerLinks {
+  clientUserId: string;
+  createdAt: Generated<Timestamp>;
+  customerId: string;
+  tenantId: string;
+}
+
+export interface ClientFavourites {
+  clientUserId: string;
+  createdAt: Generated<Timestamp>;
+  id: Generated<string>;
+  kind: string;
+  missingSince: Timestamp | null;
+  refId: string;
+  tenantId: string;
+}
+
+export interface ClientNotifications {
+  body: Generated<string>;
+  clientUserId: string;
+  createdAt: Generated<Timestamp>;
+  id: Generated<string>;
+  kind: string;
+  readAt: Timestamp | null;
+  refId: string | null;
+  refType: string | null;
+  title: string;
+}
+
+export interface ClientUsers {
+  avatar: string | null;
+  createdAt: Generated<Timestamp>;
+  dob: Timestamp | null;
+  email: string;
+  emailCode: string | null;
+  emailCodeSentAt: Timestamp | null;
+  emailVerifiedAt: Timestamp | null;
+  first: Generated<string>;
+  id: Generated<string>;
+  lang: Generated<string>;
+  last: Generated<string>;
+  /**
+   * Whether the customer allowed location use. NULL = never asked. A decision only — no position is ever stored.
+   */
+  locationAllowed: boolean | null;
+  passwordHash: string;
+  personalisedResults: Generated<boolean>;
+  phone: string | null;
+}
+
+export interface Combos {
+  category: string | null;
+  createdAt: Generated<Timestamp>;
+  descr: Generated<string>;
+  id: Generated<string>;
+  items: Generated<Json>;
+  name: string;
+  online: Generated<boolean>;
+  pos: Generated<boolean>;
+  price: number;
+  regular: number;
+  sort: Generated<number>;
+  status: Generated<ComboStatus>;
+  tenantId: string;
+  validity: Generated<string>;
+  vat: Generated<number>;
 }
 
 export interface CustomerActivity {
@@ -535,7 +604,9 @@ export interface Locations {
   hours: Json | null;
   id: Generated<string>;
   invPrefix: string | null;
+  lat: number | null;
   lifecycle: Generated<LocationLifecycle>;
+  lng: number | null;
   name: string;
   online: Generated<boolean>;
   opened: Timestamp | null;
@@ -681,24 +752,6 @@ export interface ProductCategories {
   sort: Generated<number>;
 }
 
-export interface Combos {
-  category: string | null;
-  createdAt: Generated<Timestamp>;
-  descr: Generated<string>;
-  id: Generated<string>;
-  items: Generated<Json>;
-  name: string;
-  online: Generated<boolean>;
-  pos: Generated<boolean>;
-  price: number;
-  regular: number;
-  sort: Generated<number>;
-  status: Generated<ComboStatus>;
-  tenantId: string;
-  validity: Generated<string>;
-  vat: Generated<number>;
-}
-
 export interface Products {
   active: Generated<boolean>;
   categoryId: string | null;
@@ -806,6 +859,42 @@ export interface SchemaMigrations {
   version: string;
 }
 
+export interface SearchConfig {
+  activatedAt: Timestamp | null;
+  activatedBy: string | null;
+  activatedByName: Generated<string>;
+  active: Generated<boolean>;
+  createdAt: Generated<Timestamp>;
+  createdBy: string | null;
+  createdByName: Generated<string>;
+  id: Generated<string>;
+  note: Generated<string>;
+  payload: Json;
+  version: number;
+}
+
+export interface SearchDocuments {
+  categoryId: string | null;
+  display: string;
+  kind: string;
+  norm: string;
+  refId: string;
+  salonName: string;
+  salonSlug: string;
+  tenantId: string;
+  updatedAt: Generated<Timestamp>;
+}
+
+export interface SearchMisses {
+  asked: Generated<number>;
+  day: Generated<Timestamp>;
+  firstAt: Generated<Timestamp>;
+  how: string;
+  lastAt: Generated<Timestamp>;
+  norm: string;
+  results: number;
+}
+
 export interface ServiceCategories {
   cardImage: string | null;
   icon: string | null;
@@ -813,6 +902,16 @@ export interface ServiceCategories {
   name: string;
   parentId: string | null;
   sort: Generated<number>;
+}
+
+export interface ServiceCategoryTerms {
+  categoryId: string;
+  createdAt: Generated<Timestamp>;
+  id: Generated<string>;
+  kind: string;
+  lang: string;
+  norm: Generated<string>;
+  term: string;
 }
 
 export interface ServiceModifierGroups {
@@ -899,6 +998,16 @@ export interface SupplierConnections {
   tenantId: string;
 }
 
+export interface SupplierNotifications {
+  body: Generated<string>;
+  createdAt: Generated<Timestamp>;
+  id: Generated<string>;
+  kind: string;
+  refId: string | null;
+  supplierId: string;
+  title: string;
+}
+
 export interface SupplierProducts {
   active: Generated<boolean>;
   brand: Generated<string>;
@@ -941,21 +1050,13 @@ export interface SupplierPromotions {
   value: Generated<number>;
 }
 
-export interface SupportTickets {
-  category: Generated<string>;
-  createdAt: Generated<Timestamp>;
-  createdBy: string;
-  id: Generated<string>;
-  lastActor: Generated<string>;
-  messages: Generated<Json>;
-  origin: string;
-  originName: Generated<string>;
-  replyTo: Generated<string>;
-  status: Generated<SupportStatus>;
-  subject: string;
-  supplierId: string | null;
-  tenantId: string | null;
-  updatedAt: Generated<Timestamp>;
+export interface SupplierRoles {
+  id: string;
+  locked: Generated<boolean>;
+  name: string;
+  perms: Generated<Json>;
+  scope: Generated<string>;
+  std: Generated<boolean>;
 }
 
 export interface Suppliers {
@@ -974,25 +1075,6 @@ export interface Suppliers {
   verified: Generated<boolean>;
 }
 
-export interface SupplierNotifications {
-  body: Generated<string>;
-  createdAt: Generated<Timestamp>;
-  id: Generated<string>;
-  kind: string;
-  refId: string | null;
-  supplierId: string;
-  title: string;
-}
-
-export interface SupplierRoles {
-  id: string;
-  locked: Generated<boolean>;
-  name: string;
-  perms: Generated<Json>;
-  scope: Generated<string>;
-  std: Generated<boolean>;
-}
-
 export interface SupplierUsers {
   createdAt: Generated<Timestamp>;
   email: string;
@@ -1002,6 +1084,23 @@ export interface SupplierUsers {
   role: Generated<string>;
   status: Generated<string>;
   supplierId: string;
+}
+
+export interface SupportTickets {
+  category: Generated<string>;
+  createdAt: Generated<Timestamp>;
+  createdBy: string;
+  id: Generated<string>;
+  lastActor: Generated<string>;
+  messages: Generated<Json>;
+  origin: string;
+  originName: Generated<string>;
+  replyTo: Generated<string>;
+  status: Generated<SupportStatus>;
+  subject: string;
+  supplierId: string | null;
+  tenantId: string | null;
+  updatedAt: Generated<Timestamp>;
 }
 
 export interface TaxRules {
@@ -1051,6 +1150,10 @@ export interface DB {
   categoryRequests: CategoryRequests;
   checkoutItems: CheckoutItems;
   checkouts: Checkouts;
+  clientCustomerLinks: ClientCustomerLinks;
+  clientFavourites: ClientFavourites;
+  clientNotifications: ClientNotifications;
+  clientUsers: ClientUsers;
   combos: Combos;
   customerActivity: CustomerActivity;
   customers: Customers;
@@ -1095,7 +1198,11 @@ export interface DB {
   roles: Roles;
   scheduleExceptions: ScheduleExceptions;
   schemaMigrations: SchemaMigrations;
+  searchConfig: SearchConfig;
+  searchDocuments: SearchDocuments;
+  searchMisses: SearchMisses;
   serviceCategories: ServiceCategories;
+  serviceCategoryTerms: ServiceCategoryTerms;
   serviceModifierGroups: ServiceModifierGroups;
   serviceModifierOptions: ServiceModifierOptions;
   serviceRecipes: ServiceRecipes;
@@ -1104,11 +1211,11 @@ export interface DB {
   stockMovements: StockMovements;
   supplierBrands: SupplierBrands;
   supplierConnections: SupplierConnections;
+  supplierNotifications: SupplierNotifications;
   supplierProducts: SupplierProducts;
   supplierPromotions: SupplierPromotions;
-  suppliers: Suppliers;
-  supplierNotifications: SupplierNotifications;
   supplierRoles: SupplierRoles;
+  suppliers: Suppliers;
   supplierUsers: SupplierUsers;
   supportTickets: SupportTickets;
   taxRules: TaxRules;

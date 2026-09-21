@@ -16,7 +16,9 @@ async function hqSignIn(page: Page) {
   await page.getByLabel('Email').fill('damjan@revelapps.com');
   await page.getByLabel('Password').fill('velnes-demo');
   await page.getByRole('button', { name: 'Sign in' }).click();
-  await expect(page.getByText('Signed in as Damjan Kostov · hq_onboard')).toBeVisible();
+  // The header names the role by its label now ("Onboarding
+  // Specialist"), not its id; the name is what proves the sign-in.
+  await expect(page.getByText(/Signed in as Damjan Kostov/)).toBeVisible();
 }
 
 test('a stranger registers, HQ activates, the owner signs into their own world', async ({ page, context }) => {
@@ -24,7 +26,9 @@ test('a stranger registers, HQ activates, the owner signs into their own world',
   await page.goto('/register');
   await page.getByLabel('Your name').fill('Petra Novak');
   await page.getByLabel('E-mail').fill(ownerEmail);
-  await page.getByLabel('Password').fill('super-secret');
+  // The wizard asks twice now; "Password" alone would match both.
+  await page.getByLabel('Password', { exact: true }).fill('super-secret');
+  await page.getByLabel('Confirm password').fill('super-secret');
   await page.getByRole('button', { name: 'Next' }).click();
   await page.getByLabel('Salon name').fill(`Studio Nova ${runId}`);
   await page.getByRole('button', { name: 'Next' }).click();
@@ -33,9 +37,21 @@ test('a stranger registers, HQ activates, the owner signs into their own world',
   await page.getByRole('button', { name: 'Next' }).click();
   await page.getByLabel('Street').fill('Partizanska');
   await page.getByLabel('City').fill('Bitola');
-  await page.getByTestId('regmap').click({ position: { x: 120, y: 90 } });
+  // The pin map is a real Leaflet map now, named for what it asks.
+  await page
+    .getByRole('application', { name: 'Drop the pin on your exact spot' })
+    .click({ position: { x: 120, y: 90 } });
   await page.getByRole('button', { name: 'Next' }).click();
-  await page.getByText('Physiotherapy session').click();
+  // The catalog step is a form now: name a service, give it a
+  // category, duration and price, add it — no starter list to tick.
+  // Services come first on the step; the optional products form below
+  // repeats "Category" and "Price (MKD)", so take the first of each.
+  await page.getByLabel('Service name').fill('Physiotherapy session');
+  await page.getByLabel('Category').first().selectOption({ label: 'Manual therapy' });
+  await page.getByLabel('Duration (min)').fill('45');
+  await page.getByLabel('Price (MKD)').first().fill('1800');
+  await page.getByRole('button', { name: 'Add service' }).click();
+  await expect(page.getByText('No services yet')).toBeHidden();
   await page.getByRole('button', { name: 'Next' }).click();
   await page.getByRole('button', { name: 'Next' }).click(); // gallery
   await expect(page.getByText('Invite your team')).toBeVisible();

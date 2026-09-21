@@ -41,6 +41,36 @@ export const addDays = (iso: string, n: number) => {
  *  shift that toISOString() causes. */
 export const localIso = (d: Date) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+/**
+ * The clock at a location: its own calendar day and minute of that
+ * day. The server's clock is wherever the VPS is; a salon's "now" is
+ * in `locations.tz`. An unknown zone falls back to the platform's
+ * home zone rather than throwing at a customer.
+ */
+export function nowAt(tz: string, now = new Date()): { date: string; min: number } {
+  const fmt = (zone: string) =>
+    new Intl.DateTimeFormat('en-CA', {
+      timeZone: zone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hourCycle: 'h23',
+    }).formatToParts(now);
+  let parts: Intl.DateTimeFormatPart[];
+  try {
+    parts = fmt(tz);
+  } catch {
+    parts = fmt('Europe/Skopje');
+  }
+  const get = (t: Intl.DateTimeFormatPartTypes) => parts.find((x) => x.type === t)?.value ?? '00';
+  return {
+    date: `${get('year')}-${get('month')}-${get('day')}`,
+    min: Number(get('hour')) * 60 + Number(get('minute')),
+  };
+}
+
 export const todayIso = () => {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;

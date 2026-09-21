@@ -313,7 +313,12 @@ UI + tests + seed + docs note.
 
 ## 13. Known open items (inherit from prototype)
 
-§5 search-architecture answers (blocks consumer search frontend);
+§5 search-architecture answers — **settled and built 2026-09-20**
+(`docs/SEARCH-RANKING.md`): ranked results, consent, the HQ Search lab,
+and the components that stay inert. Free-text search is the next phase
+and is planned in `docs/SEARCH.md`; note that a complete earlier search
+design exists in `reference/prototype/` and was missed when §5 was
+written;
 SMTP provider decision (email verification, invites — tokens/seats
 already modeled); payment provider + fiscalization (per legal
 entity); SUSPENDED/CLOSED transition surfaces; timing suite

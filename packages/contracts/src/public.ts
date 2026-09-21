@@ -73,6 +73,22 @@ export const PublicServicesResponseSchema = z.object({
   services: z.array(PublicServiceSchema),
 });
 
+/** A visit: one or more treatments, booked together. The consumer app
+ *  lets people pick several; the widget sends one. Same shape either
+ *  way, so there is one answer to "what is being booked". */
+export const ChainItemSchema = z.object({
+  serviceId: z.uuid(),
+  variantId: z.uuid().nullable().optional(),
+  modifierOptionIds: z.array(z.uuid()).default([]),
+});
+export const PublicChainSlotsRequestSchema = z.object({
+  key: z.string().min(4),
+  locationId: z.uuid(),
+  date: z.iso.date(),
+  employeeId: z.union([z.uuid(), z.literal('any')]).default('any'),
+  items: z.array(ChainItemSchema).min(1).max(8),
+});
+
 export const PublicHoldRequestSchema = z.object({
   key: z.string().min(8), // the booking's idempotency key
   locationId: z.uuid(),
@@ -91,17 +107,34 @@ export const PublicBookRequestSchema = z.object({
   employeeId: z.union([z.uuid(), z.literal('any')]).default('any'),
   variantId: z.uuid().nullable().optional(),
   modifierOptionIds: z.array(z.uuid()).default([]),
+  /** More than one treatment in the same visit. When present this is
+   *  what gets booked, and serviceId names the first of them. */
+  items: z.array(ChainItemSchema).min(1).max(8).optional(),
   name: z.string().min(1),
   phone: z.string().min(3),
   email: z.email().optional(),
 });
 
 export const PublicBookResponseSchema = z.object({
-  ref: z.string(), // appointment id
+  ref: z.string(), // appointment id (the visit's first treatment)
   date: z.iso.date(),
   time: ClockSchema,
   end: ClockSchema,
   serviceName: z.string(),
+  /** Every treatment in the visit, in order. One entry for a single
+   *  booking — the app never has to special-case the common case. */
+  items: z
+    .array(
+      z.object({
+        ref: z.string(),
+        serviceName: z.string(),
+        time: ClockSchema,
+        end: ClockSchema,
+        price: z.number().int(),
+        employeeName: z.string(),
+      }),
+    )
+    .default([]),
   locationName: z.string(),
   employeeName: z.string(),
   price: MoneySchema,

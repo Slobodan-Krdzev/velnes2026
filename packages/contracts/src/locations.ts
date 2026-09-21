@@ -49,6 +49,13 @@ export const LocationSchema = z.object({
   opened: z.string().nullable(), // ISO date
   lifecycle: LocationLifecycleSchema,
   hours: WeekHoursSchema.nullable(),
+  // Where the map puts this salon. Set by the pin the owner drops on a
+  // real map (registration, or Settings › Locations); null until then —
+  // the address text stands on its own, the map simply has nothing to
+  // show. Address and pin are separate truths: we print the address,
+  // the map obeys the pin.
+  lat: z.number().nullable().default(null),
+  lng: z.number().nullable().default(null),
 });
 export type Location = z.infer<typeof LocationSchema>;
 

@@ -5,6 +5,7 @@ import {
   HoldResponseSchema,
   PublicBookRequestSchema,
   PublicBookResponseSchema,
+  PublicChainSlotsRequestSchema,
   PublicHoldRequestSchema,
   PublicServicesResponseSchema,
   PublicWidgetSchema,
@@ -15,15 +16,17 @@ import { sql } from 'kysely';
 import { z } from 'zod';
 import { db, withTenant, type Trx } from '../db/index.js';
 import {
+  chainAvailability,
   availableSlots,
   BookingError,
   BookingRefused,
-  confirmBooking,
+  confirmChain,
   createHold,
   empsFor,
 } from '../modules/booking/booking.service.js';
 import { svcAt, svcVariants } from '../modules/catalog/catalog.service.js';
 import { locLive } from '../modules/locations/locations.service.js';
+import { discoveryRoutes } from './discovery.routes.js';
 
 const ErrorSchema = z.object({ error: z.string(), message: z.string() });
 const KeyQuery = z.object({ key: z.string().min(4) });
@@ -128,6 +131,10 @@ export async function publicRoutes(app: FastifyInstance) {
     keyGenerator: (req) =>
       ((req.query as { key?: string })?.key ?? (req.body as { widgetKey?: string })?.widgetKey ?? req.ip) as string,
   });
+
+  // The consumer app's key-free discovery doors share this scope (and
+  // with it, the public rate limiter).
+  await app.register(discoveryRoutes);
 
   const r = app.withTypeProvider<ZodTypeProvider>();
 
@@ -354,6 +361,30 @@ export async function publicRoutes(app: FastifyInstance) {
     },
   });
 
+  // Free times for a whole visit: several treatments, one answer. A
+  // POST because the question carries a list, not because it writes.
+  r.route({
+    method: 'POST',
+    url: '/slots',
+    schema: {
+      body: PublicChainSlotsRequestSchema,
+      response: { 200: AvailabilityResponseSchema, 403: ErrorSchema, 404: ErrorSchema },
+    },
+    handler: async (req, reply) => {
+      const w = await resolve(req, reply, req.body.key);
+      if (!w) return reply;
+      const b = req.body;
+      return withTenant(w.tenantId, (trx) =>
+        chainAvailability(trx, {
+          locationId: b.locationId,
+          items: b.items,
+          employeeId: b.employeeId,
+          date: b.date,
+        }),
+      );
+    },
+  });
+
   r.route({
     method: 'POST',
     url: '/holds',
@@ -403,44 +434,38 @@ export async function publicRoutes(app: FastifyInstance) {
       if (!w) return reply;
       try {
         const out = await withTenant(w.tenantId, async (trx) => {
-          const a = await confirmBooking(trx, null, {
+          const items = req.body.items ?? [
+            {
+              serviceId: req.body.serviceId,
+              variantId: req.body.variantId ?? null,
+              modifierOptionIds: req.body.modifierOptionIds,
+            },
+          ];
+          const booked = await confirmChain(trx, null, {
             key: req.body.key,
             locationId: req.body.locationId,
-            serviceId: req.body.serviceId,
             date: req.body.date,
             time: req.body.time,
             employeeId: req.body.employeeId,
-            variantId: req.body.variantId ?? null,
-            modifierOptionIds: req.body.modifierOptionIds,
+            items,
             name: req.body.name,
             phone: req.body.phone,
             ...(req.body.email ? { email: req.body.email } : {}),
             source: 'widget',
             deposit: 0,
           });
-          // Attribute the booking to its widget for the stats card.
+          // Attribute the visit to its widget for the stats card.
           await trx
             .updateTable('appointments')
             .set({ widgetId: w.id })
-            .where('id', '=', a.id)
+            .where(
+              'id',
+              'in',
+              booked.map((a) => a.id),
+            )
             .where('widgetId', 'is', null)
             .execute();
-          const [locRow, empRow] = await Promise.all([
-            trx.selectFrom('locations').select('name').where('id', '=', a.locationId).executeTakeFirst(),
-            a.employeeId
-              ? trx.selectFrom('employees').select('name').where('id', '=', a.employeeId).executeTakeFirst()
-              : Promise.resolve(undefined),
-          ]);
-          return {
-            ref: a.id,
-            date: a.date,
-            time: a.start,
-            end: a.end,
-            serviceName: a.serviceName ?? '',
-            locationName: locRow?.name ?? '',
-            employeeName: empRow?.name ?? '',
-            price: a.price,
-          };
+          return visitPayload(trx, booked);
         });
         // A confirmed booking frees the cache for that day.
         for (const k of availCache.keys())
@@ -451,6 +476,41 @@ export async function publicRoutes(app: FastifyInstance) {
       }
     },
   });
+}
+
+/** The visit as the app shows it: the whole span up front, a line per
+ *  treatment underneath. A single booking is a visit of one. */
+export async function visitPayload(trx: Trx, booked: { id: string; locationId: string; employeeId: string | null; date: string; start: string; end: string; price: number; serviceName: string | null }[]) {
+  const first = booked[0]!;
+  const last = booked[booked.length - 1]!;
+  const locRow = await trx
+    .selectFrom('locations')
+    .select('name')
+    .where('id', '=', first.locationId)
+    .executeTakeFirst();
+  const empIds = [...new Set(booked.map((a) => a.employeeId).filter((x): x is string => Boolean(x)))];
+  const emps = empIds.length
+    ? await trx.selectFrom('employees').select(['id', 'name']).where('id', 'in', empIds).execute()
+    : [];
+  const nameOf = (id: string | null) => (id ? (emps.find((e) => e.id === id)?.name ?? '') : '');
+  return {
+    ref: first.id,
+    date: first.date,
+    time: first.start,
+    end: last.end,
+    serviceName: booked.map((a) => a.serviceName ?? '').filter(Boolean).join(' + '),
+    items: booked.map((a) => ({
+      ref: a.id,
+      serviceName: a.serviceName ?? '',
+      time: a.start,
+      end: a.end,
+      price: a.price,
+      employeeName: nameOf(a.employeeId),
+    })),
+    locationName: locRow?.name ?? '',
+    employeeName: nameOf(first.employeeId),
+    price: booked.reduce((n, a) => n + a.price, 0),
+  };
 }
 
 function sendPublicBookingError(reply: FastifyReply, e: unknown) {
