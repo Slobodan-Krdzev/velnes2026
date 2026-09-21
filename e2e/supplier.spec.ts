@@ -40,7 +40,9 @@ test('an order travels the whole chain: salon → supplier portal → back into 
   await portal.getByLabel('Email').fill('vesna@beautypro.mk');
   await portal.getByLabel('Password').fill('velnes-demo');
   await portal.getByRole('button', { name: 'Sign in' }).click();
-  await expect(portal.getByText('Connected salons')).toBeVisible();
+  // The stat label, exactly — the portal also carries a hint that
+  // begins with the same two words.
+  await expect(portal.getByText('Connected salons', { exact: true })).toBeVisible();
   await portal.getByRole('button', { name: 'Orders' }).click();
   const prow = portal.locator('tr', { hasText: ref });
   await prow.getByRole('button', { name: 'Accept' }).click();

@@ -34,7 +34,9 @@ test('a visitor books through the hosted page', async ({ page }) => {
   await expect(page.getByText('Your details')).toBeVisible();
   await expect(page.getByText(/This time is held for you/)).toBeVisible();
   await page.getByPlaceholder('Marija Stojanovska').fill('E2E Visitor');
-  await page.getByPlaceholder('+389 70 000 000').fill('+389 70 555 444');
+  // The phone is a country picker (+389 by default) and a national
+  // number — not one free-text field any more.
+  await page.getByLabel('Phone', { exact: true }).fill('70 555 444');
   await page.getByText(/cancellation policy/).click();
   await page.getByRole('button', { name: 'Continue' }).click();
 

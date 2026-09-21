@@ -46,7 +46,10 @@ test('book an appointment from the calendar drawer', async ({ page }) => {
     .filter({ hasText: new RegExp(`^${Number(target.slice(8))}$`) })
     .click();
   await page.getByLabel('Time 1').selectOption('10:00');
-  await page.locator('.panel').getByLabel(/Customer/).selectOption({ label: 'Katerina Stojanovska' });
+  // The customer is a search box with a suggestion list now, not a
+  // select: type, then pick the row.
+  await page.locator('.panel').getByLabel('Customer', { exact: true }).fill('Katerina');
+  await page.getByRole('option', { name: /Katerina Stojanovska/ }).click();
   const book = page.getByRole('button', { name: 'Book appointment' });
   await expect(book).toBeEnabled();
   await book.click();
