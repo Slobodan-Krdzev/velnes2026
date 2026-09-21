@@ -36,6 +36,10 @@ import {
 import { useSearchBox } from './useSearchBox.js';
 import { TabBar } from '../../app/TabBar.js';
 
+/** What "near me" means, in kilometres. The distance chips can widen
+ *  or narrow it afterwards; this is where the button starts. */
+const NEAR_KM = 10;
+
 /** A salon the text matched by name without earning a direct opening. */
 type SalonHit = { id: string; slug: string; name: string; city: string | null };
 
@@ -580,6 +584,28 @@ export function Results() {
   }, [sheet]);
   // Only a typed query can have been broadened; a category card asked
   // for exactly what it got.
+  /**
+   * "Near me" turns the location on **and** limits the answer to 10km.
+   *
+   * It used to only start the geolocation, which centred the map and
+   * let distance into the ordering — but every result stayed, however
+   * far away. A button called "near me" that leaves a salon 800km up
+   * the list is answering a different question from the one it asks.
+   *
+   * The distance chips still widen or narrow it afterwards; this is the
+   * shortcut, not the only way to set a radius. Turning it off clears
+   * both, since a radius with no location is a filter that cannot run.
+   */
+  const toggleNear = useCallback(() => {
+    if (geo.status === 'on') {
+      geo.disable();
+      setFilters({ radiusKm: null });
+    } else {
+      geo.enable();
+      setFilters({ radiusKm: NEAR_KM });
+    }
+  }, [geo, setFilters]);
+
   const note = query ? searchNote(how, widened, title) : searchNote(null, widened, title);
   const unpriced = unpricedNote(hiddenUnpriced);
   // One pin per salon, not one per treatment: a salon offering four
@@ -644,11 +670,11 @@ export function Results() {
               </div>
               <button
                 className={`chip${geo.status === 'on' ? ' on' : ''}`}
-                onClick={geo.status === 'on' ? geo.disable : geo.enable}
+                onClick={toggleNear}
                 title={
                   geo.status === 'on'
-                    ? 'Following your location — click to stop'
-                    : 'Centre the map on you'
+                    ? `Within ${NEAR_KM} km of you — click to stop`
+                    : `Show only what is within ${NEAR_KM} km of you`
                 }
               >
                 {IcPin}
@@ -791,11 +817,11 @@ export function Results() {
             <div className="m-chiprow">
               <button
                 className={`chip${geo.status === 'on' ? ' on' : ''}`}
-                onClick={geo.status === 'on' ? geo.disable : geo.enable}
+                onClick={toggleNear}
                 title={
                   geo.status === 'on'
-                    ? 'Following your location — click to stop'
-                    : 'Centre the map on you'
+                    ? `Within ${NEAR_KM} km of you — click to stop`
+                    : `Show only what is within ${NEAR_KM} km of you`
                 }
               >
                 {IcPin}
