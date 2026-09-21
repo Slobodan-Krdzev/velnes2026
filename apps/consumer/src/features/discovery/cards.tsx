@@ -202,6 +202,17 @@ export function NearYouD({ s }: { s: SalonVM }) {
             </button>
           ))}
         </div>
+        {/* The slots above book a particular time; this books the
+            treatment. Both land on the salon page with it already in
+            the visit — `?service=` is the same link the results cards
+            use, and the salon page has always known how to read it. */}
+        <button
+          className="btn btn-g"
+          style={{ minHeight: '38px', padding: '6px 14px', fontSize: '13.5px', marginTop: '7px', width: '100%' }}
+          onClick={() => nav(`/salon/${s.slug}?service=${svc.id}`)}
+        >
+          View &amp; book {IcArr}
+        </button>
       </div>
     </article>
   );
@@ -236,6 +247,17 @@ export function NearYouM({ s }: { s: SalonVM }) {
             </button>
           ))}
         </div>
+        {/* The slots above book a particular time; this books the
+            treatment. Both land on the salon page with it already in
+            the visit — `?service=` is the same link the results cards
+            use, and the salon page has always known how to read it. */}
+        <button
+          className="btn btn-g"
+          style={{ minHeight: '38px', padding: '6px 14px', fontSize: '13.5px', marginTop: '8px' }}
+          onClick={() => nav(`/salon/${s.slug}?service=${svc.id}`)}
+        >
+          View &amp; book {IcArr}
+        </button>
       </div>
     </article>
   );
