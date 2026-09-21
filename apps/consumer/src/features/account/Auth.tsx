@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ApiError } from '../../lib/api/client.js';
 import { clientAuth, useSession } from '../../lib/api/session.js';
+import { DobPicker } from '../../components/DobPicker.js';
 
 /** Login and the six-step registration wizard — the prototype's auth
  *  markup, wired to the real client doors. The last step is a real
@@ -163,6 +164,25 @@ export function Register() {
           dob: d.dob || null,
           lang: d.lang,
         });
+        // Auto-verify while there is no mail provider — Alex's call for
+        // testing. The code is read back from the outbox it was queued
+        // into and submitted for them, so the verify door still runs
+        // for real; nothing is bypassed, it is just typed by the app.
+        //
+        // In production the route this reads does not exist, the fetch
+        // fails, and step 6 asks for the code exactly as it does now.
+        try {
+          const { code } = await clientAuth.devCode(d.email.trim());
+          if (code) {
+            const s = await clientAuth.verify(d.email.trim(), code);
+            setBusy(false);
+            setSession(s.token, s.profile);
+            nav('/account');
+            return;
+          }
+        } catch {
+          // No dev door: fall through to asking for the code.
+        }
         setBusy(false);
         setStep(6);
       } catch (e) {
@@ -290,13 +310,10 @@ export function Register() {
 
             {step === 5 ? (
               <>
-                <label className="acc-flbl">Date of birth (optional)</label>
-                <input
-                  className="acc-inp"
-                  type="date"
-                  value={d.dob}
-                  onChange={(e) => set({ dob: e.target.value })}
-                />
+                <label className="acc-flbl" htmlFor="reg-dob">
+                  Date of birth (optional)
+                </label>
+                <DobPicker id="reg-dob" value={d.dob} onChange={(dob) => set({ dob })} />
                 <label className="acc-flbl">Preferred language</label>
                 <select
                   className="acc-inp"

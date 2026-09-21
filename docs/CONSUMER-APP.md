@@ -352,3 +352,27 @@ before it can be real:
   other five apps and this one still needs its copy pass.
 - **Currency.** Everything is MKD, taken from the API — the prototype's
   €/MKD split was a known seam, not a spec.
+
+## Registration: the calendar, and auto-verify while there is no mail
+
+The date of birth uses **the prototype's own calendar** — `.cal`,
+`.cal-hd`, `.cal-nav`, `.cal-dw`, `.cal-g`, month and year selects
+between two arrows, Monday-first, years 2026 back to 1930, opening on
+1995. `reference/client-prototype` always had it; the port had dropped a
+bare `<input type="date">` in its place, which hands the field to
+whatever the browser feels like drawing. It talks ISO to the contract
+and shows "13 Jan 1995" to the person. One addition: a Clear, because
+the field is optional and the prototype gave no way to un-pick a date.
+
+**Registration auto-verifies while the mail transport is the mock one**
+— Alex's call, 2026-09-21, for testing. Nothing is bypassed: the code is
+still generated server-side and queued, and the real `verify-email` door
+still runs. The app simply reads the code back out of the outbox it was
+queued into (`GET /client/dev/last-code`, a route that is only
+registered when `env.mailTransport === 'mock'`) and submits it.
+
+The safety argument is that route's existence, not a flag anybody has to
+remember: configure a real SMTP transport and it is never registered,
+the fetch 404s, and step 6 asks the person for the code exactly as it
+does today. Auto-verification cannot follow the app into production
+because in production the door it depends on is not there.

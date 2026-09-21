@@ -139,6 +139,22 @@ export const clientAuth = {
     dob: string | null;
     lang: 'en' | 'mk' | 'sq';
   }) => call<{ pending: true }>('/register', { method: 'POST', body: JSON.stringify(body) }),
+  /**
+   * The code that was just "sent", for testing — and only ever in
+   * testing.
+   *
+   * The door behind this exists solely while the mail transport is the
+   * mock one: no SMTP provider has been chosen, so the code sits in the
+   * outbox rather than anybody's inbox, and reading it back is honest
+   * rather than a shortcut. The moment a real transport is configured
+   * the route is not registered at all, this 404s, and registration
+   * falls back to the person typing what they were emailed.
+   *
+   * That is the whole safety argument: this cannot follow the app into
+   * production, because in production it does not exist.
+   */
+  devCode: (email: string) =>
+    call<{ code: string | null }>(`/dev/last-code?email=${encodeURIComponent(email)}`),
   resend: (email: string) =>
     call<{ pending: true }>('/resend-code', { method: 'POST', body: JSON.stringify({ email }) }),
   verify: (email: string, code: string) =>
