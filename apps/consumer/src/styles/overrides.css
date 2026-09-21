@@ -486,12 +486,6 @@ a.pop-go:hover {
 .pro-card > span {
   min-width: 0;
 }
-.pro-card b,
-.pro-card .sm {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 /* And the name stops before the heart rather than running under it. */
 .pro-card {
   padding-right: 34px;
@@ -548,4 +542,41 @@ a.pop-go:hover {
    their names running under the heart. */
 .pro-wrap .pro-card {
   width: 100%;
+}
+
+
+/* ── Names get to be read ───────────────────────────────────────────
+   Ellipsis was the wrong trade here. "Signature Facial" and "Ivana
+   Trajkovska" are the thing the card is FOR, and a card that cuts them
+   off to protect its own width has its priorities backwards. They wrap
+   to a second line instead, and only a genuinely long name is clipped
+   after that. */
+.tr-card .nm .t,
+.pro-card b,
+.pro-card .sm {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+/* The name is no longer a single line, so the row that holds it lines
+   its pieces up from the top rather than centring the heart against two
+   lines of text. */
+.tr-card .row1 {
+  align-items: flex-start;
+}
+.tr-card .row1 .fav-inline {
+  margin-top: -2px;
+}
+
+/* ── A chosen treatment is coloured, not ticked ─────────────────────
+   The tick was a 20px circle competing for the same row as the name and
+   the heart, on a card that has little enough width as it is. The card
+   itself can carry the state: the platform's own green, at a weight
+   that reads as "chosen" without shouting. */
+.tr-card.on {
+  border-color: var(--ok);
+  background: rgba(62, 122, 68, 0.09);
 }

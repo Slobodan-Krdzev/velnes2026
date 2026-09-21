@@ -22,9 +22,6 @@ const IcScissors = (
 const IcBottle = (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M10 3h4M11 3v3.2c0 .9-2.5 1.7-2.5 3.4V19a2 2 0 0 0 2 2h3a2 2 0 0 0 2-2v-9.4c0-1.7-2.5-2.5-2.5-3.4V3" /></svg>
 );
-const IcCheck = (
-  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>
-);
 const IcCal = (
   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"><rect x="3.5" y="5" width="17" height="15" rx="2.5" /><path d="M3.5 10h17M8 3.5v3M16 3.5v3" /></svg>
 );
@@ -115,7 +112,6 @@ function TrCard({
             prototype's Favourites section lists saved services but gives
             nowhere to save one. See docs/FAVOURITES.md. */}
         <FavHeart kind="service" id={s.id} label={s.name} className="fav fav-inline" />
-        <span className="ok">{IcCheck}</span>
       </span>
       <span className="in2">
         <span>
@@ -211,7 +207,33 @@ function useSalonPage() {
   const price = lines.reduce((n, l) => n + l.price, 0);
   const durationMin = lines.reduce((n, l) => n + l.durationMin, 0);
   const dayLbl = days.find((d) => d.iso === date)?.lbl ?? date;
-  const team = lines[0]?.svc.employees ?? [];
+  /**
+   * Who can actually take this visit.
+   *
+   * One professional is assigned to the whole appointment, so the list
+   * is the intersection across every treatment in the cart, not the
+   * first one's staff — somebody who does the facial but not the
+   * manicure cannot be booked for a visit containing both, and offering
+   * them is offering a booking that cannot happen.
+   *
+   * With a single treatment chosen this is simply that treatment's
+   * staff, which is what it always was.
+   */
+  const team = lines.length
+    ? lines
+        .slice(1)
+        .reduce(
+          (who, l) => who.filter((e) => l.svc.employees.some((x) => x.id === e.id)),
+          lines[0]!.svc.employees,
+        )
+    : [];
+  const teamKey = team.map((e) => e.id).join(',');
+  // Adding a treatment the chosen professional does not do un-chooses
+  // them, rather than leaving a name selected that cannot take the
+  // booking.
+  useEffect(() => {
+    if (empId !== 'any' && !team.some((e) => e.id === empId)) setEmpId('any');
+  }, [teamKey, empId]);
   const empName = team.find((e) => e.id === empId)?.name ?? 'Any available professional';
   return {
     slug: slug ?? '',
