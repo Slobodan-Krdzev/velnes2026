@@ -16,7 +16,7 @@ import { sql } from 'kysely';
 import { z } from 'zod';
 import { db, withTenant, type Trx } from '../db/index.js';
 import {
-  availableChainSlots,
+  chainAvailability,
   availableSlots,
   BookingError,
   BookingRefused,
@@ -374,14 +374,14 @@ export async function publicRoutes(app: FastifyInstance) {
       const w = await resolve(req, reply, req.body.key);
       if (!w) return reply;
       const b = req.body;
-      return withTenant(w.tenantId, async (trx) => ({
-        slots: await availableChainSlots(trx, {
+      return withTenant(w.tenantId, (trx) =>
+        chainAvailability(trx, {
           locationId: b.locationId,
           items: b.items,
           employeeId: b.employeeId,
           date: b.date,
         }),
-      }));
+      );
     },
   });
 

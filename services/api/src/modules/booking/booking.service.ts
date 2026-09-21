@@ -898,6 +898,8 @@ async function freeFor(
     pool: string[];
     anyEmployee: boolean;
     key?: string | undefined;
+    /** Why candidates fell away, for the door to explain a blank day. */
+    stats?: PaceStats | undefined;
   },
 ): Promise<string | null> {
   for (const emp of q.pool) {
@@ -910,9 +912,13 @@ async function freeFor(
         modifierOptionIds: q.leg.modifierOptionIds ?? [],
         employeeId: emp,
       });
-      if (line.treatmentMin > q.leg.treatmentMin) continue;
+      if (line.treatmentMin > q.leg.treatmentMin) {
+        q.stats?.slowerThanOffer.add(emp);
+        continue;
+      }
       dur = line.treatmentMin;
     }
+    if (q.stats) q.stats.checked += 1;
     const refusal = await bookingCheck(trx, {
       locationId: q.locationId,
       date: q.date,
@@ -953,13 +959,30 @@ export function chainSpan(legs: ChainLeg[], startMin = 0) {
   };
 }
 
+interface PaceStats {
+  /** Everyone skipped for running longer than the catalog offer. */
+  slowerThanOffer: Set<string>;
+  /** How many times anybody was actually put to the calendar. */
+  checked: number;
+}
+
+export type ChainAvailability = {
+  slots: { t: string; emp: string | null; free: boolean }[];
+  reason?: 'NOBODY_AT_PACE';
+};
+
 /**
  * Free start times for a whole chain: a slot counts only when every
  * treatment in it fits, in order, with somebody free for each. One
  * answer for the visit, so the app can never offer a time that only
  * half works.
+ *
+ * When nothing is free and the door knows why, it says so — a blank
+ * day because everyone is slower than the catalog quotes is not the
+ * same as a full one, and the person can act on the difference (pick
+ * a professional by name). Alex, 2026-09-21: the page must inform.
  */
-export async function availableChainSlots(
+export async function chainAvailability(
   trx: Trx,
   q: {
     locationId: string;
@@ -970,14 +993,15 @@ export async function availableChainSlots(
     /** The clock, for tests; the wall clock otherwise. */
     now?: Date | undefined;
   },
-) {
-  if (!q.items.length) return [];
-  if (!(await locLive(trx, q.locationId))) return [];
+): Promise<ChainAvailability> {
+  if (!q.items.length) return { slots: [] };
+  if (!(await locLive(trx, q.locationId))) return { slots: [] };
   const cut = await pastCutoff(trx, q.locationId, q.date, q.now);
   for (const it of q.items) {
     const cfg = await svcAt(trx, it.serviceId, q.locationId).catch(() => null);
-    if (!cfg?.active) return [];
+    if (!cfg?.active) return { slots: [] };
   }
+  const stats: PaceStats = { slowerThanOffer: new Set(), checked: 0 };
   const legs = await chainLegs(trx, q);
   const pools: string[][] = [];
   for (const leg of legs) {
@@ -987,7 +1011,7 @@ export async function availableChainSlots(
         : [q.employeeId],
     );
   }
-  if (pools.some((p) => !p.length)) return [];
+  if (pools.some((p) => !p.length)) return { slots: [] };
   const sch = await scheduleFor(trx, q.locationId, q.date);
   const out: { t: string; emp: string | null; free: boolean }[] = [];
   for (let m = DAY_START; ; m += 30) {
@@ -1007,6 +1031,7 @@ export async function availableChainSlots(
         pool: pools[i]!,
         anyEmployee: q.employeeId === 'any',
         key: q.key,
+        stats,
       });
       if (!who) {
         all = false;
@@ -1016,7 +1041,23 @@ export async function availableChainSlots(
     }
     out.push({ t: hhmm(m), emp: all ? first : null, free: all });
   }
-  return out;
+  // Nobody was ever put to the calendar, and somebody was set aside for
+  // pace: the day is blank for that reason alone.
+  const nobodyAtPace =
+    q.employeeId === 'any' &&
+    out.length > 0 &&
+    !out.some((s) => s.free) &&
+    stats.checked === 0 &&
+    stats.slowerThanOffer.size > 0;
+  return nobodyAtPace ? { slots: out, reason: 'NOBODY_AT_PACE' } : { slots: out };
+}
+
+/** The slots alone — what most callers and tests want. */
+export async function availableChainSlots(
+  trx: Trx,
+  q: Parameters<typeof chainAvailability>[1],
+) {
+  return (await chainAvailability(trx, q)).slots;
 }
 
 /**

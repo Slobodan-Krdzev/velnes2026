@@ -111,6 +111,18 @@ half the visit can keep. Offer and booking share one `freeFor()` helper,
 including the existing "skip anyone slower than the catalog quote" rule
 — which is what keeps a later treatment's start time true.
 
+**A blank day says why, when it can.** The whole-visit door
+(`chainAvailability`, behind `POST /public/slots`) returns
+`reason: 'NOBODY_AT_PACE'` when "any professional" was asked and
+everyone who does the treatment is measured slower than the catalog
+quotes it — the existing rule that skips anyone slower than the offer
+left nobody to check. The salon page then says so and opens the
+professional picker, instead of "try another date" (which would have
+been every date). Seen first on the demo salon: at Centar the only
+bookable physiotherapist runs 51 min on a 45-min catalog line. The
+proper fix is the salon's — approve the workspace's timing suggestion so
+the catalog tells the truth; the app's job is to say what is going on.
+
 **Nothing in the past is offered.** Both slot doors (`availableSlots`
 for one treatment, `availableChainSlots` for a visit) cut the day at
 "now" in the *salon's* clock (`locations.tz`, default Europe/Skopje):

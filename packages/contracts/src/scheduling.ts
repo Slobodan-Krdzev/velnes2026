@@ -63,7 +63,20 @@ export const SlotSchema = z.object({
   emp: z.uuid().nullable(),
   free: z.boolean(),
 });
-export const AvailabilityResponseSchema = z.object({ slots: z.array(SlotSchema) });
+/**
+ * Why a day came back with nothing free, when the door knows a reason
+ * the caller could act on. Absent when the day is simply full.
+ *
+ *   NOBODY_AT_PACE — "any professional" was asked, and everyone who
+ *   does the treatment is measured slower than the catalog quotes it,
+ *   so no one fits the offered slot. Choosing a professional by name
+ *   offers their own times at their own pace.
+ */
+export const SlotsReasonSchema = z.enum(['NOBODY_AT_PACE']);
+export const AvailabilityResponseSchema = z.object({
+  slots: z.array(SlotSchema),
+  reason: SlotsReasonSchema.optional(),
+});
 export type AvailabilityResponse = z.infer<typeof AvailabilityResponseSchema>;
 
 export const HoldRequestSchema = z.object({

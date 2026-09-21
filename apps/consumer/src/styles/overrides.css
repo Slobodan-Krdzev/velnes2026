@@ -800,3 +800,33 @@ a.pop-go:hover {
 .step.done .n svg {
   display: block;
 }
+
+/* ── The salon page's second step, before there is a first ─────────
+   Inert and faded until a treatment is in the visit; the heading says
+   why. Not in the prototype, which pre-filled a treatment. */
+.bk-h .bk-hint {
+  margin-left: 10px;
+  font-weight: 500;
+}
+.bk-off {
+  opacity: 0.45;
+  pointer-events: none;
+  user-select: none;
+}
+/* A blank day with a reason: the door's sentence, and the way out. */
+.bk-why {
+  display: grid;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: #fff4ee;
+  border: 1px solid #f6d6c8;
+  color: #8a3f22;
+  line-height: 1.45;
+}
+.bk-why .btn {
+  justify-self: start;
+  min-height: 38px;
+  padding: 6px 14px;
+  font-size: 13px;
+}

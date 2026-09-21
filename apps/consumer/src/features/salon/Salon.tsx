@@ -322,6 +322,9 @@ function useSalonPage() {
     time,
     setTime,
     free,
+    /** The door's own account of a blank day, when it has one. */
+    slotsReason: availQ.data?.reason ?? null,
+    slotsAnswered: availQ.data !== undefined,
     allOpen,
     setAllOpen,
     proOpen,
@@ -553,7 +556,14 @@ function BookCard({ p, desktop }: { p: Page; desktop: boolean }) {
           ) : null}
         </>
       ) : null}
-      <div className="bk-h" style={{ marginTop: '20px' }}>2. Choose date &amp; time</div>
+      {/* Nothing to schedule yet: the section is there, and inert, until
+          a treatment is in the visit — a day and time for no treatment
+          is not a step anyone can complete. Alex, 2026-09-21. */}
+      <div className="bk-h" style={{ marginTop: '20px' }}>
+        2. Choose date &amp; time
+        {!p.lines.length ? <span className="sm muted bk-hint">Choose a treatment first</span> : null}
+      </div>
+      <div className={p.lines.length ? undefined : 'bk-off'} aria-disabled={!p.lines.length}>
       <div className="dayrow" ref={dayRef}>
         {p.dayOffset > 0 ? (
           <button className="daychip daychip--cal" onClick={p.prevDays} aria-label="Earlier days">
@@ -576,7 +586,22 @@ function BookCard({ p, desktop }: { p: Page; desktop: boolean }) {
             {t}
           </button>
         ))}
-        {!p.free.length ? <div className="sm muted" style={{ gridColumn: '1/-1', padding: '8px 2px' }}>No open times this day — try another date.</div> : null}
+        {!p.free.length && p.lines.length ? (
+          p.slotsReason === 'NOBODY_AT_PACE' ? (
+            /* Not a full day — a day nobody fits. The prototype only had
+               "try another date"; here that would be every date. */
+            <div className="sm bk-why" style={{ gridColumn: '1/-1' }}>
+              With &ldquo;Any available professional&rdquo;, nobody at {p.location?.name ?? 'this location'} fits this
+              visit in the time the catalog quotes for it. Choose a professional to see their own times.
+              <button type="button" className="btn btn-g" onClick={() => p.setProOpen(true)}>
+                Choose a professional
+              </button>
+            </div>
+          ) : p.slotsAnswered ? (
+            <div className="sm muted" style={{ gridColumn: '1/-1', padding: '8px 2px' }}>No open times this day — try another date.</div>
+          ) : null
+        ) : null}
+      </div>
       </div>
     </div>
   );
@@ -838,12 +863,12 @@ export function Salon() {
                     <span>Total</span>
                     <b>{showPrice}</b>
                   </div>
-                  <button className="btn btn-p" style={{ width: '100%' }} disabled={!p.time} onClick={book}>
+                  <button className="btn btn-p" style={{ width: '100%' }} disabled={!p.lines.length || !p.time} onClick={book}>
                     Book now
                   </button>
-                  {!p.time ? (
+                  {!p.lines.length || !p.time ? (
                     <div className="sm muted" style={{ textAlign: 'center', marginTop: '7px' }}>
-                      Pick a time that fits the whole visit.
+                      {!p.lines.length ? 'Choose a treatment first.' : 'Pick a time that fits the whole visit.'}
                     </div>
                   ) : null}
                 </div>
@@ -921,7 +946,7 @@ export function Salon() {
                     <b data-sum="price">{showPrice}</b>
                   </span>
                 </div>
-                <button className="btn btn-p" disabled={!p.time} onClick={book}>
+                <button className="btn btn-p" disabled={!p.lines.length || !p.time} onClick={book}>
                   Book now {IcArr}
                 </button>
                 <span className="safe">{IcVok} Safe and simple booking</span>
