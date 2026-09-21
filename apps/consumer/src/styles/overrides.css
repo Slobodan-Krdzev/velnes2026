@@ -390,10 +390,15 @@ a.pop-go:hover {
    ones really are alternatives to each other. */
 .filterbar {
   display: grid;
-  gap: 14px;
-  margin: 0 0 18px;
+  gap: 16px;
+  margin: 0 0 20px;
 }
+/* The prototype only ever makes `.chips` a flex row inside a
+   suggestion card; out here it fell back to `display: block`, so the
+   gap above was never applied and the chips sat one space apart. */
 .filterbar .chips {
+  display: flex;
+  flex-wrap: wrap;
   gap: 10px 12px;
   margin: 0;
 }
