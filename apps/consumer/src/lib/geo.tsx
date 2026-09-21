@@ -90,8 +90,23 @@ function writeDecision(d: GeoDecision) {
   }
 }
 
+/**
+ * Browsers hand out a position only on a secure origin — https, or
+ * localhost. That is why "Near me" works on the dev server and would
+ * silently not on a plain-http deploy: Chrome removes the API
+ * altogether there. Production is https through Caddy (`Caddyfile`),
+ * and this makes the failure say so if that ever changes.
+ */
+export function geoSupported(): boolean {
+  return (
+    typeof navigator !== 'undefined' &&
+    'geolocation' in navigator &&
+    (typeof window === 'undefined' || window.isSecureContext !== false)
+  );
+}
+
 export function GeoProvider({ children }: { children: ReactNode }) {
-  const supported = typeof navigator !== 'undefined' && 'geolocation' in navigator;
+  const supported = geoSupported();
   const { profile, signedIn, api } = useSession();
   const qc = useQueryClient();
 

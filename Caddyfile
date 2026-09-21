@@ -40,6 +40,8 @@ hq.velnes.mk {
 }
 
 # The consumer app: the public face people browse and book from.
+# Its TLS is load-bearing: browsers only expose geolocation on https,
+# so "Near me" depends on this block staying https (Caddy's default).
 velnes.mk, www.velnes.mk {
 	root * /srv/velnes/consumer
 	try_files {path} /index.html

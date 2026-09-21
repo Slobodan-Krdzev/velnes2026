@@ -669,7 +669,9 @@ export function Results() {
       : geo.decision === 'refused'
         ? `Enable the button for better results — ${signedIn ? 'turn location on under My Velnes › General, or' : 'turn location on'}`
         : geo.status === 'unsupported'
-          ? 'This browser cannot share a location, so “Near me” has nothing to go on.'
+          ? typeof window !== 'undefined' && window.isSecureContext === false
+            ? 'Location needs a secure (https) connection — this page was opened over plain http.'
+            : 'This browser cannot share a location, so “Near me” has nothing to go on.'
           : geo.status === 'unavailable'
             ? 'Your device could not work out where you are just now. Try again in a moment.'
             : null;
