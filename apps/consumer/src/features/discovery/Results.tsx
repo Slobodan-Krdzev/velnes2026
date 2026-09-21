@@ -596,38 +596,76 @@ export function Results() {
    * shortcut, not the only way to set a radius. Turning it off clears
    * both, since a radius with no location is a filter that cannot run.
    */
+  /**
+   * The radius is only ever written once there is a location for it to
+   * apply to. Writing `km=10` on the click and taking it back when the
+   * browser said no looked like the button breaking — the URL flashed
+   * and went blank — when what had happened was a refusal. The intent
+   * is held here until the position arrives, and dropped if it never
+   * does.
+   */
+  const [wantNear, setWantNear] = useState(false);
+  const radius = filters.radiusKm;
+  /** Lit means "filtering near you", not merely "location is on": a
+   *  remembered grant with no radius set is not the same thing. */
+  const nearOn = geo.status === 'on' && radius != null;
   const toggleNear = useCallback(() => {
-    if (geo.status === 'on') {
+    if (nearOn) {
+      setWantNear(false);
       geo.disable();
       setFilters({ radiusKm: null });
-    } else {
-      geo.enable();
-      setFilters({ radiusKm: NEAR_KM });
+      return;
     }
-  }, [geo, setFilters]);
+    // A browser that has already said no will say no again; asking
+    // twice a second only makes the refusal look like a glitch.
+    if (geo.status === 'denied' || geo.status === 'unsupported') return;
+    setWantNear(true);
+    if (geo.status === 'on') setFilters({ radiusKm: NEAR_KM });
+    else geo.enable();
+  }, [nearOn, geo, setFilters]);
+
+  useEffect(() => {
+    if (!wantNear) return;
+    if (geo.status === 'on') {
+      if (radius == null) setFilters({ radiusKm: NEAR_KM });
+      setWantNear(false);
+    } else if (geo.status !== 'asking') {
+      // Denied, unavailable, unsupported: the wish cannot be granted.
+      setWantNear(false);
+    }
+  }, [wantNear, geo.status, radius, setFilters]);
 
   /**
-   * A distance filter with no location behind it does nothing, and the
-   * door is right to ignore it — but leaving `km=10` in the URL and a
-   * chip lit says a filter is running when none is. So when the
-   * location does not arrive, the radius goes with it.
+   * A radius already in the URL — a shared link, a back button — that
+   * the location can never honour is dropped, so no chip claims a
+   * filter that is not running. Only on a definite no: `off` is also
+   * the state before the answer, and clearing on it was the flicker.
    */
-  const radius = filters.radiusKm;
   useEffect(() => {
-    if (radius && geo.status !== 'on' && geo.status !== 'asking') setFilters({ radiusKm: null });
+    const dead = geo.status === 'denied' || geo.status === 'unavailable' || geo.status === 'unsupported';
+    if (radius != null && dead) setFilters({ radiusKm: null });
   }, [radius, geo.status, setFilters]);
 
   /** Why "Near me" did nothing. It is the one control here that can
-   *  fail for reasons outside the app, so it is the one that has to
-   *  explain itself rather than just sitting there unlit. */
+   *  fail for reasons outside the app, so it has to explain itself
+   *  rather than just sitting there unlit. */
   const geoNote =
     geo.status === 'denied'
-      ? 'Velnes cannot see your location — it is blocked for this site in your browser settings.'
+      ? 'Location is blocked for this site in your browser — allow it in the address-bar site settings and “Near me” will work.'
       : geo.status === 'unavailable'
         ? 'Your device could not work out where you are just now. Try again in a moment.'
         : geo.status === 'unsupported'
           ? 'This browser cannot share a location, so “Near me” has nothing to go on.'
           : null;
+  /** The same fact on the button itself, where the click happened. */
+  const nearLabel =
+    geo.status === 'asking'
+      ? 'Locating…'
+      : geo.status === 'denied'
+        ? 'Location blocked'
+        : geo.status === 'unsupported'
+          ? 'No location'
+          : 'Near me';
 
   const note = query ? searchNote(how, widened, title) : searchNote(null, widened, title);
   const unpriced = unpricedNote(hiddenUnpriced);
@@ -692,16 +730,18 @@ export function Results() {
                 ) : null}
               </div>
               <button
-                className={`chip${geo.status === 'on' ? ' on' : ''}`}
+                className={`chip${nearOn ? ' on' : ''}`}
                 onClick={toggleNear}
+                aria-pressed={nearOn}
                 title={
-                  geo.status === 'on'
+                  geoNote ??
+                  (nearOn
                     ? `Within ${NEAR_KM} km of you — click to stop`
-                    : `Show only what is within ${NEAR_KM} km of you`
+                    : `Show only what is within ${NEAR_KM} km of you`)
                 }
               >
                 {IcPin}
-                {geo.status === 'asking' ? 'Locating…' : 'Near me'}
+                {nearLabel}
               </button>
             </div>
           </div>
@@ -845,16 +885,18 @@ export function Results() {
             </div>
             <div className="m-chiprow">
               <button
-                className={`chip${geo.status === 'on' ? ' on' : ''}`}
+                className={`chip${nearOn ? ' on' : ''}`}
                 onClick={toggleNear}
+                aria-pressed={nearOn}
                 title={
-                  geo.status === 'on'
+                  geoNote ??
+                  (nearOn
                     ? `Within ${NEAR_KM} km of you — click to stop`
-                    : `Show only what is within ${NEAR_KM} km of you`
+                    : `Show only what is within ${NEAR_KM} km of you`)
                 }
               >
                 {IcPin}
-                {geo.status === 'asking' ? 'Locating…' : 'Near me'}
+                {nearLabel}
               </button>
 
             </div>
