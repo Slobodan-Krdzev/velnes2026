@@ -580,3 +580,14 @@ a.pop-go:hover {
   border-color: var(--ok);
   background: rgba(62, 122, 68, 0.09);
 }
+
+/* ── The products count, on a phone ─────────────────────────────────
+   The pill sits beside a heading that wraps, so on a narrow screen it
+   is squeezed until "3 products" breaks over two lines — and `.tiny-tag`
+   never had to centre anything, because in the prototype it always fit
+   on one. Mobile only, since the desktop pill has the room. */
+.m-env .prod-tg .tiny-tag {
+  text-align: center;
+  justify-content: center;
+  line-height: 1.25;
+}

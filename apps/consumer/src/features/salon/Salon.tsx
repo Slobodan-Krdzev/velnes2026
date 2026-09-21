@@ -589,7 +589,6 @@ export function Salon() {
       ? `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`
       : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${printedAddress} ${d.name}`.trim())}`;
   const showPrice = p.lines.length ? fmtMKD(p.price) : '—';
-  const visitLbl = p.lines.length ? p.lines.map((l) => l.name).join(' + ') : 'Nothing selected yet';
   const book = () => goBook(p, nav, setDraft);
   const teamCard = (idPrefix: string) => (
     <div className="scard" id={`${idPrefix}-team`}>
@@ -863,9 +862,6 @@ export function Salon() {
                       {d.name} <span className="vok">{IcVok}</span>
                     </span>
                     <span className="line">
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="7" cy="18" r="2.6" /><circle cx="17" cy="18" r="2.6" /><path d="M8.8 16.2 17 4M15.2 16.2 7 4" /></svg>
-                      <b data-sum="tr">{visitLbl}</b>
-                      <span className="sep">|</span>
                       {IcCal}
                       <b data-sum="day">{p.dayLbl}</b>
                       <span className="sep">|</span>
