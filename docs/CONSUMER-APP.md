@@ -123,7 +123,11 @@ stays inside the platform's `08:00–19:00` day (`DAY_START`/`DAY_END`,
 shared with the workspace calendar); a salon's own opening hours narrow
 it, never widen it — widening is an open scheduling question (§below).
 
-On the salon page the time is the person's to pick: nothing is
+On the salon page **Today leaves the day row once it has nothing
+left**: when the device clock is past the platform's last slot
+(18:30), or when the slot door — which knows the salon's clock and the
+visit's length — answers an empty list for today. The row then starts
+at Tomorrow. The time is the person's to pick: nothing is
 pre-selected, "Book now" waits for a tap, and the stepper ticks
 **Treatment** once something is in the visit and **Date & time** once
 a time is chosen (a check in place of the number — the prototype only

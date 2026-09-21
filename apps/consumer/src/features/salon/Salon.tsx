@@ -67,6 +67,14 @@ const IcStepDone = (
   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-label="done"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>
 );
 
+/** The platform's last slot start (`DAY_END` 19:00 minus one 30-min
+ *  step). Past it, today has nothing left to offer for anything. */
+const LAST_SLOT_MIN = 18 * 60 + 30;
+const todayIso = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+
 const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -142,7 +150,21 @@ function useSalonPage() {
   const services = useMemo(() => servicesQ.data?.services ?? [], [servicesQ.data]);
   // The visible four-day window; the calendar chip walks it forward.
   const [dayOffset, setDayOffset] = useState(0);
-  const days = useMemo(() => dayChips(dayOffset), [dayOffset]);
+  /**
+   * Today drops out of the row once it has nothing left (Alex,
+   * 2026-09-21). Two ways to know: the clock is past the platform's
+   * last slot, so nothing could be offered for any visit; or the door
+   * has already answered "nothing today" for this visit — its answer
+   * is in the salon's own clock and knows the visit's length, which
+   * the device clock does not.
+   */
+  const [clockGone] = useState(() => {
+    const n = new Date();
+    return n.getHours() * 60 + n.getMinutes() >= LAST_SLOT_MIN;
+  });
+  const [doorGone, setDoorGone] = useState(false);
+  const todayGone = clockGone || doorGone;
+  const days = useMemo(() => dayChips(dayOffset + (todayGone ? 1 : 0)), [dayOffset, todayGone]);
   // The visit: several treatments in the order they were picked. The
   // prototype's desktop cart is multi-select, and a salon visit really
   // is "haircut then colour" — so the cart is the state, not one id.
@@ -212,6 +234,12 @@ function useSalonPage() {
   useEffect(() => {
     if (answered && time && !free.includes(time)) setTime('');
   }, [answered, free, time]);
+  // An empty answer for today — not "all busy", *nothing offered* — is
+  // the door saying the day is over for this visit.
+  useEffect(() => {
+    if (date === todayIso() && lines.length && availQ.data && availQ.data.slots.length === 0)
+      setDoorGone(true);
+  }, [date, lines.length, availQ.data]);
   // What the door will actually charge for the visit: every line at the
   // price its own option carries. Never a "from" price.
   const price = lines.reduce((n, l) => n + l.price, 0);
