@@ -681,3 +681,38 @@ a.pop-go:hover {
     box-shadow: 0 24px 60px rgba(45, 26, 18, 0.28);
   }
 }
+
+/* A location notice beside the control it is about (GeoNotice.tsx).
+   Warm, not muted: it explains why a button stopped working. The
+   prototype has no such state, so nothing to copy. */
+.geo-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: #fff4ee;
+  border: 1px solid #f6d6c8;
+  color: #8a3f22;
+  font-size: 13px;
+  line-height: 1.45;
+}
+.geo-notice svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+.d-topbar .d-wrap > .geo-notice {
+  margin: 10px 0 2px;
+}
+.geo-notice-wrap {
+  margin: 18px auto 0;
+}
+.geo-notice-wrap.m {
+  margin: 0 16px 12px;
+}
+/* A chip that cannot work looks like it cannot — same as the prototype's
+   disabled buttons, which fade rather than vanish. */
+.chip:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}

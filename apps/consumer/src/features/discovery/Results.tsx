@@ -20,6 +20,7 @@ import {
 import type { SearchFacets } from '@velnes/contracts';
 import { useMyNotifications, useSession } from '../../lib/api/session.js';
 import { distanceKm, distanceLbl, useUserLocation } from '../../lib/geo.js';
+import { GeoNotice } from '../../components/GeoNotice.js';
 import { SalonMap } from '../../components/SalonMap.js';
 import {
   CatCard,
@@ -694,7 +695,7 @@ export function Results() {
           padding: 0,
           font: 'inherit',
           fontWeight: 600,
-          color: 'var(--brand)',
+          color: 'inherit',
           textDecoration: 'underline',
           textUnderlineOffset: '3px',
           cursor: 'pointer',
@@ -782,6 +783,11 @@ export function Results() {
                 {nearLabel}
               </button>
             </div>
+            {geoNote ? (
+              <div className="d-wrap">
+                <GeoNotice action={geoAction}>{geoNote}</GeoNotice>
+              </div>
+            ) : null}
           </div>
           <div className={`d-wrap res-layout${landing ? ' solo' : ''}`}>
             <div>
@@ -816,14 +822,6 @@ export function Results() {
                   canDistance={geo.status === 'on'}
                 />
               )}
-              {/* Outside the results list: the landing hides that, and
-                  "Near me" is on the toolbar there too. */}
-              {geoNote ? (
-                <div className="sm muted" style={{ margin: '0 0 12px' }}>
-                  {geoNote}
-                  {geoAction ? <> {geoAction}.</> : null}
-                </div>
-              ) : null}
               <div id="d-reslist" hidden={landing}>
                 {salons.length ? <SalonHits salons={salons} title={title} /> : null}
                 {note ? (
@@ -964,9 +962,8 @@ export function Results() {
               </div>
             )}
             {geoNote ? (
-              <div className="sm muted" style={{ padding: '4px 16px 10px' }}>
-                {geoNote}
-                {geoAction ? <> {geoAction}.</> : null}
+              <div style={{ padding: '4px 16px 10px' }}>
+                <GeoNotice action={geoAction}>{geoNote}</GeoNotice>
               </div>
             ) : null}
             <div id="m-reslist" hidden={landing}>
