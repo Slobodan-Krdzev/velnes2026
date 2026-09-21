@@ -383,9 +383,19 @@ a.pop-go:hover {
    suggestion row. These are full-size controls that wrap onto several
    lines, and at 6px they read as one run-on strip rather than as
    separate choices. */
-.filterbar.chips {
+/* Three separate questions — what kind, what price, how far — that ran
+   together as one continuous strip of chips, so you could not see where
+   one ended and the next began. Each is its own row now, with a clear
+   gap between them; within a row the chips stay close, because those
+   ones really are alternatives to each other. */
+.filterbar {
+  display: grid;
+  gap: 14px;
+  margin: 0 0 18px;
+}
+.filterbar .chips {
   gap: 10px 12px;
-  margin: 0 0 16px;
+  margin: 0;
 }
 
 /* ── Headings inside the mobile search sheet ────────────────────────

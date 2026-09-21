@@ -248,9 +248,9 @@ function FilterBar({
   const cats = facets.categories;
   if (!bands && !cats.length && !canDistance) return null;
   return (
-    <div className="filterbar chips">
+    <div className="filterbar">
       {cats.length ? (
-        <>
+        <div className="chips">
           <Pick on={!filters.categoryId} set={() => set({ categoryId: null })}>
             All
           </Pick>
@@ -263,10 +263,10 @@ function FilterBar({
               {c.name} <span className="muted">{c.count}</span>
             </Pick>
           ))}
-        </>
+        </div>
       ) : null}
       {bands ? (
-        <>
+        <div className="chips">
           <Pick on={!filters.priceBand} set={() => set({ priceBand: null })}>
             Any price
           </Pick>
@@ -279,12 +279,12 @@ function FilterBar({
           <Pick on={filters.priceBand === 'high'} set={() => set({ priceBand: 'high' })}>
             Over {fmtMKD(bands.midMax)}
           </Pick>
-        </>
+        </div>
       ) : null}
       {/* A distance only means something once somebody has said where
           they are, so it appears with their location and not before. */}
       {canDistance ? (
-        <>
+        <div className="chips">
           <Pick on={!filters.radiusKm} set={() => set({ radiusKm: null })}>
             Any distance
           </Pick>
@@ -293,7 +293,7 @@ function FilterBar({
               Within {km} km
             </Pick>
           ))}
-        </>
+        </div>
       ) : null}
     </div>
   );
