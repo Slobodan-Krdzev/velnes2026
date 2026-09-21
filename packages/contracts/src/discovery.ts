@@ -140,6 +140,15 @@ export const DiscoveryServiceCardSchema = z.object({
      *  instead of showing a hole where a number should be. */
     showPrices: z.boolean(),
   }),
+  /**
+   * When this treatment can start within the next half hour — "HH:MM"
+   * in the salon's own clock — or null. Computed only when the request
+   * asked for *now* (the flag, or the word in the query); otherwise
+   * always null, never a guess. Real availability from the same
+   * `bookingCheck` gate the booking goes through: a salon's hours, its
+   * team's hours, existing appointments, holds and rooms.
+   */
+  availableAt: z.string().nullable().default(null),
 });
 
 /** Every published service in one category, across every listed salon.
@@ -225,6 +234,14 @@ export const DiscoveryViewerSchema = z.object({
   /** Hard admission, like the radius: a band the viewer chose removes
    *  what falls outside it rather than demoting it. */
   priceBand: PriceBandSchema.nullable().default(null),
+  /**
+   * "Available now": treatments that can start within the next half
+   * hour come first, earliest first, and each carries `availableAt`.
+   * Not admission — when nothing can start that soon the page says so
+   * and the ordinary answer follows, so the person is never shown an
+   * empty page for asking a reasonable question.
+   */
+  now: z.boolean().default(false),
 });
 
 /** The ranked form of a category's services. Same rows as the
@@ -254,6 +271,11 @@ export const DiscoveryRankedServicesSchema = z.object({
    *  salon that hides its prices vanishing from a price filter looks
    *  like a missing salon unless the page says why. */
   hiddenUnpriced: z.number().int(),
+  /** Whether *now* was asked for, and how many results can start within
+   *  the next half hour. Zero with `nowRequested` is the page's cue to
+   *  say so before showing what follows. */
+  nowRequested: z.boolean(),
+  availableNow: z.number().int(),
 });
 
 /**
@@ -313,6 +335,10 @@ export const SearchRequestSchema = z.object({
    *  Must be one the answer actually contains; anything else simply
    *  matches nothing, which is the honest result of asking for it. */
   categoryId: z.uuid().nullable().default(null),
+  /** "Available now" — see `DiscoveryViewerSchema.now`. The word in the
+   *  query ("massage now", "масажа сега", "masazh tani") means the same
+   *  thing, so either sets it. */
+  now: z.boolean().default(false),
 });
 
 /**
@@ -361,6 +387,10 @@ export const SearchResultsSchema = z.object({
   facets: SearchFacetsSchema,
   /** Treatments a price band removed for publishing no price at all. */
   hiddenUnpriced: z.number().int(),
+  /** Whether *now* was asked for — by flag or by the word — and how
+   *  many results can start within the next half hour. */
+  nowRequested: z.boolean(),
+  availableNow: z.number().int(),
   /** Echoed, so a late response can be discarded. */
   q: z.string(),
 });

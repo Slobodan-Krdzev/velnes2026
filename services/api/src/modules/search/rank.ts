@@ -45,6 +45,15 @@ export interface RankCandidate {
    * location. Two entry points, one scorer.
    */
   textRelevance?: number;
+  /**
+   * When this treatment can start within the next half hour ("HH:MM"),
+   * or null when it cannot. Present only on a request that asked for
+   * *now* — then it is the availability component, and the order puts
+   * what can start now first. Absent otherwise, and `bookable` stands
+   * in as before. Like `textRelevance`: inferred from the candidates,
+   * so it cannot disagree with what was supplied.
+   */
+  availableAt?: string | null;
 }
 
 /**
@@ -219,7 +228,10 @@ export function rank(
   const scored: RankedCandidate[] = candidates.map((c) => {
     const components: Record<string, number> = {};
 
-    components.availability = c.salon.bookable ? 1 : 0;
+    // Real when the request asked for now: a start within the half
+    // hour is 1, none is 0. Otherwise the old proxy — a live widget.
+    components.availability =
+      c.availableAt !== undefined ? (c.availableAt ? 1 : 0) : c.salon.bookable ? 1 : 0;
 
     const asking = c.priceFrom ?? c.price;
     components.value =
@@ -271,7 +283,18 @@ export function rank(
       a.candidate.id.localeCompare(b.candidate.id),
   );
 
-  return diversify(scored, cfg, now);
+  const out = diversify(scored, cfg, now);
+  // "Now" asked: what can start soonest leads, in start order; the rest
+  // follow in the order they already earned. A stable partition after
+  // diversify, so the dedup and the new-salon window still hold inside
+  // each half. Alex, 2026-09-21: prioritise the earliest available.
+  const nowMode = candidates.some((c) => c.availableAt !== undefined);
+  if (!nowMode) return out;
+  const soon = out
+    .filter((r) => r.candidate.availableAt)
+    .sort((a, b) => a.candidate.availableAt!.localeCompare(b.candidate.availableAt!) || b.score - a.score);
+  const later = out.filter((r) => !r.candidate.availableAt);
+  return [...soon, ...later];
 }
 
 /**

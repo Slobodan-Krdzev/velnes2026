@@ -332,6 +332,34 @@ async function pastCutoff(trx: Trx, locationId: string, date: string, now?: Date
   return clock.min;
 }
 
+/**
+ * The soonest this treatment can start at this location, if that is
+ * within `windowMin` of now — "HH:MM" in the salon's clock, or null.
+ * Today only, by construction: "now" is not a question about tomorrow.
+ * Search asks this for every result when a customer asks for *now*.
+ */
+export async function firstStartWithin(
+  trx: Trx,
+  q: { locationId: string; serviceId: string; windowMin: number; now?: Date | undefined },
+): Promise<string | null> {
+  const loc = await trx
+    .selectFrom('locations')
+    .select('tz')
+    .where('id', '=', q.locationId)
+    .executeTakeFirst();
+  if (!loc) return null;
+  const today = nowAt(loc.tz, q.now).date;
+  const slots = await availableSlots(trx, {
+    locationId: q.locationId,
+    serviceId: q.serviceId,
+    employeeId: 'any',
+    date: today,
+    now: q.now,
+    windowMin: q.windowMin,
+  });
+  return slots.find((s) => s.free)?.t ?? null;
+}
+
 /** The only place free times come from. */
 export async function availableSlots(
   trx: Trx,
@@ -344,10 +372,14 @@ export async function availableSlots(
     key?: string | undefined;
     /** The clock, for tests; the wall clock otherwise. */
     now?: Date | undefined;
+    /** Only starts within this many minutes of now — "available now"
+     *  asks for the next half hour, not the whole day. */
+    windowMin?: number | undefined;
   },
 ) {
   if (!(await locLive(trx, q.locationId))) return []; // non-live locations do not exist here
   const cut = await pastCutoff(trx, q.locationId, q.date, q.now);
+  const until = q.windowMin != null ? cut + q.windowMin : Number.POSITIVE_INFINITY;
   const cfg = await svcAt(trx, q.serviceId, q.locationId).catch(() => null);
   if (!cfg?.active) return [];
   const pool =
@@ -375,6 +407,7 @@ export async function availableSlots(
   const out: { t: string; emp: string | null; free: boolean }[] = [];
   for (let m = DAY_START; m + quoted + quotedLine.resetMin <= DAY_END; m += 30) {
     if (m <= cut) continue;
+    if (m > until) break;
     if (m - clipPrep(quotedLine.prepMin, m, sch) < DAY_START) continue;
     let who: string | null = null;
     for (const id of pool) {

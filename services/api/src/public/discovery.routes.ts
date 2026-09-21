@@ -34,6 +34,8 @@ import {
   type SearchMatch,
 } from '../modules/search/interpret.js';
 import { applyFilters, priceTercilesOf } from '../modules/search/filters.js';
+import { NOW_WINDOW_MIN, readNow } from '../modules/search/now-intent.js';
+import { firstStartWithin } from '../modules/booking/booking.service.js';
 import { db, withClient, withTenant } from '../db/index.js';
 
 const ErrorSchema = z.object({ error: z.string(), message: z.string() });
@@ -196,6 +198,88 @@ export interface TextCandidates {
   /** Salons the text reached that the strict rule would not open on
    *  their own. Offered rather than guessed between. */
   nearMisses: { id: string; slug: string; name: string; city: string | null }[];
+}
+
+/**
+ * When each candidate can start, if within the next half hour.
+ *
+ * Asked only when the customer asked for *now*: it is one calendar
+ * question per treatment per active location, through the same
+ * `bookingCheck` the booking goes through, so a time this promises is
+ * a time the salon can keep. Grouped by salon so each tenant context
+ * is opened once. Remembered for a short while per treatment: a page
+ * that refetches on every filter tap must not re-walk every calendar.
+ */
+const NOW_TTL_MS = 20_000;
+const nowCache = new Map<string, { at: number; value: string | null }>();
+async function availableNowOf(
+  candidates: RankCandidate[],
+  now: Date,
+): Promise<Map<string, string | null>> {
+  const out = new Map<string, string | null>();
+  const byBiz = new Map<string, RankCandidate[]>();
+  for (const c of candidates) {
+    const list = byBiz.get(c.salon.businessId) ?? [];
+    list.push(c);
+    byBiz.set(c.salon.businessId, list);
+  }
+  for (const [bizId, list] of byBiz) {
+    const todo = list.filter((c) => {
+      const hit = nowCache.get(`${bizId}:${c.id}`);
+      if (hit && now.getTime() - hit.at < NOW_TTL_MS) {
+        out.set(c.id, hit.value);
+        return false;
+      }
+      return true;
+    });
+    if (!todo.length) continue;
+    await withTenant(bizId, async (trx) => {
+      const locs = await trx
+        .selectFrom('locations')
+        .select('id')
+        .where('lifecycle', '=', 'ACTIVE')
+        .orderBy('name')
+        .execute();
+      for (const c of todo) {
+        let at: string | null = null;
+        for (const l of locs) {
+          at = await firstStartWithin(trx, {
+            locationId: l.id,
+            serviceId: c.id,
+            windowMin: NOW_WINDOW_MIN,
+            now,
+          });
+          if (at) break;
+        }
+        out.set(c.id, at);
+        nowCache.set(`${bizId}:${c.id}`, { at: now.getTime(), value: at });
+      }
+    });
+  }
+  return out;
+}
+
+/** Every category with something on offer, as candidates — what "now"
+ *  on its own asks for: anything, as long as it can start soon. */
+async function allCandidates(): Promise<{
+  services: DiscoveryServiceCard[];
+  byCategory: RankCandidate[];
+  facetCategories: { id: string; name: string; count: number }[];
+}> {
+  const onOffer = await categoryIdsOnOffer(await admittedBusinesses());
+  const seen = new Map<string, DiscoveryServiceCard>();
+  const byCategory: RankCandidate[] = [];
+  const facetCategories: { id: string; name: string; count: number }[] = [];
+  for (const id of onOffer) {
+    const got = await gatherCategory(id);
+    if (!got) continue;
+    const fresh = got.services.filter((svc) => !seen.has(svc.id));
+    for (const svc of fresh) seen.set(svc.id, svc);
+    if (!fresh.length) continue;
+    byCategory.push(...candidatesOf(got.category.id, fresh, got.meta));
+    facetCategories.push({ id: got.category.id, name: got.category.name, count: fresh.length });
+  }
+  return { services: [...seen.values()], byCategory, facetCategories };
 }
 
 /**
@@ -489,6 +573,8 @@ export async function gatherCategory(categoryId: string): Promise<
           bookable: true,
           showPrices: show,
         },
+        // Learned only when a request asks for *now*; see the doors.
+        availableAt: null,
       });
       meta.set(s.id, {
         businessId: b.id,
@@ -771,7 +857,12 @@ export async function discoveryRoutes(app: FastifyInstance) {
       response: { 200: SearchResultsSchema },
     },
     handler: async (req) => {
-      const q = req.body.q.trim();
+      // The "when" comes out of the text first: "massage now" is a
+      // search for massage, with a flag. The flag in the body means the
+      // same thing, so either sets it.
+      const when = readNow(req.body.q);
+      const wantNow = req.body.now || when.now;
+      const q = when.now ? when.q : req.body.q.trim();
       const empty = {
         directSalon: null,
         services: [],
@@ -783,12 +874,29 @@ export async function discoveryRoutes(app: FastifyInstance) {
         widened: null,
         facets: NO_FACETS,
         hiddenUnpriced: 0,
+        nowRequested: wantNow,
+        availableNow: 0,
         q: req.body.q,
       };
-      if (q.length < MIN_QUERY) return empty;
+      // "now" alone is a whole question — anything, as long as it can
+      // start soon — and gets every category on offer as its answer.
+      const nowOnly = wantNow && q.length < MIN_QUERY;
+      if (q.length < MIN_QUERY && !nowOnly) return empty;
 
-      const { matches, read, services, byCategory, facetCategories, nearMisses } =
-        await textCandidates(q);
+      const { matches, read, services, byCategory, facetCategories, nearMisses } = nowOnly
+        ? {
+            matches: [],
+            read: {
+              directSalon: null,
+              categoryIds: [],
+              serviceIds: [],
+              how: 'category' as const,
+              ambiguous: false,
+            },
+            nearMisses: [],
+            ...(await allCandidates()),
+          }
+        : await textCandidates(q);
 
       const cfg = await activeSearchConfig();
       // A salon named outright: the client navigates and never sees a
@@ -866,18 +974,27 @@ export async function discoveryRoutes(app: FastifyInstance) {
       )
         widened = 'category';
 
-      const ranked = rank(cut.admitted, { position, history }, cfg.payload, { now });
+      // Asked for now: every admitted candidate learns when it could
+      // start, and that becomes its availability — and the order.
+      const soon = wantNow ? await availableNowOf(cut.admitted, now) : null;
+      const admitted = soon
+        ? cut.admitted.map((c) => ({ ...c, availableAt: soon.get(c.id) ?? null }))
+        : cut.admitted;
+      const ranked = rank(admitted, { position, history }, cfg.payload, { now });
       // A page with almost nothing on it is a miss the customer feels,
       // even though the query technically worked. Only recorded when
       // they did not narrow it themselves: an empty answer to "under
       // 700 MKD within 2 km" is a filter doing its job, not a gap in
-      // what the platform sells.
+      // what the platform sells. "now" on its own names no gap either.
       const narrowed = Boolean(req.body.priceBand || req.body.categoryId || req.body.radiusKm);
-      if (!narrowed) await noteMiss(q, ranked.length, read.how);
+      if (!narrowed && !nowOnly) await noteMiss(q, ranked.length, read.how);
       const byId = new Map(services.map((s) => [s.id, s]));
       return {
         directSalon: null,
-        services: ranked.map((x) => byId.get(x.candidate.id)!),
+        services: ranked.map((x) => ({
+          ...byId.get(x.candidate.id)!,
+          availableAt: x.candidate.availableAt ?? null,
+        })),
         salons: nearMisses,
         rankVersion: cfg.version,
         personalised,
@@ -886,6 +1003,8 @@ export async function discoveryRoutes(app: FastifyInstance) {
         widened,
         facets,
         hiddenUnpriced: cut.hiddenUnpriced,
+        nowRequested: wantNow,
+        availableNow: soon ? [...soon.values()].filter(Boolean).length : 0,
         q: req.body.q,
       };
     },
@@ -968,16 +1087,25 @@ export async function discoveryRoutes(app: FastifyInstance) {
         terciles,
       );
 
-      const ranked = rank(cut.admitted, { position, history }, cfg.payload, { now });
+      const soon = req.body.now ? await availableNowOf(cut.admitted, now) : null;
+      const admitted = soon
+        ? cut.admitted.map((c) => ({ ...c, availableAt: soon.get(c.id) ?? null }))
+        : cut.admitted;
+      const ranked = rank(admitted, { position, history }, cfg.payload, { now });
       const byId = new Map(services.map((s) => [s.id, s]));
       return {
         category,
-        services: ranked.map((r) => byId.get(r.candidate.id)!),
+        services: ranked.map((r) => ({
+          ...byId.get(r.candidate.id)!,
+          availableAt: r.candidate.availableAt ?? null,
+        })),
         rankVersion: cfg.version,
         personalised,
         facets: { categories: [], price: terciles },
         widened: cut.widened,
         hiddenUnpriced: cut.hiddenUnpriced,
+        nowRequested: req.body.now,
+        availableNow: soon ? [...soon.values()].filter(Boolean).length : 0,
       };
     },
   });

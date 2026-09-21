@@ -237,10 +237,16 @@ the order is the product.
 | Radius | The ranked door already accepts `radiusKm`; today nothing sends it |
 | Price band | Terciles computed across the admitted candidates for *this* query, so a band means something within its category rather than across the platform |
 | Category | Narrows a text query that spans several |
+| **Now** (2026-09-21) | Not admission — an order and a word. Each result learns `availableAt`: the soonest 30-min grid start within the next half hour that `bookingCheck` calls free, in the salon's own clock (`locations.tz`). What can start now leads, soonest first; the rest follow in their earned order. When nothing can, the door says so (`availableNow: 0`) and the page tells the customer before showing what follows. Asked by the **Available now** chip beside Near me, or by the word in the query — *now / right now / asap*, *сега / веднаш / одма* (also Latin-typed), *tani / tash / menjëherë* — which `now-intent.ts` strips before lookup. "now" on its own means anything, now, across every category on offer |
 
-Removed rather than faked: **Now** (needs real availability, deferred)
-and any rating filter (needs reviews, which do not exist). Leaving an
-inert control is the same failure as a fake popularity label.
+Removed rather than faked: any rating filter (needs reviews, which do
+not exist). Leaving an inert control is the same failure as a fake
+popularity label. **Now** was on that list until real availability
+existed to answer it; it does now (see the row above), through the same
+`firstStartWithin` question the booking page's own slots come from, so
+the availability component of the ranker — a live-widget proxy until
+then — is real whenever *now* is asked. The cost is one calendar
+question per result per active location, remembered twenty seconds.
 
 **"Most chosen"** becomes real, per decision 2: the categories with the
 most **completed** appointments across the platform in the last 90 days.
@@ -462,7 +468,9 @@ card is real.
 ## 14. Deliberately not in this phase
 
 Professionals as a searchable entity · impressions and exposure decay ·
-real next-free-slot availability and any "available today" claim ·
+any "available today" claim outside a *now* request (the result cards'
+earlier line read the salon's first treatment, not the card's, and is
+gone) ·
 reviews and quality scoring · ten-minute result rotation · the old
 area/region geography, superseded by lat/lng · the old dual consent
 modes · salon-unit results.

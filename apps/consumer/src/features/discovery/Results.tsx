@@ -32,7 +32,6 @@ import {
   IcVok,
   SugListM,
   SugPanelD,
-  useSalonLive,
 } from './cards.js';
 import { useSearchBox } from './useSearchBox.js';
 import { TabBar } from '../../app/TabBar.js';
@@ -40,6 +39,10 @@ import { TabBar } from '../../app/TabBar.js';
 /** What "near me" means, in kilometres. The distance chips can widen
  *  or narrow it afterwards; this is where the button starts. */
 const NEAR_KM = 10;
+
+const IcBolt = (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M13 3 4 14h7l-1 7 9-11h-7z" /></svg>
+);
 
 /** A salon the text matched by name without earning a direct opening. */
 type SalonHit = { id: string; slug: string; name: string; city: string | null };
@@ -120,19 +123,31 @@ function useCategoryResults(
     hiddenUnpriced: answered?.hiddenUnpriced ?? 0,
     /** Said out loud when the answer had to be broadened to fill a page. */
     widened: query ? (byText.data?.widened ?? null) : (byCategory.data?.widened ?? null),
+    /** Whether the door was asked for *now* (flag, or the word in the
+     *  query), and how many results can start within the half hour. */
+    nowRequested: answered?.nowRequested ?? false,
+    availableNow: answered?.availableNow ?? 0,
     how: query ? (byText.data?.how ?? null) : null,
   };
 }
 
+/**
+ * The line under a result. The availability on it is the door's own
+ * `availableAt` — a start within the next half hour, from the same gate
+ * the booking goes through — and only when *now* was asked. The earlier
+ * "Available today at …" came from `useSalonLive`, which reads the
+ * salon's *first* treatment, not the one on the card; a true-looking
+ * line about the wrong treatment is exactly the claim SEARCH.md §14
+ * deferred.
+ */
 function useLiveLine(s: ServiceVM) {
-  const { slots } = useSalonLive(s.salon.slug);
   const { position } = useUserLocation();
   const km =
     position && s.salon.lat != null && s.salon.lng != null
       ? distanceKm(position, { lat: s.salon.lat, lng: s.salon.lng })
       : null;
   return {
-    av: slots[0] ? `Available today at ${slots[0]}` : null,
+    av: s.availableAt ? `Available now · starts ${s.availableAt}` : null,
     // The price of this treatment, not the salon's cheapest anything.
     pr: priceLbl(s),
     away: km === null ? null : `${distanceLbl(km)} from you`,
@@ -362,7 +377,7 @@ function BestD({ s }: { s: ServiceVM }) {
         <div className="bd">
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
             <h3>{s.name}</h3>
-            {av ? <span className="tiny-tag" style={{ background: '#EAF2E4', color: '#3E5A34' }}>Available today</span> : null}
+            {av ? <span className="tiny-tag" style={{ background: '#EAF2E4', color: '#3E5A34' }}>Available now</span> : null}
           </div>
           <div className="sm muted">
             {IcPin} {whereLine(s, away)} <span className="vok">{IcVok}</span>
@@ -514,6 +529,7 @@ export function Results() {
       priceBand: band === 'low' || band === 'mid' || band === 'high' ? band : null,
       categoryId: params.get('cat'),
       radiusKm: Number.isFinite(km) && km > 0 ? km : null,
+      now: params.get('now') === '1',
     };
   }, [params]);
   const setFilters = useCallback(
@@ -526,13 +542,14 @@ export function Results() {
       if ('priceBand' in patch) put('price', patch.priceBand ?? null);
       if ('categoryId' in patch) put('cat', patch.categoryId ?? null);
       if ('radiusKm' in patch) put('km', patch.radiusKm ?? null);
+      if ('now' in patch) put('now', patch.now ? 1 : null);
       setParams(next, { replace: true });
     },
     [params, setParams],
   );
 
   const {
-    cat, cats, rows, best, alts, loaded, unknown, personalised, rankVersion,
+    cat, cats, rows, best, alts, loaded, unknown, personalised, rankVersion, nowRequested, availableNow,
     directSalon, salons, widened, how, facets, hiddenUnpriced,
   } = useCategoryResults(category, query, filters);
 
@@ -629,9 +646,9 @@ export function Results() {
     // Entry only, like the home page.
   }, []);
   /** What the folded-away filters button has to say for itself. */
-  const nFilters = [filters.categoryId, filters.priceBand, filters.radiusKm].filter(
-    (v) => v != null,
-  ).length;
+  const nFilters =
+    [filters.categoryId, filters.priceBand, filters.radiusKm].filter((v) => v != null).length +
+    (filters.now ? 1 : 0);
   /** Lit means "filtering near you", not merely "location is on". */
   const nearOn = geo.status === 'on' && radius != null;
   /**
@@ -700,6 +717,19 @@ export function Results() {
             ? 'Your device could not work out where you are just now. Try again in a moment.'
             : null;
   const nearLabel = geo.status === 'asking' ? 'Locating…' : 'Near me';
+  /**
+   * "Available now" — the same question the word "now" asks in the
+   * search bar, as a button. Lit when either asked it, so typing
+   * "massage now" and pressing the chip look the same. Not admission:
+   * when nothing can start within the half hour the door says so and
+   * the ordinary answer follows, rather than an empty page.
+   */
+  const nowOn = filters.now || nowRequested;
+  const toggleNow = useCallback(() => setFilters({ now: !filters.now }), [filters.now, setFilters]);
+  const nowNote =
+    nowRequested && loaded && rows.length > 0 && availableNow === 0
+      ? 'Nothing can start within the next 30 minutes. Here is what is available soon, and similar treatments — or try again a little later.'
+      : null;
   /**
    * The way back after a refusal, right where the sentence is. The
    * home page asks its question once and never again, so "turn it on
@@ -807,7 +837,21 @@ export function Results() {
                 {IcPin}
                 {nearLabel}
               </button>
+              <button
+                className={`chip${nowOn ? ' on' : ''}`}
+                onClick={toggleNow}
+                aria-pressed={nowOn}
+                title="Only what can start within the next 30 minutes, soonest first"
+              >
+                {IcBolt}
+                Available now
+              </button>
             </div>
+            {nowNote ? (
+              <div className="d-wrap">
+                <GeoNotice icon="clock">{nowNote}</GeoNotice>
+              </div>
+            ) : null}
             {geoNote ? (
               <div className="d-wrap">
                 <GeoNotice action={geoAction}>{geoNote}</GeoNotice>
@@ -975,7 +1019,7 @@ export function Results() {
                         <button
                           type="button"
                           className="btn btn-g"
-                          onClick={() => setFilters({ categoryId: null, priceBand: null, radiusKm: null })}
+                          onClick={() => setFilters({ categoryId: null, priceBand: null, radiusKm: null, now: false })}
                         >
                           Clear
                         </button>
@@ -1004,8 +1048,21 @@ export function Results() {
                 {IcPin}
                 {nearLabel}
               </button>
-
+              <button
+                className={`chip${nowOn ? ' on' : ''}`}
+                onClick={toggleNow}
+                aria-pressed={nowOn}
+                title="Only what can start within the next 30 minutes, soonest first"
+              >
+                {IcBolt}
+                Available now
+              </button>
             </div>
+            {nowNote ? (
+              <div style={{ padding: '4px 16px 0' }}>
+                <GeoNotice icon="clock">{nowNote}</GeoNotice>
+              </div>
+            ) : null}
             {rows.length ? (
               <div style={{ padding: '12px 16px 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
                 <span className="spark" style={{ display: 'inline-flex', gap: '7px', alignItems: 'center', fontWeight: '700', color: 'var(--ink)' }}>

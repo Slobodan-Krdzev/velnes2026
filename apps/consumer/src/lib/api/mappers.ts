@@ -92,6 +92,9 @@ export interface ServiceVM {
    *  number rather than sending it to be hidden here. */
   price: number | null;
   priceFrom: number | null;
+  /** "HH:MM" when the door was asked for *now* and this can start within
+   *  the next half hour; null otherwise. Never computed here. */
+  availableAt: string | null;
   salon: {
     slug: string;
     name: string;
@@ -118,6 +121,7 @@ export function serviceVM(s: DiscoveryServiceCard): ServiceVM {
     durationMin: s.durationMin,
     price: s.price,
     priceFrom: s.priceFrom,
+    availableAt: s.availableAt ?? null,
     salon: {
       slug: s.salon.slug,
       name: s.salon.name,

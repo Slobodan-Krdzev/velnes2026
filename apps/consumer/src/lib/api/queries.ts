@@ -32,8 +32,11 @@ export interface SearchFilters {
   priceBand: PriceBand | null;
   categoryId: string | null;
   radiusKm: number | null;
+  /** "Available now": what can start within the next half hour first,
+   *  with a word from the door when nothing can. Not admission. */
+  now: boolean;
 }
-export const NO_FILTERS: SearchFilters = { priceBand: null, categoryId: null, radiusKm: null };
+export const NO_FILTERS: SearchFilters = { priceBand: null, categoryId: null, radiusKm: null, now: false };
 type SearchResults = z.infer<typeof SearchResultsSchema>;
 type MostChosen = z.infer<typeof MostChosenSchema>;
 type Availability = z.infer<typeof AvailabilityResponseSchema>;
@@ -106,6 +109,7 @@ export function useRankedCategoryServices(
       Boolean(token),
       filters.priceBand,
       filters.radiusKm,
+      filters.now,
     ],
     queryFn: () =>
       pubPost<RankedServices>(
@@ -115,6 +119,7 @@ export function useRankedCategoryServices(
           lng: at?.lng ?? null,
           radiusKm: at ? filters.radiusKm : null,
           priceBand: filters.priceBand,
+          now: filters.now,
         },
         token,
       ),
@@ -211,6 +216,7 @@ export function useSearch(
       filters.priceBand,
       filters.categoryId,
       filters.radiusKm,
+      filters.now,
     ],
     queryFn: () =>
       pubPost<SearchResults>(
@@ -224,6 +230,7 @@ export function useSearch(
           radiusKm: at ? filters.radiusKm : null,
           priceBand: filters.priceBand,
           categoryId: filters.categoryId,
+          now: filters.now,
         },
         token,
       ),

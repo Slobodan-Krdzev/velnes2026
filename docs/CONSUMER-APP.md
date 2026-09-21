@@ -111,6 +111,17 @@ half the visit can keep. Offer and booking share one `freeFor()` helper,
 including the existing "skip anyone slower than the catalog quote" rule
 — which is what keeps a later treatment's start time true.
 
+**"Now".** The search bar understands the word in all three languages
+("massage now", "масажа сега", "masazh tani") and there is an
+**Available now** chip beside Near me on every results page; both ask
+the same thing of the same door. Results that can start within the
+next 30 minutes come first, soonest first, each carrying the door's
+`availableAt` ("Available now · starts 10:30"); when none can, the
+page says *Nothing can start within the next 30 minutes* and shows
+what follows rather than an empty page. The old "Available today at
+…" line on result cards is gone: it read the salon's first treatment,
+not the one on the card. See `docs/SEARCH.md` §10.
+
 **A blank day says why, when it can.** The whole-visit door
 (`chainAvailability`, behind `POST /public/slots`) returns
 `reason: 'NOBODY_AT_PACE'` when "any professional" was asked and

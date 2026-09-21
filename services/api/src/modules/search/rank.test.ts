@@ -486,3 +486,39 @@ describe('the ranker', () => {
     expect(distanceKm(SKOPJE, SKOPJE)).toBe(0);
   });
 });
+
+describe('"now" — the earliest available first', () => {
+  it('puts what can start within the half hour first, soonest first, and the rest in their earned order', () => {
+    // Three ordinary candidates and one the ranker would otherwise put
+    // last (pricey, far). Asked for now, the two that can start lead —
+    // 10:30 before 11:00 — whatever their scores; the two that cannot
+    // follow in the order they already had.
+    const cands = [
+      candidate({ id: 'cheap-later', price: 800, availableAt: null }),
+      candidate({ id: 'far-soon', price: 6000, salon: { ...candidate({ id: 'far-soon' }).salon, lat: 41.5, lng: 20.9 }, availableAt: '11:00' }),
+      candidate({ id: 'mid-later', price: 2000, availableAt: null }),
+      candidate({ id: 'near-soon', price: 2000, availableAt: '10:30' }),
+    ];
+    const got = order(rank(cands, { position: SKOPJE, history: null }, cfg, { now: NOW }));
+    expect(got.slice(0, 2)).toEqual(['near-soon', 'far-soon']);
+    // The tail keeps the ordinary order: cheaper and equally near first.
+    expect(got.slice(2)).toEqual(['cheap-later', 'mid-later']);
+  });
+
+  it('is the availability component: a start within the window is 1, none is 0', () => {
+    const cands = [
+      candidate({ id: 'a', availableAt: '10:30' }),
+      candidate({ id: 'b', availableAt: null }),
+    ];
+    const got = rank(cands, { position: null, history: null }, cfg, { now: NOW });
+    expect(got.find((r) => r.candidate.id === 'a')!.components.availability).toBe(1);
+    expect(got.find((r) => r.candidate.id === 'b')!.components.availability).toBe(0);
+  });
+
+  it('changes nothing when now was not asked — availability stays the widget proxy', () => {
+    const plain = [candidate({ id: 'x' }), candidate({ id: 'y', price: 800 })];
+    const got = rank(plain, { position: null, history: null }, cfg, { now: NOW });
+    expect(got.every((r) => r.components.availability === 1)).toBe(true);
+    expect(order(got)).toEqual(['y', 'x']);
+  });
+});
