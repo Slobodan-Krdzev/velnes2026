@@ -485,6 +485,15 @@ export function Results() {
   const geo = useUserLocation();
   const { signedIn } = useSession();
   const [mapOpen, setMapOpen] = useState(false);
+  /**
+   * The phone's filters live behind one button in the search pill —
+   * a sliders icon beside the clear "×" — and drop down from the top
+   * bar. Two rows of chips above the results pushed the first result
+   * below the fold on a phone; a count on the button says what is
+   * applied while they are folded away. Not in the prototype, which
+   * had no filters at all (Alex, 2026-09-21).
+   */
+  const [filtersOpen, setFiltersOpen] = useState(false);
   /** The mobile search sheet, which is where typing happens on a phone. */
   const [sheet, setSheet] = useState(false);
   const sheetInput = useRef<HTMLInputElement>(null);
@@ -608,6 +617,21 @@ export function Results() {
    */
   const [wantNear, setWantNear] = useState(false);
   const radius = filters.radiusKm;
+  /**
+   * A radius in the URL with permission already given: take a fix on
+   * entry. Otherwise a shared or reloaded `?km=10` counts as a filter
+   * on the button yet reaches the door without a position, and does
+   * nothing — the phantom the earlier fix was about, from the other
+   * side.
+   */
+  useEffect(() => {
+    if (radius != null && geo.decision === 'allowed' && geo.status === 'off') geo.locate();
+    // Entry only, like the home page.
+  }, []);
+  /** What the folded-away filters button has to say for itself. */
+  const nFilters = [filters.categoryId, filters.priceBand, filters.radiusKm].filter(
+    (v) => v != null,
+  ).length;
   /** Lit means "filtering near you", not merely "location is on". */
   const nearOn = geo.status === 'on' && radius != null;
   /**
@@ -906,6 +930,20 @@ export function Results() {
                 >
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="M20 20l-4.2-4.2" /></svg>
                   <input value={title} placeholder="What are you looking for?" data-res="q" readOnly aria-label="Search" />
+                  {!landing ? (
+                    <button
+                      className={`m-filt${nFilters ? ' on' : ''}`}
+                      aria-label={nFilters ? `Filters, ${nFilters} applied` : 'Filters'}
+                      aria-expanded={filtersOpen}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setFiltersOpen((o) => !o);
+                      }}
+                    >
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M4 7h10M18 7h2M4 17h4M12 17h8" /><circle cx="15.5" cy="7" r="2" /><circle cx="9.5" cy="17" r="2" /></svg>
+                      {nFilters ? <span className="n">{nFilters}</span> : null}
+                    </button>
+                  ) : null}
                   <button
                     style={{ border: '0', background: 'none', color: 'var(--muted)' }}
                     onClick={(e) => {
@@ -922,6 +960,33 @@ export function Results() {
                   Map
                 </button>
               </div>
+              {filtersOpen && !landing ? (
+                <>
+                  <div className="m-filt-scrim" onClick={() => setFiltersOpen(false)} aria-hidden="true" />
+                  <div className="m-filt-panel" role="dialog" aria-label="Filters">
+                    <FilterBar
+                      facets={facets}
+                      filters={filters}
+                      set={setFilters}
+                      canDistance={geo.status === 'on'}
+                    />
+                    <div className="m-filt-foot">
+                      {nFilters ? (
+                        <button
+                          type="button"
+                          className="btn btn-g"
+                          onClick={() => setFilters({ categoryId: null, priceBand: null, radiusKm: null })}
+                        >
+                          Clear
+                        </button>
+                      ) : null}
+                      <button type="button" className="btn btn-p" onClick={() => setFiltersOpen(false)}>
+                        Show results
+                      </button>
+                    </div>
+                  </div>
+                </>
+              ) : null}
             </div>
             <div className="m-chiprow">
               <button
@@ -952,16 +1017,7 @@ export function Results() {
               <div style={{ padding: '10px 16px 0' }}>
                 <SearchLanding cats={browse} />
               </div>
-            ) : (
-              <div style={{ padding: '10px 16px 0' }}>
-                <FilterBar
-                  facets={facets}
-                  filters={filters}
-                  set={setFilters}
-                  canDistance={geo.status === 'on'}
-                />
-              </div>
-            )}
+            ) : null}
             {geoNote ? (
               <div style={{ padding: '4px 16px 10px' }}>
                 <GeoNotice action={geoAction}>{geoNote}</GeoNotice>
