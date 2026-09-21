@@ -638,12 +638,54 @@ export function Salon() {
       </div>
     </div>
   );
-  const aboutCard = (
+  /**
+   * What stands in for the booking panel when there is nothing to book.
+   *
+   * A salon is listed here as soon as it publishes a marketplace
+   * listing, but it is only bookable once it has a live widget and
+   * services it has actually put online. Plenty of imported salons have
+   * neither yet — they have a page, a gallery and an address, and no
+   * way through.
+   *
+   * Saying so is the whole point. The alternative is what this page did
+   * before: a booking column that silently is not there, which reads as
+   * a page that failed to load rather than a salon that has not set up
+   * online booking. The phone number is real data the salon published,
+   * so it is offered rather than leaving a dead end.
+   */
+  const notBookableCard = (
+    <div className="scard">
+      <h2>Booking</h2>
+      <p style={{ margin: '0 0 2px', fontSize: '14px' }}>
+        {d.name} has not opened online booking on Velnes yet, so there is nothing
+        to reserve here for now.
+      </p>
+      {d.phone ? (
+        <p className="sm muted" style={{ margin: '10px 0 0' }}>
+          They take bookings by phone:{' '}
+          <a href={`tel:${d.phone.replace(/\s+/g, '')}`} style={{ fontWeight: 700 }}>
+            {d.phone}
+          </a>
+        </p>
+      ) : (
+        <p className="sm muted" style={{ margin: '10px 0 0' }}>
+          No contact number published either — this listing is as far as it goes
+          for now.
+        </p>
+      )}
+    </div>
+  );
+
+  /** Nothing written about itself — plenty of imported listings have
+   *  neither a description nor a pitch. A heading over an empty
+   *  paragraph is worse than no card. */
+  const about = d.description || d.pitch;
+  const aboutCard = !about ? null : (
     <div className="scard">
       <h2>About {d.name}</h2>
       <div className="about2">
         <div>
-          <p style={{ margin: '0', fontSize: '14px' }}>{d.description || d.pitch}</p>
+          <p style={{ margin: '0', fontSize: '14px' }}>{about}</p>
         </div>
         <div className="ph2" style={{ backgroundImage: photo2 }}></div>
       </div>
@@ -665,7 +707,7 @@ export function Salon() {
               </div>
             </div>
           </div>
-          <div className="d-wrap d-salon">
+          <div className={`d-wrap d-salon${d.bookable ? '' : ' solo'}`}>
             <div>
               <SalonGallery photos={d.gallery} salonName={d.name} variant="gal" fallback={photo} />
               <h1 className="serif" style={{ fontSize: '32px', marginTop: '16px', display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -679,6 +721,7 @@ export function Salon() {
                 {d.bookable ? <span className="note">{IcBolt} Instant booking</span> : null}
                 <span className="note">{IcVok} Verified salon</span>
               </div>
+              {d.bookable ? null : notBookableCard}
               {aboutCard}
               {d.team.length ? teamCard('d') : null}
               {locationCard('d')}
@@ -784,7 +827,7 @@ export function Salon() {
                 <span className="note" style={{ fontSize: '12.5px' }}>{IcVok} Verified salon</span>
               </div>
             </div>
-            {d.bookable ? <BookCard p={p} desktop={false} /> : null}
+            {d.bookable ? <BookCard p={p} desktop={false} /> : notBookableCard}
             {aboutCard}
             {locationCard('m')}
             {d.team.length ? teamCard('m') : null}

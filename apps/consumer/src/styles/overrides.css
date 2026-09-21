@@ -443,3 +443,13 @@ a.pop-go:hover {
 .res-layout.solo {
   grid-template-columns: 1fr;
 }
+
+/* A salon with no online booking has no booking panel, and the page's
+   two-column grid was leaving the larger column empty — the content
+   squeezed into 46% of the width beside a blank half-page, which reads
+   as a page that failed to load rather than a salon that has not
+   opened bookings. */
+.d-salon.solo {
+  grid-template-columns: minmax(0, 1fr);
+  max-width: 760px;
+}
