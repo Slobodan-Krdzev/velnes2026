@@ -606,6 +606,29 @@ export function Results() {
     }
   }, [geo, setFilters]);
 
+  /**
+   * A distance filter with no location behind it does nothing, and the
+   * door is right to ignore it — but leaving `km=10` in the URL and a
+   * chip lit says a filter is running when none is. So when the
+   * location does not arrive, the radius goes with it.
+   */
+  const radius = filters.radiusKm;
+  useEffect(() => {
+    if (radius && geo.status !== 'on' && geo.status !== 'asking') setFilters({ radiusKm: null });
+  }, [radius, geo.status, setFilters]);
+
+  /** Why "Near me" did nothing. It is the one control here that can
+   *  fail for reasons outside the app, so it is the one that has to
+   *  explain itself rather than just sitting there unlit. */
+  const geoNote =
+    geo.status === 'denied'
+      ? 'Velnes cannot see your location — it is blocked for this site in your browser settings.'
+      : geo.status === 'unavailable'
+        ? 'Your device could not work out where you are just now. Try again in a moment.'
+        : geo.status === 'unsupported'
+          ? 'This browser cannot share a location, so “Near me” has nothing to go on.'
+          : null;
+
   const note = query ? searchNote(how, widened, title) : searchNote(null, widened, title);
   const unpriced = unpricedNote(hiddenUnpriced);
   // One pin per salon, not one per treatment: a salon offering four
@@ -715,6 +738,11 @@ export function Results() {
                   canDistance={geo.status === 'on'}
                 />
               )}
+              {/* Outside the results list: the landing hides that, and
+                  "Near me" is on the toolbar there too. */}
+              {geoNote ? (
+                <div className="sm muted" style={{ margin: '0 0 12px' }}>{geoNote}</div>
+              ) : null}
               <div id="d-reslist" hidden={landing}>
                 {salons.length ? <SalonHits salons={salons} title={title} /> : null}
                 {note ? (
@@ -723,6 +751,7 @@ export function Results() {
                 {unpriced ? (
                   <div className="sm muted" style={{ margin: '0 0 12px' }}>{unpriced}</div>
                 ) : null}
+
                 {/* "Nothing matched" would be a lie when the salon block
                     above is standing there having matched. */}
                 {best ? <BestD s={best} /> : loaded && !salons.length ? (
@@ -850,6 +879,9 @@ export function Results() {
                 />
               </div>
             )}
+            {geoNote ? (
+              <div className="sm muted" style={{ padding: '4px 16px 10px' }}>{geoNote}</div>
+            ) : null}
             <div id="m-reslist" hidden={landing}>
               {salons.length ? (
                 <div style={{ padding: '10px 16px 0' }}>
@@ -862,6 +894,7 @@ export function Results() {
               {unpriced ? (
                 <div className="sm muted" style={{ padding: '4px 16px 10px' }}>{unpriced}</div>
               ) : null}
+
               {best ? <BestM s={best} /> : loaded && !salons.length ? (
                 <div className="sm muted" style={{ padding: '18px 16px' }}>{emptyLine(title, unknown, Boolean(query))}</div>
               ) : null}

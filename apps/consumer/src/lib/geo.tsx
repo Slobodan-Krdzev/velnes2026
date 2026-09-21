@@ -22,7 +22,16 @@ export interface UserPosition {
   at: number;
 }
 
-export type GeoStatus = 'off' | 'asking' | 'on' | 'denied' | 'unsupported';
+export type GeoStatus =
+  | 'off'
+  | 'asking'
+  | 'on'
+  /** The person said no, or the browser is holding an earlier no. */
+  | 'denied'
+  /** They did not refuse — the device simply could not produce a fix.
+   *  Worth telling them apart: one is a decision, the other is weather. */
+  | 'unavailable'
+  | 'unsupported';
 
 interface GeoCtx {
   status: GeoStatus;
@@ -114,20 +123,39 @@ export function GeoProvider({ children }: { children: ReactNode }) {
   const enable = useCallback(() => {
     if (!supported) return setStatus('unsupported');
     setStatus('asking');
-    navigator.geolocation.getCurrentPosition(
-      (p) => {
-        remember(p);
-        setStatus('on');
-        try {
-          localStorage.setItem(ON_KEY, '1');
-        } catch {
-          /* ignore */
-        }
-        startWatch();
-      },
-      (err) => setStatus(err.code === err.PERMISSION_DENIED ? 'denied' : 'off'),
-      { enableHighAccuracy: true, timeout: 20_000 },
-    );
+
+    const got = (p: GeolocationPosition) => {
+      remember(p);
+      setStatus('on');
+      try {
+        localStorage.setItem(ON_KEY, '1');
+      } catch {
+        /* ignore */
+      }
+      startWatch();
+    };
+
+    /**
+     * Ask twice before giving up.
+     *
+     * A high-accuracy fix wants GPS, and on a desktop indoors that
+     * often just runs out the clock — which is why the button "worked
+     * sometimes": same click, same code, different weather. The second
+     * ask drops the accuracy requirement and will accept a fix up to
+     * five minutes old, which the browser can usually answer from wifi
+     * immediately.
+     *
+     * A refusal is final and is not retried: asking again would only
+     * produce the same no.
+     */
+    navigator.geolocation.getCurrentPosition(got, (err) => {
+      if (err.code === err.PERMISSION_DENIED) return setStatus('denied');
+      navigator.geolocation.getCurrentPosition(
+        got,
+        (again) => setStatus(again.code === again.PERMISSION_DENIED ? 'denied' : 'unavailable'),
+        { enableHighAccuracy: false, timeout: 10_000, maximumAge: 300_000 },
+      );
+    }, { enableHighAccuracy: true, timeout: 8_000 });
   }, [remember, startWatch, supported]);
 
   const disable = useCallback(() => {
