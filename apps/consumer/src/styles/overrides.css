@@ -704,12 +704,6 @@ a.pop-go:hover {
 .d-topbar .d-wrap > .geo-notice {
   margin: 10px 0 2px;
 }
-.geo-notice-wrap {
-  margin: 18px auto 0;
-}
-.geo-notice-wrap.m {
-  margin: 0 16px 12px;
-}
 /* A chip that cannot work looks like it cannot — same as the prototype's
    disabled buttons, which fade rather than vanish. */
 .chip:disabled {

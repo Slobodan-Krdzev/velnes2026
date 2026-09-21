@@ -611,14 +611,13 @@ export function Results() {
   /** Lit means "filtering near you", not merely "location is on". */
   const nearOn = geo.status === 'on' && radius != null;
   /**
-   * The button is disabled — not merely unlit — when it cannot work:
-   * the person refused location, or the browser is refusing on their
-   * behalf, or the device has none to give. A disabled control with a
-   * sentence beside it is honest; a live-looking one that does nothing
-   * is what "sometimes works" felt like.
+   * The button is disabled only when the *person* turned location off
+   * (or the device has none to give). A browser-level block does not
+   * disable it: the block can be lifted in the browser at any moment,
+   * and the next click is how the app finds out — a disabled button
+   * would have needed a reload to notice. Alex, 2026-09-21.
    */
-  const nearBlocked =
-    geo.decision === 'refused' || geo.status === 'denied' || geo.status === 'unsupported';
+  const nearBlocked = geo.decision === 'refused' || geo.status === 'unsupported';
   const toggleNear = useCallback(() => {
     if (nearOn) {
       setWantNear(false);
@@ -666,7 +665,7 @@ export function Results() {
    *  rather than just sitting there unlit. */
   const geoNote =
     geo.status === 'denied'
-      ? 'Enable the button for better results — location is blocked for this site in your browser; allow it in the address-bar site settings.'
+      ? 'Location is blocked for this site in your browser — allow it in the address-bar site settings, then press “Near me” again.'
       : geo.decision === 'refused'
         ? `Enable the button for better results — ${signedIn ? 'turn location on under My Velnes › General, or' : 'turn location on'}`
         : geo.status === 'unsupported'
