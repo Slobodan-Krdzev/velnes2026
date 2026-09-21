@@ -453,3 +453,46 @@ a.pop-go:hover {
   grid-template-columns: minmax(0, 1fr);
   max-width: 760px;
 }
+
+/* ── Two-column grids must be allowed to shrink ─────────────────────
+   `1fr` is shorthand for `minmax(auto, 1fr)`, and `auto` as a MINIMUM
+   resolves to the item's min-content width. So one long treatment name
+   or one long employee name sets a floor the track cannot go below, and
+   the grid pushes straight out of its container — which is what the
+   treatment picker and the professional picker were doing inside the
+   booking column.
+
+   `minmax(0, 1fr)` is the same layout whenever the content fits, and
+   the only difference when it does not is that the track is permitted
+   to shrink instead of overflowing. Applied to every two-column grid
+   in the app rather than the two that were reported, because the bug
+   is in the shorthand and not in those two screens. */
+.tr-grid,
+.pro-grid,
+.m-band,
+.m-catgrid,
+.m-trust,
+.forwhom,
+.fld2,
+.m-off,
+.m-foot .cols4,
+.m-foot .cols {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+/* A grid track that can shrink is only half of it: the flex row inside
+   the card has to let its text shrink too, or the name just pushes the
+   card wide from within. */
+.pro-card > span {
+  min-width: 0;
+}
+.pro-card b,
+.pro-card .sm {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* And the name stops before the heart rather than running under it. */
+.pro-card {
+  padding-right: 34px;
+}
