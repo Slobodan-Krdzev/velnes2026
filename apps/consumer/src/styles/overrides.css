@@ -344,8 +344,8 @@ a.pop-go:hover {
   position: fixed;
   inset: 0;
   z-index: 20;
-  background: rgba(45, 26, 18, 0.28);
-  backdrop-filter: blur(1.5px);
+  background: rgba(45, 26, 18, 0.46);
+  backdrop-filter: blur(2.5px);
   animation: sug-fade 0.14s ease-out;
 }
 @keyframes sug-fade {
