@@ -211,18 +211,43 @@ than an empty city.
 
 ### Where the person is
 
-"Near me" asks the browser for a location **once**. The answer is
-remembered (`localStorage`) and then *followed* with `watchPosition`:
-somebody looking for a salon is often walking to one, so the dot, the
-distances and the framing stay current as they move. A return visit
-picks the watch back up with no second prompt — and the Permissions API
-is consulted too, so a grant from an earlier visit counts. Revoking
-permission in the browser turns it off cleanly rather than leaving a
-stale fix on screen.
+Two different things, deliberately kept apart (Alex, 2026-09-21):
 
-**None of it leaves the browser.** The coordinates are never sent to the
-API: centring and distance are computed locally. A first visit watches
-nothing and prompts for nothing until the button is pressed.
+- **The decision is remembered; the position never is.** On the first
+  visit to the home page a Velnes dialog (the prototype's `.gps-modal`)
+  asks once — *Allow location access* / *Not now* — before the browser's
+  own prompt, so the bare allow/block arrives with its reason already
+  given. The answer is kept in `localStorage`
+  (`velnes.geo.decision`) and, for a signed-in customer, on the account
+  (`client_users.location_allowed`, `PATCH /client/me
+  {locationAllowed}` — `20260921160000_client_location_consent.sql`).
+  Three states: `NULL` never asked, `true` allowed, `false` refused.
+  Signing in reconciles the two: the account's answer wins on a new
+  device; a device that decided while signed out pushes its answer up.
+- **Allowed means: a fresh, precise fix on every entry to the home
+  page.** Nothing about where anyone stood is written anywhere — not
+  `localStorage`, not the server. The earlier keys that cached a
+  position (`velnes.geo.on`, `velnes.geo.last`) are wiped on sight.
+  While the app is open the fix is *followed* with `watchPosition`
+  (someone looking for a salon is often walking to one) and forgotten
+  when it closes. The ask is two-step — high accuracy for 8 s, then a
+  low-accuracy ask that will take a fix up to five minutes old — because
+  a desktop indoors often cannot answer the first.
+- **Refused means "Near me" is disabled, with a sentence beside it:**
+  *Enable the button for better results — turn location on in My
+  Velnes › General* (or, signed out, the home-page prompt). The switch
+  under **My Velnes › General › Location** is the in-app way back; it
+  calls the same `decide()` and so saves to the account too. A refusal
+  is never retried against the browser. If the *browser* is what is
+  blocking (site permission denied), the sentence says so and points at
+  the address-bar site settings instead, since no in-app switch can
+  undo that.
+
+**What the doors receive.** Where a request carries `lat`/`lng`
+(`POST /search`, `?km=` radius filtering) the API ranks by distance and
+**stores nothing from it** — the consent column holds a boolean, and
+`PATCH /me` strips coordinates from its body and has no column to put
+them in (tested).
 
 With a position known, the map centres on the person (city zoom, results
 around them) and re-centres only when they walk off the edge — never

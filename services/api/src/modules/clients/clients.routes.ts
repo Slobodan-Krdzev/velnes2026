@@ -269,6 +269,7 @@ export async function clientRoutes(app: FastifyInstance) {
               ...(b.personalisedResults !== undefined
                 ? { personalisedResults: b.personalisedResults }
                 : {}),
+              ...(b.locationAllowed !== undefined ? { locationAllowed: b.locationAllowed } : {}),
             })
             .where('id', '=', id)
             .execute(),

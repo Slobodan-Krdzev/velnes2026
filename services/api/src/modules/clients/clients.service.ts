@@ -34,6 +34,7 @@ interface ClientRow {
   emailVerifiedAt: Date | null;
   createdAt: Date;
   personalisedResults: boolean;
+  locationAllowed: boolean | null;
 }
 
 export function toProfile(c: ClientRow): ClientProfile {
@@ -49,6 +50,7 @@ export function toProfile(c: ClientRow): ClientProfile {
     avatar: c.avatar,
     since: isoDate(c.createdAt)!,
     personalisedResults: c.personalisedResults,
+    locationAllowed: c.locationAllowed,
   };
 }
 

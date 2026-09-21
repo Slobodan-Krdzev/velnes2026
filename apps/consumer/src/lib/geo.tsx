@@ -1,24 +1,39 @@
+import { useQueryClient } from '@tanstack/react-query';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useSession } from './api/session.js';
 
 /**
- * Where the person is. Asked once, remembered, and then kept current:
- * somebody looking for a salon is often walking to one, so the position
- * is watched rather than sampled.
+ * Where the person is — and, separately, whether they said we may ask.
  *
- * Nothing is sent to the server — the coordinates live in this browser
- * and are used to centre the map and measure distance locally. The
- * platform learns nothing about where anyone stands.
+ * Two things live here and they are deliberately different kinds of
+ * thing:
+ *
+ *   - **The decision** is remembered: allowed or refused, once. It sits
+ *     in localStorage for everyone and on the account for a signed-in
+ *     customer, so it follows them across devices. Null means nobody
+ *     has asked yet, and the home page asks exactly once.
+ *   - **The position** is never remembered. When the decision is
+ *     "allowed", the home page takes a fresh, precise fix the moment
+ *     it opens, uses it, and forgets it when the app closes. Nothing
+ *     about where anyone stood is written anywhere — not here, not on
+ *     the server. Alex settled that on 2026-09-21: remember the
+ *     answer, not the place.
+ *
+ * The doors still receive a rounded lat/lng inside a request so that
+ * distance can be ranked, and store nothing from it, exactly as before.
  */
 
-const ON_KEY = 'velnes.geo.on';
-const LAST_KEY = 'velnes.geo.last';
+const DECISION_KEY = 'velnes.geo.decision';
+/** Keys an earlier version used to remember a position. Removed on
+ *  sight: a stored position is now the one thing this must not hold. */
+const LEGACY_KEYS = ['velnes.geo.on', 'velnes.geo.last'];
 
 export interface UserPosition {
   lat: number;
   lng: number;
   /** Metres of uncertainty the device reported. */
   accuracy: number;
-  /** When it was taken (epoch ms) — a remembered fix can be stale. */
+  /** When it was taken (epoch ms). */
   at: number;
 }
 
@@ -26,186 +41,203 @@ export type GeoStatus =
   | 'off'
   | 'asking'
   | 'on'
-  /** The person said no, or the browser is holding an earlier no. */
+  /** The browser refused, or is holding an earlier refusal. */
   | 'denied'
-  /** They did not refuse — the device simply could not produce a fix.
-   *  Worth telling them apart: one is a decision, the other is weather. */
+  /** No refusal — the device simply could not produce a fix. One is a
+   *  decision, the other is weather; they get different words. */
   | 'unavailable'
   | 'unsupported';
+
+export type GeoDecision = 'allowed' | 'refused' | null;
 
 interface GeoCtx {
   status: GeoStatus;
   position: UserPosition | null;
-  /** Ask (once) and start following. */
-  enable: () => void;
-  /** Stop following and forget the remembered fix. */
+  /** What the person told Velnes, if anything yet. */
+  decision: GeoDecision;
+  /** Record the answer — and act on it: allowed locates now, refused
+   *  stops. Saved to the account too when signed in. */
+  decide: (allowed: boolean) => void;
+  /** Take a fresh, precise fix right now. */
+  locate: () => void;
+  /** Stop following and forget the fix. Leaves the decision alone. */
   disable: () => void;
 }
 
 const Ctx = createContext<GeoCtx>({
   status: 'off',
   position: null,
-  enable: () => {},
+  decision: null,
+  decide: () => {},
+  locate: () => {},
   disable: () => {},
 });
 
-function readLast(): UserPosition | null {
+function readDecision(): GeoDecision {
   try {
-    const raw = localStorage.getItem(LAST_KEY);
-    if (!raw) return null;
-    const p = JSON.parse(raw) as UserPosition;
-    return typeof p?.lat === 'number' && typeof p?.lng === 'number' ? p : null;
+    const v = localStorage.getItem(DECISION_KEY);
+    return v === 'allowed' || v === 'refused' ? v : null;
   } catch {
     return null;
   }
 }
-const readOn = () => {
+function writeDecision(d: GeoDecision) {
   try {
-    return localStorage.getItem(ON_KEY) === '1';
+    if (d) localStorage.setItem(DECISION_KEY, d);
+    else localStorage.removeItem(DECISION_KEY);
   } catch {
-    return false;
+    /* private mode: this session only */
   }
-};
+}
 
 export function GeoProvider({ children }: { children: ReactNode }) {
   const supported = typeof navigator !== 'undefined' && 'geolocation' in navigator;
-  const [position, setPosition] = useState<UserPosition | null>(readLast);
-  const [status, setStatus] = useState<GeoStatus>(() =>
-    !supported ? 'unsupported' : readOn() ? 'on' : 'off',
-  );
+  const { profile, signedIn, api } = useSession();
+  const qc = useQueryClient();
+
+  const [position, setPosition] = useState<UserPosition | null>(null);
+  const [status, setStatus] = useState<GeoStatus>(() => (supported ? 'off' : 'unsupported'));
+  const [decision, setDecision] = useState<GeoDecision>(readDecision);
   const watchId = useRef<number | null>(null);
 
-  const remember = useCallback((p: GeolocationPosition) => {
-    const next: UserPosition = {
+  // Nothing from the previous model survives: a remembered position is
+  // precisely what must not exist any more.
+  useEffect(() => {
+    try {
+      for (const k of LEGACY_KEYS) localStorage.removeItem(k);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  const take = useCallback((p: GeolocationPosition) => {
+    setPosition({
       lat: Number(p.coords.latitude.toFixed(6)),
       lng: Number(p.coords.longitude.toFixed(6)),
       accuracy: Math.round(p.coords.accuracy),
       at: Date.now(),
-    };
-    setPosition(next);
-    try {
-      localStorage.setItem(LAST_KEY, JSON.stringify(next));
-    } catch {
-      /* private mode: this session only */
-    }
+    });
   }, []);
 
-  /** Follow the person until the app closes. */
-  const startWatch = useCallback(() => {
-    if (!supported || watchId.current !== null) return;
-    watchId.current = navigator.geolocation.watchPosition(
-      (p) => {
-        remember(p);
-        setStatus('on');
-      },
-      (err) => {
-        // Permission taken away in the browser's own settings: stop
-        // pretending we know, and stop asking on every render.
-        if (err.code === err.PERMISSION_DENIED) {
-          setStatus('denied');
-          try {
-            localStorage.removeItem(ON_KEY);
-          } catch {
-            /* ignore */
-          }
-          if (watchId.current !== null) {
-            navigator.geolocation.clearWatch(watchId.current);
-            watchId.current = null;
-          }
-        }
-        // A timeout or a temporarily unavailable fix keeps the last
-        // known position — it is still the best answer we have.
-      },
-      { enableHighAccuracy: true, maximumAge: 15_000, timeout: 20_000 },
-    );
-  }, [remember, supported]);
-
-  const enable = useCallback(() => {
-    if (!supported) return setStatus('unsupported');
-    setStatus('asking');
-
-    const got = (p: GeolocationPosition) => {
-      remember(p);
-      setStatus('on');
-      try {
-        localStorage.setItem(ON_KEY, '1');
-      } catch {
-        /* ignore */
-      }
-      startWatch();
-    };
-
-    /**
-     * Ask twice before giving up.
-     *
-     * A high-accuracy fix wants GPS, and on a desktop indoors that
-     * often just runs out the clock — which is why the button "worked
-     * sometimes": same click, same code, different weather. The second
-     * ask drops the accuracy requirement and will accept a fix up to
-     * five minutes old, which the browser can usually answer from wifi
-     * immediately.
-     *
-     * A refusal is final and is not retried: asking again would only
-     * produce the same no.
-     */
-    navigator.geolocation.getCurrentPosition(got, (err) => {
-      if (err.code === err.PERMISSION_DENIED) return setStatus('denied');
-      navigator.geolocation.getCurrentPosition(
-        got,
-        (again) => setStatus(again.code === again.PERMISSION_DENIED ? 'denied' : 'unavailable'),
-        { enableHighAccuracy: false, timeout: 10_000, maximumAge: 300_000 },
-      );
-    }, { enableHighAccuracy: true, timeout: 8_000 });
-  }, [remember, startWatch, supported]);
-
-  const disable = useCallback(() => {
+  const stopWatch = useCallback(() => {
     if (watchId.current !== null && supported) {
       navigator.geolocation.clearWatch(watchId.current);
       watchId.current = null;
     }
-    setPosition(null);
-    setStatus('off');
-    try {
-      localStorage.removeItem(ON_KEY);
-      localStorage.removeItem(LAST_KEY);
-    } catch {
-      /* ignore */
-    }
   }, [supported]);
 
-  // Enabled once is enabled for good: a return visit picks the watch
-  // back up without another prompt. The Permissions API also tells us
-  // when the browser already holds a grant from an earlier visit.
-  useEffect(() => {
-    if (!supported) return;
-    if (readOn()) startWatch();
-    else
-      navigator.permissions
-        ?.query({ name: 'geolocation' as PermissionName })
-        .then((res) => {
-          if (res.state === 'granted') {
-            try {
-              localStorage.setItem(ON_KEY, '1');
-            } catch {
-              /* ignore */
-            }
-            startWatch();
-          } else if (res.state === 'denied') setStatus('denied');
-        })
-        .catch(() => {
-          /* no Permissions API: the button asks */
-        });
-    return () => {
-      if (watchId.current !== null) {
-        navigator.geolocation.clearWatch(watchId.current);
-        watchId.current = null;
-      }
+  /** Follow the person while the app is open — someone looking for a
+   *  salon is often walking to one. Memory only; never written down. */
+  const startWatch = useCallback(() => {
+    if (!supported || watchId.current !== null) return;
+    watchId.current = navigator.geolocation.watchPosition(
+      (p) => {
+        take(p);
+        setStatus('on');
+      },
+      (err) => {
+        if (err.code === err.PERMISSION_DENIED) {
+          setStatus('denied');
+          stopWatch();
+        }
+        // A timeout keeps the last fix of this session — still the
+        // best answer there is until the next one arrives.
+      },
+      { enableHighAccuracy: true, maximumAge: 15_000, timeout: 20_000 },
+    );
+  }, [supported, take, stopWatch]);
+
+  const disable = useCallback(() => {
+    stopWatch();
+    setPosition(null);
+    setStatus((s) => (s === 'unsupported' ? s : 'off'));
+  }, [stopWatch]);
+
+  /**
+   * A fresh, precise fix, now.
+   *
+   * Two asks before giving up. High accuracy wants GPS, and on a desktop
+   * indoors that often just runs out the clock; the second ask drops the
+   * accuracy requirement and will take a fix a few minutes old, which
+   * the browser can usually answer from wifi at once. A refusal is final
+   * and is not retried: asking again only produces the same no.
+   */
+  const locate = useCallback(() => {
+    if (!supported) return setStatus('unsupported');
+    setStatus('asking');
+    const got = (p: GeolocationPosition) => {
+      take(p);
+      setStatus('on');
+      startWatch();
     };
-  }, [startWatch, supported]);
+    navigator.geolocation.getCurrentPosition(
+      got,
+      (err) => {
+        if (err.code === err.PERMISSION_DENIED) return setStatus('denied');
+        navigator.geolocation.getCurrentPosition(
+          got,
+          (again) =>
+            setStatus(again.code === again.PERMISSION_DENIED ? 'denied' : 'unavailable'),
+          { enableHighAccuracy: false, timeout: 10_000, maximumAge: 300_000 },
+        );
+      },
+      { enableHighAccuracy: true, timeout: 8_000 },
+    );
+  }, [supported, take, startWatch]);
+
+  /** Save the answer on the account, when there is one to save it on. */
+  const saveToAccount = useCallback(
+    async (allowed: boolean) => {
+      if (!signedIn) return;
+      try {
+        await api('/me', { method: 'PATCH', body: JSON.stringify({ locationAllowed: allowed }) });
+        await qc.invalidateQueries({ queryKey: ['me'] });
+      } catch {
+        // The local decision stands; the account catches up next time.
+      }
+    },
+    [signedIn, api, qc],
+  );
+
+  const decide = useCallback(
+    (allowed: boolean) => {
+      const d: GeoDecision = allowed ? 'allowed' : 'refused';
+      setDecision(d);
+      writeDecision(d);
+      void saveToAccount(allowed);
+      if (allowed) locate();
+      else disable();
+    },
+    [saveToAccount, locate, disable],
+  );
+
+  /**
+   * The account and this device agree on the decision.
+   *
+   * Signing in on a new device: the account's answer wins and is
+   * written here, so the home page does not ask a question already
+   * answered. Signing in from a device that decided while signed out:
+   * that answer goes up, so the next device inherits it.
+   */
+  const remote = profile?.locationAllowed;
+  useEffect(() => {
+    if (!signedIn) return;
+    if (remote === true || remote === false) {
+      const d: GeoDecision = remote ? 'allowed' : 'refused';
+      if (d !== decision) {
+        setDecision(d);
+        writeDecision(d);
+      }
+    } else if (remote === null && decision !== null) {
+      void saveToAccount(decision === 'allowed');
+    }
+  }, [signedIn, remote, decision, saveToAccount]);
+
+  useEffect(() => () => stopWatch(), [stopWatch]);
 
   const value = useMemo(
-    () => ({ status, position, enable, disable }),
-    [status, position, enable, disable],
+    () => ({ status, position, decision, decide, locate, disable }),
+    [status, position, decision, decide, locate, disable],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

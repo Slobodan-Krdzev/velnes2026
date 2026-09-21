@@ -7,6 +7,7 @@ import type { z } from 'zod';
 import type { ClientAppointmentSchema } from '@velnes/contracts';
 import { SalonMap } from '../../components/SalonMap.js';
 import { useWheelScroll } from '../../lib/useWheelScroll.js';
+import { useUserLocation } from '../../lib/geo.js';
 import { ApiError } from '../../lib/api/client.js';
 import { fmtMKD, minutesLbl } from '../../lib/api/mappers.js';
 import {
@@ -688,6 +689,7 @@ function Favourites() {
 function General() {
   const qc = useQueryClient();
   const { profile, api } = useSession();
+  const geo = useUserLocation();
   const [edit, setEdit] = useState(false);
   const [pwOpen, setPwOpen] = useState(false);
   const [msg, setMsg] = useState('');
@@ -897,6 +899,37 @@ function General() {
             onClick={() => setPersonalised(!profile.personalisedResults)}
           >
             {profile.personalisedResults ? 'On' : 'Off'}
+          </button>
+        </div>
+      </div>
+
+      {/* The one place a refusal can be reversed in-app. "Near me"
+          points here when it is disabled, so this must exist for the
+          sentence there to be true. What is saved is the answer — the
+          provider PATCHes it — never a position. */}
+      <div className="acc-card">
+        <div className="acc-lbl">Location</div>
+        <div className="acc-kv" style={{ alignItems: 'flex-start' }}>
+          <span style={{ maxWidth: '62%' }}>
+            Use my location for &ldquo;Near me&rdquo;
+            <br />
+            <span className="sm muted">
+              {geo.status === 'denied'
+                ? 'Your browser is blocking location for this site — allow it in the address-bar site settings as well.'
+                : 'A fresh fix is taken each time you open the home page and is never stored — only this choice is.'}
+            </span>
+          </span>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={geo.decision === 'allowed'}
+            aria-label="Use my location for Near me"
+            disabled={geo.status === 'unsupported'}
+            className={`btn ${geo.decision === 'allowed' ? 'btn-p' : 'btn-g'}`}
+            style={{ minHeight: '34px', padding: '6px 14px', fontSize: '13px' }}
+            onClick={() => geo.decide(geo.decision !== 'allowed')}
+          >
+            {geo.decision === 'allowed' ? 'On' : 'Off'}
           </button>
         </div>
       </div>

@@ -269,6 +269,10 @@ export interface ClientUsers {
   id: Generated<string>;
   lang: Generated<string>;
   last: Generated<string>;
+  /**
+   * Whether the customer allowed location use. NULL = never asked. A decision only — no position is ever stored.
+   */
+  locationAllowed: boolean | null;
   passwordHash: string;
   personalisedResults: Generated<boolean>;
   phone: string | null;

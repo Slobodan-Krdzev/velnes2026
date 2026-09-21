@@ -817,10 +817,18 @@ CREATE TABLE public.client_users (
     email_code text,
     email_code_sent_at timestamp with time zone,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
-    personalised_results boolean DEFAULT true NOT NULL
+    personalised_results boolean DEFAULT true NOT NULL,
+    location_allowed boolean
 );
 
 ALTER TABLE ONLY public.client_users FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: COLUMN client_users.location_allowed; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.client_users.location_allowed IS 'Whether the customer allowed location use. NULL = never asked. A decision only — no position is ever stored.';
 
 
 --
@@ -6449,4 +6457,5 @@ INSERT INTO public.schema_migrations (version) VALUES
     ('20260921090000'),
     ('20260921100000'),
     ('20260921120000'),
-    ('20260921140000');
+    ('20260921140000'),
+    ('20260921160000');

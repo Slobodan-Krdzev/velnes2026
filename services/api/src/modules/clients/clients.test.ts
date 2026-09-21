@@ -306,6 +306,67 @@ describe('client users — the consumer account', () => {
     expect(on.json().personalisedResults).toBe(true);
   });
 
+  it('remembers the location decision — three states, and never a position', async () => {
+    // Nobody has been asked: null, so the home page knows to ask once.
+    const me = await app.inject({
+      method: 'GET',
+      url: `${C}/me`,
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(me.json().locationAllowed).toBeNull();
+
+    const yes = await app.inject({
+      method: 'PATCH',
+      url: `${C}/me`,
+      headers: { authorization: `Bearer ${token}` },
+      payload: { locationAllowed: true },
+    });
+    expect(yes.statusCode).toBe(200);
+    expect(yes.json().locationAllowed).toBe(true);
+
+    // A no is a no, distinct from "never asked".
+    const no = await app.inject({
+      method: 'PATCH',
+      url: `${C}/me`,
+      headers: { authorization: `Bearer ${token}` },
+      payload: { locationAllowed: false },
+    });
+    expect(no.json().locationAllowed).toBe(false);
+
+    // An unrelated edit leaves the answer alone.
+    const other = await app.inject({
+      method: 'PATCH',
+      url: `${C}/me`,
+      headers: { authorization: `Bearer ${token}` },
+      payload: { first: 'Testina' },
+    });
+    expect(other.json().locationAllowed).toBe(false);
+
+    // The door takes the decision and nothing else: coordinates in the
+    // body are not a field, so the contract strips them and there is
+    // no column for them to land in. Where a customer stood is the one
+    // thing this table must never learn.
+    const coords = await app.inject({
+      method: 'PATCH',
+      url: `${C}/me`,
+      headers: { authorization: `Bearer ${token}` },
+      payload: { locationAllowed: true, lat: 41.99, lng: 21.43 },
+    });
+    expect(coords.statusCode).toBe(200);
+    expect(coords.json().locationAllowed).toBe(true);
+    expect(coords.json()).not.toHaveProperty('lat');
+    expect(coords.json()).not.toHaveProperty('lng');
+
+    // Back to "never asked" is allowed too — a reset from support.
+    const reset = await app.inject({
+      method: 'PATCH',
+      url: `${C}/me`,
+      headers: { authorization: `Bearer ${token}` },
+      payload: { locationAllowed: null },
+    });
+    expect(reset.json().locationAllowed).toBeNull();
+  });
+
   it('leaves the switch alone when other fields are edited', async () => {
     await app.inject({
       method: 'PATCH',

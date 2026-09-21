@@ -57,6 +57,13 @@ export const ClientProfileSchema = z.object({
    * no other client's behaviour is ever involved.
    */
   personalisedResults: z.boolean(),
+  /**
+   * Whether this person allowed Velnes to use their location. A
+   * decision only — never a position: the app takes a fresh fix when it
+   * needs one and forgets it. Null means never asked; the home page asks
+   * once.
+   */
+  locationAllowed: z.boolean().nullable(),
 });
 export type ClientProfile = z.infer<typeof ClientProfileSchema>;
 
@@ -78,6 +85,7 @@ export const ClientProfilePatchSchema = z.object({
   lang: z.enum(['en', 'mk', 'sq']).optional(),
   avatar: z.string().max(AVATAR_MAX_CHARS).nullable().optional(),
   personalisedResults: z.boolean().optional(),
+  locationAllowed: z.boolean().nullable().optional(),
 });
 
 export const ClientPasswordSchema = z.object({

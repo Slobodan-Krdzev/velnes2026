@@ -482,6 +482,7 @@ export function Results() {
   const { category } = useParams();
   const unread = useMyNotifications().data?.unread ?? 0;
   const geo = useUserLocation();
+  const { signedIn } = useSession();
   const [mapOpen, setMapOpen] = useState(false);
   /** The mobile search sheet, which is where typing happens on a phone. */
   const [sheet, setSheet] = useState(false);
@@ -606,9 +607,17 @@ export function Results() {
    */
   const [wantNear, setWantNear] = useState(false);
   const radius = filters.radiusKm;
-  /** Lit means "filtering near you", not merely "location is on": a
-   *  remembered grant with no radius set is not the same thing. */
+  /** Lit means "filtering near you", not merely "location is on". */
   const nearOn = geo.status === 'on' && radius != null;
+  /**
+   * The button is disabled — not merely unlit — when it cannot work:
+   * the person refused location, or the browser is refusing on their
+   * behalf, or the device has none to give. A disabled control with a
+   * sentence beside it is honest; a live-looking one that does nothing
+   * is what "sometimes works" felt like.
+   */
+  const nearBlocked =
+    geo.decision === 'refused' || geo.status === 'denied' || geo.status === 'unsupported';
   const toggleNear = useCallback(() => {
     if (nearOn) {
       setWantNear(false);
@@ -616,13 +625,14 @@ export function Results() {
       setFilters({ radiusKm: null });
       return;
     }
-    // A browser that has already said no will say no again; asking
-    // twice a second only makes the refusal look like a glitch.
-    if (geo.status === 'denied' || geo.status === 'unsupported') return;
+    if (nearBlocked) return;
     setWantNear(true);
     if (geo.status === 'on') setFilters({ radiusKm: NEAR_KM });
-    else geo.enable();
-  }, [nearOn, geo, setFilters]);
+    // Never asked yet — this click is the question. Otherwise: a fresh
+    // fix, since the decision is already yes.
+    else if (geo.decision === null) geo.decide(true);
+    else geo.locate();
+  }, [nearOn, nearBlocked, geo, setFilters]);
 
   useEffect(() => {
     if (!wantNear) return;
@@ -642,30 +652,57 @@ export function Results() {
    * the state before the answer, and clearing on it was the flicker.
    */
   useEffect(() => {
-    const dead = geo.status === 'denied' || geo.status === 'unavailable' || geo.status === 'unsupported';
+    const dead =
+      geo.decision === 'refused' ||
+      geo.status === 'denied' ||
+      geo.status === 'unavailable' ||
+      geo.status === 'unsupported';
     if (radius != null && dead) setFilters({ radiusKm: null });
-  }, [radius, geo.status, setFilters]);
+  }, [radius, geo.decision, geo.status, setFilters]);
 
   /** Why "Near me" did nothing. It is the one control here that can
    *  fail for reasons outside the app, so it has to explain itself
    *  rather than just sitting there unlit. */
   const geoNote =
     geo.status === 'denied'
-      ? 'Location is blocked for this site in your browser — allow it in the address-bar site settings and “Near me” will work.'
-      : geo.status === 'unavailable'
-        ? 'Your device could not work out where you are just now. Try again in a moment.'
+      ? 'Enable the button for better results — location is blocked for this site in your browser; allow it in the address-bar site settings.'
+      : geo.decision === 'refused'
+        ? `Enable the button for better results — ${signedIn ? 'turn location on under My Velnes › General, or' : 'turn location on'}`
         : geo.status === 'unsupported'
           ? 'This browser cannot share a location, so “Near me” has nothing to go on.'
-          : null;
-  /** The same fact on the button itself, where the click happened. */
-  const nearLabel =
-    geo.status === 'asking'
-      ? 'Locating…'
-      : geo.status === 'denied'
-        ? 'Location blocked'
-        : geo.status === 'unsupported'
-          ? 'No location'
-          : 'Near me';
+          : geo.status === 'unavailable'
+            ? 'Your device could not work out where you are just now. Try again in a moment.'
+            : null;
+  const nearLabel = geo.status === 'asking' ? 'Locating…' : 'Near me';
+  /**
+   * The way back after a refusal, right where the sentence is. The
+   * home page asks its question once and never again, so "turn it on
+   * in the prompt" would point at a door that no longer exists; this
+   * link is that door. Signed in, the My Velnes switch is the other.
+   */
+  const geoAction =
+    geo.decision === 'refused' && geo.status !== 'denied' ? (
+      <button
+        type="button"
+        onClick={() => {
+          setWantNear(true);
+          geo.decide(true);
+        }}
+        style={{
+          background: 'none',
+          border: 0,
+          padding: 0,
+          font: 'inherit',
+          fontWeight: 600,
+          color: 'var(--brand)',
+          textDecoration: 'underline',
+          textUnderlineOffset: '3px',
+          cursor: 'pointer',
+        }}
+      >
+        {signedIn ? 'turn it on here' : 'here'}
+      </button>
+    ) : null;
 
   const note = query ? searchNote(how, widened, title) : searchNote(null, widened, title);
   const unpriced = unpricedNote(hiddenUnpriced);
@@ -732,6 +769,7 @@ export function Results() {
               <button
                 className={`chip${nearOn ? ' on' : ''}`}
                 onClick={toggleNear}
+                disabled={nearBlocked}
                 aria-pressed={nearOn}
                 title={
                   geoNote ??
@@ -781,7 +819,10 @@ export function Results() {
               {/* Outside the results list: the landing hides that, and
                   "Near me" is on the toolbar there too. */}
               {geoNote ? (
-                <div className="sm muted" style={{ margin: '0 0 12px' }}>{geoNote}</div>
+                <div className="sm muted" style={{ margin: '0 0 12px' }}>
+                  {geoNote}
+                  {geoAction ? <> {geoAction}.</> : null}
+                </div>
               ) : null}
               <div id="d-reslist" hidden={landing}>
                 {salons.length ? <SalonHits salons={salons} title={title} /> : null}
@@ -887,6 +928,7 @@ export function Results() {
               <button
                 className={`chip${nearOn ? ' on' : ''}`}
                 onClick={toggleNear}
+                disabled={nearBlocked}
                 aria-pressed={nearOn}
                 title={
                   geoNote ??
@@ -922,7 +964,10 @@ export function Results() {
               </div>
             )}
             {geoNote ? (
-              <div className="sm muted" style={{ padding: '4px 16px 10px' }}>{geoNote}</div>
+              <div className="sm muted" style={{ padding: '4px 16px 10px' }}>
+                {geoNote}
+                {geoAction ? <> {geoAction}.</> : null}
+              </div>
             ) : null}
             <div id="m-reslist" hidden={landing}>
               {salons.length ? (
