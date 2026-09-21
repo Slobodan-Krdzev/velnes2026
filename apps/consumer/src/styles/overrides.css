@@ -496,3 +496,56 @@ a.pop-go:hover {
 .pro-card {
   padding-right: 34px;
 }
+
+/* The other half of the same bug. `minmax(0, 1fr)` above lets the
+   TRACK shrink; a grid item carries its own `min-width: auto`, which is
+   again its min-content width, so the card sat at 219px inside a 173px
+   track and hung out over the edge — the price clipped mid-number and
+   the selected tick stranded outside the column.
+
+   Both ends have to be released: the track to narrow, and the item to
+   be narrowed. */
+.tr-grid > *,
+.pro-grid > * {
+  min-width: 0;
+}
+/* And again one level down, because the card is itself a grid: its
+   rows are grid items carrying the same `min-width: auto`, so releasing
+   only the card left the row inside it pinned at its content width.
+   The floor has to come off the whole chain, down to the span that
+   actually does the ellipsis. */
+.tr-card > *,
+.tr-card .nm,
+.tr-card .nm .t,
+.pro-wrap,
+.pro-card {
+  min-width: 0;
+}
+/* And then the content inside a treatment card has to give somewhere,
+   or it just clips instead of overflowing. The duration can go; the
+   price is the thing nobody may misread, so it keeps its whole width
+   and the minutes yield first. */
+.tr-card .in2 {
+  gap: 8px;
+  min-width: 0;
+}
+.tr-card .in2 > :first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tr-card .in2 > :last-child {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+/* A team card is a <button> inside the wrapper that positions its
+   heart, and a button's auto width is shrink-to-fit — it sizes to its
+   text rather than filling its parent. The "Any professional" card
+   escaped this only because it is a direct grid child, which grid
+   stretches for you. So the wrapped ones hung 80px over the edge with
+   their names running under the heart. */
+.pro-wrap .pro-card {
+  width: 100%;
+}
