@@ -887,10 +887,21 @@ function Categories({ say }: { say: (m: string) => void }) {
     }
   };
 
+  /**
+   * A native file input is wide — a couple of hundred pixels of button
+   * and filename before it will shrink at all — and it carries
+   * `min-width: auto` like every other flex item. Two of them side by
+   * side burst a 420px modal, and the second one (the icon) was pushed
+   * clean off the edge where nobody could reach it. Since saving
+   * requires both, the Save button could never enable: the category
+   * images dialog was unusable rather than merely cramped.
+   *
+   * So the pickers stack, and the input is allowed to shrink.
+   */
   const imgPicker = (label: string, value: string | null, kind: 'card' | 'icon', onPick: (v: string) => void) => (
-    <label className="field" style={{ flex: 1 }}>
+    <label className="field" style={{ flex: 1, minWidth: 0 }}>
       <span>{label}</span>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
         {value ? (
           <img
             src={value}
@@ -905,6 +916,7 @@ function Categories({ say }: { say: (m: string) => void }) {
         <input
           type="file"
           accept="image/*"
+          style={{ flex: 1, minWidth: 0, maxWidth: '100%' }}
           onChange={async (e) => {
             const f = e.target.files?.[0];
             if (f) onPick(await fileToDataUrl(f, kind === 'card' ? 720 : 128, kind));
@@ -1122,7 +1134,7 @@ function Categories({ say }: { say: (m: string) => void }) {
                   <span className="muted" style={{ fontSize: 12, fontWeight: 500 }}>
                     {t('hq.categoryMediaHint')}
                   </span>
-                  <div style={{ display: 'flex', gap: 14 }}>
+                  <div style={{ display: 'grid', gap: 14 }}>
                     {imgPicker(t('hq.categoryCard'), cardImage, 'card', setCardImage)}
                     {imgPicker(t('hq.categoryIcon'), icon, 'icon', setIcon)}
                   </div>
@@ -1156,7 +1168,7 @@ function Categories({ say }: { say: (m: string) => void }) {
             </div>
             <div className="modal-body" style={{ display: 'grid', gap: 14 }}>
               <span className="muted" style={{ fontSize: 12, fontWeight: 500 }}>{t('hq.categoryMediaHint')}</span>
-              <div style={{ display: 'flex', gap: 14 }}>
+              <div style={{ display: 'grid', gap: 14 }}>
                 {imgPicker(t('hq.categoryCard'), imgEdit.cardImage, 'card', (v) => setImgEdit({ ...imgEdit, cardImage: v }))}
                 {imgPicker(t('hq.categoryIcon'), imgEdit.icon, 'icon', (v) => setImgEdit({ ...imgEdit, icon: v }))}
               </div>
