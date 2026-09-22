@@ -97,6 +97,14 @@ active tab follows the route; nothing is active on a salon page or a
 booking step. Full-screen sheets (search, map, location prompt) still
 cover the chrome. The pages no longer carry their own tab bars.
 
+**Newest to Velnes (2026-09-23).** A second slider under "Recommended":
+`GET /discovery/newest` returns the open, listed salons whose business
+was created within the last `NEWEST_SALON_DAYS` (30 — for a registered
+salon that is the moment HQ approved it), newest first, up to eight,
+each with its `joinedAt`. The card's line says "Joined N days ago" (or
+"Joined today"); the row is hidden when no salon is that new. Pinned by
+`public/newest.test.ts`.
+
 **Sliding rows (2026-09-23).** The home page's "Recommended" and
 "Available now near you" rows are sliders, not four-card grids:
 `features/discovery/Rail.tsx` wraps a horizontal track, its arrows

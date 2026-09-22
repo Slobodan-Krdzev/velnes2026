@@ -67,6 +67,20 @@ export const DiscoveryRecommendedSchema = z.object({
 });
 export type DiscoveryRecommended = z.infer<typeof DiscoveryRecommendedSchema>;
 
+/** How long a salon counts as new to Velnes — Alex, 2026-09-23. */
+export const NEWEST_SALON_DAYS = 30;
+/**
+ * "Newest to Velnes": the open, listed salons that joined the platform
+ * within the last `NEWEST_SALON_DAYS`, newest first. A salon joins when
+ * its business is created — for a registered salon, the moment HQ
+ * approves it.
+ */
+export const DiscoveryNewestSchema = z.object({
+  days: z.number().int(),
+  salons: z.array(DiscoverySalonCardSchema.extend({ joinedAt: z.string() })),
+});
+export type DiscoveryNewest = z.infer<typeof DiscoveryNewestSchema>;
+
 export const DiscoveryTeamMemberSchema = z.object({
   id: z.uuid(),
   name: z.string(),

@@ -3082,6 +3082,10 @@ export const en = {
   'c.reco.category': 'Does {{cat}}, like you book',
   'c.rail.prevItems': 'Scroll back',
   'c.rail.nextItems': 'Scroll forward',
+  'c.home.newest': 'Newest to Velnes',
+  'c.home.newestSub': 'Salons that joined in the last {{n}} days.',
+  'c.reco.joinedDays': 'Joined {{n}} days ago',
+  'c.reco.joinedToday': 'Joined today',
 } as const;
 
 export type TranslationKey = keyof typeof en;

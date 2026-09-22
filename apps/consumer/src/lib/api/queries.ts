@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import type { z } from 'zod';
 import type {
   DiscoveryRecommendedSchema,
+  DiscoveryNewestSchema,
   AvailabilityResponseSchema,
   DiscoveryCategoriesSchema,
   DiscoverySalonDetailSchema,
@@ -18,6 +19,7 @@ import { pub, pubPost } from './client.js';
 type Categories = z.infer<typeof DiscoveryCategoriesSchema>;
 type Salons = z.infer<typeof DiscoverySalonsSchema>;
 type Recommended = z.infer<typeof DiscoveryRecommendedSchema>;
+type Newest = z.infer<typeof DiscoveryNewestSchema>;
 type SalonDetail = z.infer<typeof DiscoverySalonDetailSchema>;
 type Services = z.infer<typeof PublicServicesResponseSchema>;
 type CategoryServices = z.infer<typeof DiscoveryCategoryServicesSchema>;
@@ -72,6 +74,19 @@ export function useRecommended(position: { lat: number; lng: number } | null, to
       });
       if (!res.ok) throw new Error(res.statusText);
       return (await res.json()) as Recommended;
+    },
+    staleTime: 60_000,
+  });
+}
+
+/** "Newest to Velnes": the salons that joined within the door's window. */
+export function useNewest() {
+  return useQuery({
+    queryKey: ['newest'],
+    queryFn: async () => {
+      const res = await fetch('/api/v1/public/discovery/newest');
+      if (!res.ok) throw new Error(res.statusText);
+      return (await res.json()) as Newest;
     },
     staleTime: 60_000,
   });

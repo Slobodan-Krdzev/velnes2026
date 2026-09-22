@@ -3064,4 +3064,8 @@ export const mk: Record<TranslationKey, string> = {
   'c.reco.category': 'Нуди {{cat}}, како што резервирате',
   'c.rail.prevItems': 'Прелистај назад',
   'c.rail.nextItems': 'Прелистај напред',
+  'c.home.newest': 'Најнови на Velnes',
+  'c.home.newestSub': 'Салони што се приклучија во последните {{n}} дена.',
+  'c.reco.joinedDays': 'Се приклучи пред {{n}} дена',
+  'c.reco.joinedToday': 'Се приклучи денес',
 };

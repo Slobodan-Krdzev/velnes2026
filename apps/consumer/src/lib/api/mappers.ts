@@ -58,7 +58,13 @@ export interface SalonVM {
   lat: number | null;
   lng: number | null;
   /** Why it is recommended — only on the home page's recommended row. */
-  reason?: { kind: 'booked' } | { kind: 'favourite' } | { kind: 'category'; category: string } | { kind: 'nearby'; km: number } | null;
+  reason?:
+    | { kind: 'booked' }
+    | { kind: 'favourite' }
+    | { kind: 'category'; category: string }
+    | { kind: 'nearby'; km: number }
+    | { kind: 'new'; days: number }
+    | null;
   bookable: boolean;
 }
 

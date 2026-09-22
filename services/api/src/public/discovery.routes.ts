@@ -14,6 +14,8 @@ import {
   SearchSuggestRequestSchema,
   DiscoverySalonsSchema,
   DiscoveryRecommendedSchema,
+  DiscoveryNewestSchema,
+  NEWEST_SALON_DAYS,
   DiscoveryViewerSchema,
 } from '@velnes/contracts';
 import type { DiscoveryServiceCard } from '@velnes/contracts';
@@ -103,6 +105,9 @@ interface ListedBusiness {
   gallery: unknown;
   socials: { website: string | null; instagram: string | null; facebook: string | null; tiktok: string | null };
   marketplace: ReturnType<typeof BusinessSettingsSchema.parse>['marketplace'];
+  /** When the business entered the platform — HQ approval for a
+   *  registered salon. */
+  createdAt: Date;
 }
 
 /** All businesses that publish a marketplace listing, read under
@@ -112,7 +117,7 @@ async function listedBusinesses(): Promise<ListedBusiness[]> {
     await sql`select set_config('app.public', '1', true)`.execute(trx);
     const rows = await trx
       .selectFrom('businesses')
-      .select(['id', 'slug', 'name', 'city', 'address', 'phone', 'description', 'gallery', 'settings', 'socials'])
+      .select(['id', 'slug', 'name', 'city', 'address', 'phone', 'description', 'gallery', 'settings', 'socials', 'createdAt'])
       .orderBy('name')
       .execute();
     const out: ListedBusiness[] = [];
@@ -131,6 +136,7 @@ async function listedBusinesses(): Promise<ListedBusiness[]> {
         gallery: b.gallery,
         socials: socialLinks(b.socials),
         marketplace: parsed.data.marketplace,
+        createdAt: new Date(b.createdAt),
       });
     }
     return out;
@@ -850,6 +856,55 @@ export async function discoveryRoutes(app: FastifyInstance) {
           ? scored
           : scored.slice().sort((a, b) => b.score - a.score || (a.km ?? Infinity) - (b.km ?? Infinity) || a.card.name.localeCompare(b.card.name));
       return { how, salons: ordered.slice(0, 8).map((c) => ({ ...c.card, reason: c.reason })) };
+    },
+  });
+
+  /**
+   * "Newest to Velnes" — Alex, 2026-09-23: the salons that joined the
+   * platform within the last 30 days, newest first. Only open, listed
+   * salons; the row is hidden when there are none.
+   */
+  r.route({
+    method: 'GET',
+    url: '/discovery/newest',
+    schema: { response: { 200: DiscoveryNewestSchema } },
+    handler: async () => {
+      const since = Date.now() - NEWEST_SALON_DAYS * 86_400_000;
+      const fresh = (await listedBusinesses())
+        .filter((b) => b.createdAt.getTime() >= since)
+        .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+      const salons = [];
+      for (const b of fresh) {
+        if (!(await isOpen(b.id))) continue;
+        const cats = await withTenant(b.id, (trx) =>
+          trx
+            .selectFrom('services as s')
+            .innerJoin('serviceCategories as c', 'c.id', 's.categoryId')
+            .select('c.name')
+            .distinct()
+            .where('s.status', '=', 'active')
+            .where('s.online', '=', true)
+            .execute(),
+        );
+        const pin = await firstPin(b.id);
+        salons.push({
+          id: b.id,
+          slug: b.slug,
+          name: b.name,
+          city: b.city,
+          address: b.address,
+          pitch: b.marketplace.pitch,
+          categories: b.marketplace.categories,
+          serviceCategories: cats.map((c) => c.name),
+          photo: cardPhoto(b.gallery),
+          lat: pin.lat,
+          lng: pin.lng,
+          bookable: true,
+          joinedAt: b.createdAt.toISOString(),
+        });
+        if (salons.length === 8) break;
+      }
+      return { days: NEWEST_SALON_DAYS, salons };
     },
   });
 

@@ -3064,4 +3064,8 @@ export const sq: Record<TranslationKey, string> = {
   'c.reco.category': 'Ofron {{cat}}, siç rezervoni ju',
   'c.rail.prevItems': 'Rrëshqit prapa',
   'c.rail.nextItems': 'Rrëshqit përpara',
+  'c.home.newest': 'Më të rejat në Velnes',
+  'c.home.newestSub': 'Sallone që u bashkuan në {{n}} ditët e fundit.',
+  'c.reco.joinedDays': 'U bashkua para {{n}} ditësh',
+  'c.reco.joinedToday': 'U bashkua sot',
 };

@@ -175,6 +175,8 @@ function reasonLbl(r: NonNullable<SalonVM['reason']>): string {
       return t('c.reco.category', { cat: r.category });
     case 'nearby':
       return t('c.res.fromYou', { d: distanceLbl(r.km) });
+    case 'new':
+      return r.days < 1 ? t('c.reco.joinedToday') : t('c.reco.joinedDays', { n: r.days });
   }
 }
 

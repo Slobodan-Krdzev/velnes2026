@@ -1095,7 +1095,8 @@ a.pop-go:hover {
 .rail{position:relative;margin-top:8px}
 .rail-track{overflow-x:auto;scrollbar-width:none}
 .rail-track::-webkit-scrollbar{display:none}
-.rail-track > *{flex:0 0 auto;align-self:flex-start}
+.rail-track > *{flex:0 0 auto}
+.rail-track .rc2 h3,.rail-track .ac h3{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .rail-track.reco2{display:flex;gap:16px}
 .rail-track.reco2 > .rc2{flex:0 0 calc((100% - 48px) / 4)}
 .rail-track.avail4{display:flex;gap:14px}
