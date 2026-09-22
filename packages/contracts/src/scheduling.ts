@@ -92,7 +92,10 @@ export const HoldResponseSchema = z.object({
   until: z.iso.datetime(),
 });
 
-export const AppointmentStatusSchema = z.enum(['booked', 'confirmed', 'cancelled', 'no_show']);
+/** `requested`: a Velnes-app booking at a salon that confirms by hand —
+ *  it holds its slot until the salon accepts (booked) or declines
+ *  (cancelled). Nobody pays for a request. */
+export const AppointmentStatusSchema = z.enum(['booked', 'confirmed', 'cancelled', 'no_show', 'requested']);
 export const AppointmentKindSchema = z.enum(['appointment', 'blocked', 'absence', 'chore', 'note']);
 
 export const BookRequestSchema = z.object({
@@ -153,6 +156,13 @@ export const AppointmentPatchSchema = z.object({
   reason: z.string().optional(),
 });
 
+/** The salon's answer to a request — one door, `POST /appointments/:id/decide`. */
+export const AppointmentDecisionSchema = z.object({
+  decision: z.enum(['accept', 'decline']),
+  reason: z.string().max(300).optional(),
+});
+export type AppointmentDecision = z.infer<typeof AppointmentDecisionSchema>;
+
 export const AppointmentEventSchema = z.object({
   what: z.enum(['Treatment started', 'Treatment finished']),
 });
@@ -190,6 +200,7 @@ export const RefusalCodeSchema = z.enum([
   'SLOT_HELD',
   'ROOMS_FULL',
   'MISSING_REQUIRED',
+  'NOT_A_REQUEST',
 ]);
 export type RefusalCode = z.infer<typeof RefusalCodeSchema>;
 

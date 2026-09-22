@@ -278,6 +278,8 @@ export function Shell() {
                             navigate('/support', { state: { ticket: n.refId } });
                           else if (n.kind.startsWith('category'))
                             navigate('/catalog', { state: { tab: 'categories' } });
+                          else if (n.kind.startsWith('booking') && n.refId)
+                            navigate('/calendar', { state: { appointment: n.refId } });
                         }}
                       >
                         <span className="grow" style={{ textAlign: 'left' }}>

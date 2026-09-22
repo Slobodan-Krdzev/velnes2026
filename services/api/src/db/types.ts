@@ -7,7 +7,7 @@ import type { ColumnType } from "kysely";
 
 export type AppointmentKind = "absence" | "appointment" | "blocked" | "chore" | "note";
 
-export type AppointmentStatus = "booked" | "cancelled" | "confirmed" | "no_show";
+export type AppointmentStatus = "booked" | "cancelled" | "confirmed" | "no_show" | "requested";
 
 export type CheckoutStatus = "FAILED" | "PAID" | "PARTIALLY_PAID";
 

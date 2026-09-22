@@ -15,6 +15,7 @@ import { ApiError, get, patch, refusalText, useSession } from '@velnes/client';
 import {
   useBook,
   useCancelAppointment,
+  useDecideRequest,
   useEmployees,
   useLineQuote,
   useLocationCatalog,
@@ -747,6 +748,7 @@ function ApptRow({
 const SOURCE_KEYS: Record<string, string> = {
   marketplace: 'source.marketplace',
   widget: 'source.widget',
+  client: 'source.marketplace',
   link: 'source.link',
   staff: 'source.staff',
   pos: 'source.pos',
@@ -772,6 +774,10 @@ function EditBody({ appointment: a, onClose }: { appointment: Appointment; onClo
   const toast = useToast();
   const navigate = useNavigate();
   const cancel = useCancelAppointment();
+  const decide = useDecideRequest();
+  const [declining, setDeclining] = useState(false);
+  const [declineReason, setDeclineReason] = useState('');
+  const requested = a.status === 'requested';
   const employees = useEmployees();
   const locations = useLocations();
   const [editing, setEditing] = useState(false);
@@ -823,7 +829,9 @@ function EditBody({ appointment: a, onClose }: { appointment: Appointment; onClo
           <div>
             <span className="stat-label">{t('drawer.status')}</span>
             <div>
-              <span className="badge success">{a.status}</span>
+              <span className={`badge ${requested ? 'warning' : 'success'}`}>
+                {requested ? t('cal.requested') : a.status}
+              </span>
             </div>
           </div>
           <div>
@@ -858,8 +866,58 @@ function EditBody({ appointment: a, onClose }: { appointment: Appointment; onClo
             <span className="hint">{t('drawer.optionsHint')}</span>
           </div>
         ) : null}
-        {a.source === 'marketplace' ? <div className="note">{t('drawer.marketplaceNote')}</div> : null}
-        {a.kind === 'appointment' && a.status !== 'cancelled' ? (
+        {a.source === 'marketplace' && !requested ? <div className="note">{t('drawer.marketplaceNote')}</div> : null}
+        {requested ? (
+          <div className="note">{t('drawer.requestNote')}</div>
+        ) : null}
+        {requested ? (
+          <div style={{ display: 'grid', gap: 8 }}>
+            <button
+              className="btn btn-primary"
+              style={{ width: '100%' }}
+              disabled={decide.isPending}
+              onClick={() =>
+                void decide
+                  .mutateAsync({ id: a.id, decision: 'accept' })
+                  .then(() => toast(t('drawer.accepted')))
+                  .catch((e: unknown) => toast(refusalText(t, e)))
+                  .finally(onClose)
+              }
+            >
+              <Icon d={I.check} size={18} /> {t('drawer.accept')}
+            </button>
+            {declining ? (
+              <>
+                <textarea
+                  className="ta"
+                  rows={2}
+                  placeholder={t('drawer.declineReason')}
+                  value={declineReason}
+                  onChange={(e) => setDeclineReason(e.target.value)}
+                />
+                <button
+                  className="btn btn-subtle"
+                  style={{ width: '100%' }}
+                  disabled={decide.isPending}
+                  onClick={() =>
+                    void decide
+                      .mutateAsync({ id: a.id, decision: 'decline', reason: declineReason.trim() || undefined })
+                      .then(() => toast(t('drawer.declined')))
+                      .catch((e: unknown) => toast(refusalText(t, e)))
+                      .finally(onClose)
+                  }
+                >
+                  {t('drawer.decline')}
+                </button>
+              </>
+            ) : (
+              <button className="btn btn-secondary" style={{ width: '100%' }} onClick={() => setDeclining(true)}>
+                {t('drawer.decline')}
+              </button>
+            )}
+          </div>
+        ) : null}
+        {a.kind === 'appointment' && a.status !== 'cancelled' && !requested ? (
           <button
             className="btn btn-primary"
             style={{ width: '100%' }}

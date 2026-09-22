@@ -29,6 +29,8 @@ export interface BookedVisit {
   locationName: string;
   employeeName: string;
   price: number;
+  /** `requested` at a salon that confirms by hand: no payment yet. */
+  status?: 'booked' | 'requested';
 }
 
 const IcVok13 = (
@@ -236,8 +238,14 @@ export function BookConfirmed() {
         <div className="okring">
           <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>
         </div>
-        <h1 className="serif" style={{ fontSize: '30px' }}>{t('c.bk.booked')}</h1>
-        <p className="muted" style={{ margin: '8px 0 18px' }}>Your appointment is confirmed at {state.locationName}.</p>
+        <h1 className="serif" style={{ fontSize: '30px' }}>
+          {state.status === 'requested' ? t('c.bk.requested') : t('c.bk.booked')}
+        </h1>
+        <p className="muted" style={{ margin: '8px 0 18px' }}>
+          {state.status === 'requested'
+            ? t('c.bk.requestedSub', { salon: draft?.salonName ?? state.locationName })
+            : t('c.bk.confirmedAt', { loc: state.locationName })}
+        </p>
         <div className="sumcard">
           <div className="row"><span className="k">{t('c.bk.salon')}</span><span className="v">{draft?.salonName ?? state.locationName}</span></div>
           <div className="row"><span className="k">{t('c.bk.for')}</span><span className="v">{draft?.forWhom === 'other' ? draft.guestName : 'Myself'}</span></div>

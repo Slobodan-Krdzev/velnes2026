@@ -2922,6 +2922,19 @@ export const en = {
   'reg.cardPhotoAdd': '+ Add card photo',
   'mset.categoriesNote': 'Read from your online services: the Velnes app places you under the categories your treatments belong to. To appear under another one, add a service there.',
   'mset.categoriesNone': 'No online services yet — the first one you add under Catalog decides where you appear.',
+  'refusal.NOT_A_REQUEST': 'This appointment is not waiting for a decision.',
+  'cal.requested': 'Request',
+  'drawer.requestNote': 'A booking request from the Velnes app. The customer is not charged and hears back by e-mail and in the app the moment you decide.',
+  'drawer.accept': 'Accept request',
+  'drawer.decline': 'Decline',
+  'drawer.accepted': 'Request accepted — the customer can pay now',
+  'drawer.declined': 'Request declined',
+  'drawer.declineReason': 'A note for the customer (optional)',
+  'c.bk.requested': 'Request sent',
+  'c.bk.requestedSub': '{{salon}} confirms bookings itself. You’ll get an e-mail and a notification as soon as they answer, and you pay only once it’s accepted.',
+  'c.bk.confirmedAt': 'Your appointment is confirmed at {{loc}}.',
+  'c.acc.awaiting': 'Awaiting the salon',
+  'c.acc.awaitingSub': 'The salon confirms bookings itself. You’ll hear back here and by e-mail; nothing is charged until it’s accepted.',
 } as const;
 
 export type TranslationKey = keyof typeof en;

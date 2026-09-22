@@ -27,6 +27,7 @@ import { z } from 'zod';
 import { db, withClient, withHq, withTenant } from '../../db/index.js';
 import { env } from '../../env.js';
 import { BookingError, BookingRefused, confirmChain } from '../booking/booking.service.js';
+import { afterBooked } from '../booking/requests.service.js';
 import { visitPayload } from '../../public/public.routes.js';
 import { personalOffersFor } from '../customers/customers.service.js';
 import {
@@ -605,20 +606,17 @@ export async function clientRoutes(app: FastifyInstance) {
             )
             .execute();
           const out = await visitPayload(trx, booked);
-          await notifySalon(trx, biz.id, {
-            kind: 'booking',
-            title: 'New booking from Velnes',
-            body: `${`${c.first} ${c.last}`.trim() || c.email} booked ${out.serviceName || 'an appointment'} on ${out.date} at ${out.time}.`,
-            refId: out.ref,
+          const notice = await afterBooked(trx, {
+            tenantId: biz.id,
+            booked,
+            customerName: `${c.first} ${c.last}`.trim() || c.email,
+            customerEmail: c.email,
+            clientUserId: c.id,
           });
+          return { out, notice };
+        }).then(async ({ out, notice }) => {
+          if (notice) await notifyClient(c.id, notice);
           return out;
-        });
-        await notifyClient(c.id, {
-          kind: 'appointment',
-          title: 'Booking confirmed',
-          body: `${out.serviceName} at ${biz.name} · ${out.date} at ${out.time}.`,
-          refType: 'appointment',
-          refId: out.ref,
         });
         return out;
       } catch (e) {

@@ -2420,3 +2420,7 @@ body.ob-src .ob-body{display:flex;align-items:center;justify-content:center;
 @media (max-width:900px){
   .reg-loc,.reg-cat{grid-template-columns:1fr}
 }
+
+/* A booking request from the Velnes app: holds its slot, not yet a
+   booking — dashed until the salon accepts or declines. */
+.event.ev-requested{border:1.5px dashed var(--warning);border-left-width:4px;background:rgba(194,106,2,.08)}

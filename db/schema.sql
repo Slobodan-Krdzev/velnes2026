@@ -84,7 +84,8 @@ CREATE TYPE public.appointment_status AS ENUM (
     'booked',
     'confirmed',
     'cancelled',
-    'no_show'
+    'no_show',
+    'requested'
 );
 
 
@@ -6459,4 +6460,5 @@ INSERT INTO public.schema_migrations (version) VALUES
     ('20260921120000'),
     ('20260921140000'),
     ('20260921160000'),
-    ('20260922120000');
+    ('20260922120000'),
+    ('20260922150000');

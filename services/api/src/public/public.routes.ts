@@ -26,6 +26,7 @@ import {
   createHold,
   empsFor,
 } from '../modules/booking/booking.service.js';
+import { afterBooked } from '../modules/booking/requests.service.js';
 import { svcAt, svcVariants } from '../modules/catalog/catalog.service.js';
 import { locLive } from '../modules/locations/locations.service.js';
 import { discoveryRoutes } from './discovery.routes.js';
@@ -519,6 +520,16 @@ export async function publicRoutes(app: FastifyInstance) {
               )
               .where('widgetId', 'is', null)
               .execute();
+          // A Velnes-app guest rings the salon's bell and gets a mail
+          // like anyone else; a widget booking stays the widget's own.
+          if (w.consumer)
+            await afterBooked(trx, {
+              tenantId: w.tenantId,
+              booked,
+              customerName: req.body.name,
+              customerEmail: req.body.email ?? null,
+              clientUserId: null,
+            });
           return visitPayload(trx, booked);
         });
         // A confirmed booking frees the cache for that day.
@@ -534,7 +545,7 @@ export async function publicRoutes(app: FastifyInstance) {
 
 /** The visit as the app shows it: the whole span up front, a line per
  *  treatment underneath. A single booking is a visit of one. */
-export async function visitPayload(trx: Trx, booked: { id: string; locationId: string; employeeId: string | null; date: string; start: string; end: string; price: number; serviceName: string | null }[]) {
+export async function visitPayload(trx: Trx, booked: { id: string; locationId: string; employeeId: string | null; date: string; start: string; end: string; price: number; serviceName: string | null; status?: string }[]) {
   const first = booked[0]!;
   const last = booked[booked.length - 1]!;
   const locRow = await trx
@@ -563,6 +574,7 @@ export async function visitPayload(trx: Trx, booked: { id: string; locationId: s
     })),
     locationName: locRow?.name ?? '',
     employeeName: nameOf(first.employeeId),
+    status: first.status === 'requested' ? ('requested' as const) : ('booked' as const),
     price: booked.reduce((n, a) => n + a.price, 0),
   };
 }

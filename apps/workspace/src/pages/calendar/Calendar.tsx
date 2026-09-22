@@ -1,9 +1,11 @@
 import type { Appointment } from '@velnes/contracts';
+import { AppointmentSchema } from '@velnes/contracts';
 import { empColorOf, I, Icon } from '@velnes/ui';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useLocation } from 'react-router-dom';
 import { useAppointments, useEmployees, useLocations } from '../../api/queries.js';
-import { useSession } from '@velnes/client';
+import { get, useSession } from '@velnes/client';
 import { useOutsideClose } from '../../lib/pop.js';
 import { useScope } from '../../shell/Shell.js';
 import { AppointmentDrawer } from './AppointmentDrawer.js';
@@ -66,6 +68,7 @@ for (let m = DAY_START; m < DAY_END; m += SLOT) slots.push(m);
 const SOURCE_LABELS: Record<string, string> = {
   marketplace: 'source.marketplace',
   widget: 'source.widget',
+  client: 'source.marketplace',
   link: 'source.link',
   staff: 'source.staff',
   pos: 'source.pos',
@@ -117,7 +120,7 @@ function Event({
         />
       ) : null}
       <button
-        className={`event ${a.kind} ev-${evTone(a, category)}${paint ? ' ev-emp' : ''}`}
+        className={`event ${a.kind} ev-${evTone(a, category)}${paint ? ' ev-emp' : ''}${a.status === 'requested' ? ' ev-requested' : ''}`}
         style={
           {
             top: `${top}%`,
@@ -272,6 +275,22 @@ export function CalendarPage() {
   const employees = useEmployees();
   const [view, setView] = useState<'day' | 'week'>('day');
   const [date, setDate] = useState(localIso(new Date()));
+  // A bell entry opens its appointment: jump to its day, open the drawer.
+  const asked = (useLocation().state as { appointment?: string } | null)?.appointment;
+  useEffect(() => {
+    if (!asked) return;
+    let live = true;
+    void get(AppointmentSchema, `/appointments/${asked}`)
+      .then((a) => {
+        if (!live) return;
+        setDate(a.date);
+        setDrawer({ open: true, appointment: a });
+      })
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, [asked]);
   const [filters, setFilters] = useState(false);
   const [pick, setPick] = useState(false);
   const filtersRef = useOutsideClose(filters, () => setFilters(false));

@@ -60,6 +60,20 @@ key-free: a consumer browsing many salons has no publishable key, so the
 salon page hands back the salon's own key for the booking doors rather
 than letting the app invent one.
 
+**Requests, and mails with links (2026-09-22).** A salon that confirms
+bookings by hand gets a request, not a booking: the confirmed screen
+says "Request sent", My Velnes shows the appointment as "Awaiting the
+salon", and nobody pays until the salon accepts (SCHEDULING › Booking
+requests). Every Velnes-app booking now leaves a trace beyond the
+calendar: guests ring the salon's bell too, and the customer is mailed
+at every step — booked, requested, accepted (with the payment link),
+declined (with the salon's note). Links are built on
+`CONSUMER_APP_URL` (`.env.example`): a signed-in customer's goes to
+their appointment page, a guest's to `/pay/<id>?t=<token>`, the token
+an HMAC of the appointment id under the API secret — a capability for
+that one appointment's payment screen, since a guest has no account
+to sign into. The payment screen itself is the next step.
+
 **No widget needed (2026-09-22).** That key is `salon:<slug>`
 (`consumerKey()` in `@velnes/contracts`), not a widget's publishable
 key. The public doors resolve it to a virtual row over the salon's

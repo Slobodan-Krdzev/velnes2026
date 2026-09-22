@@ -89,6 +89,7 @@ function bucketOf(a: Appt): 'up' | 'past' | 'canc' {
 function StatusBadge({ a }: { a: Appt }) {
   const b = bucketOf(a);
   if (b === 'canc') return <span className="acc-badge off">{t('c.acc.cancelled')}</span>;
+  if (a.status === 'requested' && b === 'up') return <span className="acc-badge warn">{t('c.acc.awaiting')}</span>;
   if (b === 'past') return <span className="acc-badge mut">{t('c.acc.completed')}</span>;
   return <span className="acc-badge ok">{t('c.acc.confirmed')}</span>;
 }
@@ -472,6 +473,9 @@ export function MyVelnes({ section = 'over' }: { section?: SecId }) {
                         </div>
                       </div>
                       <StatusBadge a={current} />
+                      {current.status === 'requested' && bucketOf(current) === 'up' ? (
+                        <div className="muted" style={{ fontSize: 13, marginTop: 6, flexBasis: '100%' }}>{t('c.acc.awaitingSub')}</div>
+                      ) : null}
                     </div>
                     <div style={{ height: '10px' }}></div>
                     <div className="acc-kv">

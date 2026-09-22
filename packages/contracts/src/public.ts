@@ -138,6 +138,9 @@ export const PublicBookResponseSchema = z.object({
   locationName: z.string(),
   employeeName: z.string(),
   price: MoneySchema,
+  /** `requested` when the salon confirms bookings by hand: the visit
+   *  holds its slot and the customer pays only once it is accepted. */
+  status: z.enum(['booked', 'requested']).default('booked'),
 });
 
 export { AvailabilityResponseSchema, BookingRefusalSchema, HoldResponseSchema };
