@@ -938,7 +938,8 @@ CREATE TABLE public.discount_codes (
     used integer DEFAULT 0 NOT NULL,
     usage_limit integer,
     starts date NOT NULL,
-    ends date NOT NULL
+    ends date NOT NULL,
+    active boolean DEFAULT true NOT NULL
 );
 
 ALTER TABLE ONLY public.discount_codes FORCE ROW LEVEL SECURITY;
@@ -6483,4 +6484,5 @@ INSERT INTO public.schema_migrations (version) VALUES
     ('20260922120000'),
     ('20260922150000'),
     ('20260922170000'),
-    ('20260922180000');
+    ('20260922180000'),
+    ('20260922190000');

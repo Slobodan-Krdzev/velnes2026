@@ -2,6 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   CapacityResponseSchema,
   DiscountCodeListSchema,
+  DiscountCodeRowSchema,
   MemberRecListSchema,
   OFFER_DEFAULTS,
   OfferListSchema,
@@ -15,7 +16,8 @@ import { I, Icon, NumInput } from '@velnes/ui';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { z } from 'zod';
-import { ApiError, get, post, useSession } from '@velnes/client';
+import { api, ApiError, get, patch, post, useSession } from '@velnes/client';
+import { Toggle } from '../settings/bits.js';
 import { useLocations } from '../../api/queries.js';
 import { money } from '../../lib/money.js';
 import { useToast } from '../../lib/toast.js';
@@ -96,42 +98,173 @@ function Soon({ body }: { body: string }) {
 
 function Discounts() {
   const { t } = useTranslation();
+  const { can } = useSession();
+  const qc = useQueryClient();
+  const toast = useToast();
+  const act = can('marketing.personal_offers');
   const q = useQuery({
     queryKey: ['discountCodes'],
     queryFn: () => get(DiscountCodeListSchema, '/discount-codes'),
   });
-  const tone: Record<string, string> = { Active: 'success', Scheduled: 'info', Expired: '' };
+  const refresh = () => void qc.invalidateQueries({ queryKey: ['discountCodes'] });
+  const today = new Date().toISOString().slice(0, 10);
+  const in30 = new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10);
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [n, setN] = useState({ code: '', type: 'Percentage' as 'Percentage' | 'Fixed amount', value: 10, starts: today, ends: in30, limit: 0 });
+  const tone: Record<string, string> = { Active: 'success', Scheduled: 'info', Expired: '', Off: 'warning' };
+  const statusLbl: Record<string, string> = {
+    Active: t('mkt.statusActive'),
+    Scheduled: t('mkt.statusScheduled'),
+    Expired: t('mkt.statusExpired'),
+    Off: t('mkt.statusOff'),
+  };
+  const create = async () => {
+    setErr(null);
+    setBusy('new');
+    try {
+      await post(DiscountCodeRowSchema, '/discount-codes', {
+        code: n.code,
+        type: n.type,
+        value: n.value,
+        starts: n.starts,
+        ends: n.ends,
+        usageLimit: n.limit > 0 ? n.limit : null,
+      });
+      toast(t('mkt.codeCreated'));
+      setN({ ...n, code: '', value: 10, limit: 0 });
+      setOpen(false);
+      refresh();
+    } catch (e) {
+      setErr(e instanceof ApiError && e.status === 409 ? t('mkt.codeExists') : e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(null);
+    }
+  };
+  const flip = async (id: string, on: boolean) => {
+    setBusy(id);
+    try {
+      await patch(DiscountCodeRowSchema, `/discount-codes/${id}`, { active: on });
+      toast(on ? t('mkt.codeOn') : t('mkt.codeOff'));
+      refresh();
+    } catch (e) {
+      toast(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(null);
+    }
+  };
+  const remove = async (id: string) => {
+    setBusy(id);
+    try {
+      await api(z.object({ ok: z.literal(true) }), `/discount-codes/${id}`, { method: 'DELETE' });
+      toast(t('mkt.codeDeleted'));
+      refresh();
+    } catch (e) {
+      toast(e instanceof ApiError && e.status === 409 ? t('mkt.codeInUse') : e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(null);
+    }
+  };
+  const codes = q.data?.codes ?? [];
   return (
-    <table>
-      <thead>
-        <tr>
-          <th>{t('mkt.code')}</th>
-          <th>{t('mkt.type')}</th>
-          <th className="right">{t('mkt.value')}</th>
-          <th className="right">{t('mkt.used')}</th>
-          <th>{t('mkt.runs')}</th>
-          <th>{t('mkt.status')}</th>
-        </tr>
-      </thead>
-      <tbody>
-        {(q.data?.codes ?? []).map((d) => (
-          <tr key={d.id}>
-            <td className="bold tnum">{d.code}</td>
-            <td className="muted">{d.type}</td>
-            <td className="right bold tnum">{d.type === 'percent' ? `${d.value}%` : money(d.value)}</td>
-            <td className="right muted tnum">
-              {d.used} / {d.usageLimit ?? '∞'}
-            </td>
-            <td className="muted tnum">
-              {dateShort(d.starts)} → {dateShort(d.ends)}
-            </td>
-            <td>
-              <span className={`badge ${tone[d.status]}`}>{d.status}</span>
-            </td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
+    <div className="stacked" style={{ gap: 16 }}>
+      <div className="hstack" style={{ justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
+        <div>
+          <p className="muted" style={{ margin: 0 }}>{t('mkt.codesLead')}</p>
+          <p className="muted" style={{ margin: '4px 0 0', fontSize: 12.5 }}>{t('mkt.codeWhere')}</p>
+        </div>
+        {act ? (
+          <button className={`btn ${open ? 'btn-secondary' : 'btn-primary'}`} onClick={() => setOpen((o) => !o)}>
+            <Icon d={open ? I.x : I.plus} size={16} /> {open ? t('mkt.cancel') : t('mkt.newCode')}
+          </button>
+        ) : null}
+      </div>
+      {open ? (
+        <div className="card" style={{ padding: 16 }}>
+          <div className="grid2" style={{ gap: 12, maxWidth: 720 }}>
+            <label className="field">
+              <span>{t('mkt.code')}</span>
+              <input className="input tnum" placeholder={t('mkt.codePh')} value={n.code} onChange={(e) => setN({ ...n, code: e.target.value.toUpperCase() })} />
+            </label>
+            <label className="field">
+              <span>{t('mkt.codeType')}</span>
+              <select className="select" value={n.type} onChange={(e) => setN({ ...n, type: e.target.value as 'Percentage' | 'Fixed amount' })}>
+                <option value="Percentage">{t('mkt.percent')}</option>
+                <option value="Fixed amount">{t('mkt.fixed')}</option>
+              </select>
+            </label>
+            <label className="field">
+              <span>{t('mkt.value')}{n.type === 'Percentage' ? ' (%)' : ' (MKD)'}</span>
+              <NumInput value={n.value} onValue={(v) => setN({ ...n, value: v })} />
+            </label>
+            <label className="field">
+              <span>{t('mkt.usageLimit')}</span>
+              <NumInput value={n.limit} onValue={(v) => setN({ ...n, limit: v })} />
+              <span className="hint">0 = {t('mkt.unlimited')}</span>
+            </label>
+            <label className="field">
+              <span>{t('mkt.from')}</span>
+              <input className="input" type="date" value={n.starts} onChange={(e) => setN({ ...n, starts: e.target.value })} />
+            </label>
+            <label className="field">
+              <span>{t('mkt.until')}</span>
+              <input className="input" type="date" value={n.ends} onChange={(e) => setN({ ...n, ends: e.target.value })} />
+            </label>
+          </div>
+          {err ? <p role="alert" style={{ color: 'var(--danger)', fontWeight: 600, margin: '10px 0 0' }}>{err}</p> : null}
+          <div style={{ marginTop: 14 }}>
+            <button className="btn btn-primary" disabled={busy === 'new' || n.code.trim().length < 3 || n.value <= 0} onClick={() => void create()}>
+              {t('mkt.createCode')}
+            </button>
+          </div>
+        </div>
+      ) : null}
+      {codes.length === 0 && !q.isLoading ? (
+        <p className="muted">{t('mkt.noCodes')}</p>
+      ) : (
+        <table>
+          <thead>
+            <tr>
+              <th>{t('mkt.code')}</th>
+              <th>{t('mkt.discount')}</th>
+              <th className="right">{t('mkt.used')}</th>
+              <th>{t('mkt.runs')}</th>
+              <th>{t('mkt.status')}</th>
+              <th className="right">{t('mkt.on')} / {t('mkt.off')}</th>
+              <th />
+            </tr>
+          </thead>
+          <tbody>
+            {codes.map((d) => (
+              <tr key={d.id} style={{ opacity: d.active ? 1 : 0.6 }}>
+                <td className="bold tnum">{d.code}</td>
+                <td className="bold tnum">{d.type === 'Percentage' ? `${d.value}%` : money(d.value)}</td>
+                <td className="right muted tnum">
+                  {d.used} / {d.usageLimit ?? '∞'}
+                </td>
+                <td className="muted tnum">
+                  {dateShort(d.starts)} → {dateShort(d.ends)}
+                </td>
+                <td>
+                  <span className={`badge ${tone[d.status]}`}>{statusLbl[d.status] ?? d.status}</span>
+                </td>
+                <td className="right">
+                  <Toggle on={d.active} label={`${d.code} ${d.active ? t('mkt.on') : t('mkt.off')}`} disabled={!act || busy === d.id} onChange={(on) => void flip(d.id, on)} />
+                </td>
+                <td className="right">
+                  {act && d.used === 0 ? (
+                    <button className="btn btn-subtle btn-sm" disabled={busy === d.id} onClick={() => void remove(d.id)}>
+                      {t('mkt.deleteCode')}
+                    </button>
+                  ) : null}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
   );
 }
 

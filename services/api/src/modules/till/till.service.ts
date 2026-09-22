@@ -271,6 +271,7 @@ export async function validateCode(trx: Trx, code: string, subtotal: number) {
     .where(sql<boolean>`upper(code) = upper(${code})`)
     .executeTakeFirst();
   if (dc) {
+    if (!dc.active) return { kind: 'invalid' as const, message: `${dc.code} is switched off` };
     if (localIso(dc.starts) > today)
       return { kind: 'invalid' as const, message: `${dc.code} is not active yet` };
     if (localIso(dc.ends) < today)

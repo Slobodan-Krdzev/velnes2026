@@ -345,6 +345,7 @@ export interface Customers {
 }
 
 export interface DiscountCodes {
+  active: Generated<boolean>;
   code: string;
   ends: Timestamp;
   id: Generated<string>;
