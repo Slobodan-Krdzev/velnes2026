@@ -3080,6 +3080,8 @@ export const en = {
   'c.reco.booked': 'You’ve been here before',
   'c.reco.favourite': 'One of your favourites',
   'c.reco.category': 'Does {{cat}}, like you book',
+  'c.rail.prevItems': 'Scroll back',
+  'c.rail.nextItems': 'Scroll forward',
 } as const;
 
 export type TranslationKey = keyof typeof en;

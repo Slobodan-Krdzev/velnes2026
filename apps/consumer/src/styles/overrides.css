@@ -1089,3 +1089,16 @@ a.pop-go:hover {
 
 /* Why a salon is recommended: one quiet line under the city. */
 .rc2 .rwhy{margin-top:4px;font-size:12px;font-weight:700;color:var(--brand-hover)}
+
+/* Sliding rows (Recommended, Available now): the arrows move the row,
+   never the page; the wheel pushes it; four cards fill a view. */
+.rail{position:relative;margin-top:8px}
+.rail-track{overflow-x:auto;scrollbar-width:none}
+.rail-track::-webkit-scrollbar{display:none}
+.rail-track > *{flex:0 0 auto;align-self:flex-start}
+.rail-track.reco2{display:flex;gap:16px}
+.rail-track.reco2 > .rc2{flex:0 0 calc((100% - 48px) / 4)}
+.rail-track.avail4{display:flex;gap:14px}
+.rail-track.avail4 > .ac{flex:0 0 calc((100% - 42px) / 4)}
+.catrail-nav:disabled{opacity:.35;cursor:default;box-shadow:none}
+.catrail-nav:disabled:hover{border-color:var(--line-soft);color:var(--ink)}

@@ -97,6 +97,19 @@ active tab follows the route; nothing is active on a salon page or a
 booking step. Full-screen sheets (search, map, location prompt) still
 cover the chrome. The pages no longer carry their own tab bars.
 
+**Sliding rows (2026-09-23).** The home page's "Recommended" and
+"Available now near you" rows are sliders, not four-card grids:
+`features/discovery/Rail.tsx` wraps a horizontal track, its arrows
+scroll the track a view at a time and never leave the page (the old
+arrow opened the results screen — Alex: "the arrows on the swipers
+should swipe the slider"), an arrow greys out at its end, and the mouse
+wheel pushes the row through the same `useWheelScroll` hook the
+category shelf uses (a wheel that is already scrolling the page passes
+through; a rail at its end hands the rest back). The phone's
+"Recommended" row is swiped and takes the wheel too. The row shows
+every salon the door recommends (up to eight), not the first four.
+Pinned by `Rail.test.tsx`.
+
 **Recommended for you (2026-09-23).** The home page's "Recommended"
 row is no longer the first four listed salons. `GET
 /discovery/recommended` (optional viewer token, optional `lat/lng`)

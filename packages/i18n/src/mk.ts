@@ -3062,4 +3062,6 @@ export const mk: Record<TranslationKey, string> = {
   'c.reco.booked': 'Веќе сте биле тука',
   'c.reco.favourite': 'Едно од вашите омилени',
   'c.reco.category': 'Нуди {{cat}}, како што резервирате',
+  'c.rail.prevItems': 'Прелистај назад',
+  'c.rail.nextItems': 'Прелистај напред',
 };

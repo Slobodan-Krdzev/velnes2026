@@ -3062,4 +3062,6 @@ export const sq: Record<TranslationKey, string> = {
   'c.reco.booked': 'Keni qenë këtu më parë',
   'c.reco.favourite': 'Një nga të preferuarat tuaja',
   'c.reco.category': 'Ofron {{cat}}, siç rezervoni ju',
+  'c.rail.prevItems': 'Rrëshqit prapa',
+  'c.rail.nextItems': 'Rrëshqit përpara',
 };
