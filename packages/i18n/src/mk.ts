@@ -2984,4 +2984,12 @@ export const mk: Record<TranslationKey, string> = {
   'cset.tiktok': 'TikTok',
   'c.sal.follow': 'Најдете нè на',
   'c.sal.website': 'Веб-страница',
+  'catalog.groupNamePh': 'на пр. Должина, Додатоци, Бренд на боја',
+  'catalog.groupType': 'Клиентите избираат',
+  'catalog.optionCol': 'Опција',
+  'catalog.optPrice': '± цена (MKD)',
+  'catalog.optMin': '± минути',
+  'catalog.optionHint': 'Секоја опција додава (или одзема) на цената и времето на услугата. 0 не менува ништо; дозволени се негативни броеви.',
+  'catalog.groupNameMissing': 'Дајте име на секоја група опции.',
+  'catalog.optionNameMissing': 'Дајте име на секоја опција или отстранете го празниот ред.',
 };

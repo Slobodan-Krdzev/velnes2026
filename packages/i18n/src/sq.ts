@@ -2984,4 +2984,12 @@ export const sq: Record<TranslationKey, string> = {
   'cset.tiktok': 'TikTok',
   'c.sal.follow': 'Na gjeni në',
   'c.sal.website': 'Faqja e internetit',
+  'catalog.groupNamePh': 'p.sh. Gjatësia, Ekstra, Marka e ngjyrës',
+  'catalog.groupType': 'Klientët zgjedhin',
+  'catalog.optionCol': 'Opsioni',
+  'catalog.optPrice': '± çmimi (MKD)',
+  'catalog.optMin': '± minuta',
+  'catalog.optionHint': 'Çdo opsion shton (ose heq) nga çmimi dhe koha e shërbimit. 0 nuk ndryshon asgjë; lejohen numra negativë.',
+  'catalog.groupNameMissing': 'Jepni një emër çdo grupi opsionesh.',
+  'catalog.optionNameMissing': 'Jepni një emër çdo opsioni ose hiqni rreshtin bosh.',
 };

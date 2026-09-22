@@ -3002,6 +3002,14 @@ export const en = {
   'cset.tiktok': 'TikTok',
   'c.sal.follow': 'Find us on',
   'c.sal.website': 'Website',
+  'catalog.groupNamePh': 'e.g. Length, Extras, Hair colour brand',
+  'catalog.groupType': 'Customers pick',
+  'catalog.optionCol': 'Option',
+  'catalog.optPrice': '± price (MKD)',
+  'catalog.optMin': '± minutes',
+  'catalog.optionHint': 'Each option adds to (or takes off) the service’s price and time. 0 leaves it unchanged; negative numbers are allowed.',
+  'catalog.groupNameMissing': 'Give every option group a name.',
+  'catalog.optionNameMissing': 'Give every option a name, or remove the empty row.',
 } as const;
 
 export type TranslationKey = keyof typeof en;
