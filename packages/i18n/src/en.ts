@@ -3010,6 +3010,11 @@ export const en = {
   'catalog.optionHint': 'Each option adds to (or takes off) the service’s price and time. 0 leaves it unchanged; negative numbers are allowed.',
   'catalog.groupNameMissing': 'Give every option group a name.',
   'catalog.optionNameMissing': 'Give every option a name, or remove the empty row.',
+  'catalog.infoLbl': 'How this works',
+  'catalog.variantsInfo1': 'One service can come in several lengths — say a 30-minute and a 55-minute haircut — each with its own duration and price. Mark one as standard: that is what a customer gets when they don’t choose, and the price the salon card shows as “from”.',
+  'catalog.variantsInfo2': 'Customers pick the length when booking; the calendar block and the till line follow the one they picked. If you offer just one, leave a single row.',
+  'catalog.modifiersInfo1': 'Option groups are choices on top of the service that change its price or time without a second service: a “Hair colour brand” group with two brands at different prices, or an “Extras” group where each extra adds minutes.',
+  'catalog.modifiersInfo2': '“One choice” means the customer picks exactly one option; “Stackable” lets them tick several. Tick “required” when the booking cannot go through without an answer. Each option’s ± price and ± minutes are added to the service — 0 changes nothing, negatives are allowed.',
 } as const;
 
 export type TranslationKey = keyof typeof en;

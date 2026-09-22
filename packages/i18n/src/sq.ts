@@ -2992,4 +2992,9 @@ export const sq: Record<TranslationKey, string> = {
   'catalog.optionHint': 'Çdo opsion shton (ose heq) nga çmimi dhe koha e shërbimit. 0 nuk ndryshon asgjë; lejohen numra negativë.',
   'catalog.groupNameMissing': 'Jepni një emër çdo grupi opsionesh.',
   'catalog.optionNameMissing': 'Jepni një emër çdo opsioni ose hiqni rreshtin bosh.',
+  'catalog.infoLbl': 'Si funksionon',
+  'catalog.variantsInfo1': 'Një shërbim mund të ketë disa gjatësi — p.sh. një prerje 30-minutëshe dhe një 55-minutëshe — secila me kohën dhe çmimin e vet. Shënoni njërën si standarde: atë e merr klienti kur nuk zgjedh, dhe çmimi i saj shfaqet si “nga” në kartën e sallonit.',
+  'catalog.variantsInfo2': 'Klientët zgjedhin gjatësinë kur rezervojnë; blloku në kalendar dhe rreshti i arkës ndjekin atë që zgjodhën. Nëse ofroni vetëm një, lini një rresht të vetëm.',
+  'catalog.modifiersInfo1': 'Grupet e opsioneve janë zgjedhje mbi shërbimin që i ndryshojnë çmimin ose kohën pa një shërbim të dytë: një grup “Marka e ngjyrës” me dy marka me çmime të ndryshme, ose një grup “Ekstra” ku çdo ekstra shton minuta.',
+  'catalog.modifiersInfo2': '“Një zgjedhje” do të thotë që klienti zgjedh saktësisht një opsion; “I kombinueshëm” lejon disa. Shënoni “i detyrueshëm” kur rezervimi nuk mund të kalojë pa përgjigje. ± çmimi dhe ± minutat e çdo opsioni i shtohen shërbimit — 0 nuk ndryshon asgjë, lejohen numra negativë.',
 };

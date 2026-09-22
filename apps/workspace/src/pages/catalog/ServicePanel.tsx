@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { z } from 'zod';
 import { api, post } from '@velnes/client';
 import { useEmployees } from '../../api/queries.js';
+import { InfoTip } from '../../lib/InfoTip.js';
 import { CategoryRequestModal, type ResolvedService } from './Catalog.js';
 
 const OkSchema = z.object({ ok: z.literal(true) });
@@ -303,7 +304,10 @@ export function ServicePanel({
           </div>
 
           <div className="field">
-            <span>{t('catalog.variants')}</span>
+            <span className="field-title">
+              {t('catalog.variants')}
+              <InfoTip title={t('catalog.variants')} label={t('catalog.infoLbl')} body={[t('catalog.variantsInfo1'), t('catalog.variantsInfo2')]} />
+            </span>
             <span className="hint">{t('catalog.variantsHint')}</span>
             {variants.map((v, i) => (
               <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -368,7 +372,10 @@ export function ServicePanel({
           </div>
 
           <div className="field">
-            <span>{t('catalog.modifiers')}</span>
+            <span className="field-title">
+              {t('catalog.modifiers')}
+              <InfoTip title={t('catalog.modifiers')} label={t('catalog.infoLbl')} body={[t('catalog.modifiersInfo1'), t('catalog.modifiersInfo2')]} />
+            </span>
             <span className="hint">{t('catalog.modifiersHint')}</span>
             {groups.map((g, gi) => (
               <div
