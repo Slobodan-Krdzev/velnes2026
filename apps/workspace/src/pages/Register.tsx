@@ -1,5 +1,4 @@
 import {
-  BusinessCategoryListSchema,
   PublicServiceCategoryListSchema,
   RegistrationCreateResponseSchema,
   RegistrationImportResultSchema,
@@ -46,7 +45,7 @@ type Draft = {
 };
 const newDraft = (): Draft => ({
   acct: { name: '', email: '', pass: '' },
-  salon: { name: '', type: 'Physiotherapy', phone: '', langs: 'MK, EN' },
+  salon: { name: '', type: '', phone: '', langs: 'MK, EN' },
   legal: { name: '', taxId: '', vat: '', currency: 'MKD' },
   loc: { street: '', no: '', city: '', zip: '', px: 50, py: 50, pinned: false, lat: null, lng: null },
   services: [],
@@ -83,19 +82,25 @@ export function Register() {
   const [hqReason, setHqReason] = useState<string | null>(null);
   const [fixing, setFixing] = useState(false);
 
-  // The salon-type list is curated by Revelapps HQ (enabled ones only).
-  const bizCats = useQuery({
-    queryKey: ['businessCategories'],
-    queryFn: () => get(BusinessCategoryListSchema, '/business-categories'),
-  });
-  const catNames = bizCats.data?.categories.map((c) => c.name) ?? [];
-  // The service-category taxonomy the salon picks from when it writes
-  // its own services (a Velnes-owned list HQ curates).
+  // One taxonomy, HQ's Categories: the salon's type and the categories
+  // it files its services under are the same list. There used to be a
+  // second, separate "business categories" list behind the Type
+  // dropdown, and a category added in HQ never reached it — Alex,
+  // 2026-09-22: one list.
   const svcCats = useQuery({
     queryKey: ['serviceCategories'],
     queryFn: () => get(PublicServiceCategoryListSchema, '/service-categories'),
   });
   const svcCatNames = svcCats.data?.categories ?? [];
+  const catNames = svcCatNames;
+  // A draft that named no type yet takes the first of the list once it
+  // arrives; a type from an older draft that HQ has since renamed stays
+  // selectable (see the option list) rather than silently changing.
+  useEffect(() => {
+    if (!catNames.length) return;
+    setR((d) => (d.salon.type ? d : { ...d, salon: { ...d.salon, type: catNames[0]! } }));
+    // Only when the list arrives.
+  }, [catNames.length]);
   const [svc, setSvc] = useState<{ name: string; category: string; durationMin: string; price: string }>({
     name: '',
     category: '',
@@ -456,7 +461,7 @@ export function Register() {
                   value={r.salon.type}
                   onChange={(e) => setR((d) => ({ ...d, salon: { ...d.salon, type: e.target.value } }))}
                 >
-                  {(catNames.includes(r.salon.type) ? catNames : [r.salon.type, ...catNames]).map((x) => (
+                  {(!r.salon.type || catNames.includes(r.salon.type) ? catNames : [r.salon.type, ...catNames]).map((x) => (
                     <option key={x}>{x}</option>
                   ))}
                 </select>

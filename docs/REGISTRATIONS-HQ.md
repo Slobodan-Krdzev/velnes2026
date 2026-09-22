@@ -384,13 +384,16 @@ The classic wizard now sits on the same flower-pattern sand ground as
 the AI-onboarding screen (shared `OB_PATTERN`), so the two front doors
 feel like one product.
 
-**Categories from HQ.** The salon-type dropdown (step 2) no longer holds
-a hardcoded list — it reads the verticals Revelapps HQ curates. A new
-`business_categories` table (migration 20260906120042) is public-read /
-HQ-write; HQ manages it under Categories → **Business categories** (add,
-rename, enable/disable, super-only), and the anonymous wizard fetches the
-enabled ones from `GET /business-categories`. Disabling a category drops
-it from the wizard while HQ still sees it.
+**Categories from HQ.** The salon-type dropdown (step 2) and the
+category a salon files each service under read **one list**: the
+taxonomy HQ curates under Categories (`service_categories`, via the
+public `/service-categories` door). Until 2026-09-22 the Type dropdown
+read a second, separate list (`business_categories`, with its own HQ
+section), and a category added in HQ never reached the wizard — Alex
+chose one list. The HQ **Business categories** section is retired; the
+table and its doors remain for the seeded types already stored on
+businesses, and a draft naming a type that HQ has since renamed keeps
+it selectable rather than silently changing it.
 
 **A real map.** The Location step (step 4) drops the demo grid for a real
 **OpenStreetMap** via Leaflet: click the map or drag the pin to the exact
