@@ -907,6 +907,7 @@ a.pop-go:hover {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: 10px;
   padding: 11px 16px;
   border-top: 1px solid var(--line-soft);
@@ -921,4 +922,39 @@ a.pop-go:hover {
   min-height: 34px;
   padding: 5px 11px;
   font-size: 13px;
+}
+
+/* The three languages in the open, as chips (LangMenu inline). */
+.langseg {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.langseg-opt {
+  min-height: 32px;
+  padding: 5px 11px;
+  border: 1px solid var(--line-soft);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--ink);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.langseg-opt:hover {
+  background: var(--warm);
+}
+.langseg-opt.on {
+  background: var(--brand);
+  border-color: var(--brand);
+  color: #fff;
+}
+
+/* The phone's language card lives in the overview pane; the desktop
+   sidebar has its own row. */
+@media (min-width: 1024px) {
+  .acc-lang-m {
+    display: none;
+  }
 }

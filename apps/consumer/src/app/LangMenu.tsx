@@ -10,9 +10,29 @@ import { useLang } from '../lib/i18n.js';
  * from its shell header, and the consumer app now does too. Small on
  * purpose: a customer changes this once.
  */
-export function LangMenu({ compact = false }: { compact?: boolean }) {
+export function LangMenu({ compact = false, inline = false }: { compact?: boolean; inline?: boolean }) {
   const { t } = useTranslation();
   const { lang, setLang, langs, label } = useLang();
+  // On the profile page the three choices sit in the open, as chips —
+  // a dropdown inside a card that clips its overflow was cut in half
+  // (Alex, 2026-09-22), and three options need no menu anyway.
+  if (inline)
+    return (
+      <div className="langseg" role="radiogroup" aria-label={t('c.lang')}>
+        {langs.map((l) => (
+          <button
+            key={l}
+            type="button"
+            role="radio"
+            aria-checked={l === lang}
+            className={`langseg-opt${l === lang ? ' on' : ''}`}
+            onClick={() => setLang(l)}
+          >
+            {label[l]}
+          </button>
+        ))}
+      </div>
+    );
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement | null>(null);
   useEffect(() => {

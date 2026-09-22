@@ -2894,6 +2894,7 @@ export const en = {
   'c.acc.locNote': 'A fresh fix is taken each time you open the home page and is never stored — only this choice is.',
   'c.res.noWaiting': 'No waiting, no requests.',
   'c.res.altFit': 'Velnes finds smart alternatives that do fit your moment.',
+  'c.acc.upcomingN': '{{n}} upcoming',
 } as const;
 
 export type TranslationKey = keyof typeof en;

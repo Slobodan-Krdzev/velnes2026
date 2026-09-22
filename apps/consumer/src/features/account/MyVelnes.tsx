@@ -234,7 +234,6 @@ export function MyVelnes({ section = 'over' }: { section?: SecId }) {
                   {s.id === 'notifs' && unread > 0 ? <span className="cnt2">{unread}</span> : null}
                 </button>
               ))}
-              <LangMenu compact />
               <button
                 className="acc-chip"
                 style={{ color: 'var(--muted)' }}
@@ -269,7 +268,7 @@ export function MyVelnes({ section = 'over' }: { section?: SecId }) {
                   {t('c.lang')}
                   <span className="sub">{langLabel}</span>
                 </span>
-                <LangMenu />
+                <LangMenu inline />
               </div>
               <button
                 onClick={() => {
@@ -310,9 +309,9 @@ export function MyVelnes({ section = 'over' }: { section?: SecId }) {
                       </div>
                       <div style={{ marginTop: '7px', display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
                         <span className="tiny-tag">
-                          {list.filter((a) => bucketOf(a) === 'up').length} upcoming
+                          {t('c.acc.upcomingN', { n: list.filter((a) => bucketOf(a) === 'up').length })}
                         </span>
-                        <span className="tiny-tag">{salons.data?.salons.length ?? 0} salons</span>
+                        <span className="tiny-tag">{(salons.data?.salons.length ?? 0) === 1 ? t('c.cards.salonOne', { n: 1 }) : t('c.cards.salonMany', { n: salons.data?.salons.length ?? 0 })}</span>
                       </div>
                     </div>
                   </div>
@@ -330,6 +329,15 @@ export function MyVelnes({ section = 'over' }: { section?: SecId }) {
                       <button className="btn btn-p" onClick={() => nav('/')}>{t('c.acc.findSalon')}</button>
                     </div>
                   )}
+                  {/* The phone never shows the sidebar's language row, so the
+                      same three chips live here; desktop hides this block. */}
+                  <div className="acc-lbl acc-lang-m">{t('c.lang')}</div>
+                  <div className="acc-card acc-lang-m">
+                    <div className="acc-kv" style={{ flexWrap: 'wrap', gap: '10px' }}>
+                      <span>{langLabel}</span>
+                      <LangMenu inline />
+                    </div>
+                  </div>
                   {salons.data?.salons.length ? (
                     <>
                       <div className="acc-lbl">{t('c.acc.yourSalons')}</div>

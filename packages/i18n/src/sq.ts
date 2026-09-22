@@ -2876,4 +2876,5 @@ export const sq: Record<TranslationKey, string> = {
   'c.acc.locNote': 'Një vendndodhje e freskët merret sa herë hapni faqen kryesore dhe nuk ruhet kurrë — ruhet vetëm kjo zgjedhje.',
   'c.res.noWaiting': 'Pa pritje, pa kërkesa.',
   'c.res.altFit': 'Velnes gjen alternativa të mençura që i përshtaten momentit tuaj.',
+  'c.acc.upcomingN': '{{n}} të ardhshme',
 };
