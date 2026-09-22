@@ -245,6 +245,8 @@ export async function createLocation(
       zip: req.zip || null,
       country: req.country,
       tz: req.tz,
+      lat: req.lat,
+      lng: req.lng,
       phone: req.phone || null,
       rooms: req.rooms,
       invPrefix: req.invPrefix || `${req.name.slice(0, 3).toUpperCase()}-`,
