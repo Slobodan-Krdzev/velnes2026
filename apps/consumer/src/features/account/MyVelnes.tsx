@@ -18,6 +18,7 @@ import {
   useFavourites,
   useMyAppointments,
   useMyNotifications,
+  useMyOffers,
   useMySalons,
   useSession,
 } from '../../lib/api/session.js';
@@ -118,6 +119,7 @@ function ApptRow({ a, onOpen }: { a: Appt; onOpen: () => void }) {
 export function MyVelnes({ section = 'over' }: { section?: SecId }) {
   useTranslation();
   const { lang, label } = useLang();
+  const offers = useMyOffers();
   const langLabel = label[lang];
   const nav = useNavigate();
   const params = useParams();
@@ -329,6 +331,56 @@ export function MyVelnes({ section = 'over' }: { section?: SecId }) {
                       <button className="btn btn-p" onClick={() => nav('/')}>{t('c.acc.findSalon')}</button>
                     </div>
                   )}
+                  {/* What salons promised this person, and nobody else: the
+                      live personal offers, soonest to expire first. Absent
+                      when there are none — a heading over nothing is noise. */}
+                  {offers.data?.offers.length ? (
+                    <>
+                      <div className="acc-lbl">{t('c.acc.offers')}</div>
+                      <div className="sm muted" style={{ margin: '-6px 0 10px' }}>{t('c.acc.offersSub')}</div>
+                      {offers.data.offers.map((o) => (
+                        <div key={o.id} className="acc-card acc-offer">
+                          <div className="acc-kv" style={{ alignItems: 'flex-start', gap: '12px' }}>
+                            <span style={{ minWidth: 0 }}>
+                              <b>
+                                {o.serviceName}
+                                {o.variantLabel ? ` · ${o.variantLabel}` : ''}
+                              </b>
+                              <br />
+                              <span className="sm muted">
+                                {t('c.acc.offerAt', { salon: o.salon.name, loc: o.locationName })}
+                                {' · '}
+                                {t('c.acc.offerValid', { d: o.validUntil })}
+                              </span>
+                              {o.intent ? <div className="sm" style={{ marginTop: '4px' }}>{o.intent}</div> : null}
+                            </span>
+                            <span style={{ textAlign: 'right', flex: '0 0 auto' }}>
+                              <span className="sm muted">{t('c.acc.yourPrice')}</span>
+                              <br />
+                              <b style={{ fontSize: '16px' }}>{fmtMKD(o.specialPrice)}</b>
+                              {o.normalPrice > o.specialPrice ? (
+                                <>
+                                  <br />
+                                  <span className="sm muted" style={{ textDecoration: 'line-through' }}>
+                                    {fmtMKD(o.normalPrice)}
+                                  </span>
+                                </>
+                              ) : null}
+                            </span>
+                          </div>
+                          {o.salon.slug ? (
+                            <button
+                              className="btn btn-p"
+                              style={{ marginTop: '10px', minHeight: '38px', padding: '6px 14px', fontSize: '13px' }}
+                              onClick={() => nav(`/salon/${o.salon.slug}?service=${encodeURIComponent(o.serviceId)}&location=${encodeURIComponent(o.locationId)}`)}
+                            >
+                              {t('c.acc.offerBook')}
+                            </button>
+                          ) : null}
+                        </div>
+                      ))}
+                    </>
+                  ) : null}
                   {/* The phone never shows the sidebar's language row, so the
                       same three chips live here; desktop hides this block. */}
                   <div className="acc-lbl acc-lang-m">{t('c.lang')}</div>

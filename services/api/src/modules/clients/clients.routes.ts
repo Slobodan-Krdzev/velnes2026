@@ -12,11 +12,13 @@ import {
   ClientResendSchema,
   ClientFavouritesSchema,
   ClientSalonLinksSchema,
+  ClientOffersSchema,
   FavouriteKindSchema,
   ClientSessionSchema,
   ClientVerifySchema,
   PublicBookResponseSchema,
   BookingRefusalSchema,
+  type ClientOffer,
 } from '@velnes/contracts';
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
@@ -26,6 +28,7 @@ import { db, withClient, withHq, withTenant } from '../../db/index.js';
 import { env } from '../../env.js';
 import { BookingError, BookingRefused, confirmChain } from '../booking/booking.service.js';
 import { visitPayload } from '../../public/public.routes.js';
+import { personalOffersFor } from '../customers/customers.service.js';
 import {
   addFavourite,
   listFavourites,
@@ -62,6 +65,52 @@ const localIso = (d: Date) =>
  * salon's own context fills in its own labels. No joins across a
  * boundary the database is right to refuse.
  */
+/**
+ * The personal offers a client can act on, across every salon they are
+ * a customer of — same shape as `myAppointments`: the links under the
+ * client's own context, each salon's context for its own offers and
+ * labels, the public context for the salon's name. Live only: the
+ * marketplace shows what can still be booked, not the history.
+ */
+async function myOffers(clientUserId: string): Promise<ClientOffer[]> {
+  const links = await withClient(clientUserId, (trx) =>
+    trx.selectFrom('clientCustomerLinks').select(['tenantId', 'customerId']).execute(),
+  );
+  const out: ClientOffer[] = [];
+  for (const l of links) {
+    const biz = await db.transaction().execute(async (trx) => {
+      await sql`select set_config('app.public', '1', true)`.execute(trx);
+      return trx.selectFrom('businesses').select(['name', 'slug']).where('id', '=', l.tenantId).executeTakeFirst();
+    });
+    if (!biz) continue;
+    const rows = await withTenant(l.tenantId, async (trx) => {
+      const offers = (await personalOffersFor(trx, l.customerId)).filter((o) => o.status === 'live');
+      if (!offers.length) return [];
+      const [locs, vars] = await Promise.all([
+        trx.selectFrom('locations').select(['id', 'name']).execute(),
+        trx.selectFrom('serviceVariants').select(['id', 'label']).execute(),
+      ]);
+      return offers.map((o) => ({
+        id: o.id,
+        salon: { slug: biz.slug, name: biz.name },
+        locationId: o.locationId,
+        locationName: locs.find((x) => x.id === o.locationId)?.name ?? '',
+        serviceId: o.serviceId,
+        serviceName: o.serviceName,
+        variantId: o.variantId,
+        variantLabel: o.variantId ? (vars.find((v) => v.id === o.variantId)?.label ?? null) : null,
+        specialPrice: o.specialPrice,
+        normalPrice: o.normalPrice,
+        validUntil: o.validUntil,
+        intent: o.intent,
+      }));
+    });
+    out.push(...rows);
+  }
+  // Soonest to expire first: the one to act on now.
+  return out.sort((a, b) => a.validUntil.localeCompare(b.validUntil));
+}
+
 async function myAppointments(clientUserId: string) {
   const rows = await withClient(clientUserId, (trx) =>
     trx
@@ -297,6 +346,16 @@ export async function clientRoutes(app: FastifyInstance) {
         return fail(reply, e);
       }
     },
+  });
+
+  // ---- offers made to me, across every salon ------------------------
+
+  r.route({
+    method: 'GET',
+    url: '/me/offers',
+    preHandler: [app.authenticateClient],
+    schema: { response: { 200: ClientOffersSchema } },
+    handler: async (req) => ({ offers: await myOffers(req.clientClaims.sub) }),
   });
 
   r.route({

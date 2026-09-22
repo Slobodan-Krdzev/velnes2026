@@ -2877,4 +2877,11 @@ export const mk: Record<TranslationKey, string> = {
   'c.res.noWaiting': 'Без чекање, без барања.',
   'c.res.altFit': 'Velnes наоѓа паметни алтернативи што одговараат на вашиот момент.',
   'c.acc.upcomingN': '{{n}} претстојни',
+  'c.acc.offers': 'Понуди за вас',
+  'c.acc.offersSub': 'Цени што салоните ги одредиле само за вас. Резервирајте пред да истечат.',
+  'c.acc.offerValid': 'До {{d}}',
+  'c.acc.offerInstead': 'наместо {{p}}',
+  'c.acc.offerBook': 'Резервирај по оваа цена',
+  'c.acc.offerAt': 'во {{salon}} · {{loc}}',
+  'c.acc.yourPrice': 'Вашата цена',
 };

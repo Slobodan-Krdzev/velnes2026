@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { t } from '../../lib/i18n-core.js';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
@@ -7,6 +7,7 @@ import type { PublicServiceSchema } from '@velnes/contracts';
 import { DHeader } from '../../app/chrome.js';
 import { fmtMKD, minutesLbl } from '../../lib/api/mappers.js';
 import { useSalonDetail, useSalonServices, useVisitSlots } from '../../lib/api/queries.js';
+import { useMyOffers } from '../../lib/api/session.js';
 import { SalonGallery } from '../../components/SalonGallery.js';
 import { FavHeart } from '../discovery/cards.js';
 import { useWheelScroll } from '../../lib/useWheelScroll.js';
@@ -102,19 +103,24 @@ function TrCard({
   desktop,
   chosen,
   onToggle,
+  offer = null,
 }: {
   s: PublicService;
   on: boolean;
   desktop: boolean;
   chosen: { durationMin: number; price: number; label: string | null } | null;
   onToggle: () => void;
+  /** The salon's promise to this person for this treatment, if any. */
+  offer?: number | null;
 }) {
   const priceLbl =
     on && chosen
       ? fmtMKD(chosen.price)
-      : s.variants.length
-        ? t('c.from', { p: fmtMKD(Math.min(s.price, s.priceFrom ?? s.price)) })
-        : fmtMKD(s.price);
+      : offer != null
+        ? fmtMKD(offer)
+        : s.variants.length
+          ? t('c.from', { p: fmtMKD(Math.min(s.price, s.priceFrom ?? s.price)) })
+          : fmtMKD(s.price);
   return (
     <button className={`tr-card${desktop ? ' dtr' : ''}${on ? ' on' : ''}`} onClick={onToggle}>
       <span className="row1">
@@ -132,7 +138,10 @@ function TrCard({
           {minutesLbl(on && chosen ? chosen.durationMin : s.durationMin)}
           {on && chosen?.label ? ` · ${chosen.label}` : ''}
         </span>
-        <b>{priceLbl}</b>
+        <b>
+          {offer != null ? <span className="tiny-tag" style={{ marginRight: '6px' }}>{t('c.acc.yourPrice')}</span> : null}
+          {priceLbl}
+        </b>
       </span>
     </button>
   );
@@ -145,8 +154,36 @@ function useSalonPage() {
   const detailQ = useSalonDetail(slug);
   const detail = detailQ.data;
   const [locIdx, setLocIdx] = useState(0);
+  // An offer link names its location: open there, before anything is
+  // priced, so the promise and the page agree from the first paint.
+  useEffect(() => {
+    const ql = params.get('location');
+    if (!ql || !detail) return;
+    const i = detail.locations.findIndex((l) => l.id === ql);
+    if (i >= 0) setLocIdx(i);
+    // On arrival only.
+  }, [detail]);
   const location = detail?.locations[locIdx] ?? detail?.locations[0];
   const locationId = location?.id;
+  /**
+   * The salon's promises to this person, at this location. A line the
+   * client holds an offer for is priced at the promise — the booking
+   * door prices by customer and will charge exactly that, and a page
+   * quoting the public price over a private one would be lying twice.
+   * An offer without a variant covers every variant, as the door reads
+   * it (`livePersonalOffer`).
+   */
+  const myOffers = useMyOffers();
+  const offerFor = useCallback(
+    (serviceId: string, variantId: string | null) =>
+      (myOffers.data?.offers ?? []).find(
+        (o) =>
+          o.locationId === locationId &&
+          o.serviceId === serviceId &&
+          (!o.variantId || o.variantId === variantId),
+      ) ?? null,
+    [myOffers.data, locationId],
+  );
   const key = detail?.publishableKey;
   const servicesQ = useSalonServices(key, locationId);
   const services = useMemo(() => servicesQ.data?.services ?? [], [servicesQ.data]);
@@ -206,17 +243,19 @@ function useSalonPage() {
           const svc = services.find((x) => x.id === c.serviceId);
           if (!svc) return null;
           const variant = svc.variants.find((v) => v.id === c.variantId) ?? null;
+          const offer = offerFor(svc.id, variant?.id ?? null);
           return {
             ...c,
             svc,
             variant,
+            offer,
             name: variant ? `${svc.name} · ${variant.label}` : svc.name,
-            price: variant?.price ?? svc.price,
+            price: offer ? offer.specialPrice : (variant?.price ?? svc.price),
             durationMin: variant?.durationMin ?? svc.durationMin,
           };
         })
         .filter((x): x is NonNullable<typeof x> => x !== null),
-    [cart, services],
+    [cart, services, offerFor],
   );
   const availQ = useVisitSlots({
     key,
@@ -287,6 +326,8 @@ function useSalonPage() {
     lines,
     cart,
     inCart: (id: string) => cart.some((c) => c.serviceId === id),
+    /** The promised price for a treatment here, if this person holds one. */
+    offerPrice: (id: string) => offerFor(id, null)?.specialPrice ?? null,
     toggle: (id: string) => {
       setCart((c) =>
         c.some((x) => x.serviceId === id)
@@ -410,7 +451,7 @@ function BookCard({ p, desktop }: { p: Page; desktop: boolean }) {
             s={s}
             desktop={desktop}
             on={p.inCart(s.id)}
-            chosen={chosenOf(p, s.id)}
+            chosen={chosenOf(p, s.id)} offer={p.offerPrice(s.id)}
             onToggle={() => p.toggle(s.id)}
           />
         ))}
@@ -425,7 +466,7 @@ function BookCard({ p, desktop }: { p: Page; desktop: boolean }) {
                   s={s}
                   desktop={desktop}
                   on={p.inCart(s.id)}
-                  chosen={chosenOf(p, s.id)}
+                  chosen={chosenOf(p, s.id)} offer={p.offerPrice(s.id)}
                   onToggle={() => p.toggle(s.id)}
                 />
               ))}

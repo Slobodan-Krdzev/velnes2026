@@ -2,6 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
 import type { z } from 'zod';
 import type {
+  ClientOffer,
   ClientAppointmentsSchema,
   ClientFavouritesSchema,
   ClientNotificationsSchema,
@@ -186,6 +187,17 @@ export function useMyNotifications() {
     queryFn: () => api<Notifications>('/me/notifications'),
     enabled: signedIn,
     staleTime: 15_000,
+  });
+}
+
+/** The personal offers salons made to this person — live ones only. */
+export function useMyOffers() {
+  const { api, signedIn } = useSession();
+  return useQuery({
+    queryKey: ['my-offers'],
+    queryFn: () => api<{ offers: ClientOffer[] }>('/me/offers'),
+    enabled: signedIn,
+    staleTime: 30_000,
   });
 }
 

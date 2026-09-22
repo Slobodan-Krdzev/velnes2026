@@ -64,6 +64,21 @@ A salon appears only if it publishes a marketplace listing, and the page
 honors the switches the salon already owns (`showTeam`, `showPrices`).
 Turning `listed` off removes it from results and 404s its page — tested.
 
+## Offers for you
+
+A salon's **personal offer** (Phase 9: one customer, one treatment, a
+pinned price, a date) now reaches the customer: `GET /client/me/offers`
+walks the client's salon links and returns, from each salon's own
+context, the live offers for that salon's customer row — salon,
+location, treatment, your price against the normal price, until when,
+and the salon's own words. The profile overview shows them as
+**Offers for you**, soonest to expire first, each with *Book at this
+price*, which opens the salon page on that treatment at that location;
+there the treatment shows *Your price*, and the visit total uses it,
+so the quote is what the booking door charges — it already prices by
+customer and stamps the promise on the appointment. Redeemed, expired
+and cancelled offers stay the salon's history and are not shown.
+
 ## Three languages
 
 The app speaks English, Macedonian and Albanian like every other

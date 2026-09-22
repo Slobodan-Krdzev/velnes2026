@@ -2895,6 +2895,13 @@ export const en = {
   'c.res.noWaiting': 'No waiting, no requests.',
   'c.res.altFit': 'Velnes finds smart alternatives that do fit your moment.',
   'c.acc.upcomingN': '{{n}} upcoming',
+  'c.acc.offers': 'Offers for you',
+  'c.acc.offersSub': 'Prices salons set for you alone. Book before they run out.',
+  'c.acc.offerValid': 'Until {{d}}',
+  'c.acc.offerInstead': 'instead of {{p}}',
+  'c.acc.offerBook': 'Book at this price',
+  'c.acc.offerAt': 'at {{salon}} · {{loc}}',
+  'c.acc.yourPrice': 'Your price',
 } as const;
 
 export type TranslationKey = keyof typeof en;

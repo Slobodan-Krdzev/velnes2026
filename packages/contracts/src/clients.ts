@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { MoneySchema } from './catalog.js';
 import { AVATAR_MAX_CHARS } from './auth.js';
 import { ClockSchema } from './scheduling.js';
 
@@ -169,6 +170,34 @@ export const ClientSalonLinkSchema = z.object({
   since: z.iso.date(),
 });
 export const ClientSalonLinksSchema = z.object({ salons: z.array(ClientSalonLinkSchema) });
+
+/**
+ * A personal offer, from the customer's side.
+ *
+ * The salon's promise to *this* person for *one* treatment (Phase 9,
+ * `personal_offers`), as they see it: which salon and location, what
+ * it is, what they pay against what everyone pays, until when. Only
+ * live ones travel — a redeemed or expired promise is history, and the
+ * salon page keeps the history. Booking it needs nothing special: the
+ * booking door already prices by customer and stamps the promise.
+ */
+export const ClientOfferSchema = z.object({
+  id: z.uuid(),
+  salon: z.object({ slug: z.string().nullable(), name: z.string() }),
+  locationId: z.uuid(),
+  locationName: z.string(),
+  serviceId: z.uuid(),
+  serviceName: z.string(),
+  variantId: z.uuid().nullable(),
+  variantLabel: z.string().nullable(),
+  specialPrice: MoneySchema,
+  normalPrice: MoneySchema,
+  validUntil: z.iso.date(),
+  /** The salon's own words, if it wrote any ("Welcome back!"). */
+  intent: z.string(),
+});
+export const ClientOffersSchema = z.object({ offers: z.array(ClientOfferSchema) });
+export type ClientOffer = z.infer<typeof ClientOfferSchema>;
 
 
 /**

@@ -2877,4 +2877,11 @@ export const sq: Record<TranslationKey, string> = {
   'c.res.noWaiting': 'Pa pritje, pa kërkesa.',
   'c.res.altFit': 'Velnes gjen alternativa të mençura që i përshtaten momentit tuaj.',
   'c.acc.upcomingN': '{{n}} të ardhshme',
+  'c.acc.offers': 'Oferta për ju',
+  'c.acc.offersSub': 'Çmime që sallonet i kanë caktuar vetëm për ju. Rezervoni para se të skadojnë.',
+  'c.acc.offerValid': 'Deri më {{d}}',
+  'c.acc.offerInstead': 'në vend të {{p}}',
+  'c.acc.offerBook': 'Rezervo me këtë çmim',
+  'c.acc.offerAt': 'te {{salon}} · {{loc}}',
+  'c.acc.yourPrice': 'Çmimi juaj',
 };
