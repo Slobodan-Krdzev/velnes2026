@@ -1,6 +1,8 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { t } from '../../lib/i18n-core.js';
+import { LangMenu } from '../../app/LangMenu.js';
+import { useLang } from '../../lib/i18n.js';
 import { useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { DHeader } from '../../app/chrome.js';
@@ -115,6 +117,8 @@ function ApptRow({ a, onOpen }: { a: Appt; onOpen: () => void }) {
 
 export function MyVelnes({ section = 'over' }: { section?: SecId }) {
   useTranslation();
+  const { lang, label } = useLang();
+  const langLabel = label[lang];
   const nav = useNavigate();
   const params = useParams();
   const qc = useQueryClient();
@@ -230,6 +234,7 @@ export function MyVelnes({ section = 'over' }: { section?: SecId }) {
                   {s.id === 'notifs' && unread > 0 ? <span className="cnt2">{unread}</span> : null}
                 </button>
               ))}
+              <LangMenu compact />
               <button
                 className="acc-chip"
                 style={{ color: 'var(--muted)' }}
@@ -257,6 +262,15 @@ export function MyVelnes({ section = 'over' }: { section?: SecId }) {
                   )}
                 </button>
               ))}
+              {/* The language lives on the profile page (Alex, 2026-09-22):
+                  a row like the sections, with the pill on the right. */}
+              <div className="acc-lang">
+                <span>
+                  {t('c.lang')}
+                  <span className="sub">{langLabel}</span>
+                </span>
+                <LangMenu />
+              </div>
               <button
                 onClick={() => {
                   signOut();
