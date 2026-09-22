@@ -1038,3 +1038,7 @@ a.pop-go:hover {
 .tab-i > svg,.tab-i .vnav-ic{width:20px;height:20px;display:inline-flex;align-items:center;justify-content:center;flex:none}
 .tab-i > svg,.tab-i .vnav-ic > svg{width:20px;height:20px}
 .tab-i .vnav-ic{line-height:0}
+
+/* The desktop header is rendered once above the routes, sticky at the
+   top of every screen; below 900px the phone chrome takes over. */
+@media (max-width:899.98px){.d-head{display:none}}

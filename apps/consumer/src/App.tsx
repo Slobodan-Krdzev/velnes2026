@@ -7,6 +7,7 @@ import { BookingProvider } from './features/booking/store.js';
 import { BookConfirmed, BookIdentity, BookProfile, BookReview } from './features/booking/steps.js';
 import { BookPay } from './features/booking/pay.js';
 import { MobileChrome } from './app/MobileChrome.js';
+import { DHeader } from './app/chrome.js';
 import { Home } from './features/discovery/Home.js';
 import { Results } from './features/discovery/Results.js';
 import { Salon } from './features/salon/Salon.js';
@@ -69,6 +70,10 @@ export function App() {
           <BookingProvider>
           <BrowserRouter>
             <ScrollToTop />
+            {/* The desktop header, once, sticky above every route — and the
+                phone chrome likewise. Each hides itself on the other's side
+                of 900px. */}
+            <DHeader />
             <MobileChrome />
             <Routes>
               <Route path="/" element={<Home />} />

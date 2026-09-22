@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { DHeader } from '../../app/chrome.js';
 import {
   categoryVM,
   fmtMKD,
@@ -792,7 +791,6 @@ export function Results() {
   return (
     <>
       <div className="d-env">
-        <DHeader />
         <section data-screen="results">
           <div className="d-topbar">
             <div className="d-wrap in">

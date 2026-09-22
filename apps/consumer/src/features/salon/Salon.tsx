@@ -4,7 +4,6 @@ import { t } from '../../lib/i18n-core.js';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import type { z } from 'zod';
 import type { PublicServiceSchema } from '@velnes/contracts';
-import { DHeader } from '../../app/chrome.js';
 import { fmtMKD, minutesLbl } from '../../lib/api/mappers.js';
 import { useSalonDetail, useSalonServices, useVisitSlots } from '../../lib/api/queries.js';
 import { useMyOffers } from '../../lib/api/session.js';
@@ -903,7 +902,6 @@ export function Salon() {
   return (
     <>
       <div className="d-env">
-        <DHeader />
         <section data-screen="salon">
           <div className="d-topbar">
             <div className="d-wrap in">

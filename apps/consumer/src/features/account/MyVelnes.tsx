@@ -5,7 +5,6 @@ import { LangMenu } from '../../app/LangMenu.js';
 import { useLang } from '../../lib/i18n.js';
 import { useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { DHeader } from '../../app/chrome.js';
 import type { z } from 'zod';
 import type { ClientAppointmentSchema } from '@velnes/contracts';
 import { SalonMap } from '../../components/SalonMap.js';
@@ -144,9 +143,6 @@ export function MyVelnes({ section = 'over' }: { section?: SecId }) {
   if (!signedIn || !profile) {
     return (
       <>
-        <div className="only-d">
-          <DHeader />
-        </div>
         <div className="a-env">
           <section className="acc">
             <div className="auth-wrap">
@@ -191,9 +187,6 @@ export function MyVelnes({ section = 'over' }: { section?: SecId }) {
       {/* The account page had no chrome at all: signing in dropped you
           somewhere with no way back to anything but the browser's own
           back button. */}
-      <div className="only-d">
-        <DHeader />
-      </div>
       <div className="a-env">
         <section className="acc">
           <div className="acc-shell" id="acc-shell">
