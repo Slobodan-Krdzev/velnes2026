@@ -145,10 +145,10 @@ export function useVisitSlots(args: {
   locationId: string | undefined;
   date: string | undefined;
   employeeId?: string;
-  items: { serviceId: string; variantId?: string | null }[];
+  items: { serviceId: string; variantId?: string | null; modifierOptionIds?: string[] }[];
 }) {
   const { key, locationId, date, employeeId, items } = args;
-  const sig = items.map((i) => `${i.serviceId}:${i.variantId ?? ''}`).join(',');
+  const sig = items.map((i) => `${i.serviceId}:${i.variantId ?? ''}:${(i.modifierOptionIds ?? []).join('+')}`).join(',');
   return useQuery({
     queryKey: ['visit-slots', key, locationId, date, employeeId ?? 'any', sig],
     queryFn: () =>
@@ -160,6 +160,7 @@ export function useVisitSlots(args: {
         items: items.map((i) => ({
           serviceId: i.serviceId,
           ...(i.variantId ? { variantId: i.variantId } : {}),
+          modifierOptionIds: i.modifierOptionIds ?? [],
         })),
       }),
     enabled: Boolean(key && locationId && date && items.length),

@@ -1005,3 +1005,7 @@ a.pop-go:hover {
 .sal-social a{display:inline-grid;place-items:center;width:30px;height:30px;border-radius:999px;
   background:#fff;border:1px solid var(--line);color:var(--ink);transition:background .15s}
 .sal-social a:hover{background:var(--warm)}
+
+/* Option groups on the salon page: "required" turns amber until answered. */
+.mod-req{font-size:11.5px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;color:var(--muted)}
+.mod-req.unmet{color:#9A6A1F}

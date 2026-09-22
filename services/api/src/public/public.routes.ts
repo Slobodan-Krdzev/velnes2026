@@ -606,7 +606,25 @@ export function guestPayRoutes(app: FastifyInstance, resolve: (req: FastifyReque
 
 /** The visit as the app shows it: the whole span up front, a line per
  *  treatment underneath. A single booking is a visit of one. */
-export async function visitPayload(trx: Trx, booked: { id: string; locationId: string; employeeId: string | null; date: string; start: string; end: string; price: number; serviceName: string | null; status?: string }[]) {
+export async function visitPayload(
+  trx: Trx,
+  booked: {
+    id: string;
+    locationId: string;
+    employeeId: string | null;
+    date: string;
+    start: string;
+    end: string;
+    price: number;
+    serviceName: string | null;
+    modifierNames?: string[];
+    status?: string;
+  }[],
+) {
+  // The treatment as booked: its chosen options ride on the name, so
+  // "Mans Haircut · Loreal" is what every screen after this says.
+  const label = (a: (typeof booked)[number]) =>
+    a.serviceName ? (a.modifierNames?.length ? `${a.serviceName} · ${a.modifierNames.join(', ')}` : a.serviceName) : '';
   const first = booked[0]!;
   const last = booked[booked.length - 1]!;
   const locRow = await trx
@@ -624,10 +642,10 @@ export async function visitPayload(trx: Trx, booked: { id: string; locationId: s
     date: first.date,
     time: first.start,
     end: last.end,
-    serviceName: booked.map((a) => a.serviceName ?? '').filter(Boolean).join(' + '),
+    serviceName: booked.map(label).filter(Boolean).join(' + '),
     items: booked.map((a) => ({
       ref: a.id,
-      serviceName: a.serviceName ?? '',
+      serviceName: label(a),
       time: a.start,
       end: a.end,
       price: a.price,

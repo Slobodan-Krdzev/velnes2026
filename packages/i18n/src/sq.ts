@@ -2997,4 +2997,10 @@ export const sq: Record<TranslationKey, string> = {
   'catalog.variantsInfo2': 'Klientët zgjedhin gjatësinë kur rezervojnë; blloku në kalendar dhe rreshti i arkës ndjekin atë që zgjodhën. Nëse ofroni vetëm një, lini një rresht të vetëm.',
   'catalog.modifiersInfo1': 'Grupet e opsioneve janë zgjedhje mbi shërbimin që i ndryshojnë çmimin ose kohën pa një shërbim të dytë: një grup “Marka e ngjyrës” me dy marka me çmime të ndryshme, ose një grup “Ekstra” ku çdo ekstra shton minuta.',
   'catalog.modifiersInfo2': '“Një zgjedhje” do të thotë që klienti zgjedh saktësisht një opsion; “I kombinueshëm” lejon disa. Shënoni “i detyrueshëm” kur rezervimi nuk mund të kalojë pa përgjigje. ± çmimi dhe ± minutat e çdo opsioni i shtohen shërbimit — 0 nuk ndryshon asgjë, lejohen numra negativë.',
+  'c.sal.optionsFor': 'Opsione për {{name}}',
+  'c.sal.groupRequired': 'e detyrueshme',
+  'c.sal.groupOne': 'zgjidhni një',
+  'c.sal.groupMany': 'zgjidhni disa',
+  'c.sal.chooseGroup': 'Zgjidhni fillimisht {{group}} për {{service}}.',
+  'c.sal.noChange': 'pa ndryshim',
 };

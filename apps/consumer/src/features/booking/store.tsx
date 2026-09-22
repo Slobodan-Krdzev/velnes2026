@@ -12,7 +12,7 @@ export interface BookingDraft {
   lat: number | null;
   lng: number | null;
   /** Every treatment in the visit, in the order they happen. */
-  items: { serviceId: string; variantId: string | null; name: string; durationMin: number; price: number }[];
+  items: { serviceId: string; variantId: string | null; modifierOptionIds: string[]; name: string; durationMin: number; price: number }[];
   serviceId: string;
   variantId: string | null;
   serviceName: string;

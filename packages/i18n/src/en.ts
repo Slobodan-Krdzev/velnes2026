@@ -3015,6 +3015,12 @@ export const en = {
   'catalog.variantsInfo2': 'Customers pick the length when booking; the calendar block and the till line follow the one they picked. If you offer just one, leave a single row.',
   'catalog.modifiersInfo1': 'Option groups are choices on top of the service that change its price or time without a second service: a “Hair colour brand” group with two brands at different prices, or an “Extras” group where each extra adds minutes.',
   'catalog.modifiersInfo2': '“One choice” means the customer picks exactly one option; “Stackable” lets them tick several. Tick “required” when the booking cannot go through without an answer. Each option’s ± price and ± minutes are added to the service — 0 changes nothing, negatives are allowed.',
+  'c.sal.optionsFor': 'Options for {{name}}',
+  'c.sal.groupRequired': 'required',
+  'c.sal.groupOne': 'pick one',
+  'c.sal.groupMany': 'pick any',
+  'c.sal.chooseGroup': 'Choose {{group}} for {{service}} first.',
+  'c.sal.noChange': 'no change',
 } as const;
 
 export type TranslationKey = keyof typeof en;

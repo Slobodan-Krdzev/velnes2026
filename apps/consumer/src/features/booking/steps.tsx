@@ -184,6 +184,7 @@ export function BookProfile() {
         items: draft.items.map((i) => ({
           serviceId: i.serviceId,
           ...(i.variantId ? { variantId: i.variantId } : {}),
+          modifierOptionIds: i.modifierOptionIds,
         })),
         date: draft.date,
         time: draft.time,
@@ -350,6 +351,7 @@ export function BookReview() {
           items: draft.items.map((i) => ({
             serviceId: i.serviceId,
             ...(i.variantId ? { variantId: i.variantId } : {}),
+            modifierOptionIds: i.modifierOptionIds,
           })),
           date: draft.date,
           time: draft.time,

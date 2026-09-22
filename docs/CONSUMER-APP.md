@@ -86,6 +86,17 @@ booked appointment is unpaid, and "Paid online" once it is —
 `GET /client/me/appointments` now carries `paid`, read from the
 appointment's own `paid` column, which the online payment sets.
 
+**Option groups (2026-09-22).** The salon page now shows a service's
+option groups under it once it is in the visit — a "one choice" group
+and a "stackable" one alike as tappable cards, each option with its
+± price and ± minutes, required groups marked and turning amber until
+answered. The chosen options add to the line's price and time on the
+page, ride along in the slots request (so the day is offered for the
+real duration) and in the booking (`modifierOptionIds`), so the
+calendar block, the till line and the invoice carry them. Book now is
+held while a required group is unanswered and says which one — the
+door's `MISSING_REQUIRED` can no longer be hit from the app.
+
 **Paying (2026-09-22).** After Book now the screen switches to the
 payment section (`/book/pay`, `features/booking/pay.tsx`): the visit,
 one field for the salon's own promo code or gift card (both may

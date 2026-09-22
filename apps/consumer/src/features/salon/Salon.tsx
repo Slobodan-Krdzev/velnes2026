@@ -207,7 +207,7 @@ function useSalonPage() {
   // The visit: several treatments in the order they were picked. The
   // prototype's desktop cart is multi-select, and a salon visit really
   // is "haircut then colour" — so the cart is the state, not one id.
-  const [cart, setCart] = useState<{ serviceId: string; variantId: string | null }[]>([]);
+  const [cart, setCart] = useState<{ serviceId: string; variantId: string | null; mods: string[] }[]>([]);
   const [empId, setEmpId] = useState('any');
   const [locOpen, setLocOpen] = useState(false);
   const [openVariantFor, setOpenVariantFor] = useState<string | null>(null);
@@ -224,7 +224,7 @@ function useSalonPage() {
     if (!services.length || cart.length || !qsSvc) return;
     const match = services.find((s) => s.id === qsSvc);
     if (!match) return;
-    setCart([{ serviceId: match.id, variantId: null }]);
+    setCart([{ serviceId: match.id, variantId: null, mods: [] }]);
     const qd = params.get('date');
     const qt = params.get('time');
     if (qd && days.some((d) => d.iso === qd)) setDate(qd);
@@ -244,14 +244,24 @@ function useSalonPage() {
           if (!svc) return null;
           const variant = svc.variants.find((v) => v.id === c.variantId) ?? null;
           const offer = offerFor(svc.id, variant?.id ?? null);
+          // The chosen options add to (or take off) the line's price and
+          // time — the same sums the door makes, so the summary never
+          // promises a number the invoice will not carry.
+          const opts = svc.modifiers.flatMap((g) => g.options).filter((o) => c.mods.includes(o.id));
+          const modPrice = opts.reduce((n, o) => n + o.price, 0);
+          const modMin = opts.reduce((n, o) => n + o.durationMin, 0);
+          const missing = svc.modifiers.filter((g) => g.required && !g.options.some((o) => c.mods.includes(o.id)));
+          const base = variant ? `${svc.name} · ${variant.label}` : svc.name;
           return {
             ...c,
             svc,
             variant,
             offer,
-            name: variant ? `${svc.name} · ${variant.label}` : svc.name,
-            price: offer ? offer.specialPrice : (variant?.price ?? svc.price),
-            durationMin: variant?.durationMin ?? svc.durationMin,
+            opts,
+            missing,
+            name: opts.length ? `${base} · ${opts.map((o) => o.name).join(', ')}` : base,
+            price: Math.max(0, (offer ? offer.specialPrice : (variant?.price ?? svc.price)) + modPrice),
+            durationMin: Math.max(5, (variant?.durationMin ?? svc.durationMin) + modMin),
           };
         })
         .filter((x): x is NonNullable<typeof x> => x !== null),
@@ -262,8 +272,11 @@ function useSalonPage() {
     locationId,
     date,
     employeeId: empId,
-    items: lines.map((l) => ({ serviceId: l.serviceId, variantId: l.variantId })),
+    items: lines.map((l) => ({ serviceId: l.serviceId, variantId: l.variantId, modifierOptionIds: l.mods })),
   });
+  // Required groups nobody has answered yet: the visit cannot be booked
+  // until they are, and the button says which one.
+  const missing = lines.flatMap((l) => l.missing.map((g) => ({ service: l.svc.name, group: g.name })));
   const free = useMemo(() => (availQ.data?.slots ?? []).filter((s) => s.free).map((s) => s.t), [availQ.data]);
   // The time is the person's to pick — nothing is chosen for them, so
   // "Date & time" is ticked only once they have tapped one (Alex,
@@ -332,7 +345,7 @@ function useSalonPage() {
       setCart((c) =>
         c.some((x) => x.serviceId === id)
           ? c.filter((x) => x.serviceId !== id)
-          : [...c, { serviceId: id, variantId: null }],
+          : [...c, { serviceId: id, variantId: null, mods: [] }],
       );
       setEmpId('any');
       setOpenVariantFor(id);
@@ -340,6 +353,25 @@ function useSalonPage() {
     remove: (id: string) => setCart((c) => c.filter((x) => x.serviceId !== id)),
     setVariant: (serviceId: string, variantId: string | null) =>
       setCart((c) => c.map((x) => (x.serviceId === serviceId ? { ...x, variantId } : x))),
+    /** Toggle one option: a "one choice" group swaps, a stackable one adds. */
+    toggleMod: (serviceId: string, group: { type: 'single' | 'multi'; options: { id: string }[] }, optionId: string) =>
+      setCart((c) =>
+        c.map((x) => {
+          if (x.serviceId !== serviceId) return x;
+          const on = x.mods.includes(optionId);
+          const others = x.mods.filter((m) => !group.options.some((o) => o.id === m));
+          const mods =
+            group.type === 'single'
+              ? on
+                ? others
+                : [...others, optionId]
+              : on
+                ? x.mods.filter((m) => m !== optionId)
+                : [...x.mods, optionId];
+          return { ...x, mods };
+        }),
+      ),
+    missing,
     openVariantFor,
     setOpenVariantFor,
     empId,
@@ -482,7 +514,7 @@ function BookCard({ p, desktop }: { p: Page; desktop: boolean }) {
         .map((l) => (
           <div key={l.serviceId}>
             <div className="bk-sub" style={{ marginTop: '14px' }}>
-              <span className="muted">Options for {l.svc.name}</span>
+              <span className="muted">{t('c.sal.optionsFor', { name: l.svc.name })}</span>
             </div>
             <div className="pro-grid">
               <button
@@ -513,6 +545,51 @@ function BookCard({ p, desktop }: { p: Page; desktop: boolean }) {
                 </button>
               ))}
             </div>
+          </div>
+        ))}
+      {p.lines
+        .filter((l) => l.svc.modifiers.length)
+        .map((l) => (
+          <div key={`m-${l.serviceId}`}>
+            {l.svc.modifiers.map((g) => {
+              const unmet = g.required && !g.options.some((o) => l.mods.includes(o.id));
+              return (
+                <div key={g.id}>
+                  <div className="bk-sub" style={{ marginTop: '14px' }}>
+                    <span className="muted">
+                      {g.name} · {l.svc.name}
+                      <small className={unmet ? 'mod-req unmet' : 'mod-req'}>
+                        {' '}
+                        {g.required ? t('c.sal.groupRequired') : g.type === 'single' ? t('c.sal.groupOne') : t('c.sal.groupMany')}
+                      </small>
+                    </span>
+                  </div>
+                  <div className="pro-grid">
+                    {g.options.map((o) => {
+                      const on = l.mods.includes(o.id);
+                      const bits = [
+                        o.price ? `${o.price > 0 ? '+' : '−'}${fmtMKD(Math.abs(o.price))}` : '',
+                        o.durationMin ? `${o.durationMin > 0 ? '+' : '−'}${Math.abs(o.durationMin)} min` : '',
+                      ].filter(Boolean);
+                      return (
+                        <button
+                          key={o.id}
+                          className={`pro-card${on ? ' on' : ''}`}
+                          aria-pressed={on}
+                          onClick={() => p.toggleMod(l.serviceId, g, o.id)}
+                        >
+                          <span className="pav any">{on ? IcStepDone : IcClock}</span>
+                          <span>
+                            <b>{o.name}</b>
+                            <span className="sm muted">{bits.length ? bits.join(' · ') : t('c.sal.noChange')}</span>
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         ))}
       <div className="pro-row">
@@ -648,7 +725,7 @@ function BookCard({ p, desktop }: { p: Page; desktop: boolean }) {
 function goBook(p: Page, nav: (to: string) => void, setDraft: ReturnType<typeof useBooking>['setDraft']) {
   const d = p.detail;
   const first = p.lines[0];
-  if (!d || !first || !p.time || !d.publishableKey || !p.location) return;
+  if (!d || !first || !p.time || !d.publishableKey || !p.location || p.missing.length) return;
   setDraft({
     slug: p.slug,
     salonName: d.locations.length > 1 ? `${d.name} · ${p.location.name}` : d.name,
@@ -660,6 +737,7 @@ function goBook(p: Page, nav: (to: string) => void, setDraft: ReturnType<typeof 
     items: p.lines.map((l) => ({
       serviceId: l.serviceId,
       variantId: l.variantId,
+      modifierOptionIds: l.mods,
       name: l.name,
       durationMin: l.durationMin,
       price: l.price,
@@ -902,12 +980,16 @@ export function Salon() {
                     <span>{t('c.sal.total')}</span>
                     <b>{showPrice}</b>
                   </div>
-                  <button className="btn btn-p" style={{ width: '100%' }} disabled={!p.lines.length || !p.time} onClick={book}>
+                  <button className="btn btn-p" style={{ width: '100%' }} disabled={!p.lines.length || !p.time || p.missing.length > 0} onClick={book}>
                     {t('c.sal.bookNow')}
                   </button>
-                  {!p.lines.length || !p.time ? (
+                  {!p.lines.length || !p.time || p.missing.length ? (
                     <div className="sm muted" style={{ textAlign: 'center', marginTop: '7px' }}>
-                      {!p.lines.length ? t('c.sal.chooseFirstDot') : t('c.sal.pickTime')}
+                      {!p.lines.length
+                        ? t('c.sal.chooseFirstDot')
+                        : p.missing.length
+                          ? t('c.sal.chooseGroup', { group: p.missing[0]!.group, service: p.missing[0]!.service })
+                          : t('c.sal.pickTime')}
                     </div>
                   ) : null}
                 </div>
@@ -986,9 +1068,12 @@ export function Salon() {
                     <b data-sum="price">{showPrice}</b>
                   </span>
                 </div>
-                <button className="btn btn-p" disabled={!p.lines.length || !p.time} onClick={book}>
+                <button className="btn btn-p" disabled={!p.lines.length || !p.time || p.missing.length > 0} onClick={book}>
                   {t('c.sal.bookNow')} {IcArr}
                 </button>
+                {p.missing.length ? (
+                  <span className="sm muted">{t('c.sal.chooseGroup', { group: p.missing[0]!.group, service: p.missing[0]!.service })}</span>
+                ) : null}
                 <span className="safe">{IcVok} {t('c.sal.safe')}</span>
               </div>
             ) : null}
