@@ -3057,4 +3057,9 @@ export const sq: Record<TranslationKey, string> = {
   'c.home.nowAt': 'Tani · {{t}}',
   'c.home.noneNow': 'Asgjë nuk mund të fillojë brenda 30 minutave të ardhshme tani. Shfletoni të gjitha trajtimet.',
   'c.home.nearestHint': 'Aktivizoni vendndodhjen që më të afërtat të dalin të parat.',
+  'c.home.recoForYou': 'Të rekomanduara për ju',
+  'c.home.recoNearby': 'Sallone afër jush',
+  'c.reco.booked': 'Keni qenë këtu më parë',
+  'c.reco.favourite': 'Një nga të preferuarat tuaja',
+  'c.reco.category': 'Ofron {{cat}}, siç rezervoni ju',
 };

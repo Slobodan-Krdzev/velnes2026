@@ -47,6 +47,26 @@ export const DiscoverySalonsSchema = z.object({
   salons: z.array(DiscoverySalonCardSchema),
 });
 
+/**
+ * Why a salon is recommended — said on the card, never guessed by the
+ * app (Alex, 2026-09-23). `booked`: the viewer has been there;
+ * `favourite`: they saved it (or one of its pros); `category`: it does
+ * what they book or favourite elsewhere; `nearby`: it is close.
+ */
+export const DiscoveryRecoReasonSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('booked') }),
+  z.object({ kind: z.literal('favourite') }),
+  z.object({ kind: z.literal('category'), category: z.string() }),
+  z.object({ kind: z.literal('nearby'), km: z.number() }),
+]);
+export const DiscoveryRecommendedSchema = z.object({
+  /** `history`: the viewer's bookings and favourites decided the order;
+   *  `nearby`: their position did; `default`: neither was available. */
+  how: z.enum(['history', 'nearby', 'default']),
+  salons: z.array(DiscoverySalonCardSchema.extend({ reason: DiscoveryRecoReasonSchema.nullable() })),
+});
+export type DiscoveryRecommended = z.infer<typeof DiscoveryRecommendedSchema>;
+
 export const DiscoveryTeamMemberSchema = z.object({
   id: z.uuid(),
   name: z.string(),

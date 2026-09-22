@@ -57,11 +57,14 @@ export interface SalonVM {
   /** The salon's own map pin; null until it drops one. */
   lat: number | null;
   lng: number | null;
+  /** Why it is recommended — only on the home page's recommended row. */
+  reason?: { kind: 'booked' } | { kind: 'favourite' } | { kind: 'category'; category: string } | { kind: 'nearby'; km: number } | null;
   bookable: boolean;
 }
 
-export function salonVM(s: DiscoverySalonCard): SalonVM {
+export function salonVM(s: DiscoverySalonCard & { reason?: SalonVM['reason'] }): SalonVM {
   return {
+    ...(s.reason !== undefined ? { reason: s.reason } : {}),
     id: s.id,
     slug: s.slug,
     name: s.name,

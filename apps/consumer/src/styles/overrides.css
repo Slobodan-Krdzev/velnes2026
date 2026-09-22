@@ -1086,3 +1086,6 @@ a.pop-go:hover {
 
 /* "Available now near you" with nothing to show: say so, quietly. */
 .now-empty{padding:16px 18px;border:1px dashed var(--line);border-radius:14px;color:var(--muted);font-size:14px;background:#fff}
+
+/* Why a salon is recommended: one quiet line under the city. */
+.rc2 .rwhy{margin-top:4px;font-size:12px;font-weight:700;color:var(--brand-hover)}

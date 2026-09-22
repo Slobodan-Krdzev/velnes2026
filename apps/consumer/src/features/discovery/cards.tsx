@@ -158,9 +158,24 @@ export function SalonCard({ s }: { s: SalonVM }) {
         <div className="rrow2">
           <span>{s.city}</span>
         </div>
+        {s.reason ? <div className="rwhy">{reasonLbl(s.reason)}</div> : null}
       </div>
     </article>
   );
+}
+
+/** The reason under a recommended salon, in the viewer's language. */
+function reasonLbl(r: NonNullable<SalonVM['reason']>): string {
+  switch (r.kind) {
+    case 'booked':
+      return t('c.reco.booked');
+    case 'favourite':
+      return t('c.reco.favourite');
+    case 'category':
+      return t('c.reco.category', { cat: r.category });
+    case 'nearby':
+      return t('c.res.fromYou', { d: distanceLbl(r.km) });
+  }
 }
 
 /** "Available near you" — live data end to end: the salon's first online

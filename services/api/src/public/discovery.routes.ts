@@ -13,6 +13,7 @@ import {
   SearchSuggestionsSchema,
   SearchSuggestRequestSchema,
   DiscoverySalonsSchema,
+  DiscoveryRecommendedSchema,
   DiscoveryViewerSchema,
 } from '@velnes/contracts';
 import type { DiscoveryServiceCard } from '@velnes/contracts';
@@ -160,6 +161,18 @@ export function socialLinks(raw: unknown): ListedBusiness['socials'] {
     facebook: url(v.facebook, 'facebook.com'),
     tiktok: v.tiktok.trim() ? (/^https?:\/\//i.test(v.tiktok) ? v.tiktok.trim() : `https://tiktok.com/@${handle(v.tiktok)}`) : null,
   };
+}
+
+/** Great-circle distance in kilometres — the same arithmetic the app's
+ *  own "from you" label uses. */
+function haversineKm(a: { lat: number; lng: number }, b: { lat: number; lng: number }): number {
+  const R = 6371;
+  const dLat = ((b.lat - a.lat) * Math.PI) / 180;
+  const dLng = ((b.lng - a.lng) * Math.PI) / 180;
+  const la1 = (a.lat * Math.PI) / 180;
+  const la2 = (b.lat * Math.PI) / 180;
+  const h = Math.sin(dLat / 2) ** 2 + Math.sin(dLng / 2) ** 2 * Math.cos(la1) * Math.cos(la2);
+  return 2 * R * Math.asin(Math.sqrt(h));
 }
 
 /** Where a salon sits on the map: the pin its owner dropped, preferring
@@ -713,6 +726,130 @@ export async function discoveryRoutes(app: FastifyInstance) {
           .map((id) => byId.get(id))
           .filter((c): c is NonNullable<typeof c> => !!c),
       };
+    },
+  });
+
+  /**
+   * "Recommended for you" — Alex, 2026-09-23. No random order: a
+   * signed-in viewer who allows personalisation is recommended from
+   * their own completed bookings and favourites (the same
+   * `viewerHistory` the search ranker reads), a guest — or a viewer who
+   * switched personalisation off — gets the salons around their
+   * position, and with no position at all the listed order as it is.
+   * Every card says why it is there.
+   */
+  r.route({
+    method: 'GET',
+    url: '/discovery/recommended',
+    schema: {
+      querystring: z.object({
+        lat: z.coerce.number().min(-90).max(90).optional(),
+        lng: z.coerce.number().min(-180).max(180).optional(),
+      }),
+      response: { 200: DiscoveryRecommendedSchema },
+    },
+    handler: async (req) => {
+      const now = new Date();
+      const position = req.query.lat != null && req.query.lng != null ? { lat: req.query.lat, lng: req.query.lng } : null;
+      const listed = await listedBusinesses();
+      // Candidates: open salons, each with the categories it really serves.
+      const cards = [];
+      for (const b of listed) {
+        if (!(await isOpen(b.id))) continue;
+        const cats = await withTenant(b.id, (trx) =>
+          trx
+            .selectFrom('services as s')
+            .innerJoin('serviceCategories as c', 'c.id', 's.categoryId')
+            .select(['c.id', 'c.name'])
+            .distinct()
+            .where('s.status', '=', 'active')
+            .where('s.online', '=', true)
+            .execute(),
+        );
+        const pin = await firstPin(b.id);
+        cards.push({
+          card: {
+            id: b.id,
+            slug: b.slug,
+            name: b.name,
+            city: b.city,
+            address: b.address,
+            pitch: b.marketplace.pitch,
+            categories: b.marketplace.categories,
+            serviceCategories: cats.map((c) => c.name),
+            photo: cardPhoto(b.gallery),
+            lat: pin.lat,
+            lng: pin.lng,
+            bookable: true,
+          },
+          catIds: cats,
+          km: position && pin.lat != null && pin.lng != null ? haversineKm(position, { lat: pin.lat, lng: pin.lng }) : null,
+        });
+      }
+
+      // The viewer, when there is one and they allow it.
+      let history: Awaited<ReturnType<typeof viewerHistory>> | null = null;
+      const claims = await clientClaimsOf(req);
+      if (claims) {
+        const me = await withClient(claims.sub, (trx) =>
+          trx.selectFrom('clientUsers').select('personalisedResults').where('id', '=', claims.sub).executeTakeFirst(),
+        );
+        if (me?.personalisedResults) history = await viewerHistory(claims.sub, now);
+      }
+      const hasHistory =
+        !!history &&
+        (Object.keys(history.businesses).length > 0 || Object.keys(history.categories).length > 0 || history.favouriteBusinessIds.length > 0 || history.favouriteServiceIds.length > 0);
+
+      // Favourite treatments count for their category, resolved inside
+      // their own salon's context — one pass per salon.
+      const favCats = new Set<string>();
+      if (history?.favouriteServiceIds.length) {
+        for (const c of cards) {
+          const hits = await withTenant(c.card.id, (trx) =>
+            trx.selectFrom('services').select('categoryId').where('id', 'in', history!.favouriteServiceIds).execute(),
+          );
+          for (const h of hits) if (h.categoryId) favCats.add(h.categoryId);
+        }
+      }
+      const fresh = (iso: string) => Math.exp(-Math.max(0, (now.getTime() - new Date(iso).getTime()) / 86_400_000) / 120);
+
+      type Reason = { kind: 'booked' } | { kind: 'favourite' } | { kind: 'category'; category: string } | { kind: 'nearby'; km: number };
+      const scored = cards.map((c) => {
+        let score = 0;
+        let reason: Reason | null = null;
+        if (hasHistory && history) {
+          if (history.favouriteBusinessIds.includes(c.card.id)) {
+            score += 3;
+            reason = { kind: 'favourite' };
+          }
+          const last = history.businesses[c.card.id];
+          if (last) {
+            score += 2 * fresh(last);
+            reason ??= { kind: 'booked' };
+          }
+          let best: { name: string; w: number } | null = null;
+          for (const cat of c.catIds) {
+            const seen = history.categories[cat.id];
+            const w = (seen ? 1.5 * fresh(seen) : 0) + (favCats.has(cat.id) ? 1 : 0);
+            if (w > 0 && (!best || w > best.w)) best = { name: cat.name, w };
+          }
+          if (best) {
+            score += best.w;
+            reason ??= { kind: 'category', category: best.name };
+          }
+        }
+        if (c.km != null) {
+          score += Math.max(0, 1 - c.km / 15);
+          reason ??= { kind: 'nearby', km: Math.round(c.km * 10) / 10 };
+        }
+        return { ...c, score, reason };
+      });
+      const how: 'history' | 'nearby' | 'default' = hasHistory ? 'history' : position ? 'nearby' : 'default';
+      const ordered =
+        how === 'default'
+          ? scored
+          : scored.slice().sort((a, b) => b.score - a.score || (a.km ?? Infinity) - (b.km ?? Infinity) || a.card.name.localeCompare(b.card.name));
+      return { how, salons: ordered.slice(0, 8).map((c) => ({ ...c.card, reason: c.reason })) };
     },
   });
 

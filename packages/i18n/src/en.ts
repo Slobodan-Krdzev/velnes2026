@@ -3075,6 +3075,11 @@ export const en = {
   'c.home.nowAt': 'Now · {{t}}',
   'c.home.noneNow': 'Nothing can start in the next 30 minutes right now. Browse all treatments instead.',
   'c.home.nearestHint': 'Turn on location to put the nearest first.',
+  'c.home.recoForYou': 'Recommended for you',
+  'c.home.recoNearby': 'Salons near you',
+  'c.reco.booked': 'You’ve been here before',
+  'c.reco.favourite': 'One of your favourites',
+  'c.reco.category': 'Does {{cat}}, like you book',
 } as const;
 
 export type TranslationKey = keyof typeof en;

@@ -97,6 +97,21 @@ active tab follows the route; nothing is active on a salon page or a
 booking step. Full-screen sheets (search, map, location prompt) still
 cover the chrome. The pages no longer carry their own tab bars.
 
+**Recommended for you (2026-09-23).** The home page's "Recommended"
+row is no longer the first four listed salons. `GET
+/discovery/recommended` (optional viewer token, optional `lat/lng`)
+answers three ways and says which: `history` — a signed-in viewer who
+allows personalisation is scored from the same `viewerHistory` the
+search ranker reads (a favourite salon or pro +3, a salon they have
+completed a visit at +2 with a 120-day recency fade, the categories
+they book or favourite elsewhere +1.5/+1, closeness within 15 km up to
++1); `nearby` — a guest, or a viewer with personalisation off, gets
+the open salons around their position; `default` — no viewer and no
+position leaves the listed order as it is. Every card carries a
+`reason` (`booked`, `favourite`, `category`, `nearby`) that the card
+says out loud, so a recommendation is never a mystery. Pinned by
+`discovery/recommended.test.ts`.
+
 **Available now near you (2026-09-23).** The home page's "Available
 near you" became "Available now near you": it asks the search door for
 *now* alone (`POST /discovery/search` with `q: 'now'`, the same

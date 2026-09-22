@@ -3057,4 +3057,9 @@ export const mk: Record<TranslationKey, string> = {
   'c.home.nowAt': 'Сега · {{t}}',
   'c.home.noneNow': 'Моментално ништо не може да почне во следните 30 минути. Разгледајте ги сите третмани.',
   'c.home.nearestHint': 'Вклучете локација за да бидат најблиските прво.',
+  'c.home.recoForYou': 'Препорачано за вас',
+  'c.home.recoNearby': 'Салони во ваша близина',
+  'c.reco.booked': 'Веќе сте биле тука',
+  'c.reco.favourite': 'Едно од вашите омилени',
+  'c.reco.category': 'Нуди {{cat}}, како што резервирате',
 };
