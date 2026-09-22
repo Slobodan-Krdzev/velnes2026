@@ -347,8 +347,8 @@ export async function approveRegistration(id: string, reviewer: string) {
         catIds.set(cat, made.id);
       }
     }
-    for (const [i, s] of draft.services.entries()) {
-      const svc = await trx
+    for (const [i, s] of draft.services.entries())
+      await trx
         .insertInto('services')
         .values({
           tenantId: businessId,
@@ -362,15 +362,7 @@ export async function approveRegistration(id: string, reviewer: string) {
           online: true, // on offer to the public from the first minute
           sort: i,
         })
-        .returning('id')
-        .executeTakeFirstOrThrow();
-      // The owner delivers what the wizard listed — the skill rows the
-      // readiness gate and the booking doors both read.
-      await trx
-        .insertInto('employeeSkills')
-        .values({ tenantId: businessId, employeeId: ownerId, serviceId: svc.id })
         .execute();
-    }
 
     // The salon's own products, on the product taxonomy. Stock starts
     // at 0 — a deliberate first count, never a guess.
@@ -517,28 +509,102 @@ export async function approveRegistration(id: string, reviewer: string) {
       after: 'active',
     });
 
-    // The booking page: one live widget for the location, so the
-    // consumer app admits the salon and the widget door answers.
+    await publishSalon(trx, { businessId, locationId, actorName: reviewer, reason: 'Registration approved' });
+
+    return { businessId, locationId, ownerEmail: draft.acct.email };
+  });
+}
+
+/**
+ * Publish a salon: what "approved" has meant since 2026-09-22. One
+ * function, idempotent, so registration approval and the repair tool
+ * for salons approved before that day (`src/db/publish-salon.ts`)
+ * cannot disagree:
+ *
+ *  - every active service goes online (the wizard's are already);
+ *  - the owner is skilled in every active service they are not yet —
+ *    the owner delivers what they listed;
+ *  - one live booking widget on the location, if there is none;
+ *  - the location walks APPROVED → ACTIVE through the one lifecycle
+ *    writer when the readiness gate says yes, the actor named in the
+ *    log. Not ready → stays APPROVED, and the checklist says why.
+ *
+ * Runs inside the caller's transaction. Every query names the tenant:
+ * approval runs with `app.hq` set, which reads across tenants, and a
+ * publish that saw another salon's widget or services would be wrong.
+ */
+export async function publishSalon(
+  trx: Trx,
+  opts: { businessId: string; locationId: string; actorName: string; reason: string },
+): Promise<{ activated: boolean; notReady: string[] }> {
+  const { businessId, locationId } = opts;
+
+  await trx
+    .updateTable('services')
+    .set({ online: true })
+    .where('tenantId', '=', businessId)
+    .where('status', '=', 'active')
+    .where('online', '=', false)
+    .execute();
+
+  const biz = await trx
+    .selectFrom('businesses')
+    .select(['name', 'ownerEmployeeId'])
+    .where('id', '=', businessId)
+    .executeTakeFirstOrThrow();
+  if (biz.ownerEmployeeId) {
+    const missing = await trx
+      .selectFrom('services as s')
+      .select('s.id')
+      .where('s.tenantId', '=', businessId)
+      .where('s.status', '=', 'active')
+      .where(({ not, exists, selectFrom }) =>
+        not(
+          exists(
+            selectFrom('employeeSkills as k')
+              .select('k.serviceId')
+              .whereRef('k.serviceId', '=', 's.id')
+              .where('k.employeeId', '=', biz.ownerEmployeeId!),
+          ),
+        ),
+      )
+      .execute();
+    for (const s of missing)
+      await trx
+        .insertInto('employeeSkills')
+        .values({ tenantId: businessId, employeeId: biz.ownerEmployeeId, serviceId: s.id })
+        .execute();
+  }
+
+  const live = await trx
+    .selectFrom('widgets')
+    .select('id')
+    .where('tenantId', '=', businessId)
+    .where('status', '=', 'live')
+    .executeTakeFirst();
+  if (!live)
     await trx
       .insertInto('widgets')
       .values({
         tenantId: businessId,
-        name: draft.salon.name,
+        name: biz.name,
         publishableKey: `pk_live_${randomBytes(18).toString('base64url')}`,
         locationIds: [locationId],
         status: 'live',
       })
       .execute();
 
-    // Go live: the readiness gate is the same one the owner would pass,
-    // and the lifecycle writer logs HQ as the actor.
-    const ready = await locReadiness(trx, locationId);
-    if (ready.ok)
-      await locTransition(trx, null, locationId, 'ACTIVE', 'Registration approved', {
-        employeeId: null,
-        name: reviewer,
-      });
-
-    return { businessId, locationId, ownerEmail: draft.acct.email };
+  const loc = await trx
+    .selectFrom('locations')
+    .select('lifecycle')
+    .where('id', '=', locationId)
+    .executeTakeFirstOrThrow();
+  if (loc.lifecycle !== 'APPROVED') return { activated: loc.lifecycle === 'ACTIVE', notReady: [] };
+  const ready = await locReadiness(trx, locationId);
+  if (!ready.ok) return { activated: false, notReady: ready.items.filter((i) => !i.ok).map((i) => i.label) };
+  await locTransition(trx, null, locationId, 'ACTIVE', opts.reason, {
+    employeeId: null,
+    name: opts.actorName,
   });
+  return { activated: true, notReady: [] };
 }

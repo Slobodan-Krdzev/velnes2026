@@ -50,7 +50,15 @@ leaves its bare first location at `APPROVED`: it has no catalog to be
 ready with. Pinned by `registrations.test.ts` (ACTIVE + online, the
 lifecycle log row, the live widget, the search projection, the
 consumer salon door answering `bookable: true`) and the register loop
-in `e2e/platform.spec.ts`.
+in `e2e/platform.spec.ts`. The publishing itself is one idempotent
+function, `publishSalon()`, and a salon approved before this rule
+existed — APPROVED, services offline, no widget — is brought to the
+same state by `pnpm --filter @velnes/api exec tsx
+--env-file-if-exists=../../.env src/db/publish-salon.ts <slug>`, which
+runs the very same function under the tenant and reports what it did.
+The readiness gate's staff item now follows the booking door's rule
+(a bookable member with no skill rows does everything), so the gate
+can no longer refuse a salon the booking page would sell.
 
 ## Revelapps HQ (apps/hq)
 
