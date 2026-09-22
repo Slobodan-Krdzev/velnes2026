@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   categoryVM,
   fmtMKD,
@@ -605,6 +605,20 @@ export function Results() {
     el?.focus();
     el?.select();
   }, [sheet]);
+  // Arrived from the tab bar's Search: open the box straight away — on
+  // a phone that is the full-screen sheet (whose own effect focuses its
+  // input), on the desktop the top bar's field.
+  const routeLoc = useLocation();
+  const asked = (routeLoc.state as { focusSearch?: number } | null)?.focusSearch;
+  useEffect(() => {
+    if (!asked) return;
+    if (window.innerWidth < 900) setSheet(true);
+    else {
+      const el = document.querySelector<HTMLInputElement>('.d-topbar input[data-res="q"]');
+      el?.focus();
+      el?.select();
+    }
+  }, [asked]);
   // Only a typed query can have been broadened; a category card asked
   // for exactly what it got.
   /**
