@@ -1031,3 +1031,10 @@ a.pop-go:hover {
   /* Full-screen sheets and modals cover the chrome as before. */
   .m-sheet,.mapsheet,.gps-modal{top:0;bottom:0}
 }
+
+/* Tab bar icons: one size, one box, one baseline — five different SVG
+   sizes used to sit on five different lines. */
+.tab-i{justify-content:flex-end;min-height:44px}
+.tab-i > svg,.tab-i .vnav-ic{width:20px;height:20px;display:inline-flex;align-items:center;justify-content:center;flex:none}
+.tab-i > svg,.tab-i .vnav-ic > svg{width:20px;height:20px}
+.tab-i .vnav-ic{line-height:0}
