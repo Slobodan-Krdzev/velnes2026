@@ -78,7 +78,10 @@ export function BookIdentity() {
   };
   return (
     <section data-screen="email">
-      <div className="authwrap">
+      {/* Desktop: the booking on the left, the questions on the right,
+          both centred; phones and tablets keep the single column. */}
+      <div className="authwrap authwrap-split">
+        <div className="auth-info">
         <h1>{t('c.bk.confirm')}</h1>
         <div className="sub">{t('c.bk.emailHold')}</div>
         <div className="minisum">
@@ -93,6 +96,8 @@ export function BookIdentity() {
           <div className="r"><span className="k">{t('c.bk.dateTime')}</span><span className="v">{draft.dayLbl} · {draft.time}</span></div>
           <div className="r"><span className="k">{t('c.bk.total')}</span><span className="v">{fmtMKD(draft.price)}</span></div>
         </div>
+        </div>
+        <div className="auth-form">
         <div className="fld">
           <label style={{ fontSize: '12.5px', fontWeight: '700', color: 'var(--ink)' }}>{t('c.bk.whoFor')}</label>
         </div>
@@ -127,6 +132,7 @@ export function BookIdentity() {
           Continue {IcArr}
         </button>
         <div className="auth-note">{IcVok13} We only use your email for booking confirmations. No spam, no password.</div>
+        </div>
       </div>
     </section>
   );

@@ -958,3 +958,14 @@ a.pop-go:hover {
     display: none;
   }
 }
+
+/* ── Guest identity step, desktop: two columns, centred ─────────────
+   The booking summary on the left, "who is this for" + email + Continue
+   on the right, the pair centred in the viewport. Phones and tablets
+   keep the single column the prototype drew. */
+@media (min-width:1024px){
+  .authwrap.authwrap-split{max-width:980px;display:grid;grid-template-columns:1fr 1fr;
+    column-gap:56px;align-items:center;min-height:calc(100vh - 90px);padding-top:24px}
+  .authwrap-split .auth-info .minisum{margin-bottom:0}
+  .authwrap-split .auth-form>.fld:first-child{margin-top:0}
+}
