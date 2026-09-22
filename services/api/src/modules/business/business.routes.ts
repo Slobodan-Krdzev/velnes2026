@@ -1,4 +1,5 @@
 import {
+  BusinessCategoriesSchema,
   BusinessPatchSchema,
   BusinessProfileSchema,
   BusinessSettingsPatchSchema,
@@ -136,6 +137,29 @@ export function businessRoutes(app: FastifyInstance) {
         const b = await trx.selectFrom('businesses').select('settings').executeTakeFirstOrThrow();
         // Defaults fill any section that was never saved.
         return BusinessSettingsSchema.parse(b.settings ?? {});
+      }),
+  });
+
+  r.route({
+    method: 'GET',
+    url: '/business/categories',
+    preHandler: [app.authenticate],
+    schema: { response: { 200: BusinessCategoriesSchema } },
+    handler: async (req) =>
+      withTenant(req.claims.ten, async (trx) => {
+        // What the consumer app really files this salon under: the HQ
+        // categories of its active, online services — the shelf's own
+        // predicate (discovery's categoryIdsOnOffer), not a stored list.
+        const rows = await trx
+          .selectFrom('services as s')
+          .innerJoin('serviceCategories as c', 'c.id', 's.categoryId')
+          .select(['c.id', 'c.name'])
+          .distinct()
+          .where('s.status', '=', 'active')
+          .where('s.online', '=', true)
+          .orderBy('c.name')
+          .execute();
+        return { categories: rows };
       }),
   });
 

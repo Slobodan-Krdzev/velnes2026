@@ -1,8 +1,12 @@
-import { useQueryClient } from '@tanstack/react-query';
-import { BusinessSettingsSchema, type BusinessSettings } from '@velnes/contracts';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  BusinessCategoriesSchema,
+  BusinessSettingsSchema,
+  type BusinessSettings,
+} from '@velnes/contracts';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { patch } from '@velnes/client';
+import { get, patch } from '@velnes/client';
 import { NumInput } from '@velnes/ui';
 import { useToast } from '../../lib/toast.js';
 import { Field, ToggleRow, useBusiness, useBusinessSettings } from './bits.js';
@@ -12,7 +16,6 @@ import { Field, ToggleRow, useBusiness, useBusinessSettings } from './bits.js';
  *  starts (§5 pending); the section says so instead of pretending a
  *  marketplace exists. Photos come from the Company gallery. */
 
-const CATEGORIES = ['Physiotherapy', 'Rehab', 'Sports injury', 'Manual therapy', 'Dry needling'];
 const LEADS = ['2 hours', 'Same day', '1 day'];
 const CANCELS = ['24 hours before', '12 hours before', '2 hours before'];
 
@@ -22,6 +25,12 @@ export function MarketplaceSection() {
   const qc = useQueryClient();
   const settings = useBusinessSettings();
   const business = useBusiness();
+  // The categories the consumer app files this salon under — read from
+  // its online services by one door, never picked here.
+  const cats = useQuery({
+    queryKey: ['businessCategories'],
+    queryFn: () => get(BusinessCategoriesSchema, '/business/categories'),
+  });
   const [mp, setMp] = useState<BusinessSettings['marketplace'] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -129,26 +138,18 @@ export function MarketplaceSection() {
         <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 16 }}>
           <div className="field">
             <span>{t('mset.categories')}</span>
-            <div className="chips" style={{ marginTop: 6 }}>
-              {CATEGORIES.map((c) => {
-                const on = mp.categories.includes(c);
-                return (
-                  <button
-                    key={c}
-                    className={`chip${on ? ' on' : ''}`}
-                    onClick={() =>
-                      set({
-                        categories: on
-                          ? mp.categories.filter((x) => x !== c)
-                          : [...mp.categories, c],
-                      })
-                    }
-                  >
-                    {c}
-                  </button>
-                );
-              })}
-            </div>
+            {cats.data && cats.data.categories.length === 0 ? (
+              <div className="hint" style={{ marginTop: 6 }}>{t('mset.categoriesNone')}</div>
+            ) : (
+              <div className="chips" style={{ marginTop: 6 }} aria-live="polite">
+                {(cats.data?.categories ?? []).map((c) => (
+                  <span key={c.id} className="chip on">
+                    {c.name}
+                  </span>
+                ))}
+              </div>
+            )}
+            <div className="hint" style={{ marginTop: 8 }}>{t('mset.categoriesNote')}</div>
           </div>
           <ToggleRow
             label={t('mset.showPrices')}

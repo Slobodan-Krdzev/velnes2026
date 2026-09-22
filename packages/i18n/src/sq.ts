@@ -2902,4 +2902,6 @@ export const sq: Record<TranslationKey, string> = {
   'reg.cardPhotoSet': 'Përdor si foto të kartës',
   'reg.cardPhotoBadge': 'Foto e kartës',
   'reg.cardPhotoAdd': '+ Shto foto të kartës',
+  'mset.categoriesNote': 'Lexohen nga shërbimet tuaja online: aplikacioni Velnes ju vendos nën kategoritë ku bëjnë pjesë trajtimet tuaja. Për t’u shfaqur nën një tjetër, shtoni një shërbim aty.',
+  'mset.categoriesNone': 'Ende nuk ka shërbime online — i pari që shtoni te Katalogu vendos se ku shfaqeni.',
 };

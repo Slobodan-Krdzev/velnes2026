@@ -154,6 +154,21 @@ describe('the business card, the settings document and the new patch doors', () 
     expect(denied.statusCode).toBe(403);
   });
 
+  it('names the categories the salon appears under, read from its online services', async () => {
+    const res = await get(`${API_PREFIX}/business/categories`);
+    expect(res.statusCode).toBe(200);
+    const names = res.json().categories.map((c: { name: string }) => c.name) as string[];
+    expect(names.length).toBeGreaterThan(0);
+    expect(names).toEqual([...new Set(names)].sort((a, b) => a.localeCompare(b)));
+    // The same predicate the consumer shelf uses: active AND online.
+    const expected = await admin.query(
+      `SELECT DISTINCT c.name FROM services s JOIN service_categories c ON c.id = s.category_id
+        WHERE s.tenant_id = $1 AND s.status = 'active' AND s.online ORDER BY c.name`,
+      [demo.business],
+    );
+    expect(names).toEqual(expected.rows.map((r: { name: string }) => r.name));
+  });
+
   it('edits a location week through the audited hours door', async () => {
     const res = await patch(`${API_PREFIX}/locations/${demo.locAerodrom}`, {
       hours: {

@@ -140,6 +140,18 @@ export const BusinessSettingsSchema = z.object({
 export type BusinessSettings = z.infer<typeof BusinessSettingsSchema>;
 export const BusinessSettingsPatchSchema = BusinessSettingsSchema.partial();
 
+/**
+ * The HQ categories a salon is placed under in the consumer app —
+ * read from its active, online services, the same predicate discovery
+ * uses, so Settings can never say something the shelf does not.
+ * Read-only by design: to appear under another category, add a
+ * service there.
+ */
+export const BusinessCategoriesSchema = z.object({
+  categories: z.array(z.object({ id: z.uuid(), name: z.string() })),
+});
+export type BusinessCategories = z.infer<typeof BusinessCategoriesSchema>;
+
 /** The weekly template + booking-policy fields the Opening-hours
  *  section edits, plus the location card the settings panel edits.
  *  Hours use the same shape scheduleFor reads: weekday index

@@ -2920,6 +2920,8 @@ export const en = {
   'reg.cardPhotoSet': 'Use as card photo',
   'reg.cardPhotoBadge': 'Card photo',
   'reg.cardPhotoAdd': '+ Add card photo',
+  'mset.categoriesNote': 'Read from your online services: the Velnes app places you under the categories your treatments belong to. To appear under another one, add a service there.',
+  'mset.categoriesNone': 'No online services yet — the first one you add under Catalog decides where you appear.',
 } as const;
 
 export type TranslationKey = keyof typeof en;
