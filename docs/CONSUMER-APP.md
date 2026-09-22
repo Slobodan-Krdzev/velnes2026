@@ -69,10 +69,22 @@ calendar: guests ring the salon's bell too, and the customer is mailed
 at every step — booked, requested, accepted (with the payment link),
 declined (with the salon's note). Links are built on
 `CONSUMER_APP_URL` (`.env.example`): a signed-in customer's goes to
-their appointment page, a guest's to `/pay/<id>?t=<token>`, the token
-an HMAC of the appointment id under the API secret — a capability for
-that one appointment's payment screen, since a guest has no account
-to sign into. The payment screen itself is the next step.
+their appointment page, a guest's to `/pay/<id>?t=<token>&s=<salon>`,
+the token an HMAC of the appointment id under the API secret — a
+capability for that one appointment's payment screen, since a guest
+has no account to sign into.
+
+**Pay later (2026-09-22).** Both links open the payment screen with
+the appointment loaded. `/pay/:id` is the same `BookPay` as after Book
+now, fed by the quote instead of route state: a guest's link carries
+the token and the salon slug, a signed-in client's bare id goes
+through their session. A link opened too early (the salon has not
+accepted), too late (cancelled) or twice (already paid) says so
+instead of showing a form. The client's appointment page (My Velnes ›
+Appointments › one appointment) shows "Pay now · amount" while a
+booked appointment is unpaid, and "Paid online" once it is —
+`GET /client/me/appointments` now carries `paid`, read from the
+appointment's own `paid` column, which the online payment sets.
 
 **Paying (2026-09-22).** After Book now the screen switches to the
 payment section (`/book/pay`, `features/booking/pay.tsx`): the visit,

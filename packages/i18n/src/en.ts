@@ -2986,6 +2986,14 @@ export const en = {
   'c.acc.cardsNote': 'A card is saved when you tick “Save this card” while paying. Velnes never keeps the number — only the brand, the last four digits and the expiry.',
   'c.acc.noCards': 'No saved cards yet.',
   'c.acc.forgetCard': 'Remove',
+  'c.pay.alreadyPaid': 'This appointment is already paid. See you there.',
+  'c.pay.awaitingLink': 'The salon hasn’t accepted this request yet. You’ll get a link the moment it does.',
+  'c.pay.cancelledLink': 'This appointment was cancelled — nothing to pay.',
+  'c.pay.backAcct': 'Back to My Velnes',
+  'c.pay.findSalon': 'Find a salon',
+  'c.acc.paidOnline': 'Paid online',
+  'c.acc.payNow': 'Pay now · {{amount}}',
+  'c.acc.payNote': 'Pay online now, or at the salon on the day.',
 } as const;
 
 export type TranslationKey = keyof typeof en;

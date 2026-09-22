@@ -113,6 +113,8 @@ export const ClientAppointmentSchema = z.object({
   durationMin: z.number().int(),
   price: z.number().int(),
   status: z.string(),
+  /** Paid online through the Velnes app — the link's "Pay now" is gone. */
+  paid: z.boolean().default(false),
   /** Free cancellation window the salon set for that location. */
   cancelHours: z.number().int(),
 });

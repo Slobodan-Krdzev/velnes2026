@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { i18n, t } from '../../lib/i18n-core.js';
 import { fmtMKD } from '../../lib/api/mappers.js';
@@ -76,7 +76,23 @@ export function BookPay() {
   const qc = useQueryClient();
   const { draft, setDraft } = useBooking();
   const { signedIn, profile, api } = useSession();
-  const entry = (history.state?.usr ?? null) as PayEntry | null;
+  // Two ways in: straight from Book now (the visit in route state), or
+  // a pay-later link — /pay/:id?t=<token>&s=<salon> for a guest, the
+  // bare id for a signed-in client — which loads the visit by quoting.
+  const params = useParams<{ id: string }>();
+  const [search] = useSearchParams();
+  const stateEntry = (history.state?.usr ?? null) as PayEntry | null;
+  const entry: (PayEntry & { appointmentId: string }) | null = useMemo(() => {
+    if (stateEntry) return { ...stateEntry, appointmentId: stateEntry.visit.ref };
+    if (!params.id) return null;
+    return {
+      appointmentId: params.id,
+      slug: search.get('s') ?? '',
+      token: search.get('t') ?? undefined,
+      email: undefined,
+      visit: { ref: params.id, date: '', time: '', end: '', serviceName: '', items: [], locationName: '', employeeName: '', price: 0 },
+    };
+  }, [stateEntry, params.id, search]);
   const [quote, setQuote] = useState<PayQuote | null>(null);
   const [promo, setPromo] = useState('');
   const [gift, setGift] = useState('');
@@ -105,7 +121,7 @@ export function BookPay() {
     if (!entry) return;
     let live = true;
     call<PayQuote>('/pay/quote', {
-      appointmentId: entry.visit.ref,
+      appointmentId: entry.appointmentId,
       ...(promo ? { promoCode: promo } : {}),
       ...(gift ? { giftCode: gift } : {}),
     })
@@ -185,7 +201,21 @@ export function BookPay() {
       const res = await call<PayResult>('/pay', body);
       if (signedIn) await qc.invalidateQueries({ queryKey: ['my-appointments'] });
       if (draft) setDraft({ ...draft, email });
-      nav('/book/confirmed', { state: { ...entry.visit, payment: res, email }, replace: true });
+      // A link's visit is whatever the quote said it is.
+      const visit: BookedVisit = entry.visit.date
+        ? entry.visit
+        : {
+            ref: quote.appointmentId,
+            date: quote.items[0]?.date ?? '',
+            time: quote.items[0]?.time ?? '',
+            end: quote.items[quote.items.length - 1]?.end ?? '',
+            serviceName: quote.items.map((i) => i.serviceName).join(' + '),
+            items: quote.items.map((i) => ({ ref: i.id, serviceName: i.serviceName, time: i.time, end: i.end, price: i.price, employeeName: '' })),
+            locationName: quote.locationName,
+            employeeName: '',
+            price: quote.subtotal,
+          };
+      nav('/book/confirmed', { state: { ...visit, payment: res, email }, replace: true });
     } catch (e) {
       setBusy(false);
       setErr(e instanceof ApiError ? (i18nHas(`refusal.${e.code}`) ? t(`refusal.${e.code}`, e.params) : e.message) : t('c.bk.wrong'));
@@ -194,6 +224,9 @@ export function BookPay() {
 
   const total = quote?.total ?? entry.visit.price;
   const free = quote ? quote.total === 0 : false;
+  const when = quote?.items[0] ? `${quote.items[0].date} · ${quote.items[0].time}` : `${entry.visit.date} · ${entry.visit.time}`;
+  // A link opened too early, too late, or twice says so instead of a form.
+  const blocked = quote && quote.status !== 'payable' ? quote.status : null;
   const canPay =
     !!quote &&
     !busy &&
@@ -217,7 +250,7 @@ export function BookPay() {
                 <span className="v">{i.serviceName} · {fmtMKD(i.price)}</span>
               </div>
             ))}
-            <div className="r"><span className="k">{t('c.bk.dateTime')}</span><span className="v">{entry.visit.date} · {entry.visit.time}</span></div>
+            <div className="r"><span className="k">{t('c.bk.dateTime')}</span><span className="v">{when}</span></div>
             <div className="r"><span className="k">{t('c.pay.subtotal')}</span><span className="v">{fmtMKD(quote?.subtotal ?? entry.visit.price)}</span></div>
             {quote?.promo ? (
               <div className="r pay-disc">
@@ -257,10 +290,20 @@ export function BookPay() {
         </div>
 
         <div className="auth-form">
-          <div className="fld">
+          {blocked ? (
+            <div>
+              <div className="note pay-note">
+                {blocked === 'paid' ? t('c.pay.alreadyPaid') : blocked === 'requested' ? t('c.pay.awaitingLink') : t('c.pay.cancelledLink')}
+              </div>
+              <button className="btn btn-g" style={{ width: '100%', marginTop: 14, minHeight: 50 }} onClick={() => nav(signedIn ? '/account/appts' : '/')}>
+                {signedIn ? t('c.pay.backAcct') : t('c.pay.findSalon')}
+              </button>
+            </div>
+          ) : null}
+          <div className="fld" hidden={!!blocked}>
             <label>{t('c.pay.method')}</label>
           </div>
-          {free ? (
+          {blocked ? null : free ? (
             <div className="note pay-note">{t('c.pay.nothingToPay')}</div>
           ) : (
             <div className="pay-methods" role="radiogroup">
@@ -283,7 +326,7 @@ export function BookPay() {
             </div>
           )}
 
-          {!free && method === 'card' ? (
+          {!blocked && !free && method === 'card' ? (
             <div className="pay-card">
               {signedIn && saved.length > 0 && useSavedId ? (
                 <div className="pay-saved">
@@ -338,10 +381,10 @@ export function BookPay() {
               )}
             </div>
           ) : null}
-          {!free && method === 'venue' ? <div className="note pay-note">{t('c.pay.venueSub')}</div> : null}
+          {!blocked && !free && method === 'venue' ? <div className="note pay-note">{t('c.pay.venueSub')}</div> : null}
 
           {err ? <div className="acc-err" style={{ marginTop: 8 }}>{err}</div> : null}
-          <button className={`btn ${method === 'apple_pay' && !free ? 'btn-dark' : 'btn-p'}`} style={{ width: '100%', marginTop: 18, minHeight: 50 }} disabled={!canPay} onClick={pay}>
+          <button className={`btn ${method === 'apple_pay' && !free ? 'btn-dark' : 'btn-p'}`} style={{ width: '100%', marginTop: 18, minHeight: 50 }} disabled={!canPay} onClick={pay} hidden={!!blocked}>
             {busy
               ? t('c.pay.paying')
               : free

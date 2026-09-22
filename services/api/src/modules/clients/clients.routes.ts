@@ -135,6 +135,7 @@ async function myAppointments(clientUserId: string) {
         'durationMin',
         'price',
         'status',
+        'paid',
         'title',
       ])
       .where('clientUserId', '=', clientUserId)
@@ -191,6 +192,7 @@ async function myAppointments(clientUserId: string) {
         durationMin: a.durationMin,
         price: a.price,
         status: a.status,
+        paid: a.paid === 'paid',
         cancelHours: loc?.cancelHours ?? 24,
       });
     }

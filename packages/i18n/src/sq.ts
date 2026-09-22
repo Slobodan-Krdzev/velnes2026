@@ -2968,4 +2968,12 @@ export const sq: Record<TranslationKey, string> = {
   'c.acc.cardsNote': 'Karta ruhet kur shënoni “Ruaj këtë kartë” gjatë pagesës. Velnes nuk e ruan kurrë numrin — vetëm markën, katër shifrat e fundit dhe skadencën.',
   'c.acc.noCards': 'Ende nuk ka karta të ruajtura.',
   'c.acc.forgetCard': 'Hiq',
+  'c.pay.alreadyPaid': 'Ky termin është paguar tashmë. Shihemi atje.',
+  'c.pay.awaitingLink': 'Salloni nuk e ka pranuar ende këtë kërkesë. Do të merrni një lidhje sapo ta pranojë.',
+  'c.pay.cancelledLink': 'Ky termin u anulua — asgjë për t’u paguar.',
+  'c.pay.backAcct': 'Kthehu te Velnes-i im',
+  'c.pay.findSalon': 'Gjej një sallon',
+  'c.acc.paidOnline': 'Paguar online',
+  'c.acc.payNow': 'Paguaj tani · {{amount}}',
+  'c.acc.payNote': 'Paguani online tani ose në sallon atë ditë.',
 };

@@ -79,6 +79,7 @@ export function App() {
               <Route path="/book/profile" element={<BookProfile />} />
               <Route path="/book/review" element={<BookReview />} />
               <Route path="/book/pay" element={<BookPay />} />
+              <Route path="/pay/:id" element={<BookPay />} />
               <Route path="/book/confirmed" element={<BookConfirmed />} />
               <Route path="/login" element={<Login />} />
               <Route path="/register" element={<Register />} />

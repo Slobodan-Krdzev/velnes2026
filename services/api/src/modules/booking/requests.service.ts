@@ -41,23 +41,23 @@ export function guestPayToken(appointmentId: string): string {
 
 /** Where a customer goes to pay: their appointment page when they
  *  have an account, a tokened page when they booked as a guest. */
-export function payLink(appointmentId: string, clientUserId: string | null): string {
+export function payLink(appointmentId: string, clientUserId: string | null, slug: string | null): string {
   return clientUserId
     ? `${env.consumerAppUrl}/account/appointments/${appointmentId}`
-    : `${env.consumerAppUrl}/pay/${appointmentId}?t=${guestPayToken(appointmentId)}`;
+    : `${env.consumerAppUrl}/pay/${appointmentId}?t=${guestPayToken(appointmentId)}&s=${encodeURIComponent(slug ?? '')}`;
 }
 
 /** The salon's context for a message: its name and the owner's e-mail. */
 async function salonOf(trx: Trx, tenantId: string) {
   const b = await trx
     .selectFrom('businesses')
-    .select(['name', 'ownerEmployeeId'])
+    .select(['name', 'slug', 'ownerEmployeeId'])
     .where('id', '=', tenantId)
     .executeTakeFirstOrThrow();
   const owner = b.ownerEmployeeId
     ? await trx.selectFrom('employees').select('email').where('id', '=', b.ownerEmployeeId).executeTakeFirst()
     : undefined;
-  return { name: b.name, ownerEmail: owner?.email ?? null };
+  return { name: b.name, slug: b.slug, ownerEmail: owner?.email ?? null };
 }
 
 export interface BookedVisitCtx {
@@ -120,7 +120,7 @@ export async function afterBooked(trx: Trx, ctx: BookedVisitCtx): Promise<Client
       subject: requested ? `Request sent to ${salon.name}` : `Booked at ${salon.name}`,
       body: requested
         ? `Your request for ${what} on ${when} is with ${salon.name}. They confirm requests themselves — you will get an e-mail as soon as they answer, and you pay only once it is accepted.`
-        : `${what} on ${when} at ${salon.name} is booked.\n\nSee the appointment or pay for it here: ${payLink(first.id, ctx.clientUserId)}`,
+        : `${what} on ${when} at ${salon.name} is booked.\n\nSee the appointment or pay for it here: ${payLink(first.id, ctx.clientUserId, salon.slug)}`,
       kind: requested ? 'booking_requested' : 'booking_confirmed',
       refId: first.id,
     });
@@ -153,7 +153,7 @@ export async function afterDecided(
   const what = a.serviceName ?? 'your appointment';
   const when = `${a.date} at ${a.start}`;
   const accepted = decision === 'accept';
-  const link = payLink(a.id, customer.clientUserId);
+  const link = payLink(a.id, customer.clientUserId, salon.slug);
 
   if (customer.email)
     await queueMail(trx, {

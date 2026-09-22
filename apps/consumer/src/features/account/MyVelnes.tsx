@@ -547,6 +547,15 @@ export function MyVelnes({ section = 'over' }: { section?: SecId }) {
                       </div>
                       {err ? <div className="acc-err">{err}</div> : null}
                       <div style={{ display: 'grid', gap: '10px' }}>
+                        {current.status === 'booked' && !current.paid ? (
+                          <>
+                            <button className="btn btn-p" style={{ width: '100%' }} onClick={() => nav(`/pay/${current.id}`)}>
+                              {t('c.acc.payNow', { amount: fmtMKD(current.price) })}
+                            </button>
+                            <div className="muted" style={{ fontSize: 13, marginTop: -4 }}>{t('c.acc.payNote')}</div>
+                          </>
+                        ) : null}
+                        {current.paid ? <div className="acc-badge ok" style={{ justifySelf: 'start' }}>{t('c.acc.paidOnline')}</div> : null}
                         {current.salonSlug ? (
                           <button
                             className="btn btn-p"

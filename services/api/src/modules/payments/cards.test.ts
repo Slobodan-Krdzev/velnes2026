@@ -120,6 +120,9 @@ describe('saved cards — a client keeps a card at checkout and pays with it nex
     const raw = await admin.query(`SELECT provider_ref FROM client_payment_methods WHERE last4 = '4242'`);
     expect(raw.rows[0].provider_ref).toMatch(/^mock_pm_/);
     expect(JSON.stringify(raw.rows)).not.toContain('4242424242424242');
+    // My appointments says paid, so the page drops its Pay now.
+    const mine = await call('GET', '/me/appointments');
+    expect(mine.json().appointments.find((a: { id: string }) => a.id === b.ref)?.paid).toBe(true);
     // The client's own bell heard the payment.
     const bell = await call('GET', '/me/notifications');
     expect(bell.json().notifications.some((n: { title: string }) => n.title === 'Payment received')).toBe(true);
