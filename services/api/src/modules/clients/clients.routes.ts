@@ -22,6 +22,7 @@ import {
   PayQuoteSchema,
   PayRequestSchema,
   PayResultSchema,
+  ClientCardsSchema,
   type ClientOffer,
 } from '@velnes/contracts';
 import type { FastifyInstance, FastifyReply } from 'fastify';
@@ -33,6 +34,7 @@ import { env } from '../../env.js';
 import { BookingError, BookingRefused, confirmChain } from '../booking/booking.service.js';
 import { afterBooked } from '../booking/requests.service.js';
 import { payAppointment, quotePayment } from '../payments/payments.service.js';
+import { randomBytes } from 'node:crypto';
 import { visitPayload } from '../../public/public.routes.js';
 import { personalOffersFor } from '../customers/customers.service.js';
 import {
@@ -239,7 +241,53 @@ function clientPayRoutes(app: FastifyInstance) {
       const a = await own(id, req.body.appointmentId);
       if (!a) return reply.code(404).send({ error: 'NOT_FOUND', message: 'Unknown appointment' });
       try {
-        const out = await withTenant(a.tenantId, (trx) => payAppointment(trx, a.tenantId, req.body, { clientUserId: id }));
+        // A saved card is charged through its provider token — the
+        // form never sees the number again. A new card may be kept.
+        let charged: { ref: string; brand: string; last4: string } | undefined;
+        if (req.body.method === 'card' && req.body.savedCardId) {
+          const card = await withClient(id, (trx) =>
+            trx
+              .selectFrom('clientPaymentMethods')
+              .select(['brand', 'last4', 'providerRef', 'expMonth', 'expYear'])
+              .where('id', '=', req.body.savedCardId!)
+              .executeTakeFirst(),
+          );
+          if (!card) return reply.code(404).send({ error: 'NOT_FOUND', message: 'Unknown card' });
+          if (new Date(card.expYear, card.expMonth, 0) < new Date())
+            return reply.code(409).send({ error: 'REFUSED' as const, message: 'That card has expired', code: 'CARD_DECLINED', params: {} });
+          charged = { ref: `mock_ch_${randomBytes(9).toString('base64url')}`, brand: card.brand, last4: card.last4 };
+        }
+        const out = await withTenant(a.tenantId, (trx) =>
+          payAppointment(trx, a.tenantId, req.body, { clientUserId: id, charged }),
+        );
+        if (out.status === 'paid' && req.body.method === 'card' && req.body.saveCard && req.body.card && !req.body.savedCardId) {
+          const c = req.body.card;
+          const digits = c.number.replace(/[\s-]/g, '');
+          const dup = await withClient(id, (trx) =>
+            trx
+              .selectFrom('clientPaymentMethods')
+              .select('id')
+              .where('last4', '=', digits.slice(-4))
+              .where('expMonth', '=', c.expMonth)
+              .where('expYear', '=', c.expYear)
+              .executeTakeFirst(),
+          );
+          if (!dup)
+            await withClient(id, (trx) =>
+              trx
+                .insertInto('clientPaymentMethods')
+                .values({
+                  clientUserId: id,
+                  brand: out.card?.brand ?? 'Card',
+                  last4: digits.slice(-4),
+                  expMonth: c.expMonth,
+                  expYear: c.expYear,
+                  holder: c.holder,
+                  providerRef: `mock_pm_${randomBytes(9).toString('base64url')}`,
+                })
+                .execute(),
+            );
+        }
         if (out.status === 'paid')
           await notifyClient(id, {
             kind: 'appointment',
@@ -258,6 +306,41 @@ function clientPayRoutes(app: FastifyInstance) {
   });
 }
 
+/** The account's saved cards: list and forget. Adding one happens at
+ *  checkout ("save this card"), never here — a card is saved by using it. */
+function clientCardRoutes(app: FastifyInstance) {
+  const r = app.withTypeProvider<ZodTypeProvider>();
+  r.route({
+    method: 'GET',
+    url: '/me/cards',
+    preHandler: [app.authenticateClient],
+    schema: { response: { 200: ClientCardsSchema } },
+    handler: async (req) => {
+      const rows = await withClient(req.clientClaims.sub, (trx) =>
+        trx
+          .selectFrom('clientPaymentMethods')
+          .select(['id', 'brand', 'last4', 'expMonth', 'expYear', 'holder', 'createdAt'])
+          .orderBy('createdAt', 'desc')
+          .execute(),
+      );
+      return { cards: rows.map((c) => ({ ...c, createdAt: c.createdAt.toISOString() })) };
+    },
+  });
+  r.route({
+    method: 'DELETE',
+    url: '/me/cards/:id',
+    preHandler: [app.authenticateClient],
+    schema: { params: z.object({ id: z.uuid() }), response: { 200: z.object({ ok: z.literal(true) }), 404: ErrorSchema } },
+    handler: async (req, reply) => {
+      const gone = await withClient(req.clientClaims.sub, (trx) =>
+        trx.deleteFrom('clientPaymentMethods').where('id', '=', req.params.id).returning('id').executeTakeFirst(),
+      );
+      if (!gone) return reply.code(404).send({ error: 'NOT_FOUND', message: 'Unknown card' });
+      return { ok: true as const };
+    },
+  });
+}
+
 export async function clientRoutes(app: FastifyInstance) {
   await app.register(rateLimit, {
     max: 120,
@@ -265,6 +348,7 @@ export async function clientRoutes(app: FastifyInstance) {
     keyGenerator: (req) => req.ip,
   });
   clientPayRoutes(app);
+  clientCardRoutes(app);
 
   const r = app.withTypeProvider<ZodTypeProvider>();
 

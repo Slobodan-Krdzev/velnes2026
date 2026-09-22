@@ -2963,4 +2963,9 @@ export const sq: Record<TranslationKey, string> = {
   'c.pay.confirmFree': 'Konfirmo',
   'c.pay.later': 'Paguaj më vonë',
   'drawer.paidOnline': 'Paguar',
+  'c.acc.cards': 'Mënyrat e pagesës',
+  'c.acc.cardsSub': 'Kartat e ruajtura gjatë pagesës',
+  'c.acc.cardsNote': 'Karta ruhet kur shënoni “Ruaj këtë kartë” gjatë pagesës. Velnes nuk e ruan kurrë numrin — vetëm markën, katër shifrat e fundit dhe skadencën.',
+  'c.acc.noCards': 'Ende nuk ka karta të ruajtura.',
+  'c.acc.forgetCard': 'Hiq',
 };

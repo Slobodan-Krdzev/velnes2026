@@ -2963,4 +2963,9 @@ export const mk: Record<TranslationKey, string> = {
   'c.pay.confirmFree': 'Потврди',
   'c.pay.later': 'Плати подоцна',
   'drawer.paidOnline': 'Платено',
+  'c.acc.cards': 'Начини на плаќање',
+  'c.acc.cardsSub': 'Картички зачувани при плаќање',
+  'c.acc.cardsNote': 'Картичката се зачувува кога ќе штиклирате „Зачувај ја картичката“ при плаќање. Velnes никогаш не го чува бројот — само брендот, последните четири цифри и рокот.',
+  'c.acc.noCards': 'Сè уште нема зачувани картички.',
+  'c.acc.forgetCard': 'Отстрани',
 };

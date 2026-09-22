@@ -94,9 +94,22 @@ so the salon's calendar, till and reports all see it; pay at the venue
 records the choice in the history and leaves the till to collect. The
 salon's bell rings on payment and the customer gets a receipt mail.
 The confirmed screen then says paid (card, invoice number) or booked
-with payment at the salon. Pinned by `payments.test.ts`. Saved cards
-and the pay-later link are the next steps; the mock is labelled on
-screen ("test mode") so nobody mistakes it for money.
+with payment at the salon. Pinned by `payments.test.ts`. The mock is
+labelled on screen ("test mode") so nobody mistakes it for money.
+
+**Saved cards (2026-09-22).** A signed-in client who ticks "Save this
+card" while paying keeps it on the account: `client_payment_methods`
+holds the brand, the last four digits, the expiry, the name and the
+provider's token — never the number, which only ever crossed the wire
+to the (mock) provider. Next time the pay screen offers the saved card
+first ("Use Visa ••4242"), with a way to use another; `POST
+/client/pay` charges a `savedCardId` through the token, refuses an
+expired one, and saves a new card only when asked and only once (same
+last four + expiry). My Velnes › Payment methods lists and forgets
+them (`GET`/`DELETE /client/me/cards`). A guest never saves a card,
+whatever the request says. Private to the client by RLS
+(`app.client_id`), readable by HQ for support. Pinned by
+`cards.test.ts`.
 
 **No widget needed (2026-09-22).** That key is `salon:<slug>`
 (`consumerKey()` in `@velnes/contracts`), not a widget's publishable

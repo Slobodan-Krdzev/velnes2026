@@ -1,4 +1,4 @@
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { t } from '../../lib/i18n-core.js';
 import { LangMenu } from '../../app/LangMenu.js';
@@ -45,9 +45,10 @@ const secs = () => [
   { id: 'appts' as const, t: t('c.acc.appts'), sub: t('c.acc.apptsSub') },
   // Third, where the prototype puts it.
   { id: 'favs' as const, t: t('c.acc.favs'), sub: t('c.acc.favsSub') },
+  { id: 'cards' as const, t: t('c.acc.cards'), sub: t('c.acc.cardsSub') },
   { id: 'notifs' as const, t: t('c.acc.notifs'), sub: '' },
 ];
-type SecId = 'general' | 'appts' | 'favs' | 'notifs' | 'over' | 'appt';
+type SecId = 'general' | 'appts' | 'favs' | 'notifs' | 'cards' | 'over' | 'appt';
 
 const titles = (): Record<string, string> => ({
   over: t('c.acc.title'),
@@ -55,6 +56,7 @@ const titles = (): Record<string, string> => ({
   appts: t('c.acc.appts'),
   appt: 'Appointment',
   favs: t('c.acc.favs'),
+  cards: t('c.acc.cards'),
   notifs: t('c.acc.notifs'),
 });
 
@@ -420,6 +422,9 @@ export function MyVelnes({ section = 'over' }: { section?: SecId }) {
               {/* ---- general ---- */}
               {sec === 'general' ? <General /> : null}
 
+              {/* ---- payment methods ---- */}
+              {sec === 'cards' ? <Cards /> : null}
+
               {/* ---- appointments ---- */}
               {sec === 'appts' ? (
                 <>
@@ -736,6 +741,54 @@ function Favourites() {
         </div>
       ) : null}
     </>
+  );
+}
+
+/** Payment methods: the cards the account kept at checkout. Listing
+ *  and forgetting live here; adding is "save this card" while paying. */
+function Cards() {
+  const { api } = useSession();
+  const qc = useQueryClient();
+  const cards = useQuery({
+    queryKey: ['my-cards'],
+    queryFn: () => api<{ cards: { id: string; brand: string; last4: string; expMonth: number; expYear: number; holder: string }[] }>('/me/cards'),
+  });
+  const [busy, setBusy] = useState<string | null>(null);
+  const forget = async (id: string) => {
+    setBusy(id);
+    try {
+      await api(`/me/cards/${id}`, { method: 'DELETE' });
+      await qc.invalidateQueries({ queryKey: ['my-cards'] });
+    } finally {
+      setBusy(null);
+    }
+  };
+  const list = cards.data?.cards ?? [];
+  return (
+    <div className="acc-card">
+      <div className="acc-lbl">{t('c.acc.cards')}</div>
+      <div className="muted" style={{ fontSize: 13.5, marginBottom: 14 }}>{t('c.acc.cardsNote')}</div>
+      {cards.isLoading ? null : list.length === 0 ? (
+        <div className="acc-empty">{t('c.acc.noCards')}</div>
+      ) : (
+        <div style={{ display: 'grid', gap: 10 }}>
+          {list.map((c) => (
+            <div className="acc-row" key={c.id} style={{ alignItems: 'center' }}>
+              <div>
+                <div style={{ fontWeight: 700 }}>{c.brand} ••{c.last4}</div>
+                <div className="muted" style={{ fontSize: 13 }}>
+                  {String(c.expMonth).padStart(2, '0')}/{String(c.expYear).slice(-2)}
+                  {c.holder ? ` · ${c.holder}` : ''}
+                </div>
+              </div>
+              <button type="button" className="acc-link" disabled={busy === c.id} onClick={() => void forget(c.id)}>
+                {t('c.acc.forgetCard')}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 

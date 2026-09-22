@@ -197,6 +197,20 @@ export const ClientOfferSchema = z.object({
   intent: z.string(),
 });
 export const ClientOffersSchema = z.object({ offers: z.array(ClientOfferSchema) });
+
+/** A card the account keeps — brand, last four, expiry, name. Never the
+ *  number: the provider's token is the only thing that can charge it. */
+export const ClientCardSchema = z.object({
+  id: z.uuid(),
+  brand: z.string(),
+  last4: z.string(),
+  expMonth: z.number().int(),
+  expYear: z.number().int(),
+  holder: z.string(),
+  createdAt: z.iso.datetime(),
+});
+export type ClientCard = z.infer<typeof ClientCardSchema>;
+export const ClientCardsSchema = z.object({ cards: z.array(ClientCardSchema) });
 export type ClientOffer = z.infer<typeof ClientOfferSchema>;
 
 

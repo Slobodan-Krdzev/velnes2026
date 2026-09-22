@@ -87,6 +87,7 @@ export function App() {
               <Route path="/account/appts" element={<MyVelnes section="appts" />} />
               <Route path="/account/favs" element={<MyVelnes section="favs" />} />
               <Route path="/account/notifs" element={<MyVelnes section="notifs" />} />
+              <Route path="/account/cards" element={<MyVelnes section="cards" />} />
               <Route path="/account/appointments/:id" element={<MyVelnes section="appts" />} />
               <Route path="*" element={<Home />} />
             </Routes>

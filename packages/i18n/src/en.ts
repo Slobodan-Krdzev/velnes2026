@@ -2981,6 +2981,11 @@ export const en = {
   'c.pay.confirmFree': 'Confirm',
   'c.pay.later': 'Pay later',
   'drawer.paidOnline': 'Paid',
+  'c.acc.cards': 'Payment methods',
+  'c.acc.cardsSub': 'Cards you saved at checkout',
+  'c.acc.cardsNote': 'A card is saved when you tick “Save this card” while paying. Velnes never keeps the number — only the brand, the last four digits and the expiry.',
+  'c.acc.noCards': 'No saved cards yet.',
+  'c.acc.forgetCard': 'Remove',
 } as const;
 
 export type TranslationKey = keyof typeof en;

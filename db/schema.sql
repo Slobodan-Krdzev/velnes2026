@@ -804,6 +804,25 @@ ALTER TABLE ONLY public.client_notifications FORCE ROW LEVEL SECURITY;
 -- Name: client_users; Type: TABLE; Schema: public; Owner: -
 --
 
+CREATE TABLE public.client_payment_methods (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    client_user_id uuid NOT NULL,
+    brand text NOT NULL,
+    last4 text NOT NULL,
+    exp_month integer NOT NULL,
+    exp_year integer NOT NULL,
+    holder text DEFAULT ''::text NOT NULL,
+    provider text DEFAULT 'mock'::text NOT NULL,
+    provider_ref text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+ALTER TABLE public.client_payment_methods FORCE ROW LEVEL SECURITY;
+ALTER TABLE public.client_payment_methods ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY cards_client ON public.client_payment_methods USING (((client_user_id)::text = current_setting('app.client_id'::text, true))) WITH CHECK (((client_user_id)::text = current_setting('app.client_id'::text, true)));
+CREATE POLICY cards_hq ON public.client_payment_methods FOR SELECT USING ((current_setting('app.hq'::text, true) = '1'::text));
+
 CREATE TABLE public.client_users (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     email text NOT NULL,
@@ -6461,4 +6480,5 @@ INSERT INTO public.schema_migrations (version) VALUES
     ('20260921140000'),
     ('20260921160000'),
     ('20260922120000'),
-    ('20260922150000');
+    ('20260922150000'),
+    ('20260922170000');

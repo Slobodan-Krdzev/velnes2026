@@ -245,6 +245,19 @@ export interface ClientFavourites {
   tenantId: string;
 }
 
+export interface ClientPaymentMethods {
+  brand: string;
+  clientUserId: string;
+  createdAt: Generated<Timestamp>;
+  expMonth: number;
+  expYear: number;
+  holder: Generated<string>;
+  id: Generated<string>;
+  last4: string;
+  provider: Generated<string>;
+  providerRef: string;
+}
+
 export interface ClientNotifications {
   body: Generated<string>;
   clientUserId: string;
@@ -1153,6 +1166,7 @@ export interface DB {
   clientCustomerLinks: ClientCustomerLinks;
   clientFavourites: ClientFavourites;
   clientNotifications: ClientNotifications;
+  clientPaymentMethods: ClientPaymentMethods;
   clientUsers: ClientUsers;
   combos: Combos;
   customerActivity: CustomerActivity;
