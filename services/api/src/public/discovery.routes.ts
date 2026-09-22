@@ -1,4 +1,5 @@
 import {
+  consumerKey,
   BusinessSettingsSchema,
   DiscoveryCategoriesSchema,
   DiscoveryCategoryServicesSchema,
@@ -132,7 +133,6 @@ async function listedBusinesses(): Promise<ListedBusiness[]> {
   });
 }
 
-/** Live-widget lookup under app.public — same policy the widget doors use. */
 /** Where a salon sits on the map: the pin its owner dropped, preferring
  *  a live location's but falling back to any of them — a salon that is
  *  listed but not yet bookable still has a place in the world. */
@@ -149,18 +149,14 @@ async function firstPin(tenantId: string): Promise<{ lat: number | null; lng: nu
   return { lat: best?.lat ?? null, lng: best?.lng ?? null };
 }
 
-async function liveWidgets(tenantIds: string[]) {
-  if (!tenantIds.length) return [];
-  return db.transaction().execute(async (trx) => {
-    await sql`select set_config('app.public', '1', true)`.execute(trx);
-    return trx
-      .selectFrom('widgets')
-      .select(['tenantId', 'publishableKey', 'locationIds', 'createdAt'])
-      .where('tenantId', 'in', tenantIds)
-      .where('status', '=', 'live')
-      .orderBy('createdAt')
-      .execute();
-  });
+/** Is the salon open to the outside world — does it have an ACTIVE
+ *  location? The one bookability question; the website widget is a
+ *  separate product and plays no part (Alex, 2026-09-22). */
+async function isOpen(tenantId: string): Promise<boolean> {
+  const active = await withTenant(tenantId, (trx) =>
+    trx.selectFrom('locations').select('id').where('lifecycle', '=', 'ACTIVE').executeTakeFirst(),
+  );
+  return !!active;
 }
 
 /**
@@ -399,14 +395,15 @@ interface CandidateMeta {
  *    locations exist to the outside world, which is the rule the
  *    lifecycle was built to carry; a salon still being set up is not
  *    open, whatever else is true of it.
- *  - It is bookable — a live widget answers for it. This surface exists
- *    to be booked from, and a treatment that cannot be booked has no
- *    business competing for position with one that can. As an admission
- *    rule rather than a weight, because a weight can always be
- *    out-argued by another weight: at proximity 0.30 against
- *    availability 0.20 a nearby salon that took no bookings used to
- *    outrank a bookable one further away, which is precisely the
- *    outcome this forbids.
+ *    That ACTIVE location is also what makes it bookable: the consumer
+ *    app books through the public doors with the salon's own key
+ *    (`salon:<slug>`), so nothing else — in particular no website
+ *    widget, a separate product not every salon will have — is asked
+ *    for. As an admission rule rather than a weight, because a weight
+ *    can always be out-argued by another weight: at proximity 0.30
+ *    against availability 0.20 a nearby salon that took no bookings
+ *    used to outrank a bookable one further away, which is precisely
+ *    the outcome this forbids.
  *
  * One predicate, used by the category shelf and by both service doors,
  * so a card can never open onto a page its own admission rules emptied.
@@ -470,20 +467,8 @@ export function resetAdmittedCache() {
 
 async function admittedBusinesses(): Promise<ListedBusiness[]> {
   const listed = await listedBusinesses();
-  if (!listed.length) return [];
-  const bookable = new Set((await liveWidgets(listed.map((b) => b.id))).map((w) => w.tenantId));
   const out: ListedBusiness[] = [];
-  for (const b of listed) {
-    if (!bookable.has(b.id)) continue;
-    const active = await withTenant(b.id, (trx) =>
-      trx
-        .selectFrom('locations')
-        .select('id')
-        .where('lifecycle', '=', 'ACTIVE')
-        .executeTakeFirst(),
-    );
-    if (active) out.push(b);
-  }
+  for (const b of listed) if (await isOpen(b.id)) out.push(b);
   return out;
 }
 
@@ -708,11 +693,10 @@ export async function discoveryRoutes(app: FastifyInstance) {
     schema: { response: { 200: DiscoverySalonsSchema } },
     handler: async () => {
       const listed = await listedBusinesses();
-      const widgets = await liveWidgets(listed.map((b) => b.id));
-      const bookable = new Set(widgets.map((w) => w.tenantId));
       const salons = [];
       for (const b of listed) {
         const photo = cardPhoto(b.gallery);
+        const open = await isOpen(b.id);
         const cats = await withTenant(b.id, (trx) =>
           trx
             .selectFrom('services as s')
@@ -735,7 +719,7 @@ export async function discoveryRoutes(app: FastifyInstance) {
           photo,
           lat: pin.lat,
           lng: pin.lng,
-          bookable: bookable.has(b.id),
+          bookable: open,
         });
       }
       return { salons };
@@ -1127,7 +1111,6 @@ export async function discoveryRoutes(app: FastifyInstance) {
       const biz = listed.find((b) => b.slug === req.params.slug);
       if (!biz)
         return reply.code(404).send({ error: 'UNKNOWN_SALON', message: 'No salon here' });
-      const widget = (await liveWidgets([biz.id]))[0];
       const pin = await firstPin(biz.id);
       const { team, products, locations, addr } = await withTenant(biz.id, async (trx) => {
         const team = biz.marketplace.showTeam
@@ -1149,24 +1132,23 @@ export async function discoveryRoutes(app: FastifyInstance) {
           .where('p.price', '>', 0)
           .orderBy('p.name')
           .execute();
-        const locations = widget
-          ? (
-              await trx
-                .selectFrom('locations')
-                .select(['id', 'name', 'city', 'address', 'lifecycle', 'lat', 'lng'])
-                .where('id', 'in', widget.locationIds.length ? widget.locationIds : [biz.id])
-                .execute()
-            )
-              .filter((l) => l.lifecycle === 'ACTIVE')
-              .map((l) => ({
-                id: l.id,
-                name: l.name,
-                city: l.city,
-                address: l.address,
-                lat: l.lat,
-                lng: l.lng,
-              }))
-          : [];
+        // Every ACTIVE location is bookable here — the consumer app
+        // needs no widget, only the salon's own key.
+        const locations = (
+          await trx
+            .selectFrom('locations')
+            .select(['id', 'name', 'city', 'address', 'lat', 'lng'])
+            .where('lifecycle', '=', 'ACTIVE')
+            .orderBy('createdAt')
+            .execute()
+        ).map((l) => ({
+          id: l.id,
+          name: l.name,
+          city: l.city,
+          address: l.address,
+          lat: l.lat,
+          lng: l.lng,
+        }));
         // What we print: the business card's address, else the first
         // location's — a salon always has one somewhere.
         const any = await trx
@@ -1196,8 +1178,8 @@ export async function discoveryRoutes(app: FastifyInstance) {
         showPrices: biz.marketplace.showPrices,
         team: team.map((e) => ({ id: e.id, name: e.name, role: e.roleTitle, avatar: e.avatar })),
         products,
-        bookable: Boolean(widget),
-        publishableKey: widget?.publishableKey ?? null,
+        bookable: locations.length > 0,
+        publishableKey: locations.length ? consumerKey(biz.slug) : null,
         locations,
       };
     },

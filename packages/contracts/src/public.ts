@@ -141,3 +141,13 @@ export const PublicBookResponseSchema = z.object({
 });
 
 export { AvailabilityResponseSchema, BookingRefusalSchema, HoldResponseSchema };
+
+/**
+ * The consumer app's key for the public booking doors: `salon:<slug>`.
+ * The platform's own surface books without any widget — a salon is on
+ * the Velnes app once HQ approved it with live services; the website
+ * widget is a separate product it may or may not have (Alex,
+ * 2026-09-22). The doors resolve it to the salon's ACTIVE locations.
+ */
+export const CONSUMER_KEY_PREFIX = 'salon:';
+export const consumerKey = (slug: string): string => `${CONSUMER_KEY_PREFIX}${slug}`;

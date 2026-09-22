@@ -72,8 +72,10 @@ export const DiscoveryGalleryPhotoSchema = z.object({
 
 /** The full salon page payload. Team and prices honor the salon's own
  *  marketplace switches; products are the sellable shelf (active, not
- *  own-use, priced). publishableKey/locations come from the live widget
- *  and are null for a listed-but-not-bookable salon. */
+ *  own-use, priced). `locations` are the salon's ACTIVE ones and
+ *  `publishableKey` is the consumer key (`salon:<slug>`) the booking
+ *  doors accept — null only when no location is open. No widget is
+ *  involved: that is the salon's separate website product. */
 export const DiscoverySalonDetailSchema = z.object({
   id: z.uuid(),
   slug: z.string(),

@@ -44,7 +44,7 @@ subsystem does not exist yet, the surface is simply absent.
 | Treatments, prices, durations | the existing `GET /public/services` (per location) |
 | Open times | the existing `GET /public/availability` — the one availability engine, no second opinion |
 | Open times for a visit | `POST /public/slots` — one answer for the whole visit, however many treatments |
-| Booking (guest) | `POST /public/book` → `confirmChain()` → `confirmBooking()`, the same door the widget uses |
+| Booking (guest) | `POST /public/book` → `confirmChain()` → `confirmBooking()`, the same door the widget uses — with the salon's own key, source `marketplace` |
 | Booking (signed in) | `POST /client/book` → the same `confirmBooking()`, plus the customer link and both notifications |
 | My Velnes | `GET /client/me`, `/me/appointments`, `/me/notifications`, `/me/salons` |
 
@@ -59,6 +59,19 @@ then drop into `withTenant` for anything tenant-scoped. They are
 key-free: a consumer browsing many salons has no publishable key, so the
 salon page hands back the salon's own key for the booking doors rather
 than letting the app invent one.
+
+**No widget needed (2026-09-22).** That key is `salon:<slug>`
+(`consumerKey()` in `@velnes/contracts`), not a widget's publishable
+key. The public doors resolve it to a virtual row over the salon's
+ACTIVE locations (`consumerRow()` in `public.routes.ts`): no domain
+list, no widget attribution, source `marketplace`, and the widget's
+own configuration door refuses it. Admission to discovery is the
+ACTIVE location alone — Alex's rule: the website booking widget is a
+separate product not every salon will have, so a salon HQ approved
+with live services is on the Velnes app whether or not it ever buys
+one. Pinned in `discovery.test.ts` (a widget set to draft changes
+nothing), `suggest.test.ts`, and `registrations.test.ts` (a freshly
+approved salon, no widget row at all, answers the services door).
 
 A salon appears only if it publishes a marketplace listing, and the page
 honors the switches the salon already owns (`showTeam`, `showPrices`).
@@ -100,7 +113,8 @@ Selection happens on the salon page (location → treatment → option →
 professional → day → time); identity is collected in two steps, then the
 booking goes through `POST /public/book`. It creates or links a
 per-tenant `customers` row exactly as the booking page does today, and
-lands in the salon's calendar attributed to its widget.
+lands in the salon's calendar as source `marketplace` — no widget is
+involved.
 
 Two decisions worth recording:
 

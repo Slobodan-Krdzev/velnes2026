@@ -415,10 +415,10 @@ filters admit rather than re-sort · "Most chosen" silent below its floor
 · `EXPLAIN` proves the trigram index is used.
 
 The identical-Labi pair is covered as a unit test of `interpret()`
-rather than through the door, and deliberately: neither of those two
-imported salons has a live widget, so Phase B's bookable admission keeps
-them out of consumer discovery entirely and the door never sees the
-pair. The rule they exist to prove is still the one under test — it is
+rather than through the door, and deliberately: when it was written,
+neither of those two imported salons had a live widget and Phase B's
+admission still asked for one (it asks for an ACTIVE location alone
+since 2026-09-22), so the door never saw the pair. The rule they exist to prove is still the one under test — it is
 just tested where it lives.
 
 ---

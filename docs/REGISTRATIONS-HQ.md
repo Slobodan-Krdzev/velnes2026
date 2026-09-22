@@ -29,17 +29,16 @@ business, the two standard roles (`standardRoles()` — a locked Owner
 at the widest legal scopes and the basic Employee kit, see
 FOUNDATIONS › Authorization), the owner account with the wizard's own
 password (sign-in works the same minute), the legal entity
-**verified** (the compound decision), the location, the wizard's
-services and products, and one **live booking widget** on the
-location. Idempotent: approving twice returns the same world.
+**verified** (the compound decision), the location, and the wizard's
+services and products. Idempotent: approving twice returns the same
+world.
 
 **Approval publishes (2026-09-22).** Alex's rule replaces the
 prototype's "approval does not publish anything": a salon HQ approves
 is bookable on the consumer app the same minute. So activation now
 inserts every wizard service `online`, gives the owner a skill row for
-each of them (the owner delivers what they listed), creates the live
-widget, and then walks the location `APPROVED → ACTIVE` through the
-one lifecycle writer — the readiness gate is the same one an owner
+each of them (the owner delivers what they listed), and then walks the
+location `APPROVED → ACTIVE` through the one lifecycle writer — the readiness gate is the same one an owner
 passes, and the log names the HQ reviewer as actor. `locTransition`
 accepts that claims-less, named-actor call as the one hand besides the
 owner's allowed on the switch; a draft that somehow is not ready (no
@@ -47,13 +46,17 @@ wizard draft is: the schema demands a service) stays `APPROVED` with
 the checklist saying why. Wizard colleagues arrive holding the
 Employee role rather than none. HQ's own create-business door still
 leaves its bare first location at `APPROVED`: it has no catalog to be
-ready with. Pinned by `registrations.test.ts` (ACTIVE + online, the
-lifecycle log row, the live widget, the search projection, the
-consumer salon door answering `bookable: true`) and the register loop
-in `e2e/platform.spec.ts`. The publishing itself is one idempotent
+ready with. **No website widget is created**: that is the salon's
+separate product, and the consumer app books through the public doors
+with the salon's own key (`salon:<slug>`, see CONSUMER-APP) — approval
+with live services is all it takes to be on the Velnes app (Alex,
+2026-09-22). Pinned by `registrations.test.ts` (ACTIVE + online, the
+lifecycle log row, no widget, the search projection, the consumer
+salon door answering `bookable: true`, the consumer key opening the
+services door) and the register loop in `e2e/platform.spec.ts`. The publishing itself is one idempotent
 function, `publishSalon()`, and a salon approved before this rule
-existed — APPROVED, services offline, no widget — is brought to the
-same state by `pnpm --filter @velnes/api exec tsx
+existed — APPROVED, services offline — is brought to the same
+state by `pnpm --filter @velnes/api exec tsx
 --env-file-if-exists=../../.env src/db/publish-salon.ts <slug>`, which
 runs the very same function under the tenant and reports what it did.
 The readiness gate's staff item now follows the booking door's rule

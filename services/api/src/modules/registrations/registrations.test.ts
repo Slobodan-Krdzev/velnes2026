@@ -292,14 +292,10 @@ describe('registrations and the HQ intake table', () => {
       [newBusinessId],
     );
     expect(skills.rows[0].n).toBe(2);
-    // One live booking widget on the location, born with the salon.
-    const widget = await admin.query(
-      `SELECT status, location_ids FROM widgets WHERE tenant_id=$1`,
-      [newBusinessId],
-    );
-    expect(widget.rows).toHaveLength(1);
-    expect(widget.rows[0].status).toBe('live');
-    expect(widget.rows[0].location_ids).toEqual([locs.json().locations[0].id]);
+    // No website widget is made: that is the salon's separate product,
+    // and the consumer app does not need one.
+    const widget = await admin.query(`SELECT id FROM widgets WHERE tenant_id=$1`, [newBusinessId]);
+    expect(widget.rows).toHaveLength(0);
     // The salon's own product, stocked at 0 at the created location.
     const prod = await admin.query(
       `SELECT p.name, lcp.stock FROM products p
@@ -378,6 +374,21 @@ describe('registrations and the HQ intake table', () => {
     expect(salon.statusCode).toBe(200);
     expect(salon.json().bookable).toBe(true);
     expect(salon.json().locations).toHaveLength(1);
+    // The consumer key opens the booking doors without any widget.
+    const key = salon.json().publishableKey as string;
+    expect(key).toBe(`salon:${biz.rows[0].slug}`);
+    const services = await app.inject({
+      method: 'GET',
+      url: `${API_PREFIX}/public/services?key=${encodeURIComponent(key)}&locationId=${salon.json().locations[0].id}`,
+    });
+    expect(services.statusCode).toBe(200);
+    expect(services.json().services.map((s: { name: string }) => s.name)).toEqual([
+      'Physiotherapy session',
+      'Sports massage',
+    ]);
+    // The widget's own configuration door is not a consumer thing.
+    const cfg = await app.inject({ method: 'GET', url: `${API_PREFIX}/public/widget?key=${encodeURIComponent(key)}` });
+    expect(cfg.statusCode).toBe(404);
     const cards = await app.inject({ method: 'GET', url: `${API_PREFIX}/public/discovery/salons` });
     const card = cards.json().salons.find((x: { id: string }) => x.id === newBusinessId);
     expect(card?.bookable).toBe(true);

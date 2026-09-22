@@ -1,4 +1,4 @@
-import { randomBytes, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import {
   ownerPermMap,
   type PermMap,
@@ -524,7 +524,6 @@ export async function approveRegistration(id: string, reviewer: string) {
  *  - every active service goes online (the wizard's are already);
  *  - the owner is skilled in every active service they are not yet —
  *    the owner delivers what they listed;
- *  - one live booking widget on the location, if there is none;
  *  - the location walks APPROVED → ACTIVE through the one lifecycle
  *    writer when the readiness gate says yes, the actor named in the
  *    log. Not ready → stays APPROVED, and the checklist says why.
@@ -549,7 +548,7 @@ export async function publishSalon(
 
   const biz = await trx
     .selectFrom('businesses')
-    .select(['name', 'ownerEmployeeId'])
+    .select('ownerEmployeeId')
     .where('id', '=', businessId)
     .executeTakeFirstOrThrow();
   if (biz.ownerEmployeeId) {
@@ -576,23 +575,9 @@ export async function publishSalon(
         .execute();
   }
 
-  const live = await trx
-    .selectFrom('widgets')
-    .select('id')
-    .where('tenantId', '=', businessId)
-    .where('status', '=', 'live')
-    .executeTakeFirst();
-  if (!live)
-    await trx
-      .insertInto('widgets')
-      .values({
-        tenantId: businessId,
-        name: biz.name,
-        publishableKey: `pk_live_${randomBytes(18).toString('base64url')}`,
-        locationIds: [locationId],
-        status: 'live',
-      })
-      .execute();
+  // No widget is made here: the website booking widget is the salon's
+  // separate product, and the consumer app books with the salon's own
+  // key (`salon:<slug>`) regardless (Alex, 2026-09-22).
 
   const loc = await trx
     .selectFrom('locations')

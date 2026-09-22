@@ -2,6 +2,8 @@ import rateLimit from '@fastify/rate-limit';
 import {
   AvailabilityResponseSchema,
   BookingRefusalSchema,
+  BusinessSettingsSchema,
+  CONSUMER_KEY_PREFIX,
   HoldResponseSchema,
   PublicBookRequestSchema,
   PublicBookResponseSchema,
@@ -32,6 +34,9 @@ const ErrorSchema = z.object({ error: z.string(), message: z.string() });
 const KeyQuery = z.object({ key: z.string().min(4) });
 
 interface WidgetRow {
+  /** The consumer app's own key (`salon:<slug>`): no widget row behind
+   *  it, so nothing is attributed to a widget and no domain list applies. */
+  consumer?: true;
   id: string;
   tenantId: string;
   name: string;
@@ -49,9 +54,53 @@ interface WidgetRow {
   status: 'live' | 'draft';
 }
 
+/**
+ * The consumer app books without a widget: `salon:<slug>` resolves to
+ * a virtual row over the salon's ACTIVE locations. A salon is on the
+ * Velnes app once HQ approved it with live services; the website widget
+ * is a separate product it may or may not have (Alex, 2026-09-22).
+ */
+async function consumerRow(slug: string): Promise<WidgetRow | undefined> {
+  const biz = await db.transaction().execute(async (trx) => {
+    await sql`select set_config('app.public', '1', true)`.execute(trx);
+    return trx
+      .selectFrom('businesses')
+      .select(['id', 'name', 'settings'])
+      .where('slug', '=', slug)
+      .executeTakeFirst();
+  });
+  if (!biz) return undefined;
+  const parsed = BusinessSettingsSchema.safeParse(biz.settings ?? {});
+  if (!parsed.success || !parsed.data.marketplace.listed) return undefined;
+  const locs = await withTenant(biz.id, (trx) =>
+    trx.selectFrom('locations').select('id').where('lifecycle', '=', 'ACTIVE').orderBy('createdAt').execute(),
+  );
+  if (!locs.length) return undefined;
+  return {
+    consumer: true,
+    id: '',
+    tenantId: biz.id,
+    name: biz.name,
+    publishableKey: `${CONSUMER_KEY_PREFIX}${slug}`,
+    locationIds: locs.map((l) => l.id),
+    categories: ['all'],
+    lang: 'en',
+    theme: '',
+    accent: '',
+    radius: '',
+    startStep: '',
+    deposit: '',
+    cancelPolicy: '',
+    domains: [],
+    status: 'live',
+  };
+}
+
 /** The one pre-auth door of the public surface: the publishable key
- *  resolves the widget (and with it, the tenant). */
+ *  resolves the widget (and with it, the tenant) — or, for the consumer
+ *  app's `salon:<slug>`, the salon itself. */
 async function widgetByKey(key: string): Promise<WidgetRow | undefined> {
+  if (key.startsWith(CONSUMER_KEY_PREFIX)) return consumerRow(key.slice(CONSUMER_KEY_PREFIX.length));
   return db.transaction().execute(async (trx) => {
     await sql`select set_config('app.public', '1', true)`.execute(trx);
     return trx
@@ -106,6 +155,7 @@ const AVAIL_TTL = 30_000;
 function corsCheck(req: FastifyRequest, reply: FastifyReply, w: WidgetRow): boolean {
   const origin = req.headers.origin;
   if (!origin) return true; // same-origin / server-side
+  if (w.consumer) return true; // the platform's own app: no domain list, the server's CORS applies
   let host = '';
   try {
     host = new URL(origin).hostname;
@@ -153,7 +203,7 @@ export async function publicRoutes(app: FastifyInstance) {
         logEvent(
           trx,
           w.tenantId,
-          w.id,
+          w.consumer ? null : w.id,
           'DOMAIN_NOT_ALLOWED',
           `A request came from ${req.headers.origin ?? 'an unknown origin'}, which is not on the widget's domain list.`,
           'Add the domain under Settings › Online booking, or remove the embed from that site.',
@@ -206,6 +256,8 @@ export async function publicRoutes(app: FastifyInstance) {
     handler: async (req, reply) => {
       const w = await resolve(req, reply, req.query.key);
       if (!w) return reply;
+      // The widget's own configuration door: a consumer key has none.
+      if (w.consumer) return reply.code(404).send({ error: 'UNKNOWN_KEY', message: 'Unknown publishable key' });
       return widgetPayload(w);
     },
   });
@@ -338,7 +390,7 @@ export async function publicRoutes(app: FastifyInstance) {
           await logEvent(
             trx,
             w.tenantId,
-            w.id,
+            w.consumer ? null : w.id,
             'SERVICE_NOT_FOUND',
             `Availability was asked for a service that does not exist (${q.serviceId}).`,
             'Remove the service from the widget selection, or restore it in the catalog.',
@@ -451,20 +503,22 @@ export async function publicRoutes(app: FastifyInstance) {
             name: req.body.name,
             phone: req.body.phone,
             ...(req.body.email ? { email: req.body.email } : {}),
-            source: 'widget',
+            source: w.consumer ? 'marketplace' : 'widget',
             deposit: 0,
           });
-          // Attribute the visit to its widget for the stats card.
-          await trx
-            .updateTable('appointments')
-            .set({ widgetId: w.id })
-            .where(
-              'id',
-              'in',
-              booked.map((a) => a.id),
-            )
-            .where('widgetId', 'is', null)
-            .execute();
+          // Attribute the visit to its widget for the stats card — a
+          // consumer booking has no widget to be attributed to.
+          if (!w.consumer)
+            await trx
+              .updateTable('appointments')
+              .set({ widgetId: w.id })
+              .where(
+                'id',
+                'in',
+                booked.map((a) => a.id),
+              )
+              .where('widgetId', 'is', null)
+              .execute();
           return visitPayload(trx, booked);
         });
         // A confirmed booking frees the cache for that day.
