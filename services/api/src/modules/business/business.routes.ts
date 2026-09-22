@@ -4,6 +4,7 @@ import {
   BusinessProfileSchema,
   BusinessSettingsPatchSchema,
   BusinessSettingsSchema,
+  SocialLinksSchema,
   type BusinessSettings,
 } from '@velnes/contracts';
 import type { FastifyInstance, FastifyReply } from 'fastify';
@@ -41,6 +42,7 @@ async function profile(trx: Trx) {
     phone: b.phone,
     description: b.description,
     gallery: (b.gallery ?? []) as z.infer<typeof BusinessProfileSchema>['gallery'],
+    socials: SocialLinksSchema.parse(b.socials ?? {}),
     timingEnabled: b.timingEnabled,
     legal: le
       ? {
@@ -104,6 +106,18 @@ export function businessRoutes(app: FastifyInstance) {
             ...(b.phone !== undefined ? { phone: b.phone } : {}),
             ...(b.description !== undefined ? { description: b.description } : {}),
             ...(b.gallery !== undefined ? { gallery: JSON.stringify(b.gallery) } : {}),
+            ...(b.socials !== undefined
+              ? {
+                  socials: JSON.stringify(
+                    SocialLinksSchema.parse({
+                      ...SocialLinksSchema.parse(
+                        (await trx.selectFrom('businesses').select('socials').executeTakeFirstOrThrow()).socials ?? {},
+                      ),
+                      ...Object.fromEntries(Object.entries(b.socials).map(([k, v]) => [k, (v ?? '').trim()])),
+                    }),
+                  ),
+                }
+              : {}),
             ...(b.timingEnabled !== undefined ? { timingEnabled: b.timingEnabled } : {}),
           })
           .where('id', '=', req.claims.ten)

@@ -2976,4 +2976,12 @@ export const sq: Record<TranslationKey, string> = {
   'c.acc.paidOnline': 'Paguar online',
   'c.acc.payNow': 'Paguaj tani · {{amount}}',
   'c.acc.payNote': 'Paguani online tani ose në sallon atë ditë.',
+  'cset.socials': 'Rrjetet sociale',
+  'cset.socialsHint': 'Shfaqen në faqen e sallonit tuaj në aplikacionin Velnes. Ngjitni një lidhje ose vetëm emrin e përdoruesit.',
+  'cset.website': 'Faqja e internetit',
+  'cset.instagram': 'Instagram',
+  'cset.facebook': 'Facebook',
+  'cset.tiktok': 'TikTok',
+  'c.sal.follow': 'Na gjeni në',
+  'c.sal.website': 'Faqja e internetit',
 };

@@ -399,7 +399,8 @@ CREATE TABLE public.businesses (
     description text DEFAULT ''::text NOT NULL,
     gallery jsonb DEFAULT '[]'::jsonb NOT NULL,
     settings jsonb DEFAULT '{}'::jsonb NOT NULL,
-    assistant_enabled boolean DEFAULT false NOT NULL
+    assistant_enabled boolean DEFAULT false NOT NULL,
+    socials jsonb DEFAULT '{}'::jsonb NOT NULL
 );
 
 ALTER TABLE ONLY public.businesses FORCE ROW LEVEL SECURITY;
@@ -6481,4 +6482,5 @@ INSERT INTO public.schema_migrations (version) VALUES
     ('20260921160000'),
     ('20260922120000'),
     ('20260922150000'),
-    ('20260922170000');
+    ('20260922170000'),
+    ('20260922180000');

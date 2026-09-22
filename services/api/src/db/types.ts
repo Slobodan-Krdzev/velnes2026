@@ -189,6 +189,7 @@ export interface Businesses {
   settings: Generated<Json>;
   since: Timestamp | null;
   slug: string | null;
+  socials: Generated<Json>;
   timingEnabled: Generated<boolean>;
   vat: string | null;
 }

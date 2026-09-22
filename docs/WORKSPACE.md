@@ -45,7 +45,11 @@ roleTitle/week/skills through the extended employee PATCH. Honest
 deferrals: General's tz/currency/week-start render read-only (per-
 location / fixed for MK); the online-booking deposit and per-location
 online toggles wait for payments and a real door; the form builder
-and commission stay disabled. Settings › Locations › New location carries the
+and commission stay disabled. Settings › Company carries the salon's social
+links (2026-09-22: website, Instagram, Facebook, TikTok —
+`businesses.socials`, typed as handles or URLs; the public salon door
+normalises them to links and the consumer salon page shows one icon
+per network). Settings › Locations › New location carries the
 registration wizard's map from 2026-09-22, so the pin is dropped at
 creation (`LocationCreateSchema.lat/lng`) rather than found later
 under the location's own settings. Marketplace › "Categories you appear

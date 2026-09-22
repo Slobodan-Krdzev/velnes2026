@@ -2976,4 +2976,12 @@ export const mk: Record<TranslationKey, string> = {
   'c.acc.paidOnline': 'Платено онлајн',
   'c.acc.payNow': 'Плати сега · {{amount}}',
   'c.acc.payNote': 'Платете онлајн сега или во салонот на денот.',
+  'cset.socials': 'Социјални мрежи',
+  'cset.socialsHint': 'Се прикажуваат на страницата на вашиот салон во Velnes апликацијата. Залепете линк или само корисничкото име.',
+  'cset.website': 'Веб-страница',
+  'cset.instagram': 'Instagram',
+  'cset.facebook': 'Facebook',
+  'cset.tiktok': 'TikTok',
+  'c.sal.follow': 'Најдете нè на',
+  'c.sal.website': 'Веб-страница',
 };

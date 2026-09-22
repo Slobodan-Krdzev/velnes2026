@@ -44,6 +44,7 @@ const business = {
   description: 'Physiotherapy in Skopje.',
   gallery: [{ id: 'g1', name: 'Front desk', img: null, tone: '#6f7357' }],
   timingEnabled: true,
+  socials: { website: '', instagram: '', facebook: '', tiktok: '' },
   legal: {
     name: 'Velnes Studio DOOEL Skopje',
     taxId: 'MK4080012345678',

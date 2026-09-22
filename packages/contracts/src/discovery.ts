@@ -91,6 +91,13 @@ export const DiscoverySalonDetailSchema = z.object({
   lng: z.number().nullable(),
   categories: z.array(z.string()),
   gallery: z.array(DiscoveryGalleryPhotoSchema),
+  /** The salon's links, already normalised to URLs — null when unset. */
+  socials: z.object({
+    website: z.string().nullable(),
+    instagram: z.string().nullable(),
+    facebook: z.string().nullable(),
+    tiktok: z.string().nullable(),
+  }),
   showPrices: z.boolean(),
   team: z.array(DiscoveryTeamMemberSchema),
   products: z.array(DiscoveryProductSchema),

@@ -999,3 +999,9 @@ a.pop-go:hover {
 @media (min-width:1024px){
   .authwrap.pay-wrap{max-width:1040px;align-items:start;min-height:calc(100vh - 90px)}
 }
+
+/* Social links beside the salon's badges: quiet round icons. */
+.sal-social{display:inline-flex;gap:6px;align-items:center;margin-left:4px}
+.sal-social a{display:inline-grid;place-items:center;width:30px;height:30px;border-radius:999px;
+  background:#fff;border:1px solid var(--line);color:var(--ink);transition:background .15s}
+.sal-social a:hover{background:var(--warm)}

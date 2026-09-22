@@ -2994,6 +2994,14 @@ export const en = {
   'c.acc.paidOnline': 'Paid online',
   'c.acc.payNow': 'Pay now · {{amount}}',
   'c.acc.payNote': 'Pay online now, or at the salon on the day.',
+  'cset.socials': 'Social links',
+  'cset.socialsHint': 'Shown on your salon page in the Velnes app. Paste a link or just the handle.',
+  'cset.website': 'Website',
+  'cset.instagram': 'Instagram',
+  'cset.facebook': 'Facebook',
+  'cset.tiktok': 'TikTok',
+  'c.sal.follow': 'Find us on',
+  'c.sal.website': 'Website',
 } as const;
 
 export type TranslationKey = keyof typeof en;

@@ -30,6 +30,23 @@ export const GalleryPhotoWriteSchema = GalleryPhotoSchema.extend({
   img: z.string().max(GALLERY_IMG_MAX_CHARS, 'IMG_TOO_LARGE').nullable(),
 });
 
+/** The four links a salon shows on its page — as typed (a handle or a
+ *  URL); empty means none. The public door turns them into links. */
+export const SocialLinksSchema = z.object({
+  website: z.string().max(200).default(''),
+  instagram: z.string().max(200).default(''),
+  facebook: z.string().max(200).default(''),
+  tiktok: z.string().max(200).default(''),
+});
+export type SocialLinks = z.infer<typeof SocialLinksSchema>;
+/** A partial write: only the keys sent change; no defaults sneak in. */
+export const SocialLinksPatchSchema = z.object({
+  website: z.string().max(200).optional(),
+  instagram: z.string().max(200).optional(),
+  facebook: z.string().max(200).optional(),
+  tiktok: z.string().max(200).optional(),
+});
+
 export const BusinessProfileSchema = z.object({
   id: z.uuid(),
   name: z.string(),
@@ -41,6 +58,7 @@ export const BusinessProfileSchema = z.object({
   phone: z.string().nullable(),
   description: z.string(),
   gallery: z.array(GalleryPhotoSchema),
+  socials: SocialLinksSchema,
   // The one switch behind prep/reset + per-employee pace (real column,
   // read by every quote).
   timingEnabled: z.boolean(),
@@ -65,6 +83,7 @@ export const BusinessPatchSchema = z.object({
   phone: z.string().nullable().optional(),
   description: z.string().optional(),
   gallery: z.array(GalleryPhotoWriteSchema).max(GALLERY_MAX_PHOTOS).optional(),
+  socials: SocialLinksPatchSchema.optional(),
   timingEnabled: z.boolean().optional(),
 });
 

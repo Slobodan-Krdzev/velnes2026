@@ -96,6 +96,31 @@ describe('the business card, the settings document and the new patch doors', () 
     expect(b.legal?.status).toBe('verified');
   });
 
+  it('keeps the salon’s social links, and the public page normalises them to URLs', async () => {
+    const saved = await patch(`${API_PREFIX}/business`, {
+      socials: { website: 'velnes-fizio.mk', instagram: '@velnesfizio', facebook: 'https://facebook.com/velnesfizio', tiktok: 'velnesfizio' },
+    });
+    expect(saved.statusCode).toBe(200);
+    expect(saved.json().socials).toEqual({
+      website: 'velnes-fizio.mk',
+      instagram: '@velnesfizio',
+      facebook: 'https://facebook.com/velnesfizio',
+      tiktok: 'velnesfizio',
+    });
+    // A partial patch leaves the others alone.
+    const partial = await patch(`${API_PREFIX}/business`, { socials: { tiktok: '' } });
+    expect(partial.json().socials.instagram).toBe('@velnesfizio');
+    expect(partial.json().socials.tiktok).toBe('');
+    const page = await app.inject({ method: 'GET', url: `${API_PREFIX}/public/discovery/salons/velnes-fizio` });
+    expect(page.json().socials).toEqual({
+      website: 'https://velnes-fizio.mk',
+      instagram: 'https://instagram.com/velnesfizio',
+      facebook: 'https://facebook.com/velnesfizio',
+      tiktok: null,
+    });
+    await patch(`${API_PREFIX}/business`, { socials: { website: '', instagram: '', facebook: '' } });
+  });
+
   it('edits the card behind locations.manage and audits a rename', async () => {
     const denied = await patch(`${API_PREFIX}/business`, { description: 'x' }, anaToken);
     expect(denied.statusCode).toBe(403);

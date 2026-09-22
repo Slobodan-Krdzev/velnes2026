@@ -1,5 +1,6 @@
 import {
   consumerKey,
+  SocialLinksSchema,
   BusinessSettingsSchema,
   DiscoveryCategoriesSchema,
   DiscoveryCategoryServicesSchema,
@@ -99,6 +100,7 @@ interface ListedBusiness {
   phone: string | null;
   description: string;
   gallery: unknown;
+  socials: { website: string | null; instagram: string | null; facebook: string | null; tiktok: string | null };
   marketplace: ReturnType<typeof BusinessSettingsSchema.parse>['marketplace'];
 }
 
@@ -109,7 +111,7 @@ async function listedBusinesses(): Promise<ListedBusiness[]> {
     await sql`select set_config('app.public', '1', true)`.execute(trx);
     const rows = await trx
       .selectFrom('businesses')
-      .select(['id', 'slug', 'name', 'city', 'address', 'phone', 'description', 'gallery', 'settings'])
+      .select(['id', 'slug', 'name', 'city', 'address', 'phone', 'description', 'gallery', 'settings', 'socials'])
       .orderBy('name')
       .execute();
     const out: ListedBusiness[] = [];
@@ -126,11 +128,38 @@ async function listedBusinesses(): Promise<ListedBusiness[]> {
         phone: b.phone,
         description: b.description,
         gallery: b.gallery,
+        socials: socialLinks(b.socials),
         marketplace: parsed.data.marketplace,
       });
     }
     return out;
   });
+}
+
+/**
+ * A salon's social links as the page shows them: whatever the owner
+ * typed — "@slobos", "slobos", a full URL — becomes one link per
+ * network, and nothing becomes null. The owner never has to know what
+ * a canonical URL is.
+ */
+export function socialLinks(raw: unknown): ListedBusiness['socials'] {
+  const s = SocialLinksSchema.safeParse(raw ?? {});
+  const v = s.success ? s.data : SocialLinksSchema.parse({});
+  const handle = (x: string) => x.trim().replace(/^@/, '').replace(/^https?:\/\/(www\.)?[^/]+\//i, '').replace(/\/+$/, '');
+  const url = (x: string, host: string) => {
+    const t = x.trim();
+    if (!t) return null;
+    if (/^https?:\/\//i.test(t)) return t;
+    if (/^(www\.)?[a-z0-9-]+\.[a-z]{2,}/i.test(t)) return `https://${t}`;
+    return `https://${host}/${handle(t)}`;
+  };
+  const site = v.website.trim();
+  return {
+    website: !site ? null : /^https?:\/\//i.test(site) ? site : `https://${site}`,
+    instagram: url(v.instagram, 'instagram.com'),
+    facebook: url(v.facebook, 'facebook.com'),
+    tiktok: v.tiktok.trim() ? (/^https?:\/\//i.test(v.tiktok) ? v.tiktok.trim() : `https://tiktok.com/@${handle(v.tiktok)}`) : null,
+  };
 }
 
 /** Where a salon sits on the map: the pin its owner dropped, preferring
@@ -1175,6 +1204,7 @@ export async function discoveryRoutes(app: FastifyInstance) {
         lng: pin.lng,
         categories: biz.marketplace.categories,
         gallery: galleryOf(biz.gallery),
+        socials: biz.socials,
         showPrices: biz.marketplace.showPrices,
         team: team.map((e) => ({ id: e.id, name: e.name, role: e.roleTitle, avatar: e.avatar })),
         products,
