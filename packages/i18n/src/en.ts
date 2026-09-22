@@ -3067,6 +3067,10 @@ export const en = {
   'c.acc.premTitle': 'Velnes Premium',
   'c.acc.premSub': 'First access to last-minute offers and 1.5× points, at every salon. See what it gives you.',
   'c.acc.premMore': 'About Premium',
+  'c.home.premEyebrow': 'Velnes Premium',
+  'c.home.premTitle': 'Be first when a slot opens up',
+  'c.home.premSub': 'One membership across every salon on Velnes: first access to last-minute offers, 1.5× loyalty points, and member prices you can see.',
+  'c.home.premBtn': 'See what Premium gives you',
 } as const;
 
 export type TranslationKey = keyof typeof en;

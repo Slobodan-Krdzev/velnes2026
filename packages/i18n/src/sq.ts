@@ -3049,4 +3049,8 @@ export const sq: Record<TranslationKey, string> = {
   'c.acc.premTitle': 'Anëtarësimi Velnes Premium',
   'c.acc.premSub': 'Qasje e parë në ofertat e minutës së fundit dhe 1.5× pikë, në çdo sallon. Shihni çfarë ju jep.',
   'c.acc.premMore': 'Rreth Premium',
+  'c.home.premEyebrow': 'Anëtarësimi Velnes Premium',
+  'c.home.premTitle': 'Jini të parët kur lirohet një termin',
+  'c.home.premSub': 'Një anëtarësim për çdo sallon në Velnes: qasje e parë në ofertat e minutës së fundit, 1.5× pikë besnikërie dhe çmime për anëtarë që i shihni.',
+  'c.home.premBtn': 'Shihni çfarë ju jep Premium',
 };

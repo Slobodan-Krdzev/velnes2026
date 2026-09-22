@@ -3049,4 +3049,8 @@ export const mk: Record<TranslationKey, string> = {
   'c.acc.premTitle': 'Velnes Premium членство',
   'c.acc.premSub': 'Прв пристап до понуди во последен момент и 1.5× поени, во секој салон. Видете што нуди.',
   'c.acc.premMore': 'За Premium',
+  'c.home.premEyebrow': 'Velnes Premium членство',
+  'c.home.premTitle': 'Бидете први кога ќе се ослободи термин',
+  'c.home.premSub': 'Едно членство за сите салони на Velnes: прв пристап до понуди во последен момент, 1.5× поени за лојалност и цени за членови што ги гледате.',
+  'c.home.premBtn': 'Видете што нуди Premium',
 };

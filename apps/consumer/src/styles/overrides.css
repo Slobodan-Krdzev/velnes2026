@@ -1067,3 +1067,19 @@ a.pop-go:hover {
 .prem-cta p{margin:6px auto 14px;max-width:520px;font-size:14px;color:var(--muted);line-height:1.5}
 .prem-actions{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
 .acc-prem{border-left:4px solid #F6D38B}
+
+/* ── Velnes Premium band on the home page ────────────────────────── */
+.prem-band{margin:18px 0;padding:22px 24px;border-radius:18px;background:var(--ink);color:#fff;
+  background-image:radial-gradient(120% 140% at 100% 0%,rgba(246,211,139,.22),transparent 60%)}
+.prem-band-eyebrow{display:inline-block;font-size:11.5px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#F6D38B;margin-bottom:8px}
+.prem-band-body{display:flex;align-items:center;gap:18px;flex-wrap:wrap}
+.prem-band .tx{flex:1;min-width:240px}
+.prem-band b{display:block;font-size:20px;line-height:1.2;font-family:var(--fd);font-weight:400}
+.prem-band p{margin:6px 0 0;font-size:14px;line-height:1.5;color:rgba(255,255,255,.82);max-width:56ch}
+.prem-band .btn{white-space:nowrap}
+@media (max-width:899.98px){
+  .m-page .prem-band{margin:14px 16px;padding:18px}
+  .m-page .prem-band b{font-size:18px}
+  .m-page .prem-band .btn{width:100%;justify-content:center}
+}
+@media (min-width:900px){.d-env .prem-band{margin:28px auto;max-width:1280px}}
