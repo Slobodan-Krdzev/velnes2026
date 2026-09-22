@@ -507,6 +507,7 @@ export function Results() {
   /** The mobile search sheet, which is where typing happens on a phone. */
   const [sheet, setSheet] = useState(false);
   const sheetInput = useRef<HTMLInputElement>(null);
+  const topInput = useRef<HTMLInputElement>(null);
   const [params, setParams] = useSearchParams();
   const query = params.get('q');
 
@@ -605,19 +606,17 @@ export function Results() {
     el?.focus();
     el?.select();
   }, [sheet]);
-  // Arrived from the tab bar's Search: open the box straight away — on
-  // a phone that is the full-screen sheet (whose own effect focuses its
-  // input), on the desktop the top bar's field.
+  // Arrived from the tab bar's Search: the results screen as it is,
+  // with the field at the top focused so the keyboard is up — the phone's
+  // top field, or the desktop top bar's. The sheet stays where it was.
   const routeLoc = useLocation();
   const asked = (routeLoc.state as { focusSearch?: number } | null)?.focusSearch;
   useEffect(() => {
     if (!asked) return;
-    if (window.innerWidth < 900) setSheet(true);
-    else {
-      const el = document.querySelector<HTMLInputElement>('.d-topbar input[data-res="q"]');
-      el?.focus();
-      el?.select();
-    }
+    const el =
+      window.innerWidth < 900 ? topInput.current : document.querySelector<HTMLInputElement>('.d-topbar input[data-res="q"]');
+    el?.focus();
+    el?.select();
   }, [asked]);
   // Only a typed query can have been broadened; a category card asked
   // for exactly what it got.
@@ -972,16 +971,15 @@ export function Results() {
                 <button className="m-mark" onClick={() => nav('/')} aria-label={t('c.hdr.home')}>
                   {IcMark}
                 </button>
-                {/* On a phone the bar opens the full-screen sheet, exactly
-                    as it does on the home page — typing into a 40px strip
-                    under a sticky header is not the same feature. */}
-                <div
-                  className="m-search"
-                  style={{ boxShadow: 'none', border: '1px solid var(--line)' }}
-                  onClick={() => setSheet(true)}
-                >
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="M20 20l-4.2-4.2" /></svg>
-                  <input value={title} placeholder={t('c.res.searchPh')} data-res="q" readOnly aria-label={t('c.res.search')} />
+                {/* The phone's field is a real search box (Alex, 2026-09-22):
+                    the tab bar's Search focuses it, typing stays here and
+                    Enter searches. The magnifier still opens the full-screen
+                    sheet with its suggestions. */}
+                <div className="m-search" style={{ boxShadow: 'none', border: '1px solid var(--line)' }}>
+                  <button type="button" className="m-sheet-open" onClick={() => setSheet(true)} aria-label={t('c.res.search')}>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="M20 20l-4.2-4.2" /></svg>
+                  </button>
+                  <input ref={topInput} placeholder={t('c.res.searchPh')} data-res="q" aria-label={t('c.res.search')} {...box.inputProps} />
                   {!landing ? (
                     <button
                       className={`m-filt${nFilters ? ' on' : ''}`}

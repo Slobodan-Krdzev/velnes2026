@@ -1042,3 +1042,6 @@ a.pop-go:hover {
 /* The desktop header is rendered once above the routes, sticky at the
    top of every screen; below 900px the phone chrome takes over. */
 @media (max-width:899.98px){.d-head{display:none}}
+
+/* The magnifier in the phone's top field is a button: it opens the sheet. */
+.m-sheet-open{display:inline-flex;align-items:center;border:0;background:none;padding:0;color:inherit;cursor:pointer}
