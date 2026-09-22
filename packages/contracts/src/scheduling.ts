@@ -201,6 +201,10 @@ export const RefusalCodeSchema = z.enum([
   'ROOMS_FULL',
   'MISSING_REQUIRED',
   'NOT_A_REQUEST',
+  'NOT_PAYABLE',
+  'ALREADY_PAID',
+  'CARD_DECLINED',
+  'BAD_CODE',
 ]);
 export type RefusalCode = z.infer<typeof RefusalCodeSchema>;
 

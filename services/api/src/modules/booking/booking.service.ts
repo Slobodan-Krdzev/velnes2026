@@ -30,7 +30,7 @@ export interface Refusal {
   params: Record<string, string | number>;
   message: string;
 }
-const refuse = (
+export const refuse = (
   code: RefusalCode,
   params: Record<string, string | number>,
   message: string,

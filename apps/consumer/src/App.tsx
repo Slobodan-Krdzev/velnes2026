@@ -5,6 +5,7 @@ import { Login, Register } from './features/account/Auth.js';
 import { MyVelnes } from './features/account/MyVelnes.js';
 import { BookingProvider } from './features/booking/store.js';
 import { BookConfirmed, BookIdentity, BookProfile, BookReview } from './features/booking/steps.js';
+import { BookPay } from './features/booking/pay.js';
 import { Home } from './features/discovery/Home.js';
 import { Results } from './features/discovery/Results.js';
 import { Salon } from './features/salon/Salon.js';
@@ -77,6 +78,7 @@ export function App() {
               <Route path="/book/identity" element={<BookIdentity />} />
               <Route path="/book/profile" element={<BookProfile />} />
               <Route path="/book/review" element={<BookReview />} />
+              <Route path="/book/pay" element={<BookPay />} />
               <Route path="/book/confirmed" element={<BookConfirmed />} />
               <Route path="/login" element={<Login />} />
               <Route path="/register" element={<Register />} />

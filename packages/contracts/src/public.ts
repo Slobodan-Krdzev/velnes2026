@@ -141,6 +141,9 @@ export const PublicBookResponseSchema = z.object({
   /** `requested` when the salon confirms bookings by hand: the visit
    *  holds its slot and the customer pays only once it is accepted. */
   status: z.enum(['booked', 'requested']).default('booked'),
+  /** A guest's capability for the payment doors (`/public/pay`) — only
+   *  on Velnes-app bookings; a signed-in client pays under their token. */
+  payToken: z.string().optional(),
 });
 
 export { AvailabilityResponseSchema, BookingRefusalSchema, HoldResponseSchema };

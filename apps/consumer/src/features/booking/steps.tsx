@@ -31,6 +31,15 @@ export interface BookedVisit {
   price: number;
   /** `requested` at a salon that confirms by hand: no payment yet. */
   status?: 'booked' | 'requested';
+  /** A guest's key to the payment doors — only on app bookings. */
+  payToken?: string;
+}
+
+/** After Book now: a request goes straight to its "sent" screen — no
+ *  payment yet; a booking switches to the payment section. */
+function afterBook(nav: (to: string, o?: { state?: unknown; replace?: boolean }) => void, res: BookedVisit, slug: string, email: string) {
+  if (res.status === 'requested') nav('/book/confirmed', { state: res });
+  else nav('/book/pay', { state: { visit: res, slug, token: res.payToken, email } });
 }
 
 const IcVok13 = (
@@ -184,7 +193,7 @@ export function BookProfile() {
         email: draft.email,
       });
       patch({ name, phone: phone.trim() });
-      nav('/book/confirmed', { state: res });
+      afterBook(nav, res, draft.slug, draft.email);
     } catch (e) {
       setBusy(false);
       if (e instanceof ApiError) setErr(i18nHas(`refusal.${e.code}`) ? t(`refusal.${e.code}`, e.params) : e.message);
@@ -223,11 +232,18 @@ export function BookConfirmed() {
   useTranslation();
   const nav = useNavigate();
   const { draft, setDraft } = useBooking();
-  const state = (history.state?.usr ?? null) as BookedVisit | null;
+  const state = (history.state?.usr ?? null) as
+    | (BookedVisit & {
+        payment?: { status: 'paid' | 'venue'; amount: number; invoiceNumber: string | null; card: { brand: string; last4: string } | null };
+        email?: string;
+      })
+    | null;
   if (!state) {
     nav('/');
     return null;
   }
+  const payment = state.payment ?? null;
+  const cardLbl = payment?.card ? (payment.card.last4 ? `${payment.card.brand} ••${payment.card.last4}` : payment.card.brand) : '';
   const done = () => {
     setDraft(null);
     nav('/');
@@ -239,12 +255,22 @@ export function BookConfirmed() {
           <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>
         </div>
         <h1 className="serif" style={{ fontSize: '30px' }}>
-          {state.status === 'requested' ? t('c.bk.requested') : t('c.bk.booked')}
+          {state.status === 'requested'
+            ? t('c.bk.requested')
+            : payment?.status === 'paid'
+              ? t('c.pay.paidTitle')
+              : payment?.status === 'venue'
+                ? t('c.pay.venueTitle')
+                : t('c.bk.booked')}
         </h1>
         <p className="muted" style={{ margin: '8px 0 18px' }}>
           {state.status === 'requested'
             ? t('c.bk.requestedSub', { salon: draft?.salonName ?? state.locationName })
-            : t('c.bk.confirmedAt', { loc: state.locationName })}
+            : payment?.status === 'paid'
+              ? t('c.pay.paidSub', { amount: fmtMKD(payment.amount), card: cardLbl, invoice: payment.invoiceNumber ?? '—', email: state.email ?? draft?.email ?? '' })
+              : payment?.status === 'venue'
+                ? t('c.pay.venueDone', { amount: fmtMKD(payment.amount), loc: state.locationName })
+                : t('c.bk.confirmedAt', { loc: state.locationName })}
         </p>
         <div className="sumcard">
           <div className="row"><span className="k">{t('c.bk.salon')}</span><span className="v">{draft?.salonName ?? state.locationName}</span></div>
@@ -271,6 +297,9 @@ export function BookConfirmed() {
           <div className="row"><span className="k">{t('c.bk.dateTime')}</span><span className="v">{state.date} · {state.time} – {state.end}</span></div>
           <div className="row"><span className="k">{t('c.bk.reference')}</span><span className="v">{state.ref.slice(0, 8).toUpperCase()}</span></div>
           <div className="row tot"><span className="k" style={{ color: 'var(--ink)', fontWeight: '700' }}>{t('c.bk.total')}</span><span className="v">{fmtMKD(state.price)}</span></div>
+          {payment ? (
+            <div className="row"><span className="k">{t('c.pay.line')}</span><span className="v">{payment.status === 'paid' ? t('c.pay.paidWith', { card: cardLbl }) : t('c.pay.atVenue')}</span></div>
+          ) : null}
         </div>
         {draft?.lat != null && draft.lng != null ? (
           <div style={{ marginTop: '16px' }}>
@@ -333,7 +362,7 @@ export function BookReview() {
         qc.invalidateQueries({ queryKey: ['my-salons'] }),
       ]);
       setDraft({ ...draft, email: profile.email });
-      nav('/book/confirmed', { state: res });
+      afterBook(nav, res, draft.slug, profile.email);
     } catch (e) {
       setBusy(false);
       setErr(e instanceof ApiError ? (i18nHas(`refusal.${e.code}`) ? t(`refusal.${e.code}`, e.params) : e.message) : t('c.bk.wrong'));

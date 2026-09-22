@@ -969,3 +969,33 @@ a.pop-go:hover {
   .authwrap-split .auth-info .minisum{margin-bottom:0}
   .authwrap-split .auth-form>.fld:first-child{margin-top:0}
 }
+
+/* ── Payment section ──────────────────────────────────────────────── */
+.pay-code{display:flex;gap:8px}
+.pay-code .tin{flex:1;min-width:0}
+.pay-code .btn{min-height:50px;padding-inline:18px;white-space:nowrap}
+.minisum .r.pay-disc .k{color:#3E5A34}
+.minisum .r.pay-disc .v{color:#3E5A34}
+.minisum .r.pay-disc small{color:var(--muted);font-weight:500}
+.minisum .r.pay-total{margin-top:6px;padding-top:8px;border-top:1px solid var(--line);font-size:15px}
+.minisum .r.pay-total .k{color:var(--ink);font-weight:700}
+.pay-x{background:none;border:0;padding:0 0 0 6px;font:inherit;font-size:12px;color:var(--muted);text-decoration:underline;cursor:pointer}
+.pay-methods{display:grid;grid-template-columns:1fr;gap:10px;margin-top:6px}
+@media (min-width:700px){.pay-methods{grid-template-columns:1fr 1fr 1fr}}
+.pay-methods .fwopt{justify-content:flex-start;min-height:52px}
+/* Apple Pay keeps Apple's own look: black, white mark, no brand tint. */
+.apple-pay-btn{display:inline-flex;align-items:center;justify-content:center;gap:5px;min-height:52px;
+  padding:0 16px;border-radius:11px;background:#000;color:#fff;border:2px solid #000;
+  font:600 16px/1 -apple-system,BlinkMacSystemFont,"Helvetica Neue",Helvetica,Arial,sans-serif;cursor:pointer}
+.apple-pay-btn.on{box-shadow:0 0 0 3px rgba(0,0,0,.18)}
+.apple-pay-btn span{letter-spacing:-.01em}
+.pay-card{margin-top:4px}
+.pay-saved{display:grid;gap:8px}
+.pay-save{display:flex;align-items:center;gap:8px;margin-top:12px;font-size:13.5px;color:var(--ink)}
+.pay-save input{width:16px;height:16px;accent-color:var(--brand)}
+.pay-note{margin-top:10px}
+.auth-note.pay-mock{color:#9A6A1F}
+.btn.btn-dark svg{color:#fff}
+@media (min-width:1024px){
+  .authwrap.pay-wrap{max-width:1040px;align-items:start;min-height:calc(100vh - 90px)}
+}

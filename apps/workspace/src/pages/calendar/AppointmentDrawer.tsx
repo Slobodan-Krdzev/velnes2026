@@ -832,6 +832,7 @@ function EditBody({ appointment: a, onClose }: { appointment: Appointment; onClo
               <span className={`badge ${requested ? 'warning' : 'success'}`}>
                 {requested ? t('cal.requested') : a.status}
               </span>
+              {a.paid ? <span className="badge accent" style={{ marginLeft: 6 }}>{t('drawer.paidOnline')}</span> : null}
             </div>
           </div>
           <div>
@@ -917,7 +918,7 @@ function EditBody({ appointment: a, onClose }: { appointment: Appointment; onClo
             )}
           </div>
         ) : null}
-        {a.kind === 'appointment' && a.status !== 'cancelled' && !requested ? (
+        {a.kind === 'appointment' && a.status !== 'cancelled' && !requested && !a.paid ? (
           <button
             className="btn btn-primary"
             style={{ width: '100%' }}

@@ -74,6 +74,30 @@ an HMAC of the appointment id under the API secret — a capability for
 that one appointment's payment screen, since a guest has no account
 to sign into. The payment screen itself is the next step.
 
+**Paying (2026-09-22).** After Book now the screen switches to the
+payment section (`/book/pay`, `features/booking/pay.tsx`): the visit,
+one field for the salon's own promo code or gift card (both may
+apply; the discount is shown and charged), and three ways to pay —
+Card and Pay at the venue in the app's styling, Apple Pay in Apple's
+own black button. The full price is charged; deposits stay deferred.
+A guest pays with the `payToken` the booking handed back (an HMAC
+capability for that one appointment) through `POST /public/pay/quote`
+and `POST /public/pay`; a signed-in client through `POST /client/pay/
+quote` and `POST /client/pay` under their own session, which also
+rings their bell. Both doors run `quotePayment` / `payAppointment`
+(`modules/payments`): a request that the salon has not accepted yet is
+refused (`NOT_PAYABLE`), a paid visit is never charged twice
+(`ALREADY_PAID`), a bad code is named (`BAD_CODE`), the mock provider's
+decline is `CARD_DECLINED`. A payment is a real sale in the till (TILL
+› Online payment is a sale) — invoice, transaction, codes redeemed —
+so the salon's calendar, till and reports all see it; pay at the venue
+records the choice in the history and leaves the till to collect. The
+salon's bell rings on payment and the customer gets a receipt mail.
+The confirmed screen then says paid (card, invoice number) or booked
+with payment at the salon. Pinned by `payments.test.ts`. Saved cards
+and the pay-later link are the next steps; the mock is labelled on
+screen ("test mode") so nobody mistakes it for money.
+
 **No widget needed (2026-09-22).** That key is `salon:<slug>`
 (`consumerKey()` in `@velnes/contracts`), not a widget's publishable
 key. The public doors resolve it to a virtual row over the salon's

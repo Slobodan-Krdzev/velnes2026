@@ -9,8 +9,12 @@ import {
   PublicBookResponseSchema,
   PublicChainSlotsRequestSchema,
   PublicHoldRequestSchema,
+  PublicPayQuoteRequestSchema,
+  PublicPayRequestSchema,
   PublicServicesResponseSchema,
   PublicWidgetSchema,
+  PayQuoteSchema,
+  PayResultSchema,
 } from '@velnes/contracts';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
@@ -26,7 +30,8 @@ import {
   createHold,
   empsFor,
 } from '../modules/booking/booking.service.js';
-import { afterBooked } from '../modules/booking/requests.service.js';
+import { afterBooked, guestPayToken } from '../modules/booking/requests.service.js';
+import { payAppointment, quotePayment } from '../modules/payments/payments.service.js';
 import { svcAt, svcVariants } from '../modules/catalog/catalog.service.js';
 import { locLive } from '../modules/locations/locations.service.js';
 import { discoveryRoutes } from './discovery.routes.js';
@@ -215,6 +220,8 @@ export async function publicRoutes(app: FastifyInstance) {
     }
     return w;
   };
+
+  guestPayRoutes(app, resolve);
 
   const widgetPayload = async (w: WidgetRow) =>
     withTenant(w.tenantId, async (trx) => {
@@ -530,12 +537,66 @@ export async function publicRoutes(app: FastifyInstance) {
               customerEmail: req.body.email ?? null,
               clientUserId: null,
             });
-          return visitPayload(trx, booked);
+          const payload = await visitPayload(trx, booked);
+          // A guest's key to the payment doors — theirs alone.
+          return w.consumer ? { ...payload, payToken: guestPayToken(payload.ref) } : payload;
         });
         // A confirmed booking frees the cache for that day.
         for (const k of availCache.keys())
           if (k.startsWith(`${req.body.locationId}|`)) availCache.delete(k);
         return out;
+      } catch (e) {
+        return sendPublicBookingError(reply, e);
+      }
+    },
+  });
+}
+
+/**
+ * A guest's payment doors. The salon key names the tenant; the token
+ * (handed out with the booking, or in the acceptance mail) proves the
+ * guest may act on that one appointment. Signed-in clients use the
+ * client doors instead.
+ */
+export function guestPayRoutes(app: FastifyInstance, resolve: (req: FastifyRequest, reply: FastifyReply, key: string) => Promise<WidgetRow | null>) {
+  const r = app.withTypeProvider<ZodTypeProvider>();
+  const admit = async (req: FastifyRequest, reply: FastifyReply, key: string, appointmentId: string, token: string) => {
+    const w = await resolve(req, reply, key);
+    if (!w) return null;
+    if (!w.consumer || token !== guestPayToken(appointmentId)) {
+      await reply.code(403).send({ error: 'FORBIDDEN', message: 'This link does not open that appointment' });
+      return null;
+    }
+    return w;
+  };
+
+  r.route({
+    method: 'POST',
+    url: '/pay/quote',
+    schema: { body: PublicPayQuoteRequestSchema, response: { 200: PayQuoteSchema, 403: ErrorSchema, 404: ErrorSchema, 409: BookingRefusalSchema } },
+    handler: async (req, reply) => {
+      const w = await admit(req, reply, req.body.key, req.body.appointmentId, req.body.token);
+      if (!w) return reply;
+      try {
+        return await withTenant(w.tenantId, (trx) => quotePayment(trx, req.body));
+      } catch (e) {
+        return sendPublicBookingError(reply, e);
+      }
+    },
+  });
+
+  r.route({
+    method: 'POST',
+    url: '/pay',
+    schema: { body: PublicPayRequestSchema, response: { 200: PayResultSchema, 403: ErrorSchema, 404: ErrorSchema, 409: BookingRefusalSchema } },
+    handler: async (req, reply) => {
+      const w = await admit(req, reply, req.body.key, req.body.appointmentId, req.body.token);
+      if (!w) return reply;
+      try {
+        // A guest never keeps a card: the request's saveCard is ignored.
+        return await withTenant(w.tenantId, (trx) =>
+          payAppointment(trx, w.tenantId, { ...req.body, saveCard: false }, { clientUserId: null }),
+        );
       } catch (e) {
         return sendPublicBookingError(reply, e);
       }

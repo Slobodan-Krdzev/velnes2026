@@ -48,6 +48,22 @@ takes 25 ml arnica oil and 1.4 m couch roll), opening containers from
 stock as needed and reporting shortages honestly the moment they
 happen. Own-use products are refused as sale lines.
 
+**Online payment is a sale (2026-09-22).** When a customer pays a
+booking from the Velnes app (CONSUMER-APP › Paying), the money lands
+here, not beside here: `settleSale()` — `finishSale` split so the
+till's signed-in employee and the Velnes app are both just a
+`SaleActor` — writes the same invoice (method `Online card` or
+`Apple Pay`, the professional as employee, actor "Velnes app"), the
+same routed checkout and merchant transactions (now stamped with the
+provider's `provider_ref`), the same gift-card balance and promo
+counter, the same personal-offer redemption, the same audit line
+(source `Velnes app`). So the drawer says paid because an invoice line
+says so, the till stops offering the appointment, and the reports
+count the revenue — nothing special-cased. The provider is a mock
+(`payments.service.ts › mockCharge`: Luhn, expiry, a card ending 0000
+declines) until one is chosen, exactly like the mail transport.
+`validateCode()` is the one code door for the app too.
+
 **Seed.** The prototype's gift cards, four promo codes across their
 lifecycle states, loyalty config + reconciling ledger, the recipes,
 historical invoices CEN-2026-0409..0412 and the counter at 413.

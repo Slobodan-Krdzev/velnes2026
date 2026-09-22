@@ -18,6 +18,10 @@ import {
   ClientVerifySchema,
   PublicBookResponseSchema,
   BookingRefusalSchema,
+  PayQuoteRequestSchema,
+  PayQuoteSchema,
+  PayRequestSchema,
+  PayResultSchema,
   type ClientOffer,
 } from '@velnes/contracts';
 import type { FastifyInstance, FastifyReply } from 'fastify';
@@ -28,6 +32,7 @@ import { db, withClient, withHq, withTenant } from '../../db/index.js';
 import { env } from '../../env.js';
 import { BookingError, BookingRefused, confirmChain } from '../booking/booking.service.js';
 import { afterBooked } from '../booking/requests.service.js';
+import { payAppointment, quotePayment } from '../payments/payments.service.js';
 import { visitPayload } from '../../public/public.routes.js';
 import { personalOffersFor } from '../customers/customers.service.js';
 import {
@@ -192,12 +197,74 @@ async function myAppointments(clientUserId: string) {
   return out.sort((x, y) => (x.date === y.date ? y.time.localeCompare(x.time) : y.date.localeCompare(x.date)));
 }
 
+/** A signed-in client's payment doors: their own appointment, their
+ *  own token — no capability needed. */
+function clientPayRoutes(app: FastifyInstance) {
+  const r = app.withTypeProvider<ZodTypeProvider>();
+  const own = async (clientUserId: string, appointmentId: string) =>
+    withClient(clientUserId, (trx) =>
+      trx
+        .selectFrom('appointments')
+        .select('tenantId')
+        .where('id', '=', appointmentId)
+        .where('clientUserId', '=', clientUserId)
+        .executeTakeFirst(),
+    );
+
+  r.route({
+    method: 'POST',
+    url: '/pay/quote',
+    preHandler: [app.authenticateClient],
+    schema: { body: PayQuoteRequestSchema, response: { 200: PayQuoteSchema, 404: ErrorSchema, 409: BookingRefusalSchema } },
+    handler: async (req, reply) => {
+      const a = await own(req.clientClaims.sub, req.body.appointmentId);
+      if (!a) return reply.code(404).send({ error: 'NOT_FOUND', message: 'Unknown appointment' });
+      try {
+        return await withTenant(a.tenantId, (trx) => quotePayment(trx, req.body));
+      } catch (e) {
+        if (e instanceof BookingRefused)
+          return reply.code(409).send({ error: 'REFUSED' as const, message: e.message, code: e.code, params: e.params });
+        throw e;
+      }
+    },
+  });
+
+  r.route({
+    method: 'POST',
+    url: '/pay',
+    preHandler: [app.authenticateClient],
+    schema: { body: PayRequestSchema, response: { 200: PayResultSchema, 404: ErrorSchema, 409: BookingRefusalSchema } },
+    handler: async (req, reply) => {
+      const id = req.clientClaims.sub;
+      const a = await own(id, req.body.appointmentId);
+      if (!a) return reply.code(404).send({ error: 'NOT_FOUND', message: 'Unknown appointment' });
+      try {
+        const out = await withTenant(a.tenantId, (trx) => payAppointment(trx, a.tenantId, req.body, { clientUserId: id }));
+        if (out.status === 'paid')
+          await notifyClient(id, {
+            kind: 'appointment',
+            title: 'Payment received',
+            body: `${out.amount} MKD paid${out.card ? ` with ${out.card.brand}${out.card.last4 ? ` ••${out.card.last4}` : ''}` : ''}. Invoice ${out.invoiceNumber ?? ''}.`,
+            refType: 'appointment',
+            refId: req.body.appointmentId,
+          });
+        return out;
+      } catch (e) {
+        if (e instanceof BookingRefused)
+          return reply.code(409).send({ error: 'REFUSED' as const, message: e.message, code: e.code, params: e.params });
+        throw e;
+      }
+    },
+  });
+}
+
 export async function clientRoutes(app: FastifyInstance) {
   await app.register(rateLimit, {
     max: 120,
     timeWindow: '1 minute',
     keyGenerator: (req) => req.ip,
   });
+  clientPayRoutes(app);
 
   const r = app.withTypeProvider<ZodTypeProvider>();
 
