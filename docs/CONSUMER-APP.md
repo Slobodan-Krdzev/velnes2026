@@ -105,8 +105,9 @@ the treatments whose `availableAt` — a start within the next half
 hour, from the booking gate itself — is set, sorted by distance from
 the viewer's position when one is known, else in the door's own
 order with a line saying location would sort it. Each card's slot
-button books that very start (`?service=&date=&time=`); an empty
-answer says so instead of drawing a hole. The earlier cards read a
+button books that very start (`?service=&date=&time=`); with nothing
+startable the whole section is absent, and reappears on its own as
+soon as the door has something (Alex, 2026-09-23). The earlier cards read a
 salon's *first* treatment and today's first slots, which was a claim
 about the wrong treatment.
 
