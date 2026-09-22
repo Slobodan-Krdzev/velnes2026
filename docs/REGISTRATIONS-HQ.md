@@ -384,6 +384,22 @@ The classic wizard now sits on the same flower-pattern sand ground as
 the AI-onboarding screen (shared `OB_PATTERN`), so the two front doors
 feel like one product.
 
+**The wizard, 2026-09-22.** Step 4 puts the address fields down the
+left — street, number, city, postal code and a **country** with its flag
+(North Macedonia, Albania, Kosovo; `loc.country`, ISO alpha-2, written
+to `locations.country` and `businesses.country` at activation, with the
+postal code to `locations.zip`) — and a squarer map beside them. Step 5
+is two columns, services left and products right, each with its own
+"add" form on top that folds away; a product now carries its **size in
+ml**, **opening stock**, **sell price** and **cost** (`products.cost`,
+`size_amount`/`size_unit`; the opening stock lands on the first
+location's `location_catalog_products.stock` *and* as an `adjustment`
+movement ref `registration`, so the stock room's history starts at the
+truth). Step 6 adds the **salon card photo**: one gallery entry carries
+`card: true`, the consumer app's `cardPhoto()` prefers it over the first
+photograph, and the flag survives Settings › Company edits
+(`GalleryPhotoSchema.card`).
+
 **Categories from HQ.** The salon-type dropdown (step 2) and the
 category a salon files each service under read **one list**: the
 taxonomy HQ curates under Categories (`service_categories`, via the

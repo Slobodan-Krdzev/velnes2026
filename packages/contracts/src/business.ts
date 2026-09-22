@@ -19,6 +19,9 @@ export const GalleryPhotoSchema = z.object({
   name: z.string(),
   img: z.string().nullable(), // data URL — the file is the storage
   tone: z.string().nullable().optional(),
+  /** The photograph the consumer app shows on the salon's card. At most
+   *  one is meant to carry it; absent, the first photograph does. */
+  card: z.boolean().optional(),
 });
 
 /** What the PATCH accepts: the read side stays permissive so an

@@ -54,6 +54,7 @@ const GalleryEntrySchema = z
     name: z.string().default(''),
     img: z.string().nullable().default(null),
     tone: z.string().nullable().default(null),
+    card: z.boolean().optional(),
   })
   .loose();
 const GallerySchema = z.array(GalleryEntrySchema).catch([]);
@@ -63,9 +64,13 @@ const GallerySchema = z.array(GalleryEntrySchema).catch([]);
 const galleryOf = (gallery: unknown) =>
   GallerySchema.parse(gallery)
     .filter((p) => p.img || p.tone)
-    .map((p) => ({ id: p.id, name: p.name, img: p.img, tone: p.tone }));
-/** The card image: the first real photograph, if there is one. */
-const cardPhoto = (gallery: unknown) => galleryOf(gallery).find((p) => p.img)?.img ?? null;
+    .map((p) => ({ id: p.id, name: p.name, img: p.img, tone: p.tone, card: p.card === true }));
+/** The card image: the photograph the salon marked for its card, else
+ *  the first real photograph, if there is one. */
+const cardPhoto = (gallery: unknown) => {
+  const photos = galleryOf(gallery).filter((p) => p.img);
+  return (photos.find((p) => p.card) ?? photos[0])?.img ?? null;
+};
 
 /** The consumer app is first-party: answer velnes hosts and local dev,
  *  nothing else needs these doors cross-origin. */

@@ -51,6 +51,15 @@ export const REG_SERVICE_TEMPLATES: {
 
 /** One service the salon creates during registration. Name, price and
  *  duration are its own; the category is a name from the HQ taxonomy. */
+/** Where a salon can register today: the three markets Velnes serves. */
+export const REG_COUNTRIES = ['MK', 'AL', 'XK'] as const;
+export const RegCountrySchema = z.enum(REG_COUNTRIES);
+export const REG_COUNTRY_NAMES: Record<(typeof REG_COUNTRIES)[number], string> = {
+  MK: 'North Macedonia',
+  AL: 'Albania',
+  XK: 'Kosovo',
+};
+
 export const RegServiceSchema = z.object({
   name: z.string().min(1).max(80),
   category: z.string().min(1),
@@ -59,12 +68,21 @@ export const RegServiceSchema = z.object({
 });
 export type RegService = z.infer<typeof RegServiceSchema>;
 
-/** One product the salon creates during registration — its own name
- *  and price, on a category from the HQ taxonomy. Stock starts at 0. */
+/** One product the salon creates during registration — its own name,
+ *  on a category from the HQ taxonomy, with what the till and the
+ *  stock room need from day one (Alex, 2026-09-22): the size, the
+ *  opening stock, what it sells for and what it cost. */
 export const RegProductSchema = z.object({
   name: z.string().min(1).max(80),
   category: z.string().min(1),
+  /** Sell price, whole MKD. */
   price: z.number().int().nonnegative(),
+  /** Pack size in millilitres; null for products not measured that way. */
+  sizeMl: z.number().int().positive().nullable().default(null),
+  /** Units on the shelf at the first location on day one. */
+  stock: z.number().int().nonnegative().default(0),
+  /** What one unit cost the salon (bought in, or made); null when unknown. */
+  cost: z.number().int().nonnegative().nullable().default(null),
 });
 export type RegProduct = z.infer<typeof RegProductSchema>;
 
@@ -99,6 +117,8 @@ export const RegistrationDraftSchema = z.object({
       no: z.string().default(''),
       city: z.string().min(1),
       zip: z.string().default(''),
+      /** ISO 3166-1 alpha-2, from the wizard's short list. */
+      country: RegCountrySchema.default('MK'),
       // The pin is required: it is what the consumer app's map obeys,
       // and a salon nobody can find on a map is a salon nobody visits.
       // The wizard offers device precision or a click on the map.
@@ -122,7 +142,14 @@ export const RegistrationDraftSchema = z.object({
   // the website; the owner can add/replace in the Gallery step). Each is
   // size-capped like the business gallery, and there are at most twelve.
   gallery: z
-    .array(z.object({ name: z.string().default(''), img: z.string().max(GALLERY_IMG_MAX_CHARS) }))
+    .array(
+      z.object({
+        name: z.string().default(''),
+        img: z.string().max(GALLERY_IMG_MAX_CHARS),
+        /** The one the consumer app puts on the salon's card. */
+        card: z.boolean().default(false),
+      }),
+    )
     .max(GALLERY_MAX_PHOTOS)
     .default([]),
   team: z.array(z.object({ name: z.string(), email: z.email() })).default([]),

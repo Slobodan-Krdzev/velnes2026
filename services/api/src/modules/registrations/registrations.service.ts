@@ -4,6 +4,7 @@ import {
   scopeChoices,
   type PermMap,
   type RegistrationDraft,
+  REG_COUNTRY_NAMES,
 } from '@velnes/contracts';
 import argon2 from 'argon2';
 import { sql } from 'kysely';
@@ -220,15 +221,17 @@ export async function approveRegistration(id: string, reviewer: string) {
         slug,
         city: draft.loc.city,
         phone: draft.salon.phone || null,
-        country: 'North Macedonia',
+        country: REG_COUNTRY_NAMES[draft.loc.country],
         since: new Date(),
         // The photos the owner brought in (AI onboarding read them off the
-        // website, or they uploaded them) become the business gallery.
+        // website, or they uploaded them) become the business gallery; the
+        // one they marked is the salon's card in the consumer app.
         gallery: JSON.stringify(
           draft.gallery.map((g, i) => ({
             id: randomUUID(),
             name: g.name || `Photo ${i + 1}`,
             img: g.img,
+            ...(g.card ? { card: true } : {}),
           })),
         ),
       })
@@ -306,6 +309,8 @@ export async function approveRegistration(id: string, reviewer: string) {
         name: draft.salon.name,
         city: draft.loc.city,
         address: `${draft.loc.street} ${draft.loc.no}`.trim(),
+        zip: draft.loc.zip || null,
+        country: REG_COUNTRY_NAMES[draft.loc.country],
         tz: 'Europe/Skopje',
         phone: draft.salon.phone || null,
         rooms: 2,
@@ -396,6 +401,8 @@ export async function approveRegistration(id: string, reviewer: string) {
           name: p.name,
           categoryId: prodCatIds.get(p.category)!,
           price: p.price,
+          cost: p.cost,
+          ...(p.sizeMl != null ? { sizeAmount: p.sizeMl, sizeUnit: 'ml' } : {}),
           vat: 18,
           active: true,
         })
@@ -410,9 +417,24 @@ export async function approveRegistration(id: string, reviewer: string) {
           active: true,
           price: p.price,
           pos: true,
-          stock: 0,
+          stock: p.stock,
         })
         .execute();
+      // Opening stock is a movement like any other, so the stock room's
+      // history starts at the truth rather than at an unexplained number.
+      if (p.stock > 0)
+        await trx
+          .insertInto('stockMovements')
+          .values({
+            tenantId: businessId,
+            locationId,
+            productId: prod.id,
+            qty: p.stock,
+            kind: 'adjustment',
+            ref: 'registration',
+            note: 'Opening stock',
+          })
+          .execute();
     }
 
     // The colleagues invited in the wizard. Each becomes an invited,

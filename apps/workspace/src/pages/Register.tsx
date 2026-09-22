@@ -1,5 +1,6 @@
 import {
   PublicServiceCategoryListSchema,
+  REG_COUNTRIES,
   RegistrationCreateResponseSchema,
   RegistrationImportResultSchema,
   RegistrationStatusResponseSchema,
@@ -19,6 +20,10 @@ import { z } from 'zod';
 import { OB_PATTERN } from '../lib/obPattern.js';
 import { LocationMap } from './register/LocationMap.js';
 
+/** The three markets, as the wizard shows them. Kosovo's flag is a
+ *  regional-indicator pair some older platforms render as letters. */
+const FLAG: Record<(typeof REG_COUNTRIES)[number], string> = { MK: '🇲🇰', AL: '🇦🇱', XK: '🇽🇰' };
+
 /** The prototype's viewRegisterSalon: eight steps, one draft, the
  *  whole thing retained so "changes required" reopens the same
  *  wizard. Anonymous — no session anywhere near this. */
@@ -36,10 +41,10 @@ type Draft = {
   acct: { name: string; email: string; pass: string };
   salon: { name: string; type: string; phone: string; langs: string };
   legal: { name: string; taxId: string; vat: string; currency: string };
-  loc: { street: string; no: string; city: string; zip: string; px: number; py: number; pinned: boolean; lat: number | null; lng: number | null };
+  loc: { country: (typeof REG_COUNTRIES)[number]; street: string; no: string; city: string; zip: string; px: number; py: number; pinned: boolean; lat: number | null; lng: number | null };
   services: RegService[];
   products: RegProduct[];
-  gallery: { name: string; img: string | null }[];
+  gallery: { name: string; img: string | null; card?: boolean }[];
   team: { name: string; email: string }[];
   hours: Record<(typeof DAYS)[number], Day>;
 };
@@ -47,7 +52,7 @@ const newDraft = (): Draft => ({
   acct: { name: '', email: '', pass: '' },
   salon: { name: '', type: '', phone: '', langs: 'MK, EN' },
   legal: { name: '', taxId: '', vat: '', currency: 'MKD' },
-  loc: { street: '', no: '', city: '', zip: '', px: 50, py: 50, pinned: false, lat: null, lng: null },
+  loc: { country: 'MK', street: '', no: '', city: '', zip: '', px: 50, py: 50, pinned: false, lat: null, lng: null },
   services: [],
   products: [],
   gallery: [],
@@ -133,11 +138,18 @@ export function Register() {
     queryFn: () => get(PublicServiceCategoryListSchema, '/product-categories'),
   });
   const prodCatNames = prodCats.data?.categories ?? [];
-  const [prod, setProd] = useState<{ name: string; category: string; price: string }>({
-    name: '',
-    category: '',
-    price: '',
-  });
+  const [prod, setProd] = useState<{
+    name: string;
+    category: string;
+    price: string;
+    sizeMl: string;
+    stock: string;
+    cost: string;
+  }>({ name: '', category: '', price: '', sizeMl: '', stock: '', cost: '' });
+  // The two "add" forms fold away once a list is long enough to want
+  // the room (Alex, 2026-09-22).
+  const [showSvcForm, setShowSvcForm] = useState(true);
+  const [showProdForm, setShowProdForm] = useState(true);
   const addProduct = () => {
     const cat = prod.category || prodCatNames[0] || '';
     if (!prod.name.trim() || !cat) return;
@@ -145,10 +157,17 @@ export function Register() {
       ...d,
       products: [
         ...d.products,
-        { name: prod.name.trim(), category: cat, price: Math.max(0, Math.round(Number(prod.price) || 0)) },
+        {
+          name: prod.name.trim(),
+          category: cat,
+          price: Math.max(0, Math.round(Number(prod.price) || 0)),
+          sizeMl: prod.sizeMl.trim() ? Math.max(1, Math.round(Number(prod.sizeMl) || 0)) || null : null,
+          stock: Math.max(0, Math.round(Number(prod.stock) || 0)),
+          cost: prod.cost.trim() ? Math.max(0, Math.round(Number(prod.cost) || 0)) : null,
+        },
       ],
     }));
-    setProd({ name: '', category: cat, price: '' });
+    setProd({ name: '', category: cat, price: '', sizeMl: '', stock: '', cost: '' });
   };
   const removeProduct = (i: number) =>
     setR((d) => ({ ...d, products: d.products.filter((_, j) => j !== i) }));
@@ -205,7 +224,7 @@ export function Register() {
             salon: d.salon,
             legal: d.legal,
             loc: {
-              street: d.loc.street, no: d.loc.no, city: d.loc.city, zip: d.loc.zip,
+              country: d.loc.country, street: d.loc.street, no: d.loc.no, city: d.loc.city, zip: d.loc.zip,
               px: 50, py: 50, pinned: d.loc.lat != null, lat: d.loc.lat, lng: d.loc.lng,
             },
             services: d.services,
@@ -247,12 +266,12 @@ export function Register() {
     acct: r.acct,
     salon: r.salon,
     legal: r.legal,
-    loc: { street: r.loc.street, no: r.loc.no, city: r.loc.city, zip: r.loc.zip, lat: r.loc.lat, lng: r.loc.lng },
+    loc: { country: r.loc.country, street: r.loc.street, no: r.loc.no, city: r.loc.city, zip: r.loc.zip, lat: r.loc.lat, lng: r.loc.lng },
     services: r.services,
     products: r.products,
     gallery: r.gallery
-      .filter((g): g is { name: string; img: string } => !!g.img)
-      .map((g) => ({ name: g.name, img: g.img })),
+      .filter((g): g is { name: string; img: string; card?: boolean } => !!g.img)
+      .map((g) => ({ name: g.name, img: g.img, card: g.card === true })),
     team: r.team.filter((x) => x.email.trim()).map((x) => ({ name: x.name, email: x.email })),
     hours: r.hours,
   });
@@ -484,24 +503,58 @@ export function Register() {
 
           {step === 4 ? (
             <>
-              <div className="grid2">
-                {F(t('reg.street'), r.loc.street, (v) => setR((d) => ({ ...d, loc: { ...d.loc, street: v } })))}
-                {F(t('reg.number'), r.loc.no, (v) => setR((d) => ({ ...d, loc: { ...d.loc, no: v } })))}
-                {F(t('reg.city'), r.loc.city, (v) => setR((d) => ({ ...d, loc: { ...d.loc, city: v } })))}
-                {F(t('reg.zip'), r.loc.zip, (v) => setR((d) => ({ ...d, loc: { ...d.loc, zip: v } })))}
+              {/* Address down the left, the map beside it (Alex, 2026-09-22):
+                  the fields read as one column, and the map has room to be
+                  a map rather than a strip. */}
+              <div className="reg-loc">
+                <div className="reg-loc-fields">
+                  {F(t('reg.street'), r.loc.street, (v) => setR((d) => ({ ...d, loc: { ...d.loc, street: v } })))}
+                  {F(t('reg.number'), r.loc.no, (v) => setR((d) => ({ ...d, loc: { ...d.loc, no: v } })))}
+                  {F(t('reg.city'), r.loc.city, (v) => setR((d) => ({ ...d, loc: { ...d.loc, city: v } })))}
+                  {F(t('reg.zip'), r.loc.zip, (v) => setR((d) => ({ ...d, loc: { ...d.loc, zip: v } })))}
+                  <label className="field">
+                    <span>{t('reg.country')}</span>
+                    <select
+                      className="select"
+                      value={r.loc.country}
+                      onChange={(e) =>
+                        setR((d) => ({ ...d, loc: { ...d.loc, country: e.target.value as (typeof REG_COUNTRIES)[number] } }))
+                      }
+                    >
+                      {REG_COUNTRIES.map((c) => (
+                        <option key={c} value={c}>
+                          {FLAG[c]} {t(`reg.country${c}`)}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+                <div className="reg-loc-map">
+                  <LocationMap
+                    lat={r.loc.lat}
+                    lng={r.loc.lng}
+                    square
+                    onPick={(lat, lng) => setR((d) => ({ ...d, loc: { ...d.loc, lat, lng, pinned: true } }))}
+                  />
+                </div>
               </div>
-              <LocationMap
-                lat={r.loc.lat}
-                lng={r.loc.lng}
-                onPick={(lat, lng) => setR((d) => ({ ...d, loc: { ...d.loc, lat, lng, pinned: true } }))}
-              />
               <div className="note">{t('reg.pinNote')}</div>
             </>
           ) : null}
 
           {step === 5 ? (
-            <>
+            <div className="reg-cat">
+              {/* Services on the left, products on the right, each with its
+                  own "add" form on top that folds away (Alex, 2026-09-22). */}
+              <section className="reg-col">
+              <div className="reg-col-h">
+                <h3 style={{ margin: 0 }}>{t('reg.servicesTitle')}</h3>
+                <button type="button" className="btn btn-ghost btn-sm" onClick={() => setShowSvcForm((v) => !v)}>
+                  {showSvcForm ? t('reg.formHide') : t('reg.formShow')}
+                </button>
+              </div>
               <div className="note">{t('reg.createServices')}</div>
+              {showSvcForm ? (
               <div
                 className="card"
                 style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}
@@ -565,6 +618,7 @@ export function Register() {
                   </button>
                 </div>
               </div>
+              ) : null}
 
               {r.services.length ? (
                 <table>
@@ -598,8 +652,16 @@ export function Register() {
                 </p>
               )}
 
-              <h3 style={{ margin: 0 }}>{t('reg.productsTitle')}</h3>
+              </section>
+              <section className="reg-col">
+              <div className="reg-col-h">
+                <h3 style={{ margin: 0 }}>{t('reg.productsTitle')}</h3>
+                <button type="button" className="btn btn-ghost btn-sm" onClick={() => setShowProdForm((v) => !v)}>
+                  {showProdForm ? t('reg.formHide') : t('reg.formShow')}
+                </button>
+              </div>
               <div className="note">{t('reg.createProducts')}</div>
+              {showProdForm ? (
               <div
                 className="card"
                 style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}
@@ -630,7 +692,29 @@ export function Register() {
                     </select>
                   </label>
                   <label className="field">
-                    <span>{t('reg.svcPrice')}</span>
+                    <span>{t('reg.prodSize')}</span>
+                    <input
+                      className="input tnum"
+                      type="number"
+                      min={1}
+                      value={prod.sizeMl}
+                      placeholder="100"
+                      onChange={(e) => setProd((s) => ({ ...s, sizeMl: e.target.value }))}
+                    />
+                  </label>
+                  <label className="field">
+                    <span>{t('reg.prodStock')}</span>
+                    <input
+                      className="input tnum"
+                      type="number"
+                      min={0}
+                      value={prod.stock}
+                      placeholder="0"
+                      onChange={(e) => setProd((s) => ({ ...s, stock: e.target.value }))}
+                    />
+                  </label>
+                  <label className="field">
+                    <span>{t('reg.prodSell')}</span>
                     <input
                       className="input tnum"
                       type="number"
@@ -639,6 +723,18 @@ export function Register() {
                       placeholder="0"
                       onChange={(e) => setProd((s) => ({ ...s, price: e.target.value }))}
                     />
+                  </label>
+                  <label className="field">
+                    <span>{t('reg.prodCost')}</span>
+                    <input
+                      className="input tnum"
+                      type="number"
+                      min={0}
+                      value={prod.cost}
+                      placeholder="0"
+                      onChange={(e) => setProd((s) => ({ ...s, cost: e.target.value }))}
+                    />
+                    <span className="hint">{t('reg.prodCostHint')}</span>
                   </label>
                 </div>
                 <div>
@@ -652,6 +748,7 @@ export function Register() {
                   </button>
                 </div>
               </div>
+              ) : null}
 
               {r.products.length ? (
                 <table>
@@ -662,6 +759,12 @@ export function Register() {
                           <span className="bold">{p.name}</span>
                           <span className="muted" style={{ display: 'block', fontSize: 12 }}>
                             {p.category}
+                            {' · '}
+                            {t('reg.prodLine', {
+                              size: p.sizeMl != null ? `${p.sizeMl} ml` : '—',
+                              stock: p.stock,
+                              cost: p.cost != null ? money(p.cost) : '—',
+                            })}
                           </span>
                         </td>
                         <td className="right bold tnum">{money(p.price)}</td>
@@ -684,11 +787,59 @@ export function Register() {
                   {t('reg.prodNoneYet')}
                 </p>
               )}
-            </>
+              </section>
+            </div>
           ) : null}
 
           {step === 6 ? (
             <>
+              {/* The salon's card in the consumer app wears one photograph;
+                  it is chosen here, or added here (Alex, 2026-09-22). */}
+              <div className="card" style={{ padding: 16, display: 'flex', gap: 14, alignItems: 'center', flexWrap: 'wrap' }}>
+                {(() => {
+                  const card = r.gallery.find((g) => g.card);
+                  return (
+                    <>
+                      <div
+                        style={{
+                          width: 132, height: 99, borderRadius: 12, overflow: 'hidden', flex: '0 0 auto',
+                          border: '1px solid var(--line)', background: card?.img ? 'none' : '#6f7357',
+                        }}
+                      >
+                        {card?.img ? (
+                          <img src={card.img} alt={card.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        ) : null}
+                      </div>
+                      <div style={{ flex: 1, minWidth: 200 }}>
+                        <div className="bold">{t('reg.cardPhoto')}</div>
+                        <div className="hint" style={{ marginTop: 4 }}>{t('reg.cardPhotoNote')}</div>
+                      </div>
+                      <label className="btn btn-secondary btn-sm" style={{ cursor: 'pointer' }}>
+                        {t('reg.cardPhotoAdd')}
+                        <input
+                          type="file"
+                          accept="image/*"
+                          style={{ display: 'none' }}
+                          onChange={(e) => {
+                            const f = e.target.files?.[0];
+                            if (!f) return;
+                            const reader = new FileReader();
+                            reader.onload = () =>
+                              setR((d) => ({
+                                ...d,
+                                gallery: [
+                                  { name: f.name.replace(/\.[^.]+$/, ''), img: String(reader.result), card: true },
+                                  ...d.gallery.map((g) => ({ ...g, card: false })),
+                                ],
+                              }));
+                            reader.readAsDataURL(f);
+                          }}
+                        />
+                      </label>
+                    </>
+                  );
+                })()}
+              </div>
               <div className="grid2" style={{ gap: 10 }}>
                 {r.gallery.map((g, i) => (
                   <div
@@ -712,6 +863,20 @@ export function Register() {
                     >
                       ✕
                     </button>
+                    {g.card ? (
+                      <span className="tag" style={{ position: 'absolute', top: 6, left: 6 }}>{t('reg.cardPhotoBadge')}</span>
+                    ) : (
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-sm"
+                        style={{ position: 'absolute', top: 4, left: 4, color: '#fff' }}
+                        onClick={() =>
+                          setR((d) => ({ ...d, gallery: d.gallery.map((x, j) => ({ ...x, card: j === i })) }))
+                        }
+                      >
+                        {t('reg.cardPhotoSet')}
+                      </button>
+                    )}
                   </div>
                 ))}
                 <label
@@ -734,7 +899,7 @@ export function Register() {
                       reader.onload = () =>
                         setR((d) => ({
                           ...d,
-                          gallery: [...d.gallery, { name: f.name.replace(/\.[^.]+$/, ''), img: String(reader.result) }],
+                          gallery: [...d.gallery, { name: f.name.replace(/\.[^.]+$/, ''), img: String(reader.result), card: false }],
                         }));
                       reader.readAsDataURL(f);
                     }}

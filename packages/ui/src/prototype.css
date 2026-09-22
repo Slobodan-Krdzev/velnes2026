@@ -2404,3 +2404,19 @@ body.ob-src .ob-body{display:flex;align-items:center;justify-content:center;
   .ob-shots{grid-template-columns:repeat(2,1fr)}
 }
 
+
+
+/* ── Registration wizard layout (2026-09-22, not in the prototype) ──
+   Step 4: address fields down the left, the map beside them.
+   Step 5: services and products side by side, each with its own
+   folding "add" form on top. Both collapse to one column on phones. */
+.reg-loc{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.15fr);gap:20px;align-items:start}
+.reg-loc-fields{display:grid;gap:12px}
+.reg-loc-map .field>span{display:block}
+.reg-cat{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:22px;align-items:start}
+.reg-col{display:flex;flex-direction:column;gap:12px;min-width:0}
+.reg-col-h{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.reg-col table{width:100%}
+@media (max-width:900px){
+  .reg-loc,.reg-cat{grid-template-columns:1fr}
+}
