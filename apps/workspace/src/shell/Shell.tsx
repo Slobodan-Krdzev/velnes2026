@@ -13,6 +13,7 @@ import { useToast } from '../lib/toast.js';
 import { useSession } from '@velnes/client';
 import { WA_SUPPORT, WhatsAppGlyph, WhatsAppPopup } from './WhatsAppSupport.js';
 import { Assistant } from './Assistant.js';
+import { SignInLinkPanel } from '../pages/settings/SignInLinkPanel.js';
 
 /** Location scope — the prototype's loc-switch: chosen once in the
  *  topbar, honoured by every screen. 'all' = every assigned location. */
@@ -67,6 +68,8 @@ export function Shell() {
   const [envMenu, setEnvMenu] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
   const [waOpen, setWaOpen] = useState(false);
+  // The account menu's "Employee app": my own sign-in link, any role.
+  const [linkOpen, setLinkOpen] = useState(false);
   const notifRef = useOutsideClose(notifOpen, () => setNotifOpen(false));
   // Platform notices — HQ speaks, the bell listens. Seen-state is a
   // per-browser convenience, not business truth.
@@ -337,6 +340,15 @@ export function Shell() {
                       </span>
                     </span>
                   </div>
+                  <button
+                    className="menu-row"
+                    onClick={() => {
+                      setLinkOpen(true);
+                      setEnvMenu(false);
+                    }}
+                  >
+                    {t('shell.employeeApp')}
+                  </button>
                   {can('users.manage') ? (
                     <button
                       className="menu-row"
@@ -382,6 +394,7 @@ export function Shell() {
             </div>
           </div>
         </header>
+        {linkOpen ? <SignInLinkPanel employee={{ id: me.id, name: me.name }} self onClose={() => setLinkOpen(false)} /> : null}
         <main id="view">
           <ScopeContext.Provider value={scopeValue}>
             <Outlet />

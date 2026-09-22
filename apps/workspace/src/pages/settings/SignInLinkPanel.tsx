@@ -1,4 +1,4 @@
-import { SIGN_IN_LINK_DAYS, SignInLinkResponseSchema, type Employee } from '@velnes/contracts';
+import { SIGN_IN_LINK_DAYS, SignInLinkResponseSchema } from '@velnes/contracts';
 import { post } from '@velnes/client';
 import { I, Icon } from '@velnes/ui';
 import QRCode from 'qrcode';
@@ -15,9 +15,20 @@ const EMPLOYEE_APP = (import.meta.env.VITE_EMPLOYEE_URL ?? 'http://localhost:517
  * that both hands a team member their personal link — copied, or
  * scanned as a QR — and explains how signing in works on the phone.
  * The link is minted on demand; the door revokes the previous one.
+ * With `self` it is the account menu's "Employee app": the signed-in
+ * person's own link, worded to them — every role gets that door.
  */
-export function SignInLinkPanel({ employee, onClose }: { employee: Employee; onClose: () => void }) {
+export function SignInLinkPanel({
+  employee,
+  self = false,
+  onClose,
+}: {
+  employee: { id: string; name: string };
+  self?: boolean;
+  onClose: () => void;
+}) {
   const { t } = useTranslation();
+  const k = (key: string) => (self ? `tset.linkSelf${key}` : `tset.link${key}`);
   const [link, setLink] = useState<{ url: string; expiresAt: string } | null>(null);
   const [qr, setQr] = useState<string | null>(null);
   const [working, setWorking] = useState(false);
@@ -64,11 +75,11 @@ export function SignInLinkPanel({ employee, onClose }: { employee: Employee; onC
   return (
     <PanelPortal>
       <div className="scrim on" onClick={onClose} />
-      <aside className="panel open" role="dialog" aria-modal="true" aria-label={t('tset.linkTitle', { name: employee.name })}>
+      <aside className="panel open" role="dialog" aria-modal="true" aria-label={t(k('Title'), { name: employee.name })}>
         <div className="panel-head plain">
           <div>
-            <h2>{t('tset.linkTitle', { name: employee.name })}</h2>
-            <p className="sub">{t('tset.linkSub')}</p>
+            <h2>{t(k('Title'), { name: employee.name })}</h2>
+            <p className="sub">{t(k('Sub'))}</p>
           </div>
           <div className="panel-actions">
             <button className="iconbtn" aria-label={t('common.close')} onClick={onClose}>
@@ -77,11 +88,11 @@ export function SignInLinkPanel({ employee, onClose }: { employee: Employee; onC
           </div>
         </div>
         <div className="panel-body">
-          <h3 style={{ margin: '0 0 8px', fontSize: 14 }}>{t('tset.linkHowTitle', { name: employee.name })}</h3>
+          <h3 style={{ margin: '0 0 8px', fontSize: 14 }}>{t(k('HowTitle'), { name: employee.name })}</h3>
           <ol style={{ margin: 0, paddingLeft: 20, display: 'grid', gap: 6, fontSize: 13.5, lineHeight: 1.45 }}>
-            <li>{t('tset.linkHow1')}</li>
-            <li>{t('tset.linkHow2', { name: employee.name })}</li>
-            <li>{t('tset.linkHow3')}</li>
+            <li>{t(k('How1'))}</li>
+            <li>{t(k('How2'), { name: employee.name })}</li>
+            <li>{t(k('How3'))}</li>
             <li>
               {t('tset.linkHow4')} <code>{appAt}</code>
             </li>

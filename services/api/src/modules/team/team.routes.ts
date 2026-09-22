@@ -231,8 +231,10 @@ export function teamRoutes(app: FastifyInstance) {
       }),
   });
 
-  /** Mint a personal sign-in link for a team member (Settings › Team).
-   *  Any earlier unused link for them stops working. */
+  /** Mint a personal sign-in link: for yourself (the account menu's
+   *  "Employee app" — every role), or for a team member with
+   *  users.manage (Settings › Team). Any earlier unused link for that
+   *  person stops working. */
   r.route({
     method: 'POST',
     url: '/employees/:id/sign-in-link',
@@ -247,9 +249,11 @@ export function teamRoutes(app: FastifyInstance) {
     },
     handler: async (req, reply) =>
       withTenant(req.claims.ten, async (trx) => {
-        const perms = await permsFor(trx, req.claims);
-        if (!can(perms, 'users.manage'))
-          return reply.code(403).send({ error: 'FORBIDDEN', message: 'Missing permission: users.manage' });
+        if (req.params.id !== req.claims.sub) {
+          const perms = await permsFor(trx, req.claims);
+          if (!can(perms, 'users.manage'))
+            return reply.code(403).send({ error: 'FORBIDDEN', message: 'Missing permission: users.manage' });
+        }
         const link = await createSignInLink(trx, req.claims, req.params.id);
         if (!link) return reply.code(404).send({ error: 'NOT_FOUND', message: 'No such team member' });
         return link;

@@ -395,5 +395,9 @@ how the employee app sign-in works — open the link on the phone, choose
 a password once, then tap your name at the app's address — and mints
 the member's personal link on demand, shown as a URL to copy and a QR to
 scan. Minting again revokes the previous link; a link works once and
-for seven days. The same link rides in the invite mail. Details and the
-doors live in `docs/EMPLOYEE-APP.md`.
+for seven days. The same link rides in the invite mail. Because a
+plain Employee cannot open Settings, the account menu (the avatar, top
+right) has **Employee app** for every role: the same panel, worded to
+the signed-in person, minting their own link — the door lets anyone
+mint their own and asks `users.manage` only for someone else's. Details
+and the doors live in `docs/EMPLOYEE-APP.md`.

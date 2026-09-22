@@ -3116,6 +3116,13 @@ export const en = {
   'join.pwRepeat': 'Repeat password',
   'join.pwMismatch': 'The two passwords do not match',
   'join.continue': 'Save and continue',
+  'shell.employeeApp': 'Employee app',
+  'tset.linkSelfTitle': 'Sign in to the employee app',
+  'tset.linkSelfSub': 'Your personal link to the employee app on your phone',
+  'tset.linkSelfHowTitle': 'How you sign in',
+  'tset.linkSelfHow1': 'Create the link below and open it on your phone, or scan the QR with the phone\'s camera.',
+  'tset.linkSelfHow2': 'Opening it signs you straight into your salon and asks you to choose a password once.',
+  'tset.linkSelfHow3': 'From then on the phone remembers the salon: tap your name and enter your password at every shift.',
 } as const;
 
 export type TranslationKey = keyof typeof en;

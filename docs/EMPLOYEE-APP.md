@@ -64,7 +64,9 @@ prose, nothing accepted it. Now the owner opens Settings › Team ›
 works (open the link on the phone, choose a password once, then "tap
 your name" at the app's address) and mints the link on demand — shown
 as a URL to copy and as a QR to scan. `POST /employees/:id/sign-in-link`
-(`users.manage`) stores only a sha256 of a 256-bit token in
+(your own id: any role — the account menu's **Employee app** opens the
+same panel for a plain Employee; someone else's: `users.manage`) stores
+only a sha256 of a 256-bit token in
 `employee_sign_in_links`, revokes the member's earlier unused link, and
 audits "Sign-in link created"; the same link rides in the invite mail
 from `POST /employees` and from registration approval. The employee app

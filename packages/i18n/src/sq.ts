@@ -3098,4 +3098,11 @@ export const sq: Record<TranslationKey, string> = {
   'join.pwRepeat': 'Përsërit fjalëkalimin',
   'join.pwMismatch': 'Dy fjalëkalimet nuk përputhen',
   'join.continue': 'Ruaj dhe vazhdo',
+  'shell.employeeApp': 'Aplikacioni për punonjës',
+  'tset.linkSelfTitle': 'Hyni në aplikacionin për punonjës',
+  'tset.linkSelfSub': 'Lidhja juaj personale për aplikacionin e punonjësve në telefon',
+  'tset.linkSelfHowTitle': 'Si hyni ju',
+  'tset.linkSelfHow1': 'Krijoni lidhjen më poshtë dhe hapeni në telefon, ose skanoni kodin QR me kamerën.',
+  'tset.linkSelfHow2': 'Duke e hapur, hyni drejtpërdrejt në sallonin tuaj dhe zgjidhni një fjalëkalim një herë.',
+  'tset.linkSelfHow3': 'Që atëherë telefoni e mban mend sallonin: prekni emrin tuaj dhe shkruani fjalëkalimin në çdo turn.',
 };

@@ -127,9 +127,13 @@ describe('personal sign-in links — a team member joins their own salon on the 
     expect(ok.needsPassword).toBe(false);
   });
 
-  it('minting takes users.manage, and an unknown team member is a 404', async () => {
+  it('anyone may mint their own link; minting for another takes users.manage; an unknown member is a 404', async () => {
     const ana = await app.inject({ method: 'POST', url: `${A}/login`, payload: { email: 'ana@velnes.mk', password: DEMO_PASSWORD } });
     const anaToken = LoginResponseSchema.parse(ana.json()).accessToken;
+    const own = await mint(demo.empAna, anaToken);
+    expect(own.statusCode).toBe(200);
+    expect(SignInLinkResponseSchema.parse(own.json()).employeeId).toBe(demo.empAna);
+    await admin.query(`DELETE FROM employee_sign_in_links WHERE employee_id = $1`, [demo.empAna]);
     const forbidden = await mint(newId, anaToken);
     expect(forbidden.statusCode).toBe(403);
     const missing = await mint('00000000-0000-4000-8000-00000000dead');
