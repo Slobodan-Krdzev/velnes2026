@@ -24,6 +24,22 @@ in until active. 2FA is a reserved flag (honest emptiness).
 platform) lives in `@velnes/contracts`; roles store a validated perm
 map (jsonb); `scopeOf`/`can` is the one authz door.
 
+**Two standard roles (2026-09-22).** Every tenant is born with exactly
+two: **Owner** (locked, every key at its widest scope) and **Employee**
+— Alex's basic kit: their own appointments, create/edit/cancel
+appointments at their location, take payments; every other key
+`none`, so the workspace shows them Calendar, Cash register and
+Support and nothing else — the Flightdeck too is behind
+`reports.view_location`/`reports.view_business` now (API 403, the
+home route sends them to the calendar). The kits are `STANDARD_ROLES` in
+`@velnes/contracts`, written by one helper (`standardRoles()`) from
+registration approval, HQ's create-business door and both seeds;
+migration `20260922120000_employee_role` gave every earlier tenant
+its Employee role and reset existing standard Employee roles to the
+kit (custom roles untouched). An invite that names no role gets the
+Employee role, never nothing. The Employee role is unlocked: an owner
+who wants more for their staff edits it or adds a role.
+
 **Location lifecycle.** `locTransition` is the only lifecycle writer:
 legal edges per the prototype's `LOC_EDGES`, readiness gate on
 APPROVED→ACTIVE (five requirements; the service/staff checks read the

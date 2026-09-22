@@ -493,15 +493,21 @@ export async function locTransition(
             .map((i) => i.label)
             .join(', '),
       );
-    const actorRow = claims
-      ? await trx
-          .selectFrom('employees')
-          .select('access')
-          .where('id', '=', claims.sub)
-          .executeTakeFirst()
-      : undefined;
-    if (actorRow?.access !== 'owner')
+    // Owner-only for tenant callers. A claims-less call with a named
+    // actor is Revelapps HQ approving a registration — the one other
+    // hand allowed on this switch (Alex, 2026-09-22: approved salons
+    // are bookable at once).
+    if (claims) {
+      const actorRow = await trx
+        .selectFrom('employees')
+        .select('access')
+        .where('id', '=', claims.sub)
+        .executeTakeFirst();
+      if (actorRow?.access !== 'owner')
+        throw new LocationError('OWNER_ONLY', 'Only account-level owners can activate a location');
+    } else if (!actor) {
       throw new LocationError('OWNER_ONLY', 'Only account-level owners can activate a location');
+    }
   }
 
   const patch: Partial<{

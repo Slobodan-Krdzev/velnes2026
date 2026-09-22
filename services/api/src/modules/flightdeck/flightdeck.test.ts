@@ -22,6 +22,20 @@ describe('flightdeck — the salon home composed from live data', () => {
     await closeDb();
   });
 
+  it('is closed to the basic Employee kit — no location figures, no flightdeck', async () => {
+    const login = await app.inject({
+      method: 'POST',
+      url: `${API_PREFIX}/auth/login`,
+      payload: { email: 'ana@velnes.mk', password: 'velnes-demo' },
+    });
+    const res = await app.inject({
+      method: 'GET',
+      url: `${API_PREFIX}/flightdeck`,
+      headers: { authorization: `Bearer ${(login.json() as { accessToken: string }).accessToken}` },
+    });
+    expect(res.statusCode).toBe(403);
+  });
+
   it('returns a valid, provider-tagged payload for the seeded salon', async () => {
     const res = await app.inject({
       method: 'GET',

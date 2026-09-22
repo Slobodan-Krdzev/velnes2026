@@ -1053,7 +1053,7 @@ export const en = {
   'hq.reasonPh2': 'What must the owner correct?',
   'hq.approve': 'Approve',
   'hq.approveCompound': 'Approve location + entity',
-  'hq.approveNote': 'Approval does not publish anything: the owner still activates deliberately, behind the readiness gate.',
+  'hq.approveNote': 'Approval publishes the salon: its location goes live, the wizard’s services go online and customers can book the same minute.',
   'hq.approvedToast': 'Approved — the owner can activate when ready',
   'hq.notFound': 'Location not found.',
   'hq.when': 'When',

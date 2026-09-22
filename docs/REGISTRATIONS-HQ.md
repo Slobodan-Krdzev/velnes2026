@@ -25,13 +25,32 @@ row-level, not an if-statement. Email verification and team
 invitations mint their tokens now and wait for SMTP, honestly.
 
 **Approval provisions the tenant world in one transaction**: the
-business, a locked Owner role at the widest legal scopes, the owner
-account with the wizard's own password (sign-in works the same
-minute), the legal entity **verified** (the compound decision), the
-location at `APPROVED` — activation stays with the owner, behind the
-readiness gate — and the picked starter services
-(`REG_SERVICE_TEMPLATES`, business-level, online off). Idempotent:
-approving twice returns the same world.
+business, the two standard roles (`standardRoles()` — a locked Owner
+at the widest legal scopes and the basic Employee kit, see
+FOUNDATIONS › Authorization), the owner account with the wizard's own
+password (sign-in works the same minute), the legal entity
+**verified** (the compound decision), the location, the wizard's
+services and products, and one **live booking widget** on the
+location. Idempotent: approving twice returns the same world.
+
+**Approval publishes (2026-09-22).** Alex's rule replaces the
+prototype's "approval does not publish anything": a salon HQ approves
+is bookable on the consumer app the same minute. So activation now
+inserts every wizard service `online`, gives the owner a skill row for
+each of them (the owner delivers what they listed), creates the live
+widget, and then walks the location `APPROVED → ACTIVE` through the
+one lifecycle writer — the readiness gate is the same one an owner
+passes, and the log names the HQ reviewer as actor. `locTransition`
+accepts that claims-less, named-actor call as the one hand besides the
+owner's allowed on the switch; a draft that somehow is not ready (no
+wizard draft is: the schema demands a service) stays `APPROVED` with
+the checklist saying why. Wizard colleagues arrive holding the
+Employee role rather than none. HQ's own create-business door still
+leaves its bare first location at `APPROVED`: it has no catalog to be
+ready with. Pinned by `registrations.test.ts` (ACTIVE + online, the
+lifecycle log row, the live widget, the search projection, the
+consumer salon door answering `bookable: true`) and the register loop
+in `e2e/platform.spec.ts`.
 
 ## Revelapps HQ (apps/hq)
 

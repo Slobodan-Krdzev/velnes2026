@@ -3,7 +3,7 @@ import { FlightdeckSchema, TimingSuggestionsResponseSchema } from '@velnes/contr
 import { I, Icon } from '@velnes/ui';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useNavigate } from 'react-router-dom';
+import { Navigate, useNavigate } from 'react-router-dom';
 import { z } from 'zod';
 import { get, post } from '@velnes/client';
 import { money } from '../../lib/money.js';
@@ -26,6 +26,21 @@ const OB_ICON: Record<string, string> = {
  *  needs a decision. Below: today at a glance, upsell per person, and
  *  the Kumo insight. Opportunities/Kumo come from the insights engine
  *  (rules today, Claude later) — the UI computes nothing. */
+/**
+ * The home route. The flightdeck is the location's figures, so it is
+ * for whoever may read location reports; a basic Employee — calendar
+ * and till only — lands on their calendar instead of a 403.
+ */
+export function HomePage() {
+  const { me, can } = useSession();
+  // The account owner always has the deck, whatever the perm map says.
+  return me?.access === 'owner' || can('reports.view_location') || can('reports.view_business') ? (
+    <FlightdeckPage />
+  ) : (
+    <Navigate to="/calendar" replace />
+  );
+}
+
 export function FlightdeckPage() {
   const { t } = useTranslation();
   const toast = useToast();

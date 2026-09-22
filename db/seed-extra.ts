@@ -10,7 +10,7 @@
 import { randomUUID } from 'node:crypto';
 import argon2 from 'argon2';
 import pg from 'pg';
-import { PERM_KEYS, scopeChoices, type PermMap } from '@velnes/contracts';
+import { employeePermMap, PERM_KEYS, scopeChoices, STANDARD_ROLES, type PermMap } from '@velnes/contracts';
 
 const ADMIN_URL =
   process.env.ADMIN_DATABASE_URL ??
@@ -25,14 +25,7 @@ const mkPerms = (o: PermMap): PermMap => {
   return r;
 };
 const ownerPerms = mkPerms(Object.fromEntries(PERM_KEYS.map((k) => [k, scopeChoices(k).at(-1) ?? 'none'])) as PermMap);
-const staffPerms = mkPerms({
-  'appointments.view_own': 'own',
-  'appointments.create': 'location',
-  'appointments.edit': 'location',
-  'pos.checkout': 'location',
-  'reports.view_own': 'own',
-  'catalog.view': 'location',
-});
+const staffPerms = employeePermMap();
 const deskPerms = mkPerms({
   'appointments.view_own': 'own',
   'appointments.view_location': 'location',
@@ -388,7 +381,7 @@ async function main() {
 
     for (const [id, name, locked, descr, perms] of [
       [roleOwner, 'Owner', true, 'Everything, everywhere. The account itself.', ownerPerms],
-      [roleStaff, 'Employee', true, 'Their own day and the till.', staffPerms],
+      [roleStaff, 'Employee', false, STANDARD_ROLES.employee.description, staffPerms],
       [roleDesk, 'Front desk', true, 'The calendar and the till at the location.', deskPerms],
     ] as [string, string, boolean, string, PermMap][])
       await q(

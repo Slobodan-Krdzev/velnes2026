@@ -1046,7 +1046,7 @@ export const sq: Record<TranslationKey, string> = {
   'hq.reasonPh2': 'Çfarë duhet të korrigjojë pronari?',
   'hq.approve': 'Mirato',
   'hq.approveCompound': 'Mirato vendndodhjen + personin',
-  'hq.approveNote': 'Miratimi nuk publikon asgjë: pronari ende aktivizon me vetëdije, pas kontrollit të gatishmërisë.',
+  'hq.approveNote': 'Miratimi e publikon sallonin: vendndodhja bëhet aktive, shërbimet e magjistarit dalin online dhe klientët mund të rezervojnë që në minutën e parë.',
   'hq.approvedToast': 'U miratua — pronari mund të aktivizojë kur të jetë gati',
   'hq.notFound': 'Vendndodhja nuk u gjet.',
   'hq.when': 'Kur',

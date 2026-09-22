@@ -3,6 +3,7 @@ import type { FastifyInstance } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { withTenant } from '../../db/index.js';
+import { can, permsFor } from '../auth/authz.service.js';
 import { flightdeck } from './flightdeck.service.js';
 
 const Err = z.object({ error: z.string(), message: z.string() });
@@ -17,10 +18,18 @@ export function flightdeckRoutes(app: FastifyInstance) {
     preHandler: [app.authenticate],
     schema: {
       querystring: z.object({ locationId: z.uuid().optional() }),
-      response: { 200: FlightdeckSchema, 404: Err },
+      response: { 200: FlightdeckSchema, 403: Err, 404: Err },
     },
     handler: async (req, reply) =>
       withTenant(req.claims.ten, async (trx) => {
+        // The flightdeck is the location's figures — revenue, customers,
+        // stock, member opportunities — so it opens for whoever may read
+        // location reports. A basic Employee lands on the calendar instead.
+        const perms = await permsFor(trx, req.claims);
+        if (!can(perms, 'reports.view_location') && !can(perms, 'reports.view_business'))
+          return reply
+            .code(403)
+            .send({ error: 'FORBIDDEN', message: 'Missing permission: reports.view_location' });
         // With no location given ("All locations"), the flightdeck's
         // location-specific parts show the primary operating location —
         // the one with the most appointments — not the first by name.
@@ -34,11 +43,10 @@ export function flightdeckRoutes(app: FastifyInstance) {
             .groupBy('locationId')
             .orderBy('n', 'desc')
             .executeTakeFirst();
-          // Prefer the busiest, then the first ACTIVE location. A
-          // freshly-approved salon has neither — its only location is
-          // still APPROVED (activation is the owner's step) — so fall
-          // back to any location, otherwise the flightdeck 404s and the
-          // owner never sees their getting-started checklist.
+          // Prefer the busiest, then the first ACTIVE location, then any
+          // location at all (an HQ-created business starts with a bare
+          // APPROVED one), otherwise the flightdeck 404s and the owner
+          // never sees their getting-started checklist.
           const activeOrAny = async (activeOnly: boolean) => {
             let q = trx.selectFrom('locations').select('id');
             if (activeOnly) q = q.where('lifecycle', '=', 'ACTIVE');

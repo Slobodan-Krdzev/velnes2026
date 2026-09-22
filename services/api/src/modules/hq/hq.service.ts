@@ -8,7 +8,8 @@ import { db, withHq } from '../../db/index.js';
 import { logAudit } from '../audit/audit.service.js';
 import { AuthError } from '../auth/auth.service.js';
 import { queueMail } from '../mail/mail.service.js';
-import { ownerPerms, RegistrationError } from '../registrations/registrations.service.js';
+import { RegistrationError } from '../registrations/registrations.service.js';
+import { standardRoles } from '../team/role-kits.js';
 
 /** HQ principals are their own kind: separate table, separate token
  *  shape. The login lookup reuses the explicit app.auth mode. */
@@ -195,19 +196,7 @@ export async function hqCreateBusiness(
       })
       .execute();
 
-    const roleId = randomUUID();
-    await trx
-      .insertInto('roles')
-      .values({
-        id: roleId,
-        tenantId: businessId,
-        name: 'Owner',
-        std: true,
-        locked: true,
-        description: 'Everything, everywhere. The account itself.',
-        perms: JSON.stringify(ownerPerms()),
-      })
-      .execute();
+    const { ownerRoleId } = await standardRoles(trx, businessId);
 
     const ownerId = randomUUID();
     await trx
@@ -219,7 +208,7 @@ export async function hqCreateBusiness(
         roleTitle: 'Owner',
         email: input.ownerEmail,
         access: 'owner',
-        roleId,
+        roleId: ownerRoleId,
         bookable: true,
         status: 'invited',
         color: 'olive',
