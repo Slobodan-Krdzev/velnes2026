@@ -323,6 +323,20 @@ export function MyVelnes({ section = 'over' }: { section?: SecId }) {
                       <button className="btn btn-p" onClick={() => nav('/')}>{t('c.acc.findSalon')}</button>
                     </div>
                   )}
+                  {/* Velnes Premium, in a sentence, with the page that says
+                      the rest — membership itself is not open yet. */}
+                  <div className="acc-card acc-prem">
+                    <div className="acc-kv" style={{ alignItems: 'center', gap: '12px' }}>
+                      <span style={{ minWidth: 0 }}>
+                        <b>{t('c.acc.premTitle')}</b>
+                        <br />
+                        <span className="sm muted">{t('c.acc.premSub')}</span>
+                      </span>
+                      <button className="btn btn-g" style={{ minHeight: '38px', padding: '6px 14px', fontSize: '13px', flex: '0 0 auto' }} onClick={() => nav('/premium')}>
+                        {t('c.acc.premMore')}
+                      </button>
+                    </div>
+                  </div>
                   {/* What salons promised this person, and nobody else: the
                       live personal offers, soonest to expire first. Absent
                       when there are none — a heading over nothing is noise. */}

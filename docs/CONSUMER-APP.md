@@ -97,6 +97,18 @@ active tab follows the route; nothing is active on a salon page or a
 booking step. Full-screen sheets (search, map, location prompt) still
 cover the chrome. The pages no longer carry their own tab bars.
 
+**Velnes Premium, explained (2026-09-22).** `/premium`
+(`features/premium/Premium.tsx`) tells a customer what membership is
+in their terms — the first window on last-minute offers, ×1.5 loyalty
+at every salon, honest member prices, one membership everywhere — and
+says plainly that joining is not open yet (nothing is drawn that does
+nothing). Linked from the home footer's "Membership" and a card on My
+Velnes' overview. The rules quoted are the platform's real ones
+(`PREMIUM_RULES`, `PREMIUM_LOYALTY_MULT`, the offer phases); sign-up
+and billing stay deferred. Related: the workspace flightdeck no longer
+shows the members-first "fill capacity" hero to a salon with no
+Premium members (it would have read "0 members get first access").
+
 **Option groups (2026-09-22).** The salon page now shows a service's
 option groups under it once it is in the visit — a "one choice" group
 and a "stackable" one alike as tappable cards, each option with its

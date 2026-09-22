@@ -57,6 +57,27 @@ describe('flightdeck — the salon home composed from live data', () => {
       expect(['customers', 'reports', 'catalog', 'suppliers', 'marketing']).toContain(o.actionTarget);
   });
 
+  it('shows no members-first hero when the salon has no Velnes Premium members', async () => {
+    const { default: pg } = await import('pg');
+    const admin = new pg.Client({
+      connectionString: (process.env.TEST_ADMIN_DATABASE_URL ?? process.env.TEST_SEED_DATABASE_URL ?? 'postgres://velnes:velnes@localhost:5432/velnes').replace(
+        /\/[^/?]+(\?|$)/,
+        '/velnes_test$1',
+      ),
+    });
+    await admin.connect();
+    const saved = await admin.query(`SELECT id, premium FROM customers WHERE tenant_id = $1 AND premium IS NOT NULL`, [demo.business]);
+    try {
+      await admin.query(`UPDATE customers SET premium = NULL WHERE tenant_id = $1`, [demo.business]);
+      const res = await app.inject({ method: 'GET', url: `${API_PREFIX}/flightdeck`, headers: { authorization: `Bearer ${token}` } });
+      expect(res.statusCode).toBe(200);
+      expect(res.json().hero.kind).toBe('quiet');
+    } finally {
+      for (const r of saved.rows) await admin.query(`UPDATE customers SET premium = $2 WHERE id = $1`, [r.id, r.premium]);
+      await admin.end();
+    }
+  });
+
   it('falls back to the first location when none is given', async () => {
     const res = await app.inject({
       method: 'GET',

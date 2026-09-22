@@ -241,10 +241,13 @@ export async function flightdeck(
   };
 
   // ── The hero: fill tomorrow's gaps, else today's, else quiet. ──
+  // The fill is a members-first offer, so with no Velnes Premium members
+  // there is nobody to offer to and the card would promise "0 members
+  // get first access" — quiet instead (Alex, 2026-09-22).
   const heroCaps = capsTmw.length ? capsTmw : capsToday.length ? capsToday : null;
   const heroWhen = capsTmw.length ? 'tomorrow' : 'today';
   const heroDate = capsTmw.length ? tomorrow : today;
-  const hero: Flightdeck['hero'] = heroCaps
+  const hero: Flightdeck['hero'] = heroCaps && memberCount > 0
     ? {
         kind: 'capacity',
         when: heroWhen,

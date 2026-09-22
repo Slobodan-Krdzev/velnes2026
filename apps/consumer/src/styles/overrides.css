@@ -1045,3 +1045,25 @@ a.pop-go:hover {
 
 /* The magnifier in the phone's top field is a button: it opens the sheet. */
 .m-sheet-open{display:inline-flex;align-items:center;border:0;background:none;padding:0;color:inherit;cursor:pointer}
+
+/* ── Velnes Premium, explained ───────────────────────────────────── */
+.prem{padding:26px 18px 70px}
+.prem-wrap{max-width:900px;margin-inline:auto}
+.prem-hero{text-align:center;padding:24px 0 8px}
+.prem-badge{display:inline-flex;align-items:center;gap:8px;padding:8px 14px;border-radius:999px;background:var(--ink);color:#F6D38B;font-weight:800;font-size:13px;letter-spacing:.02em}
+.prem-hero h1{font-size:34px;margin:16px 0 10px}
+.prem-lead{max-width:600px;margin:0 auto;font-size:15.5px;line-height:1.5;color:var(--muted)}
+.prem-grid{display:grid;grid-template-columns:1fr;gap:12px;margin-top:26px}
+@media (min-width:700px){.prem-grid{grid-template-columns:1fr 1fr}}
+.prem-card{background:#fff;border:1px solid var(--line-soft);border-radius:16px;padding:18px;box-shadow:var(--shadow)}
+.prem-card .prem-ic{display:inline-grid;place-items:center;width:42px;height:42px;border-radius:12px;background:var(--warm);color:var(--brand);margin-bottom:10px}
+.prem-card b{display:block;font-size:16px;color:var(--ink);margin-bottom:4px}
+.prem-card p{margin:0;font-size:14px;line-height:1.5;color:var(--muted)}
+.prem-how{margin-top:28px;background:var(--warm);border-radius:16px;padding:20px 22px}
+.prem-how h2{margin:0 0 10px;font-size:18px}
+.prem-how ol{margin:0;padding-left:20px;display:grid;gap:8px;font-size:14.5px;line-height:1.45;color:var(--text)}
+.prem-cta{margin-top:24px;text-align:center;background:#fff;border:1px dashed var(--line);border-radius:16px;padding:22px}
+.prem-cta b{font-size:16px;color:var(--ink)}
+.prem-cta p{margin:6px auto 14px;max-width:520px;font-size:14px;color:var(--muted);line-height:1.5}
+.prem-actions{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+.acc-prem{border-left:4px solid #F6D38B}
