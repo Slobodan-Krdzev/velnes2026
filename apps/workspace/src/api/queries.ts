@@ -94,6 +94,19 @@ export const useBook = () => {
   });
 };
 
+/** The salon's answer to a booking request — accept or decline. */
+export const useDecideRequest = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (v: { id: string; decision: 'accept' | 'decline'; reason?: string | undefined }) =>
+      post(AppointmentSchema, `/appointments/${v.id}/decide`, {
+        decision: v.decision,
+        ...(v.reason ? { reason: v.reason } : {}),
+      }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['appointments'] }),
+  });
+};
+
 export const useCancelAppointment = () => {
   const qc = useQueryClient();
   return useMutation({

@@ -7,7 +7,7 @@ import { ToastProvider } from './lib/toast.js';
 import { CalendarPage } from './pages/calendar/Calendar.js';
 import { CatalogPage } from './pages/catalog/Catalog.js';
 import { CustomersPage } from './pages/customers/Customers.js';
-import { FlightdeckPage } from './pages/flightdeck/Flightdeck.js';
+import { HomePage } from './pages/flightdeck/Flightdeck.js';
 import { ReportsPage } from './pages/reports/Reports.js';
 import { MarketingPage } from './pages/marketing/Marketing.js';
 import { SettingsPage } from './pages/settings/Settings.js';
@@ -52,7 +52,7 @@ export function App() {
                   </Protected>
                 }
               >
-                <Route path="/" element={<FlightdeckPage />} />
+                <Route path="/" element={<HomePage />} />
                 <Route path="/calendar" element={<CalendarPage />} />
                 <Route path="/till" element={<TillPage />} />
                 <Route path="/till/invoices" element={<InvoicesPage />} />

@@ -271,6 +271,7 @@ export async function validateCode(trx: Trx, code: string, subtotal: number) {
     .where(sql<boolean>`upper(code) = upper(${code})`)
     .executeTakeFirst();
   if (dc) {
+    if (!dc.active) return { kind: 'invalid' as const, message: `${dc.code} is switched off` };
     if (localIso(dc.starts) > today)
       return { kind: 'invalid' as const, message: `${dc.code} is not active yet` };
     if (localIso(dc.ends) < today)
@@ -348,6 +349,29 @@ export async function finishSale(
   claims: AccessClaims,
   req: SaleRequest,
 ): Promise<SaleResponse> {
+  const actor = await trx
+    .selectFrom('employees')
+    .select('name')
+    .where('id', '=', claims.sub)
+    .executeTakeFirst();
+  return settleSale(trx, { tenantId: claims.ten, employeeId: claims.sub, name: actor?.name ?? '', source: 'Till' }, req);
+}
+
+/** Who is ringing the sale up: the till's signed-in employee, or the
+ *  Velnes app when a customer pays online (no employee, named source). */
+export interface SaleActor {
+  tenantId: string;
+  employeeId: string | null;
+  name: string;
+  source: string;
+}
+
+/**
+ * The sale itself, for any actor. Online payment reaches here from
+ * payments.service with the Velnes app as actor: the same invoice, the
+ * same merchant transaction, the same code redemption — one sale door.
+ */
+export async function settleSale(trx: Trx, actor: SaleActor, req: SaleRequest): Promise<SaleResponse> {
   const prior = await trx
     .selectFrom('invoices')
     .select('id')
@@ -367,7 +391,7 @@ export async function finishSale(
       `${loc?.name ?? 'That location'} is not active — checkout is closed there`,
     );
   }
-  const tenantId = claims.ten;
+  const tenantId = actor.tenantId;
   const lines = await resolveLines(trx, req.locationId, req.lines, req.customerId ?? null);
   const subtotal = lines.reduce((s, l) => s + lineTotal(l), 0);
 
@@ -441,12 +465,6 @@ export async function finishSale(
         .where('id', '=', req.employeeId)
         .executeTakeFirst()
     : undefined;
-  const actor = await trx
-    .selectFrom('employees')
-    .select('name')
-    .where('id', '=', claims.sub)
-    .executeTakeFirst();
-
   const inv = await trx
     .insertInto('invoices')
     .values({
@@ -456,8 +474,8 @@ export async function finishSale(
       date: new Date(todayIso()),
       customerId: customer?.id ?? null,
       customerName: customer?.name ?? 'Walk-in',
-      employeeId: employee?.id ?? claims.sub,
-      employeeName: employee?.name ?? actor?.name ?? '',
+      employeeId: employee?.id ?? actor.employeeId,
+      employeeName: employee?.name ?? actor.name,
       method: req.method,
       total,
       tip: req.tip,
@@ -617,7 +635,7 @@ export async function finishSale(
           qty: -l.qty,
           kind: 'sale',
           ref: number,
-          actorEmployeeId: claims.sub,
+          actorEmployeeId: actor.employeeId,
         })
         .execute();
     }
@@ -658,7 +676,7 @@ export async function finishSale(
                 kind: 'own_use',
                 ref: number,
                 note: `Used for ${l.description}`,
-                actorEmployeeId: claims.sub,
+                actorEmployeeId: actor.employeeId,
               })
               .execute();
           }
@@ -677,13 +695,13 @@ export async function finishSale(
   }
 
   await logAudit(trx, tenantId, {
-    actorEmployeeId: claims.sub,
-    actorName: actor?.name ?? '',
+    actorEmployeeId: actor.employeeId,
+    actorName: actor.name,
     action: 'Sale',
     object: `Invoice · ${number}`,
     after: `${total} ден · ${req.method}`,
     locationName: loc.name,
-    source: 'Till',
+    source: actor.source,
   });
 
   return {

@@ -1,6 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
 import type { z } from 'zod';
 import type {
+  DiscoveryRecommendedSchema,
+  DiscoveryNewestSchema,
   AvailabilityResponseSchema,
   DiscoveryCategoriesSchema,
   DiscoverySalonDetailSchema,
@@ -16,6 +18,8 @@ import { pub, pubPost } from './client.js';
 
 type Categories = z.infer<typeof DiscoveryCategoriesSchema>;
 type Salons = z.infer<typeof DiscoverySalonsSchema>;
+type Recommended = z.infer<typeof DiscoveryRecommendedSchema>;
+type Newest = z.infer<typeof DiscoveryNewestSchema>;
 type SalonDetail = z.infer<typeof DiscoverySalonDetailSchema>;
 type Services = z.infer<typeof PublicServicesResponseSchema>;
 type CategoryServices = z.infer<typeof DiscoveryCategoryServicesSchema>;
@@ -53,6 +57,37 @@ export function useSalons() {
   return useQuery({
     queryKey: ['salons'],
     queryFn: () => pub<Salons>('/discovery/salons'),
+    staleTime: 60_000,
+  });
+}
+
+/** "Recommended for you": the door decides from the viewer's own
+ *  bookings and favourites, else their position, and says which. */
+export function useRecommended(position: { lat: number; lng: number } | null, token: string | null) {
+  const at = position ? { lat: Math.round(position.lat * 1000) / 1000, lng: Math.round(position.lng * 1000) / 1000 } : null;
+  const qs = at ? `?lat=${at.lat}&lng=${at.lng}` : '';
+  return useQuery({
+    queryKey: ['recommended', at?.lat ?? null, at?.lng ?? null, Boolean(token)],
+    queryFn: async () => {
+      const res = await fetch(`/api/v1/public/discovery/recommended${qs}`, {
+        headers: token ? { authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) throw new Error(res.statusText);
+      return (await res.json()) as Recommended;
+    },
+    staleTime: 60_000,
+  });
+}
+
+/** "Newest to Velnes": the salons that joined within the door's window. */
+export function useNewest() {
+  return useQuery({
+    queryKey: ['newest'],
+    queryFn: async () => {
+      const res = await fetch('/api/v1/public/discovery/newest');
+      if (!res.ok) throw new Error(res.statusText);
+      return (await res.json()) as Newest;
+    },
     staleTime: 60_000,
   });
 }
@@ -145,10 +180,10 @@ export function useVisitSlots(args: {
   locationId: string | undefined;
   date: string | undefined;
   employeeId?: string;
-  items: { serviceId: string; variantId?: string | null }[];
+  items: { serviceId: string; variantId?: string | null; modifierOptionIds?: string[] }[];
 }) {
   const { key, locationId, date, employeeId, items } = args;
-  const sig = items.map((i) => `${i.serviceId}:${i.variantId ?? ''}`).join(',');
+  const sig = items.map((i) => `${i.serviceId}:${i.variantId ?? ''}:${(i.modifierOptionIds ?? []).join('+')}`).join(',');
   return useQuery({
     queryKey: ['visit-slots', key, locationId, date, employeeId ?? 'any', sig],
     queryFn: () =>
@@ -160,6 +195,7 @@ export function useVisitSlots(args: {
         items: items.map((i) => ({
           serviceId: i.serviceId,
           ...(i.variantId ? { variantId: i.variantId } : {}),
+          modifierOptionIds: i.modifierOptionIds ?? [],
         })),
       }),
     enabled: Boolean(key && locationId && date && items.length),

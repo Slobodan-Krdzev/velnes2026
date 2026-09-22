@@ -137,7 +137,7 @@ describe('suggestions', () => {
     }
   });
 
-  it('never suggests a treatment nobody can book', async () => {
+  it('keeps suggesting when the website widget goes dark — admission is the open location', async () => {
     const before = await suggest('Sports massage');
     expect(before.services.length).toBeGreaterThan(0);
     await admin.query(
@@ -146,9 +146,10 @@ describe('suggestions', () => {
     );
     try {
       const after = await suggest('Sports massage');
-      // Admission is the same rule the results page uses. A suggestion
-      // that cannot be booked is a dead end with a nice name.
-      expect(after.services).toEqual([]);
+      // Admission is the same rule the results page uses, and that rule
+      // is the ACTIVE location: the widget is a separate product a salon
+      // may never have, so switching it off changes nothing here.
+      expect(after.services.length).toBe(before.services.length);
     } finally {
       await admin.query(
         `UPDATE widgets SET status='live'

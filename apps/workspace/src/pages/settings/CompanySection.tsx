@@ -28,6 +28,10 @@ export function CompanySection() {
     city: string;
     phone: string;
     description: string;
+    website: string;
+    instagram: string;
+    facebook: string;
+    tiktok: string;
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -40,6 +44,10 @@ export function CompanySection() {
         city: b.city ?? '',
         phone: b.phone ?? '',
         description: b.description,
+        website: b.socials.website,
+        instagram: b.socials.instagram,
+        facebook: b.socials.facebook,
+        tiktok: b.socials.tiktok,
       });
   }, [b, form]);
   if (!b || !form) return null;
@@ -53,6 +61,7 @@ export function CompanySection() {
         city: form.city || null,
         phone: form.phone || null,
         description: form.description,
+        socials: { website: form.website, instagram: form.instagram, facebook: form.facebook, tiktok: form.tiktok },
       });
       toast(t('cset.saved'));
       void qc.invalidateQueries({ queryKey: ['business'] });
@@ -103,6 +112,18 @@ export function CompanySection() {
               value={form.description}
               onChange={(e) => setF('description', e.target.value)}
             />
+          </Field>
+          <Field label={t('cset.website')} hint={t('cset.socialsHint')}>
+            <input className="input" placeholder="www.yoursalon.mk" value={form.website} onChange={(e) => setF('website', e.target.value)} />
+          </Field>
+          <Field label={t('cset.instagram')}>
+            <input className="input" placeholder="@yoursalon" value={form.instagram} onChange={(e) => setF('instagram', e.target.value)} />
+          </Field>
+          <Field label={t('cset.facebook')}>
+            <input className="input" placeholder="facebook.com/yoursalon" value={form.facebook} onChange={(e) => setF('facebook', e.target.value)} />
+          </Field>
+          <Field label={t('cset.tiktok')}>
+            <input className="input" placeholder="@yoursalon" value={form.tiktok} onChange={(e) => setF('tiktok', e.target.value)} />
           </Field>
         </div>
         {error ? (

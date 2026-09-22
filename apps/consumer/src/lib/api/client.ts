@@ -8,16 +8,21 @@ export class ApiError extends Error {
     public status: number,
     public code: string,
     message: string,
+    /** A refusal's parameters, so the app can say it in its own
+     *  language (`refusal.<code>`) rather than echo the door's English. */
+    public params: Record<string, string | number> = {},
   ) {
     super(message);
   }
 }
 
+type ErrBody = { error?: string; message?: string; params?: Record<string, string | number> };
+
 export async function pub<T>(path: string): Promise<T> {
   const res = await fetch(`${P}${path}`);
   if (!res.ok) {
-    const body = (await res.json().catch(() => ({}))) as { error?: string; message?: string };
-    throw new ApiError(res.status, body.error ?? 'ERROR', body.message ?? res.statusText);
+    const body = (await res.json().catch(() => ({}))) as ErrBody;
+    throw new ApiError(res.status, body.error ?? 'ERROR', body.message ?? res.statusText, body.params ?? {});
   }
   return res.json() as Promise<T>;
 }
@@ -41,8 +46,8 @@ export async function pubPost<T>(path: string, body: unknown, token?: string | n
     body: JSON.stringify(body),
   });
   if (!res.ok) {
-    const data = (await res.json().catch(() => ({}))) as { error?: string; message?: string };
-    throw new ApiError(res.status, data.error ?? 'ERROR', data.message ?? res.statusText);
+    const data = (await res.json().catch(() => ({}))) as ErrBody;
+    throw new ApiError(res.status, data.error ?? 'ERROR', data.message ?? res.statusText, data.params ?? {});
   }
   return res.json() as Promise<T>;
 }

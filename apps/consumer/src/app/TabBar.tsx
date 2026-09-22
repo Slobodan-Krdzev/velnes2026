@@ -1,4 +1,5 @@
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 
 /**
  * The phone's bottom bar, in one place.
@@ -31,13 +32,18 @@ const IcPerson = (
 
 export type Tab = 'home' | 'search' | 'bookings' | 'favs' | 'profile';
 
-export function TabBar({ active, unread = 0 }: { active: Tab; unread?: number }) {
+export function TabBar({ active, unread = 0 }: { active: Tab | null; unread?: number }) {
   const nav = useNavigate();
+  const { t } = useTranslation();
+  // The Search tab does not just open the results screen — it asks for
+  // the search box itself, so the keyboard is up as soon as you land.
+  // A fresh stamp each tap, so tapping it again while already there
+  // re-opens the box rather than doing nothing.
   const tab = (id: Tab, to: string, icon: React.ReactNode, label: string) => (
     <button
       className={`tab-i${active === id ? ' on' : ''}`}
       aria-current={active === id ? 'page' : undefined}
-      onClick={() => nav(to)}
+      onClick={() => (id === 'search' ? nav(to, { state: { focusSearch: Date.now() } }) : nav(to))}
     >
       {icon}
       {label}
@@ -45,10 +51,10 @@ export function TabBar({ active, unread = 0 }: { active: Tab; unread?: number })
   );
   return (
     <nav className="tabbar">
-      {tab('home', '/', IcHome, 'Home')}
-      {tab('search', '/search', IcSearch, 'Search')}
-      {tab('bookings', '/account/appts', IcCal, 'Bookings')}
-      {tab('favs', '/account/favs', IcHeart, 'Favorites')}
+      {tab('home', '/', IcHome, t('c.tab.home'))}
+      {tab('search', '/search', IcSearch, t('c.tab.search'))}
+      {tab('bookings', '/account/appts', IcCal, t('c.tab.bookings'))}
+      {tab('favs', '/account/favs', IcHeart, t('c.tab.favs'))}
       <button
         className={`tab-i${active === 'profile' ? ' on' : ''}`}
         aria-current={active === 'profile' ? 'page' : undefined}
@@ -60,7 +66,7 @@ export function TabBar({ active, unread = 0 }: { active: Tab; unread?: number })
             {unread}
           </span>
         </span>
-        Profile
+        {t('c.tab.profile')}
       </button>
     </nav>
   );

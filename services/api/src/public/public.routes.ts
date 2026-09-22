@@ -2,13 +2,19 @@ import rateLimit from '@fastify/rate-limit';
 import {
   AvailabilityResponseSchema,
   BookingRefusalSchema,
+  BusinessSettingsSchema,
+  CONSUMER_KEY_PREFIX,
   HoldResponseSchema,
   PublicBookRequestSchema,
   PublicBookResponseSchema,
   PublicChainSlotsRequestSchema,
   PublicHoldRequestSchema,
+  PublicPayQuoteRequestSchema,
+  PublicPayRequestSchema,
   PublicServicesResponseSchema,
   PublicWidgetSchema,
+  PayQuoteSchema,
+  PayResultSchema,
 } from '@velnes/contracts';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
@@ -24,6 +30,8 @@ import {
   createHold,
   empsFor,
 } from '../modules/booking/booking.service.js';
+import { afterBooked, guestPayToken } from '../modules/booking/requests.service.js';
+import { payAppointment, quotePayment } from '../modules/payments/payments.service.js';
 import { svcAt, svcVariants } from '../modules/catalog/catalog.service.js';
 import { locLive } from '../modules/locations/locations.service.js';
 import { discoveryRoutes } from './discovery.routes.js';
@@ -32,6 +40,9 @@ const ErrorSchema = z.object({ error: z.string(), message: z.string() });
 const KeyQuery = z.object({ key: z.string().min(4) });
 
 interface WidgetRow {
+  /** The consumer app's own key (`salon:<slug>`): no widget row behind
+   *  it, so nothing is attributed to a widget and no domain list applies. */
+  consumer?: true;
   id: string;
   tenantId: string;
   name: string;
@@ -49,9 +60,53 @@ interface WidgetRow {
   status: 'live' | 'draft';
 }
 
+/**
+ * The consumer app books without a widget: `salon:<slug>` resolves to
+ * a virtual row over the salon's ACTIVE locations. A salon is on the
+ * Velnes app once HQ approved it with live services; the website widget
+ * is a separate product it may or may not have (Alex, 2026-09-22).
+ */
+async function consumerRow(slug: string): Promise<WidgetRow | undefined> {
+  const biz = await db.transaction().execute(async (trx) => {
+    await sql`select set_config('app.public', '1', true)`.execute(trx);
+    return trx
+      .selectFrom('businesses')
+      .select(['id', 'name', 'settings'])
+      .where('slug', '=', slug)
+      .executeTakeFirst();
+  });
+  if (!biz) return undefined;
+  const parsed = BusinessSettingsSchema.safeParse(biz.settings ?? {});
+  if (!parsed.success || !parsed.data.marketplace.listed) return undefined;
+  const locs = await withTenant(biz.id, (trx) =>
+    trx.selectFrom('locations').select('id').where('lifecycle', '=', 'ACTIVE').orderBy('createdAt').execute(),
+  );
+  if (!locs.length) return undefined;
+  return {
+    consumer: true,
+    id: '',
+    tenantId: biz.id,
+    name: biz.name,
+    publishableKey: `${CONSUMER_KEY_PREFIX}${slug}`,
+    locationIds: locs.map((l) => l.id),
+    categories: ['all'],
+    lang: 'en',
+    theme: '',
+    accent: '',
+    radius: '',
+    startStep: '',
+    deposit: '',
+    cancelPolicy: '',
+    domains: [],
+    status: 'live',
+  };
+}
+
 /** The one pre-auth door of the public surface: the publishable key
- *  resolves the widget (and with it, the tenant). */
+ *  resolves the widget (and with it, the tenant) — or, for the consumer
+ *  app's `salon:<slug>`, the salon itself. */
 async function widgetByKey(key: string): Promise<WidgetRow | undefined> {
+  if (key.startsWith(CONSUMER_KEY_PREFIX)) return consumerRow(key.slice(CONSUMER_KEY_PREFIX.length));
   return db.transaction().execute(async (trx) => {
     await sql`select set_config('app.public', '1', true)`.execute(trx);
     return trx
@@ -106,6 +161,7 @@ const AVAIL_TTL = 30_000;
 function corsCheck(req: FastifyRequest, reply: FastifyReply, w: WidgetRow): boolean {
   const origin = req.headers.origin;
   if (!origin) return true; // same-origin / server-side
+  if (w.consumer) return true; // the platform's own app: no domain list, the server's CORS applies
   let host = '';
   try {
     host = new URL(origin).hostname;
@@ -153,7 +209,7 @@ export async function publicRoutes(app: FastifyInstance) {
         logEvent(
           trx,
           w.tenantId,
-          w.id,
+          w.consumer ? null : w.id,
           'DOMAIN_NOT_ALLOWED',
           `A request came from ${req.headers.origin ?? 'an unknown origin'}, which is not on the widget's domain list.`,
           'Add the domain under Settings › Online booking, or remove the embed from that site.',
@@ -164,6 +220,8 @@ export async function publicRoutes(app: FastifyInstance) {
     }
     return w;
   };
+
+  guestPayRoutes(app, resolve);
 
   const widgetPayload = async (w: WidgetRow) =>
     withTenant(w.tenantId, async (trx) => {
@@ -206,6 +264,8 @@ export async function publicRoutes(app: FastifyInstance) {
     handler: async (req, reply) => {
       const w = await resolve(req, reply, req.query.key);
       if (!w) return reply;
+      // The widget's own configuration door: a consumer key has none.
+      if (w.consumer) return reply.code(404).send({ error: 'UNKNOWN_KEY', message: 'Unknown publishable key' });
       return widgetPayload(w);
     },
   });
@@ -338,7 +398,7 @@ export async function publicRoutes(app: FastifyInstance) {
           await logEvent(
             trx,
             w.tenantId,
-            w.id,
+            w.consumer ? null : w.id,
             'SERVICE_NOT_FOUND',
             `Availability was asked for a service that does not exist (${q.serviceId}).`,
             'Remove the service from the widget selection, or restore it in the catalog.',
@@ -451,21 +511,35 @@ export async function publicRoutes(app: FastifyInstance) {
             name: req.body.name,
             phone: req.body.phone,
             ...(req.body.email ? { email: req.body.email } : {}),
-            source: 'widget',
+            source: w.consumer ? 'marketplace' : 'widget',
             deposit: 0,
           });
-          // Attribute the visit to its widget for the stats card.
-          await trx
-            .updateTable('appointments')
-            .set({ widgetId: w.id })
-            .where(
-              'id',
-              'in',
-              booked.map((a) => a.id),
-            )
-            .where('widgetId', 'is', null)
-            .execute();
-          return visitPayload(trx, booked);
+          // Attribute the visit to its widget for the stats card — a
+          // consumer booking has no widget to be attributed to.
+          if (!w.consumer)
+            await trx
+              .updateTable('appointments')
+              .set({ widgetId: w.id })
+              .where(
+                'id',
+                'in',
+                booked.map((a) => a.id),
+              )
+              .where('widgetId', 'is', null)
+              .execute();
+          // A Velnes-app guest rings the salon's bell and gets a mail
+          // like anyone else; a widget booking stays the widget's own.
+          if (w.consumer)
+            await afterBooked(trx, {
+              tenantId: w.tenantId,
+              booked,
+              customerName: req.body.name,
+              customerEmail: req.body.email ?? null,
+              clientUserId: null,
+            });
+          const payload = await visitPayload(trx, booked);
+          // A guest's key to the payment doors — theirs alone.
+          return w.consumer ? { ...payload, payToken: guestPayToken(payload.ref) } : payload;
         });
         // A confirmed booking frees the cache for that day.
         for (const k of availCache.keys())
@@ -478,9 +552,79 @@ export async function publicRoutes(app: FastifyInstance) {
   });
 }
 
+/**
+ * A guest's payment doors. The salon key names the tenant; the token
+ * (handed out with the booking, or in the acceptance mail) proves the
+ * guest may act on that one appointment. Signed-in clients use the
+ * client doors instead.
+ */
+export function guestPayRoutes(app: FastifyInstance, resolve: (req: FastifyRequest, reply: FastifyReply, key: string) => Promise<WidgetRow | null>) {
+  const r = app.withTypeProvider<ZodTypeProvider>();
+  const admit = async (req: FastifyRequest, reply: FastifyReply, key: string, appointmentId: string, token: string) => {
+    const w = await resolve(req, reply, key);
+    if (!w) return null;
+    if (!w.consumer || token !== guestPayToken(appointmentId)) {
+      await reply.code(403).send({ error: 'FORBIDDEN', message: 'This link does not open that appointment' });
+      return null;
+    }
+    return w;
+  };
+
+  r.route({
+    method: 'POST',
+    url: '/pay/quote',
+    schema: { body: PublicPayQuoteRequestSchema, response: { 200: PayQuoteSchema, 403: ErrorSchema, 404: ErrorSchema, 409: BookingRefusalSchema } },
+    handler: async (req, reply) => {
+      const w = await admit(req, reply, req.body.key, req.body.appointmentId, req.body.token);
+      if (!w) return reply;
+      try {
+        return await withTenant(w.tenantId, (trx) => quotePayment(trx, req.body));
+      } catch (e) {
+        return sendPublicBookingError(reply, e);
+      }
+    },
+  });
+
+  r.route({
+    method: 'POST',
+    url: '/pay',
+    schema: { body: PublicPayRequestSchema, response: { 200: PayResultSchema, 403: ErrorSchema, 404: ErrorSchema, 409: BookingRefusalSchema } },
+    handler: async (req, reply) => {
+      const w = await admit(req, reply, req.body.key, req.body.appointmentId, req.body.token);
+      if (!w) return reply;
+      try {
+        // A guest never keeps a card: the request's saveCard is ignored.
+        return await withTenant(w.tenantId, (trx) =>
+          payAppointment(trx, w.tenantId, { ...req.body, saveCard: false }, { clientUserId: null }),
+        );
+      } catch (e) {
+        return sendPublicBookingError(reply, e);
+      }
+    },
+  });
+}
+
 /** The visit as the app shows it: the whole span up front, a line per
  *  treatment underneath. A single booking is a visit of one. */
-export async function visitPayload(trx: Trx, booked: { id: string; locationId: string; employeeId: string | null; date: string; start: string; end: string; price: number; serviceName: string | null }[]) {
+export async function visitPayload(
+  trx: Trx,
+  booked: {
+    id: string;
+    locationId: string;
+    employeeId: string | null;
+    date: string;
+    start: string;
+    end: string;
+    price: number;
+    serviceName: string | null;
+    modifierNames?: string[];
+    status?: string;
+  }[],
+) {
+  // The treatment as booked: its chosen options ride on the name, so
+  // "Mans Haircut · Loreal" is what every screen after this says.
+  const label = (a: (typeof booked)[number]) =>
+    a.serviceName ? (a.modifierNames?.length ? `${a.serviceName} · ${a.modifierNames.join(', ')}` : a.serviceName) : '';
   const first = booked[0]!;
   const last = booked[booked.length - 1]!;
   const locRow = await trx
@@ -498,10 +642,10 @@ export async function visitPayload(trx: Trx, booked: { id: string; locationId: s
     date: first.date,
     time: first.start,
     end: last.end,
-    serviceName: booked.map((a) => a.serviceName ?? '').filter(Boolean).join(' + '),
+    serviceName: booked.map(label).filter(Boolean).join(' + '),
     items: booked.map((a) => ({
       ref: a.id,
-      serviceName: a.serviceName ?? '',
+      serviceName: label(a),
       time: a.start,
       end: a.end,
       price: a.price,
@@ -509,6 +653,7 @@ export async function visitPayload(trx: Trx, booked: { id: string; locationId: s
     })),
     locationName: locRow?.name ?? '',
     employeeName: nameOf(first.employeeId),
+    status: first.status === 'requested' ? ('requested' as const) : ('booked' as const),
     price: booked.reduce((n, a) => n + a.price, 0),
   };
 }

@@ -44,9 +44,20 @@ the Exceptions tab. Schedules & services persists per-employee
 roleTitle/week/skills through the extended employee PATCH. Honest
 deferrals: General's tz/currency/week-start render read-only (per-
 location / fixed for MK); the online-booking deposit and per-location
-online toggles wait for payments and a real door; marketplace choices
-are stored now, honored when §5 search/discovery starts; the form
-builder and commission stay disabled.
+online toggles wait for payments and a real door; the form builder
+and commission stay disabled. Settings › Company carries the salon's social
+links (2026-09-22: website, Instagram, Facebook, TikTok —
+`businesses.socials`, typed as handles or URLs; the public salon door
+normalises them to links and the consumer salon page shows one icon
+per network). Settings › Locations › New location carries the
+registration wizard's map from 2026-09-22, so the pin is dropped at
+creation (`LocationCreateSchema.lat/lng`) rather than found later
+under the location's own settings. Marketplace › "Categories you appear
+under" (2026-09-22) is read-only truth, not a pick-list: `GET
+/business/categories` names the HQ categories of the salon's active,
+online services — discovery's own predicate — so Settings can never
+claim a placement the shelf does not make; the prototype's five
+hard-coded physio chips are gone.
 
 **Preview access (2026-09-02).** The prototype's startPreview, made
 honest: POST `/auth/preview` (users.manage, never yourself) issues a

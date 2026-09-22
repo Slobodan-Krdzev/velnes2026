@@ -77,7 +77,7 @@ test('a stranger registers, HQ activates, the owner signs into their own world',
   await page.getByLabel('Settings', { exact: true }).click();
   await page.getByRole('button', { name: 'Locations', exact: true }).click();
   await expect(page.getByText(`Studio Nova ${runId}`).first()).toBeVisible();
-  await expect(page.getByText('APPROVED').first()).toBeVisible();
+  await expect(page.getByText('ACTIVE').first()).toBeVisible();
 });
 
 test('an owner submits a new location, HQ approves the compound, the owner activates', async ({ page, context }) => {

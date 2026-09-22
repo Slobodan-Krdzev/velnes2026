@@ -1,8 +1,10 @@
 import {
+  BusinessCategoriesSchema,
   BusinessPatchSchema,
   BusinessProfileSchema,
   BusinessSettingsPatchSchema,
   BusinessSettingsSchema,
+  SocialLinksSchema,
   type BusinessSettings,
 } from '@velnes/contracts';
 import type { FastifyInstance, FastifyReply } from 'fastify';
@@ -40,6 +42,7 @@ async function profile(trx: Trx) {
     phone: b.phone,
     description: b.description,
     gallery: (b.gallery ?? []) as z.infer<typeof BusinessProfileSchema>['gallery'],
+    socials: SocialLinksSchema.parse(b.socials ?? {}),
     timingEnabled: b.timingEnabled,
     legal: le
       ? {
@@ -103,6 +106,18 @@ export function businessRoutes(app: FastifyInstance) {
             ...(b.phone !== undefined ? { phone: b.phone } : {}),
             ...(b.description !== undefined ? { description: b.description } : {}),
             ...(b.gallery !== undefined ? { gallery: JSON.stringify(b.gallery) } : {}),
+            ...(b.socials !== undefined
+              ? {
+                  socials: JSON.stringify(
+                    SocialLinksSchema.parse({
+                      ...SocialLinksSchema.parse(
+                        (await trx.selectFrom('businesses').select('socials').executeTakeFirstOrThrow()).socials ?? {},
+                      ),
+                      ...Object.fromEntries(Object.entries(b.socials).map(([k, v]) => [k, (v ?? '').trim()])),
+                    }),
+                  ),
+                }
+              : {}),
             ...(b.timingEnabled !== undefined ? { timingEnabled: b.timingEnabled } : {}),
           })
           .where('id', '=', req.claims.ten)
@@ -136,6 +151,29 @@ export function businessRoutes(app: FastifyInstance) {
         const b = await trx.selectFrom('businesses').select('settings').executeTakeFirstOrThrow();
         // Defaults fill any section that was never saved.
         return BusinessSettingsSchema.parse(b.settings ?? {});
+      }),
+  });
+
+  r.route({
+    method: 'GET',
+    url: '/business/categories',
+    preHandler: [app.authenticate],
+    schema: { response: { 200: BusinessCategoriesSchema } },
+    handler: async (req) =>
+      withTenant(req.claims.ten, async (trx) => {
+        // What the consumer app really files this salon under: the HQ
+        // categories of its active, online services — the shelf's own
+        // predicate (discovery's categoryIdsOnOffer), not a stored list.
+        const rows = await trx
+          .selectFrom('services as s')
+          .innerJoin('serviceCategories as c', 'c.id', 's.categoryId')
+          .select(['c.id', 'c.name'])
+          .distinct()
+          .where('s.status', '=', 'active')
+          .where('s.online', '=', true)
+          .orderBy('c.name')
+          .execute();
+        return { categories: rows };
       }),
   });
 

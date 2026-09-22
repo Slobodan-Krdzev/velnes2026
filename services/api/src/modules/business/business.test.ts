@@ -96,6 +96,31 @@ describe('the business card, the settings document and the new patch doors', () 
     expect(b.legal?.status).toBe('verified');
   });
 
+  it('keeps the salon’s social links, and the public page normalises them to URLs', async () => {
+    const saved = await patch(`${API_PREFIX}/business`, {
+      socials: { website: 'velnes-fizio.mk', instagram: '@velnesfizio', facebook: 'https://facebook.com/velnesfizio', tiktok: 'velnesfizio' },
+    });
+    expect(saved.statusCode).toBe(200);
+    expect(saved.json().socials).toEqual({
+      website: 'velnes-fizio.mk',
+      instagram: '@velnesfizio',
+      facebook: 'https://facebook.com/velnesfizio',
+      tiktok: 'velnesfizio',
+    });
+    // A partial patch leaves the others alone.
+    const partial = await patch(`${API_PREFIX}/business`, { socials: { tiktok: '' } });
+    expect(partial.json().socials.instagram).toBe('@velnesfizio');
+    expect(partial.json().socials.tiktok).toBe('');
+    const page = await app.inject({ method: 'GET', url: `${API_PREFIX}/public/discovery/salons/velnes-fizio` });
+    expect(page.json().socials).toEqual({
+      website: 'https://velnes-fizio.mk',
+      instagram: 'https://instagram.com/velnesfizio',
+      facebook: 'https://facebook.com/velnesfizio',
+      tiktok: null,
+    });
+    await patch(`${API_PREFIX}/business`, { socials: { website: '', instagram: '', facebook: '' } });
+  });
+
   it('edits the card behind locations.manage and audits a rename', async () => {
     const denied = await patch(`${API_PREFIX}/business`, { description: 'x' }, anaToken);
     expect(denied.statusCode).toBe(403);
@@ -152,6 +177,21 @@ describe('the business card, the settings document and the new patch doors', () 
       anaToken,
     );
     expect(denied.statusCode).toBe(403);
+  });
+
+  it('names the categories the salon appears under, read from its online services', async () => {
+    const res = await get(`${API_PREFIX}/business/categories`);
+    expect(res.statusCode).toBe(200);
+    const names = res.json().categories.map((c: { name: string }) => c.name) as string[];
+    expect(names.length).toBeGreaterThan(0);
+    expect(names).toEqual([...new Set(names)].sort((a, b) => a.localeCompare(b)));
+    // The same predicate the consumer shelf uses: active AND online.
+    const expected = await admin.query(
+      `SELECT DISTINCT c.name FROM services s JOIN service_categories c ON c.id = s.category_id
+        WHERE s.tenant_id = $1 AND s.status = 'active' AND s.online ORDER BY c.name`,
+      [demo.business],
+    );
+    expect(names).toEqual(expected.rows.map((r: { name: string }) => r.name));
   });
 
   it('edits a location week through the audited hours door', async () => {

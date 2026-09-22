@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { z } from 'zod';
 import { api, post } from '@velnes/client';
 import { useEmployees } from '../../api/queries.js';
+import { InfoTip } from '../../lib/InfoTip.js';
 import { CategoryRequestModal, type ResolvedService } from './Catalog.js';
 
 const OkSchema = z.object({ ok: z.literal(true) });
@@ -103,6 +104,14 @@ export function ServicePanel({
   }, []);
 
   const save = async () => {
+    if (groups.some((g) => !g.name.trim())) {
+      setError(t('catalog.groupNameMissing'));
+      return;
+    }
+    if (groups.some((g) => g.options.some((o) => !o.name.trim()))) {
+      setError(t('catalog.optionNameMissing'));
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -295,7 +304,10 @@ export function ServicePanel({
           </div>
 
           <div className="field">
-            <span>{t('catalog.variants')}</span>
+            <span className="field-title">
+              {t('catalog.variants')}
+              <InfoTip title={t('catalog.variants')} label={t('catalog.infoLbl')} body={[t('catalog.variantsInfo1'), t('catalog.variantsInfo2')]} />
+            </span>
             <span className="hint">{t('catalog.variantsHint')}</span>
             {variants.map((v, i) => (
               <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -360,7 +372,10 @@ export function ServicePanel({
           </div>
 
           <div className="field">
-            <span>{t('catalog.modifiers')}</span>
+            <span className="field-title">
+              {t('catalog.modifiers')}
+              <InfoTip title={t('catalog.modifiers')} label={t('catalog.infoLbl')} body={[t('catalog.modifiersInfo1'), t('catalog.modifiersInfo2')]} />
+            </span>
             <span className="hint">{t('catalog.modifiersHint')}</span>
             {groups.map((g, gi) => (
               <div
@@ -373,32 +388,46 @@ export function ServicePanel({
                   gap: 8,
                 }}
               >
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                  <input
-                    className="input"
-                    style={{ flex: 1 }}
-                    value={g.name}
-                    placeholder={t('catalog.groupName')}
-                    onChange={(e) =>
-                      setGroups((a) => a.map((x, j) => (j === gi ? { ...x, name: e.target.value } : x)))
-                    }
-                  />
-                  <select
-                    className="select"
-                    value={g.type}
-                    aria-label="type"
-                    onChange={(e) =>
-                      setGroups((a) =>
-                        a.map((x, j) =>
-                          j === gi ? { ...x, type: e.target.value as 'single' | 'multi' } : x,
-                        ),
-                      )
-                    }
+                <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
+                  <label className="field" style={{ flex: 1, margin: 0 }}>
+                    <span>{t('catalog.groupName')}<span className="req">*</span></span>
+                    <input
+                      className="input"
+                      value={g.name}
+                      placeholder={t('catalog.groupNamePh')}
+                      onChange={(e) =>
+                        setGroups((a) => a.map((x, j) => (j === gi ? { ...x, name: e.target.value } : x)))
+                      }
+                    />
+                  </label>
+                  <button
+                    className="btn btn-subtle btn-sq"
+                    aria-label={t('common.delete')}
+                    title={t('common.delete')}
+                    onClick={() => setGroups((a) => a.filter((_, j) => j !== gi))}
                   >
-                    <option value="single">{t('catalog.single')}</option>
-                    <option value="multi">{t('catalog.multi')}</option>
-                  </select>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12 }}>
+                    <Icon d={I.trash} size={16} />
+                  </button>
+                </div>
+                <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+                  <label className="field" style={{ margin: 0, minWidth: 180 }}>
+                    <span>{t('catalog.groupType')}</span>
+                    <select
+                      className="select"
+                      value={g.type}
+                      onChange={(e) =>
+                        setGroups((a) =>
+                          a.map((x, j) =>
+                            j === gi ? { ...x, type: e.target.value as 'single' | 'multi' } : x,
+                          ),
+                        )
+                      }
+                    >
+                      <option value="single">{t('catalog.single')}</option>
+                      <option value="multi">{t('catalog.multi')}</option>
+                    </select>
+                  </label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, paddingBottom: 10 }}>
                     <input
                       type="checkbox"
                       checked={g.required}
@@ -410,19 +439,18 @@ export function ServicePanel({
                     />
                     {t('catalog.required')}
                   </label>
-                  <button
-                    className="btn btn-subtle btn-sq"
-                    aria-label={t('common.delete')}
-                    onClick={() => setGroups((a) => a.filter((_, j) => j !== gi))}
-                  >
-                    <Icon d={I.trash} size={16} />
-                  </button>
+                </div>
+                <div className="hint" style={{ margin: 0 }}>{t('catalog.optionHint')}</div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,2fr) 110px 100px 36px', gap: 8, fontSize: 11.5, fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase', color: 'var(--muted)' }}>
+                  <span>{t('catalog.optionCol')}</span>
+                  <span>{t('catalog.optPrice')}</span>
+                  <span>{t('catalog.optMin')}</span>
+                  <span />
                 </div>
                 {g.options.map((o, oi) => (
-                  <div key={oi} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <div key={oi} style={{ display: 'grid', gridTemplateColumns: 'minmax(0,2fr) 110px 100px 36px', gap: 8, alignItems: 'center' }}>
                     <input
                       className="input"
-                      style={{ flex: 2 }}
                       value={o.name}
                       placeholder={t('catalog.optionName')}
                       onChange={(e) =>
@@ -441,9 +469,9 @@ export function ServicePanel({
                       }
                     />
                     <NumInput
-                      style={{ width: 90 }}
+                      style={{ width: '100%' }}
                       value={o.price}
-                      aria-label="option price"
+                      aria-label={t('catalog.optPrice')}
                       onValue={(n) =>
                         setGroups((a) =>
                           a.map((x, j) =>
@@ -455,9 +483,9 @@ export function ServicePanel({
                       }
                     />
                     <NumInput
-                      style={{ width: 70 }}
+                      style={{ width: '100%' }}
                       value={o.durationMin}
-                      aria-label="option minutes"
+                      aria-label={t('catalog.optMin')}
                       onValue={(n) =>
                         setGroups((a) =>
                           a.map((x, j) =>

@@ -1,11 +1,21 @@
 import { API_PREFIX, ReportSchema } from '@velnes/contracts';
+import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { closeDb } from '../../db/index.js';
+import { demo } from '../../db/seed-demo.js';
 import { buildServer } from '../../server.js';
 
 const app = await buildServer();
+const ADMIN_URL = (
+  process.env.TEST_ADMIN_DATABASE_URL ??
+  process.env.TEST_SEED_DATABASE_URL ??
+  'postgres://velnes:velnes@localhost:5432/velnes'
+).replace(/\/[^/?]+(\?|$)/, '/velnes_test$1');
+const admin = new pg.Client({ connectionString: ADMIN_URL });
 let ownerToken = '';
 let anaToken = '';
+let employeeToken = '';
+let ownFiguresRoleId = '';
 
 const localIso = (d: Date) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -33,12 +43,40 @@ describe('the reports door', () => {
           payload: { email, password: 'velnes-demo' },
         })
       ).json().accessToken as string;
+    await admin.connect();
     ownerToken = await login('maria@velnes.mk');
+    // Ana on the standard Employee kit first — it carries no reports
+    // right at all — then on a role that sees exactly her own figures.
+    // She logs in after each switch so her claims carry the role.
+    await admin.query(`UPDATE employees SET role_id=$2 WHERE id=$1`, [demo.empAna, demo.roleEmployee]);
+    employeeToken = await login('ana@velnes.mk');
+    const created = await app.inject({
+      method: 'POST',
+      url: `${API_PREFIX}/roles`,
+      headers: { authorization: `Bearer ${ownerToken}` },
+      payload: {
+        name: 'Own figures (test)',
+        description: 'Sees their own figures, nothing else.',
+        perms: { 'reports.view_own': 'own' },
+      },
+    });
+    ownFiguresRoleId = created.json().id;
+    await admin.query(`UPDATE employees SET role_id=$2 WHERE id=$1`, [demo.empAna, ownFiguresRoleId]);
     anaToken = await login('ana@velnes.mk');
   });
   afterAll(async () => {
+    // The seeded world goes back exactly as the other suites read it.
+    await admin.query(`UPDATE employees SET role_id=$2 WHERE id=$1`, [demo.empAna, demo.roleEmployee]);
+    await admin.query(`DELETE FROM roles WHERE id=$1`, [ownFiguresRoleId]);
+    await admin.query(`DELETE FROM audit_log WHERE action IN ('Role created','Role changed','Role removed')`);
+    await admin.end();
     await app.close();
     await closeDb();
+  });
+
+  it('the standard Employee kit has no figures at all — not even their own', async () => {
+    const res = await report(employeeToken, daysAgo(27), daysAgo(1));
+    expect(res.statusCode).toBe(403);
   });
 
   it('computes a period over the seeded history and stays internally consistent', async () => {

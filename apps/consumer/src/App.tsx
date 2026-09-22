@@ -5,11 +5,17 @@ import { Login, Register } from './features/account/Auth.js';
 import { MyVelnes } from './features/account/MyVelnes.js';
 import { BookingProvider } from './features/booking/store.js';
 import { BookConfirmed, BookIdentity, BookProfile, BookReview } from './features/booking/steps.js';
+import { BookPay } from './features/booking/pay.js';
+import { MobileChrome } from './app/MobileChrome.js';
+import { Premium } from './features/premium/Premium.js';
+import { DHeader } from './app/chrome.js';
 import { Home } from './features/discovery/Home.js';
 import { Results } from './features/discovery/Results.js';
 import { Salon } from './features/salon/Salon.js';
 import { SessionProvider, useFavourites, useSession } from './lib/api/session.js';
 import { GeoProvider } from './lib/geo.js';
+import { I18nextProvider } from 'react-i18next';
+import { LangSync, i18n } from './lib/i18n.js';
 
 const qc = new QueryClient({
   defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false } },
@@ -56,13 +62,20 @@ function ScrollToTop() {
 
 export function App() {
   return (
+    <I18nextProvider i18n={i18n}>
     <QueryClientProvider client={qc}>
       <SessionProvider>
         <PendingFavourite />
+        <LangSync />
         <GeoProvider>
           <BookingProvider>
           <BrowserRouter>
             <ScrollToTop />
+            {/* The desktop header, once, sticky above every route — and the
+                phone chrome likewise. Each hides itself on the other's side
+                of 900px. */}
+            <DHeader />
+            <MobileChrome />
             <Routes>
               <Route path="/" element={<Home />} />
               <Route path="/s/:category" element={<Results />} />
@@ -73,7 +86,10 @@ export function App() {
               <Route path="/book/identity" element={<BookIdentity />} />
               <Route path="/book/profile" element={<BookProfile />} />
               <Route path="/book/review" element={<BookReview />} />
+              <Route path="/book/pay" element={<BookPay />} />
+              <Route path="/pay/:id" element={<BookPay />} />
               <Route path="/book/confirmed" element={<BookConfirmed />} />
+              <Route path="/premium" element={<Premium />} />
               <Route path="/login" element={<Login />} />
               <Route path="/register" element={<Register />} />
               <Route path="/account" element={<MyVelnes section="over" />} />
@@ -81,6 +97,7 @@ export function App() {
               <Route path="/account/appts" element={<MyVelnes section="appts" />} />
               <Route path="/account/favs" element={<MyVelnes section="favs" />} />
               <Route path="/account/notifs" element={<MyVelnes section="notifs" />} />
+              <Route path="/account/cards" element={<MyVelnes section="cards" />} />
               <Route path="/account/appointments/:id" element={<MyVelnes section="appts" />} />
               <Route path="*" element={<Home />} />
             </Routes>
@@ -89,5 +106,6 @@ export function App() {
         </GeoProvider>
       </SessionProvider>
     </QueryClientProvider>
+    </I18nextProvider>
   );
 }

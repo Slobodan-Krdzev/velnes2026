@@ -302,6 +302,10 @@ function snap(ai: AiExtract, serviceCats: string[], productCats: string[]): Extr
         name: p.name.trim().slice(0, 80),
         category: snapCategory(p.category, productCats),
         price: toMkd(p.price, p.currency),
+        // Websites rarely say; the owner fills these in the wizard.
+        sizeMl: null,
+        stock: 0,
+        cost: null,
       })),
     hours: ai.hours.map((h) => ({
       day: h.day,

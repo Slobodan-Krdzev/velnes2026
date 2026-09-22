@@ -12,11 +12,18 @@ import {
   ClientResendSchema,
   ClientFavouritesSchema,
   ClientSalonLinksSchema,
+  ClientOffersSchema,
   FavouriteKindSchema,
   ClientSessionSchema,
   ClientVerifySchema,
   PublicBookResponseSchema,
   BookingRefusalSchema,
+  PayQuoteRequestSchema,
+  PayQuoteSchema,
+  PayRequestSchema,
+  PayResultSchema,
+  ClientCardsSchema,
+  type ClientOffer,
 } from '@velnes/contracts';
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
@@ -25,7 +32,11 @@ import { z } from 'zod';
 import { db, withClient, withHq, withTenant } from '../../db/index.js';
 import { env } from '../../env.js';
 import { BookingError, BookingRefused, confirmChain } from '../booking/booking.service.js';
+import { afterBooked } from '../booking/requests.service.js';
+import { payAppointment, quotePayment } from '../payments/payments.service.js';
+import { randomBytes } from 'node:crypto';
 import { visitPayload } from '../../public/public.routes.js';
+import { personalOffersFor } from '../customers/customers.service.js';
 import {
   addFavourite,
   listFavourites,
@@ -62,6 +73,52 @@ const localIso = (d: Date) =>
  * salon's own context fills in its own labels. No joins across a
  * boundary the database is right to refuse.
  */
+/**
+ * The personal offers a client can act on, across every salon they are
+ * a customer of — same shape as `myAppointments`: the links under the
+ * client's own context, each salon's context for its own offers and
+ * labels, the public context for the salon's name. Live only: the
+ * marketplace shows what can still be booked, not the history.
+ */
+async function myOffers(clientUserId: string): Promise<ClientOffer[]> {
+  const links = await withClient(clientUserId, (trx) =>
+    trx.selectFrom('clientCustomerLinks').select(['tenantId', 'customerId']).execute(),
+  );
+  const out: ClientOffer[] = [];
+  for (const l of links) {
+    const biz = await db.transaction().execute(async (trx) => {
+      await sql`select set_config('app.public', '1', true)`.execute(trx);
+      return trx.selectFrom('businesses').select(['name', 'slug']).where('id', '=', l.tenantId).executeTakeFirst();
+    });
+    if (!biz) continue;
+    const rows = await withTenant(l.tenantId, async (trx) => {
+      const offers = (await personalOffersFor(trx, l.customerId)).filter((o) => o.status === 'live');
+      if (!offers.length) return [];
+      const [locs, vars] = await Promise.all([
+        trx.selectFrom('locations').select(['id', 'name']).execute(),
+        trx.selectFrom('serviceVariants').select(['id', 'label']).execute(),
+      ]);
+      return offers.map((o) => ({
+        id: o.id,
+        salon: { slug: biz.slug, name: biz.name },
+        locationId: o.locationId,
+        locationName: locs.find((x) => x.id === o.locationId)?.name ?? '',
+        serviceId: o.serviceId,
+        serviceName: o.serviceName,
+        variantId: o.variantId,
+        variantLabel: o.variantId ? (vars.find((v) => v.id === o.variantId)?.label ?? null) : null,
+        specialPrice: o.specialPrice,
+        normalPrice: o.normalPrice,
+        validUntil: o.validUntil,
+        intent: o.intent,
+      }));
+    });
+    out.push(...rows);
+  }
+  // Soonest to expire first: the one to act on now.
+  return out.sort((a, b) => a.validUntil.localeCompare(b.validUntil));
+}
+
 async function myAppointments(clientUserId: string) {
   const rows = await withClient(clientUserId, (trx) =>
     trx
@@ -78,6 +135,7 @@ async function myAppointments(clientUserId: string) {
         'durationMin',
         'price',
         'status',
+        'paid',
         'title',
       ])
       .where('clientUserId', '=', clientUserId)
@@ -134,6 +192,7 @@ async function myAppointments(clientUserId: string) {
         durationMin: a.durationMin,
         price: a.price,
         status: a.status,
+        paid: a.paid === 'paid',
         cancelHours: loc?.cancelHours ?? 24,
       });
     }
@@ -142,12 +201,156 @@ async function myAppointments(clientUserId: string) {
   return out.sort((x, y) => (x.date === y.date ? y.time.localeCompare(x.time) : y.date.localeCompare(x.date)));
 }
 
+/** A signed-in client's payment doors: their own appointment, their
+ *  own token — no capability needed. */
+function clientPayRoutes(app: FastifyInstance) {
+  const r = app.withTypeProvider<ZodTypeProvider>();
+  const own = async (clientUserId: string, appointmentId: string) =>
+    withClient(clientUserId, (trx) =>
+      trx
+        .selectFrom('appointments')
+        .select('tenantId')
+        .where('id', '=', appointmentId)
+        .where('clientUserId', '=', clientUserId)
+        .executeTakeFirst(),
+    );
+
+  r.route({
+    method: 'POST',
+    url: '/pay/quote',
+    preHandler: [app.authenticateClient],
+    schema: { body: PayQuoteRequestSchema, response: { 200: PayQuoteSchema, 404: ErrorSchema, 409: BookingRefusalSchema } },
+    handler: async (req, reply) => {
+      const a = await own(req.clientClaims.sub, req.body.appointmentId);
+      if (!a) return reply.code(404).send({ error: 'NOT_FOUND', message: 'Unknown appointment' });
+      try {
+        return await withTenant(a.tenantId, (trx) => quotePayment(trx, req.body));
+      } catch (e) {
+        if (e instanceof BookingRefused)
+          return reply.code(409).send({ error: 'REFUSED' as const, message: e.message, code: e.code, params: e.params });
+        throw e;
+      }
+    },
+  });
+
+  r.route({
+    method: 'POST',
+    url: '/pay',
+    preHandler: [app.authenticateClient],
+    schema: { body: PayRequestSchema, response: { 200: PayResultSchema, 404: ErrorSchema, 409: BookingRefusalSchema } },
+    handler: async (req, reply) => {
+      const id = req.clientClaims.sub;
+      const a = await own(id, req.body.appointmentId);
+      if (!a) return reply.code(404).send({ error: 'NOT_FOUND', message: 'Unknown appointment' });
+      try {
+        // A saved card is charged through its provider token — the
+        // form never sees the number again. A new card may be kept.
+        let charged: { ref: string; brand: string; last4: string } | undefined;
+        if (req.body.method === 'card' && req.body.savedCardId) {
+          const card = await withClient(id, (trx) =>
+            trx
+              .selectFrom('clientPaymentMethods')
+              .select(['brand', 'last4', 'providerRef', 'expMonth', 'expYear'])
+              .where('id', '=', req.body.savedCardId!)
+              .executeTakeFirst(),
+          );
+          if (!card) return reply.code(404).send({ error: 'NOT_FOUND', message: 'Unknown card' });
+          if (new Date(card.expYear, card.expMonth, 0) < new Date())
+            return reply.code(409).send({ error: 'REFUSED' as const, message: 'That card has expired', code: 'CARD_DECLINED', params: {} });
+          charged = { ref: `mock_ch_${randomBytes(9).toString('base64url')}`, brand: card.brand, last4: card.last4 };
+        }
+        const out = await withTenant(a.tenantId, (trx) =>
+          payAppointment(trx, a.tenantId, req.body, { clientUserId: id, charged }),
+        );
+        if (out.status === 'paid' && req.body.method === 'card' && req.body.saveCard && req.body.card && !req.body.savedCardId) {
+          const c = req.body.card;
+          const digits = c.number.replace(/[\s-]/g, '');
+          const dup = await withClient(id, (trx) =>
+            trx
+              .selectFrom('clientPaymentMethods')
+              .select('id')
+              .where('last4', '=', digits.slice(-4))
+              .where('expMonth', '=', c.expMonth)
+              .where('expYear', '=', c.expYear)
+              .executeTakeFirst(),
+          );
+          if (!dup)
+            await withClient(id, (trx) =>
+              trx
+                .insertInto('clientPaymentMethods')
+                .values({
+                  clientUserId: id,
+                  brand: out.card?.brand ?? 'Card',
+                  last4: digits.slice(-4),
+                  expMonth: c.expMonth,
+                  expYear: c.expYear,
+                  holder: c.holder,
+                  providerRef: `mock_pm_${randomBytes(9).toString('base64url')}`,
+                })
+                .execute(),
+            );
+        }
+        if (out.status === 'paid')
+          await notifyClient(id, {
+            kind: 'appointment',
+            title: 'Payment received',
+            body: `${out.amount} MKD paid${out.card ? ` with ${out.card.brand}${out.card.last4 ? ` ••${out.card.last4}` : ''}` : ''}. Invoice ${out.invoiceNumber ?? ''}.`,
+            refType: 'appointment',
+            refId: req.body.appointmentId,
+          });
+        return out;
+      } catch (e) {
+        if (e instanceof BookingRefused)
+          return reply.code(409).send({ error: 'REFUSED' as const, message: e.message, code: e.code, params: e.params });
+        throw e;
+      }
+    },
+  });
+}
+
+/** The account's saved cards: list and forget. Adding one happens at
+ *  checkout ("save this card"), never here — a card is saved by using it. */
+function clientCardRoutes(app: FastifyInstance) {
+  const r = app.withTypeProvider<ZodTypeProvider>();
+  r.route({
+    method: 'GET',
+    url: '/me/cards',
+    preHandler: [app.authenticateClient],
+    schema: { response: { 200: ClientCardsSchema } },
+    handler: async (req) => {
+      const rows = await withClient(req.clientClaims.sub, (trx) =>
+        trx
+          .selectFrom('clientPaymentMethods')
+          .select(['id', 'brand', 'last4', 'expMonth', 'expYear', 'holder', 'createdAt'])
+          .orderBy('createdAt', 'desc')
+          .execute(),
+      );
+      return { cards: rows.map((c) => ({ ...c, createdAt: c.createdAt.toISOString() })) };
+    },
+  });
+  r.route({
+    method: 'DELETE',
+    url: '/me/cards/:id',
+    preHandler: [app.authenticateClient],
+    schema: { params: z.object({ id: z.uuid() }), response: { 200: z.object({ ok: z.literal(true) }), 404: ErrorSchema } },
+    handler: async (req, reply) => {
+      const gone = await withClient(req.clientClaims.sub, (trx) =>
+        trx.deleteFrom('clientPaymentMethods').where('id', '=', req.params.id).returning('id').executeTakeFirst(),
+      );
+      if (!gone) return reply.code(404).send({ error: 'NOT_FOUND', message: 'Unknown card' });
+      return { ok: true as const };
+    },
+  });
+}
+
 export async function clientRoutes(app: FastifyInstance) {
   await app.register(rateLimit, {
     max: 120,
     timeWindow: '1 minute',
     keyGenerator: (req) => req.ip,
   });
+  clientPayRoutes(app);
+  clientCardRoutes(app);
 
   const r = app.withTypeProvider<ZodTypeProvider>();
 
@@ -297,6 +500,16 @@ export async function clientRoutes(app: FastifyInstance) {
         return fail(reply, e);
       }
     },
+  });
+
+  // ---- offers made to me, across every salon ------------------------
+
+  r.route({
+    method: 'GET',
+    url: '/me/offers',
+    preHandler: [app.authenticateClient],
+    schema: { response: { 200: ClientOffersSchema } },
+    handler: async (req) => ({ offers: await myOffers(req.clientClaims.sub) }),
   });
 
   r.route({
@@ -546,20 +759,17 @@ export async function clientRoutes(app: FastifyInstance) {
             )
             .execute();
           const out = await visitPayload(trx, booked);
-          await notifySalon(trx, biz.id, {
-            kind: 'booking',
-            title: 'New booking from Velnes',
-            body: `${`${c.first} ${c.last}`.trim() || c.email} booked ${out.serviceName || 'an appointment'} on ${out.date} at ${out.time}.`,
-            refId: out.ref,
+          const notice = await afterBooked(trx, {
+            tenantId: biz.id,
+            booked,
+            customerName: `${c.first} ${c.last}`.trim() || c.email,
+            customerEmail: c.email,
+            clientUserId: c.id,
           });
+          return { out, notice };
+        }).then(async ({ out, notice }) => {
+          if (notice) await notifyClient(c.id, notice);
           return out;
-        });
-        await notifyClient(c.id, {
-          kind: 'appointment',
-          title: 'Booking confirmed',
-          body: `${out.serviceName} at ${biz.name} · ${out.date} at ${out.time}.`,
-          refType: 'appointment',
-          refId: out.ref,
         });
         return out;
       } catch (e) {

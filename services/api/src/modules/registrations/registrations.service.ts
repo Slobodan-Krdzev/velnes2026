@@ -1,15 +1,17 @@
 import { randomUUID } from 'node:crypto';
 import {
-  PERM_KEYS,
-  scopeChoices,
+  ownerPermMap,
   type PermMap,
   type RegistrationDraft,
+  REG_COUNTRY_NAMES,
 } from '@velnes/contracts';
 import argon2 from 'argon2';
 import { sql } from 'kysely';
 import { db, withHq, type Trx } from '../../db/index.js';
 import { logAudit } from '../audit/audit.service.js';
+import { locReadiness, locTransition } from '../locations/locations.service.js';
 import { queueMail } from '../mail/mail.service.js';
+import { standardRoles } from '../team/role-kits.js';
 
 export class RegistrationError extends Error {
   constructor(
@@ -20,10 +22,9 @@ export class RegistrationError extends Error {
   }
 }
 
-/** Owner role: every permission at its widest legal scope — the same
- *  rule the seed uses. Shared with HQ's create-business door. */
-export const ownerPerms = (): PermMap =>
-  Object.fromEntries(PERM_KEYS.map((k) => [k, scopeChoices(k).at(-1) ?? 'none'])) as PermMap;
+/** Owner role: every permission at its widest legal scope — the kit in
+ *  @velnes/contracts. Kept as a name for the callers that grew up on it. */
+export const ownerPerms = (): PermMap => ownerPermMap();
 
 /** mon..sun (wizard) → weekday index 0..6 (locations.hours). */
 const DAY_KEYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as const;
@@ -159,10 +160,14 @@ export async function reviewRegistration(
 
 /**
  * Approval provisions the whole tenant world in one transaction:
- * business, Owner role, owner account with the wizard's password,
- * legal entity (verified — the compound decision), the location
- * (APPROVED, never ACTIVE: the owner still activates deliberately
- * behind the readiness gate), and the picked starter services.
+ * business, the Owner and Employee roles, owner account with the
+ * wizard's password, legal entity (verified — the compound decision),
+ * the location, the picked services (online), the products, and a live
+ * booking widget. Then, if the readiness gate is satisfied — it is,
+ * for any wizard draft — the location goes ACTIVE right here: an
+ * approved salon is bookable the same minute (Alex, 2026-09-22),
+ * nothing waits for the owner. A draft that somehow is not ready stays
+ * at APPROVED with the readiness checklist telling the owner why.
  */
 export async function approveRegistration(id: string, reviewer: string) {
   return db.transaction().execute(async (trx: Trx) => {
@@ -220,33 +225,23 @@ export async function approveRegistration(id: string, reviewer: string) {
         slug,
         city: draft.loc.city,
         phone: draft.salon.phone || null,
-        country: 'North Macedonia',
+        country: REG_COUNTRY_NAMES[draft.loc.country],
         since: new Date(),
         // The photos the owner brought in (AI onboarding read them off the
-        // website, or they uploaded them) become the business gallery.
+        // website, or they uploaded them) become the business gallery; the
+        // one they marked is the salon's card in the consumer app.
         gallery: JSON.stringify(
           draft.gallery.map((g, i) => ({
             id: randomUUID(),
             name: g.name || `Photo ${i + 1}`,
             img: g.img,
+            ...(g.card ? { card: true } : {}),
           })),
         ),
       })
       .execute();
 
-    const roleId = randomUUID();
-    await trx
-      .insertInto('roles')
-      .values({
-        id: roleId,
-        tenantId: businessId,
-        name: 'Owner',
-        std: true,
-        locked: true,
-        description: 'Everything, everywhere. The account itself.',
-        perms: JSON.stringify(ownerPerms()),
-      })
-      .execute();
+    const { ownerRoleId, employeeRoleId } = await standardRoles(trx, businessId);
 
     const ownerId = randomUUID();
     await trx
@@ -259,7 +254,7 @@ export async function approveRegistration(id: string, reviewer: string) {
         email: draft.acct.email,
         phone: draft.salon.phone || null,
         access: 'owner',
-        roleId,
+        roleId: ownerRoleId,
         bookable: true,
         status: 'active',
         color: 'olive',
@@ -306,13 +301,15 @@ export async function approveRegistration(id: string, reviewer: string) {
         name: draft.salon.name,
         city: draft.loc.city,
         address: `${draft.loc.street} ${draft.loc.no}`.trim(),
+        zip: draft.loc.zip || null,
+        country: REG_COUNTRY_NAMES[draft.loc.country],
         tz: 'Europe/Skopje',
         phone: draft.salon.phone || null,
         rooms: 2,
         invPrefix: `${draft.salon.name.slice(0, 3).toUpperCase()}-`,
-        online: false,
+        online: false, // flipped by the ACTIVE transition below
         cancelHours: 24,
-        lifecycle: 'APPROVED', // verified here; activation stays with the owner
+        lifecycle: 'APPROVED', // → ACTIVE at the end of this transaction
         hours: JSON.stringify(hoursFromDraft(draft)),
         // The pin the owner dropped on the map in the wizard — kept, not
         // discarded: it is what the consumer app's map obeys.
@@ -362,7 +359,7 @@ export async function approveRegistration(id: string, reviewer: string) {
           vat: 18,
           status: 'active',
           pos: true,
-          online: false, // online selling is a deliberate later switch
+          online: true, // on offer to the public from the first minute
           sort: i,
         })
         .execute();
@@ -396,6 +393,8 @@ export async function approveRegistration(id: string, reviewer: string) {
           name: p.name,
           categoryId: prodCatIds.get(p.category)!,
           price: p.price,
+          cost: p.cost,
+          ...(p.sizeMl != null ? { sizeAmount: p.sizeMl, sizeUnit: 'ml' } : {}),
           vat: 18,
           active: true,
         })
@@ -410,9 +409,24 @@ export async function approveRegistration(id: string, reviewer: string) {
           active: true,
           price: p.price,
           pos: true,
-          stock: 0,
+          stock: p.stock,
         })
         .execute();
+      // Opening stock is a movement like any other, so the stock room's
+      // history starts at the truth rather than at an unexplained number.
+      if (p.stock > 0)
+        await trx
+          .insertInto('stockMovements')
+          .values({
+            tenantId: businessId,
+            locationId,
+            productId: prod.id,
+            qty: p.stock,
+            kind: 'adjustment',
+            ref: 'registration',
+            note: 'Opening stock',
+          })
+          .execute();
     }
 
     // The colleagues invited in the wizard. Each becomes an invited,
@@ -448,7 +462,7 @@ export async function approveRegistration(id: string, reviewer: string) {
           email,
           phone: null,
           access: 'staff',
-          roleId: null,
+          roleId: employeeRoleId,
           bookable: false,
           status: 'invited',
           color: PALETTE[colorIdx % PALETTE.length]!,
@@ -495,6 +509,87 @@ export async function approveRegistration(id: string, reviewer: string) {
       after: 'active',
     });
 
+    await publishSalon(trx, { businessId, locationId, actorName: reviewer, reason: 'Registration approved' });
+
     return { businessId, locationId, ownerEmail: draft.acct.email };
   });
+}
+
+/**
+ * Publish a salon: what "approved" has meant since 2026-09-22. One
+ * function, idempotent, so registration approval and the repair tool
+ * for salons approved before that day (`src/db/publish-salon.ts`)
+ * cannot disagree:
+ *
+ *  - every active service goes online (the wizard's are already);
+ *  - the owner is skilled in every active service they are not yet —
+ *    the owner delivers what they listed;
+ *  - the location walks APPROVED → ACTIVE through the one lifecycle
+ *    writer when the readiness gate says yes, the actor named in the
+ *    log. Not ready → stays APPROVED, and the checklist says why.
+ *
+ * Runs inside the caller's transaction. Every query names the tenant:
+ * approval runs with `app.hq` set, which reads across tenants, and a
+ * publish that saw another salon's widget or services would be wrong.
+ */
+export async function publishSalon(
+  trx: Trx,
+  opts: { businessId: string; locationId: string; actorName: string; reason: string },
+): Promise<{ activated: boolean; notReady: string[] }> {
+  const { businessId, locationId } = opts;
+
+  await trx
+    .updateTable('services')
+    .set({ online: true })
+    .where('tenantId', '=', businessId)
+    .where('status', '=', 'active')
+    .where('online', '=', false)
+    .execute();
+
+  const biz = await trx
+    .selectFrom('businesses')
+    .select('ownerEmployeeId')
+    .where('id', '=', businessId)
+    .executeTakeFirstOrThrow();
+  if (biz.ownerEmployeeId) {
+    const missing = await trx
+      .selectFrom('services as s')
+      .select('s.id')
+      .where('s.tenantId', '=', businessId)
+      .where('s.status', '=', 'active')
+      .where(({ not, exists, selectFrom }) =>
+        not(
+          exists(
+            selectFrom('employeeSkills as k')
+              .select('k.serviceId')
+              .whereRef('k.serviceId', '=', 's.id')
+              .where('k.employeeId', '=', biz.ownerEmployeeId!),
+          ),
+        ),
+      )
+      .execute();
+    for (const s of missing)
+      await trx
+        .insertInto('employeeSkills')
+        .values({ tenantId: businessId, employeeId: biz.ownerEmployeeId, serviceId: s.id })
+        .execute();
+  }
+
+  // No widget is made here: the website booking widget is the salon's
+  // separate product, and the consumer app books with the salon's own
+  // key (`salon:<slug>`) regardless (Alex, 2026-09-22).
+
+  const loc = await trx
+    .selectFrom('locations')
+    .select('lifecycle')
+    .where('id', '=', locationId)
+    .executeTakeFirstOrThrow();
+  if (loc.lifecycle !== 'APPROVED') return { activated: loc.lifecycle === 'ACTIVE', notReady: [] };
+  const ready = await locReadiness(trx, locationId);
+  if (!ready.ok) return { activated: false, notReady: ready.items.filter((i) => !i.ok).map((i) => i.label) };
+  await locTransition(trx, null, locationId, 'ACTIVE', opts.reason, {
+    employeeId: null,
+    name: opts.actorName,
+  });
+  return { activated: true, notReady: [] };
 }

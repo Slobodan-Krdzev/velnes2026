@@ -3,6 +3,7 @@ import { sql } from 'kysely';
 import type { Trx } from '../../db/index.js';
 import { logAudit } from '../audit/audit.service.js';
 import { queueMail } from '../mail/mail.service.js';
+import { employeeRoleId } from './role-kits.js';
 
 /**
  * The team doors — the create/update-employee logic, lifted verbatim out
@@ -127,13 +128,16 @@ export async function createEmployee(trx: Trx, claims: AccessClaims, b: Employee
   const locationIds =
     b.locationIds ?? (await trx.selectFrom('locations').select('id').execute()).map((l) => l.id);
 
+  // Nobody joins with no rights at all: an invite that names no role
+  // gets the standard Employee kit — book, take payments, ask support.
+  const roleId = b.roleId ?? (await employeeRoleId(trx));
   const row = await trx
     .insertInto('employees')
     .values({
       tenantId: claims.ten,
       name: b.name,
       email: b.email,
-      roleId: b.roleId ?? null,
+      roleId,
       roleTitle: b.roleTitle ?? 'New user',
       access: b.access ?? 'staff',
       bookable: b.bookable,
@@ -151,7 +155,7 @@ export async function createEmployee(trx: Trx, claims: AccessClaims, b: Employee
   for (const sid of b.skillServiceIds ?? [])
     await trx.insertInto('employeeSkills').values({ tenantId: claims.ten, employeeId: row.id, serviceId: sid }).execute();
 
-  const role = b.roleId ? await roleName(trx, b.roleId) : '—';
+  const role = roleId ? await roleName(trx, roleId) : '—';
   await logAudit(trx, claims.ten, {
     actorEmployeeId: claims.sub,
     actorName: await actorName(trx, claims.sub),

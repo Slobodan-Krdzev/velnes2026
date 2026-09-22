@@ -85,3 +85,16 @@ reviews (marketplace phase — a review hangs on an appointment),
 campaigns (SMTP undecided), product-testing invitations (supplier
 phase), the CI trends/suggestions rule sets and the AI analysis panel
 (a real model on the same JSON).
+
+**Discount codes (2026-09-22).** Marketing › Discount codes is a real
+door now: `POST /discount-codes` (code upper-cased, letters/digits/
+dashes, a window, an optional cap, a percentage capped at 100, unique
+per salon — a clash is a 409), `PATCH /discount-codes/:id` (the
+switch, the cap, the end date) and `DELETE /discount-codes/:id` (only a
+code nobody used; a used one stays for the record and is switched off
+instead), all behind `marketing.personal_offers` and audited. The
+switch is one column, `discount_codes.active`, read by the one
+validation door `validateCode()` — so the till's code field, the
+Velnes app's payment quote and the marketing table can never disagree
+about whether a code works. Off shows as status `Off`; the workspace
+table toggles it in place. Pinned by `marketing/discount-codes.test.ts`.

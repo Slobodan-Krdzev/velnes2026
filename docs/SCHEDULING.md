@@ -53,6 +53,25 @@ returns only after the sample grows 25 %. Owner approval
 (`POST /timings/:id/approve`, audited with before/after) is the only
 writer of working durations — Velnes never changes one on its own.
 
+**Booking requests (2026-09-22).** "Confirm bookings automatically"
+(Settings › Online marketplace) is honoured now. Off, a booking from
+the Velnes app — source `marketplace` (guest) or `client` (signed in);
+staff and widget bookings are the salon's own and stay `booked` —
+lands on the new status `requested`: it holds its slot like any
+appointment, the history says `Requested`, the salon's bell rings
+(`booking_request`) and the owner is mailed. The salon answers through
+one door, `POST /appointments/:id/decide` (`appointments.edit`):
+accept → `booked`, decline → `cancelled`, history `Accepted`/`Declined`,
+audited; anything but a `requested` appointment is refused
+(`NOT_A_REQUEST`). Either way the customer is mailed — the acceptance
+carries the payment link, built on `CONSUMER_APP_URL` — and, with an
+account, their bell rings too. In the workspace a request is a dashed
+block; the drawer shows Accept / Decline (with an optional note for
+the customer) instead of Take payment; a bell entry opens the
+appointment (`GET /appointments/:id`, the list's rights). Pinned by
+`booking/requests.test.ts`. The messaging lives in
+`booking/requests.service.ts`, the state in `booking.service.ts`.
+
 **Seed.** Demo appointments this week, the et1/et2/et3 timing
 showcase (Maria's pace suggestion, Elena's approved 40-minute
 massage, Ana's beginner-60-now-49 relearn case), six customers

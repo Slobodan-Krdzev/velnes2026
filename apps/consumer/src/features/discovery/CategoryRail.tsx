@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef } from 'react';
+import { t } from '../../lib/i18n-core.js';
 import type { CategoryVM } from '../../lib/api/mappers.js';
 import { useWheelScroll } from '../../lib/useWheelScroll.js';
 import { CatCard } from './cards.js';
@@ -95,7 +96,7 @@ export function CategoryRail({ categories }: { categories: CategoryVM[] }) {
   return (
     <div className="catrail">
       {loops ? (
-        <button className="catrail-nav prev" aria-label="Previous categories" onClick={() => step(-1)}>
+        <button className="catrail-nav prev" aria-label={t('c.rail.prev')} onClick={() => step(-1)}>
           {CHEV_L}
         </button>
       ) : null}
@@ -105,7 +106,7 @@ export function CategoryRail({ categories }: { categories: CategoryVM[] }) {
         )}
       </div>
       {loops ? (
-        <button className="catrail-nav next" aria-label="More categories" onClick={() => step(1)}>
+        <button className="catrail-nav next" aria-label={t('c.rail.next')} onClick={() => step(1)}>
           {CHEV_R}
         </button>
       ) : null}

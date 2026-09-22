@@ -47,6 +47,40 @@ export const DiscoverySalonsSchema = z.object({
   salons: z.array(DiscoverySalonCardSchema),
 });
 
+/**
+ * Why a salon is recommended — said on the card, never guessed by the
+ * app (Alex, 2026-09-23). `booked`: the viewer has been there;
+ * `favourite`: they saved it (or one of its pros); `category`: it does
+ * what they book or favourite elsewhere; `nearby`: it is close.
+ */
+export const DiscoveryRecoReasonSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('booked') }),
+  z.object({ kind: z.literal('favourite') }),
+  z.object({ kind: z.literal('category'), category: z.string() }),
+  z.object({ kind: z.literal('nearby'), km: z.number() }),
+]);
+export const DiscoveryRecommendedSchema = z.object({
+  /** `history`: the viewer's bookings and favourites decided the order;
+   *  `nearby`: their position did; `default`: neither was available. */
+  how: z.enum(['history', 'nearby', 'default']),
+  salons: z.array(DiscoverySalonCardSchema.extend({ reason: DiscoveryRecoReasonSchema.nullable() })),
+});
+export type DiscoveryRecommended = z.infer<typeof DiscoveryRecommendedSchema>;
+
+/** How long a salon counts as new to Velnes — Alex, 2026-09-23. */
+export const NEWEST_SALON_DAYS = 30;
+/**
+ * "Newest to Velnes": the open, listed salons that joined the platform
+ * within the last `NEWEST_SALON_DAYS`, newest first. A salon joins when
+ * its business is created — for a registered salon, the moment HQ
+ * approves it.
+ */
+export const DiscoveryNewestSchema = z.object({
+  days: z.number().int(),
+  salons: z.array(DiscoverySalonCardSchema.extend({ joinedAt: z.string() })),
+});
+export type DiscoveryNewest = z.infer<typeof DiscoveryNewestSchema>;
+
 export const DiscoveryTeamMemberSchema = z.object({
   id: z.uuid(),
   name: z.string(),
@@ -72,8 +106,10 @@ export const DiscoveryGalleryPhotoSchema = z.object({
 
 /** The full salon page payload. Team and prices honor the salon's own
  *  marketplace switches; products are the sellable shelf (active, not
- *  own-use, priced). publishableKey/locations come from the live widget
- *  and are null for a listed-but-not-bookable salon. */
+ *  own-use, priced). `locations` are the salon's ACTIVE ones and
+ *  `publishableKey` is the consumer key (`salon:<slug>`) the booking
+ *  doors accept — null only when no location is open. No widget is
+ *  involved: that is the salon's separate website product. */
 export const DiscoverySalonDetailSchema = z.object({
   id: z.uuid(),
   slug: z.string(),
@@ -89,6 +125,13 @@ export const DiscoverySalonDetailSchema = z.object({
   lng: z.number().nullable(),
   categories: z.array(z.string()),
   gallery: z.array(DiscoveryGalleryPhotoSchema),
+  /** The salon's links, already normalised to URLs — null when unset. */
+  socials: z.object({
+    website: z.string().nullable(),
+    instagram: z.string().nullable(),
+    facebook: z.string().nullable(),
+    tiktok: z.string().nullable(),
+  }),
   showPrices: z.boolean(),
   team: z.array(DiscoveryTeamMemberSchema),
   products: z.array(DiscoveryProductSchema),

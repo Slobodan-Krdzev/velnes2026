@@ -245,6 +245,8 @@ export async function createLocation(
       zip: req.zip || null,
       country: req.country,
       tz: req.tz,
+      lat: req.lat,
+      lng: req.lng,
       phone: req.phone || null,
       rooms: req.rooms,
       invPrefix: req.invPrefix || `${req.name.slice(0, 3).toUpperCase()}-`,
@@ -410,6 +412,8 @@ export async function locReadiness(trx: Trx, id: string): Promise<ReadinessRespo
     .where('legalEntities.status', '=', 'verified')
     .executeTakeFirst();
 
+  // Named tenant on purpose: HQ approves registrations in a context that
+  // reads across tenants, and this gate must only ever see this salon.
   const bookableAt = (trx2: Trx) =>
     trx2
       .selectFrom('services as s')
@@ -417,13 +421,18 @@ export async function locReadiness(trx: Trx, id: string): Promise<ReadinessRespo
         join.onRef('lcs.serviceId', '=', 's.id').on('lcs.locationId', '=', id),
       )
       .select('s.id')
+      .where('s.tenantId', '=', l.tenantId)
       .where(
         sql<boolean>`coalesce(lcs.active, s.status = 'active') and coalesce(lcs.online, s.online)`,
       );
 
   const svcOk = await bookableAt(trx).limit(1).executeTakeFirst();
 
-  const staffOk = await trx
+  // The same rule as the booking door's empsFor: a skilled member
+  // delivers what they are skilled in, and a bookable member with no
+  // skill rows at all does everything. The gate must not refuse a salon
+  // the booking page would happily sell.
+  const skilled = await trx
     .selectFrom('employees as e')
     .innerJoin('employeeLocations as el', 'el.employeeId', 'e.id')
     .innerJoin('employeeSkills as sk', 'sk.employeeId', 'e.id')
@@ -434,6 +443,21 @@ export async function locReadiness(trx: Trx, id: string): Promise<ReadinessRespo
     .where('sk.serviceId', 'in', bookableAt(trx))
     .limit(1)
     .executeTakeFirst();
+  const doesEverything = svcOk
+    ? await trx
+        .selectFrom('employees as e')
+        .innerJoin('employeeLocations as el', 'el.employeeId', 'e.id')
+        .select('e.id')
+        .where('el.locationId', '=', id)
+        .where('e.bookable', '=', true)
+        .where('e.status', '=', 'active')
+        .where(({ not, exists, selectFrom }) =>
+          not(exists(selectFrom('employeeSkills as k').select('k.serviceId').whereRef('k.employeeId', '=', 'e.id'))),
+        )
+        .limit(1)
+        .executeTakeFirst()
+    : undefined;
+  const staffOk = skilled ?? doesEverything;
 
   const items = [
     { k: 'legal' as const, label: 'Verified legal entity attached', ok: !!legal },
@@ -493,15 +517,21 @@ export async function locTransition(
             .map((i) => i.label)
             .join(', '),
       );
-    const actorRow = claims
-      ? await trx
-          .selectFrom('employees')
-          .select('access')
-          .where('id', '=', claims.sub)
-          .executeTakeFirst()
-      : undefined;
-    if (actorRow?.access !== 'owner')
+    // Owner-only for tenant callers. A claims-less call with a named
+    // actor is Revelapps HQ approving a registration — the one other
+    // hand allowed on this switch (Alex, 2026-09-22: approved salons
+    // are bookable at once).
+    if (claims) {
+      const actorRow = await trx
+        .selectFrom('employees')
+        .select('access')
+        .where('id', '=', claims.sub)
+        .executeTakeFirst();
+      if (actorRow?.access !== 'owner')
+        throw new LocationError('OWNER_ONLY', 'Only account-level owners can activate a location');
+    } else if (!actor) {
       throw new LocationError('OWNER_ONLY', 'Only account-level owners can activate a location');
+    }
   }
 
   const patch: Partial<{

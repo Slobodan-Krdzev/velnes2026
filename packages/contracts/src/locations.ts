@@ -99,6 +99,10 @@ export const LocationCreateSchema = z.object({
   phone: z.string().default(''),
   rooms: z.coerce.number().int().min(1).default(2),
   invPrefix: z.string().default(''),
+  /** The pin dropped on the map at creation — what the consumer app's
+   *  map obeys. Null until the owner drops one (Alex, 2026-09-22). */
+  lat: z.number().nullable().default(null),
+  lng: z.number().nullable().default(null),
   mode: z.enum(['scratch', 'copy']),
   srcLocationId: z.uuid().nullable().default(null),
   copy: CopyChecklistSchema.default({

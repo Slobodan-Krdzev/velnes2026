@@ -2,8 +2,10 @@ import { randomUUID } from 'node:crypto';
 import argon2 from 'argon2';
 import pg from 'pg';
 import {
+  employeePermMap,
   PERM_KEYS,
   scopeChoices,
+  STANDARD_ROLES,
   type PermMap,
 } from '@velnes/contracts';
 
@@ -170,13 +172,7 @@ const frontdeskPerms = mkPerms({
   'inventory.view': 'location',
 });
 
-const employeePerms = mkPerms({
-  'appointments.view_own': 'own',
-  'appointments.create': 'location',
-  'appointments.edit': 'location',
-  'pos.checkout': 'location',
-  'reports.view_own': 'own',
-});
+const employeePerms = employeePermMap();
 
 const financePerms = mkPerms({
   'reports.view_location': 'business',
@@ -279,8 +275,7 @@ export async function seedDemo(adminUrl: string) {
         'Everything day to day at the locations they are assigned to. No ownership, no payouts.', managerPerms],
       [demo.roleFrontdesk, 'Front desk', true, false,
         'The whole calendar and the till at one location. No reports, no business settings.', frontdeskPerms],
-      [demo.roleEmployee, 'Employee', true, false,
-        'Their own day and the till. No catalog, no customer list, and no calendar of anyone else.', employeePerms],
+      [demo.roleEmployee, 'Employee', true, false, STANDARD_ROLES.employee.description, employeePerms],
       [demo.roleFinance, 'Bookkeeping', false, false,
         'Custom role. Reads the figures of every location, changes nothing in the calendar.', financePerms],
     ];
@@ -1092,6 +1087,11 @@ export async function seedDemo(adminUrl: string) {
         `INSERT INTO roles (id, tenant_id, name, std, locked, description, perms)
          VALUES ($1,$2,'Owner',true,true,'Everything, everywhere. The account itself.',$3)`,
         [roleId, b.id, JSON.stringify(ownerPerms)],
+      );
+      await q(
+        `INSERT INTO roles (id, tenant_id, name, std, locked, description, perms)
+         VALUES ($1,$2,'Employee',true,false,$3,$4)`,
+        [randomUUID(), b.id, STANDARD_ROLES.employee.description, JSON.stringify(employeePerms)],
       );
       const ownerId = randomUUID();
       await q(

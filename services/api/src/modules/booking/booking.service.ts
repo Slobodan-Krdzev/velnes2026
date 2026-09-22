@@ -1,6 +1,7 @@
 import type { AccessClaims, Appointment, BookRequest, RefusalCode } from '@velnes/contracts';
 import type { Trx } from '../../db/index.js';
 import { logAudit } from '../audit/audit.service.js';
+import { autoConfirmOn } from './requests.service.js';
 import { priceFor, svcAt, svcChoice, svcLine } from '../catalog/catalog.service.js';
 import { locLive } from '../locations/locations.service.js';
 import type { DaySchedule } from '@velnes/contracts';
@@ -29,7 +30,7 @@ export interface Refusal {
   params: Record<string, string | number>;
   message: string;
 }
-const refuse = (
+export const refuse = (
   code: RefusalCode,
   params: Record<string, string | number>,
   message: string,
@@ -675,6 +676,11 @@ export async function confirmBooking(
     .select('name')
     .where('id', '=', req.serviceId)
     .executeTakeFirst();
+  // A Velnes-app booking at a salon that confirms by hand is a request:
+  // it holds the slot as `requested` until the salon decides. Staff and
+  // widget bookings are the salon's own and land booked as before.
+  const fromApp = req.source === 'marketplace' || req.source === 'client';
+  const status = fromApp && !(await autoConfirmOn(trx)) ? 'requested' : 'booked';
   const inserted = await trx
     .insertInto('appointments')
     .values({
@@ -686,7 +692,7 @@ export async function confirmBooking(
       prepMin: clipPrep(line.prepMin, mins(req.time), sch),
       resetMin: line.resetMin,
       kind: 'appointment',
-      status: 'booked',
+      status,
       title: custName ?? 'Walk-in',
       serviceId: req.serviceId,
       variantId: line.vid,
@@ -717,7 +723,7 @@ export async function confirmBooking(
     .values({
       tenantId,
       appointmentId: inserted.id,
-      what: 'Created',
+      what: status === 'requested' ? 'Requested' : 'Created',
       byName: custName ?? 'Walk-in',
       source: req.source,
     })
@@ -739,6 +745,12 @@ export async function confirmBooking(
     source: req.source,
   });
   return toContract(trx, inserted.id);
+}
+
+export async function getAppointment(trx: Trx, id: string): Promise<Appointment> {
+  const row = await trx.selectFrom('appointments').select('id').where('id', '=', id).executeTakeFirst();
+  if (!row) throw new BookingError('NOT_FOUND', 'Unknown appointment');
+  return toContract(trx, id);
 }
 
 export async function listAppointments(trx: Trx, q: { locationId: string; from: string; to: string }) {
@@ -764,7 +776,7 @@ export async function patchAppointment(
     date?: string | undefined;
     time?: string | undefined;
     employeeId?: string | undefined;
-    status?: 'booked' | 'confirmed' | 'cancelled' | 'no_show' | undefined;
+    status?: 'booked' | 'confirmed' | 'cancelled' | 'no_show' | 'requested' | undefined;
     reason?: string | undefined;
   },
 ) {
@@ -828,6 +840,52 @@ export async function patchAppointment(
       reason: patch.reason,
     });
   }
+  return toContract(trx, id);
+}
+
+/**
+ * The salon answers a request: accept makes it a booking, decline
+ * frees the slot as a cancellation. Only a `requested` appointment can
+ * be decided — anything else is a 409, never a silent no-op — and the
+ * step is written to the history and the audit like every lifecycle.
+ */
+export async function decideRequest(
+  trx: Trx,
+  claims: AccessClaims,
+  id: string,
+  decision: 'accept' | 'decline',
+  reason?: string,
+): Promise<Appointment> {
+  const a = await trx
+    .selectFrom('appointments')
+    .select(['id', 'tenantId', 'status', 'title'])
+    .where('id', '=', id)
+    .executeTakeFirst();
+  if (!a) throw new BookingError('NOT_FOUND', 'Unknown appointment');
+  if (a.status !== 'requested')
+    throw new BookingRefused(refuse('NOT_A_REQUEST', {}, 'This appointment is not waiting for a decision'));
+  const to = decision === 'accept' ? 'booked' : 'cancelled';
+  await trx.updateTable('appointments').set({ status: to }).where('id', '=', id).execute();
+  const actor = await trx.selectFrom('employees').select('name').where('id', '=', claims.sub).executeTakeFirst();
+  await trx
+    .insertInto('appointmentHistory')
+    .values({
+      tenantId: a.tenantId,
+      appointmentId: id,
+      what: decision === 'accept' ? 'Accepted' : 'Declined',
+      byName: actor?.name ?? '',
+      source: 'staff',
+    })
+    .execute();
+  await logAudit(trx, a.tenantId, {
+    actorEmployeeId: claims.sub,
+    actorName: actor?.name ?? '',
+    action: decision === 'accept' ? 'Booking request accepted' : 'Booking request declined',
+    object: a.title,
+    before: 'requested',
+    after: to,
+    reason,
+  });
   return toContract(trx, id);
 }
 

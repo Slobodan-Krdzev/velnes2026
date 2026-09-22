@@ -151,7 +151,8 @@ describe('the consumer discovery surface', () => {
     expect(d.name).toBe('Velnes Fizio Centar');
     expect(d.locations.map((l) => l.name).sort()).toEqual(['Aerodrom', 'Centar']);
     // The key the booking doors expect, so the app never invents one.
-    expect(d.publishableKey).toBe('pk_live_velnes_demo');
+    // The consumer key, not the widget's: the app books without a widget.
+    expect(d.publishableKey).toBe('salon:velnes-fizio');
     expect(d.team.length).toBeGreaterThan(0);
     // Own-use and zero-priced stock stays out of the consumer shelf.
     expect(d.products.every((p) => p.price > 0)).toBe(true);
@@ -257,6 +258,51 @@ describe('the consumer discovery surface', () => {
       [out.items.map((i: { ref: string }) => i.ref)],
     );
     expect(rows.rows[0].n).toBe(2);
+  });
+
+  it('books with the salon key alone — no widget, source marketplace, nothing attributed', async () => {
+    const { demo } = await import('../db/seed-demo.js');
+    // A Tuesday three weeks out — the same rule the visit test uses, a week later.
+    const day = (() => {
+      const d = new Date();
+      d.setDate(d.getDate() + 23 - ((d.getDay() + 5) % 7));
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    })();
+    const slots = await app.inject({
+      method: 'POST',
+      url: `${P}/slots`,
+      payload: {
+        key: 'salon:velnes-fizio',
+        locationId: demo.locAerodrom,
+        date: day,
+        employeeId: 'any',
+        items: [{ serviceId: demo.s1 }],
+      },
+    });
+    expect(slots.statusCode).toBe(200);
+    const slot = slots.json().slots.find((x: { free: boolean }) => x.free);
+    expect(slot).toBeDefined();
+    const res = await app.inject({
+      method: 'POST',
+      url: `${P}/book`,
+      payload: {
+        widgetKey: 'salon:velnes-fizio',
+        key: randomUUID(),
+        locationId: demo.locAerodrom,
+        serviceId: demo.s1,
+        date: day,
+        time: slot.t,
+        employeeId: 'any',
+        items: [{ serviceId: demo.s1 }],
+        name: 'Visit Tester',
+        phone: '+389 70 999 224',
+      },
+    });
+    expect(res.statusCode).toBe(200);
+    const row = await admin.query(`SELECT source, widget_id FROM appointments WHERE id = $1`, [
+      res.json().items[0].ref,
+    ]);
+    expect(row.rows[0]).toEqual({ source: 'marketplace', widget_id: null });
   });
 
   it('books nothing at all when one treatment in the visit cannot fit', async () => {
@@ -439,11 +485,11 @@ describe('the consumer discovery surface', () => {
       }
     });
 
-    it('drops a salon that cannot be booked, rather than ranking it low', async () => {
+    it('keeps a salon admitted whatever its website widget does — a separate product', async () => {
       const body = await firstCategoryWithServices();
       const slug = body.services[0]!.salon.slug;
-      // A weight can always be out-argued by another weight; this must
-      // be absolute, so it is an admission rule.
+      // Admission is the ACTIVE location, never the widget: a salon that
+      // never bought the website widget is still on the Velnes app.
       await admin.query(
         `UPDATE widgets SET status = 'draft'
          WHERE tenant_id = (SELECT id FROM businesses WHERE slug = $1)`,
@@ -455,7 +501,7 @@ describe('the consumer discovery surface', () => {
           url: `${P}/discovery/categories/${body.category.id}/services`,
         });
         const after = DiscoveryCategoryServicesSchema.parse(res.json());
-        expect(after.services.some((s) => s.salon.slug === slug)).toBe(false);
+        expect(after.services.some((s) => s.salon.slug === slug)).toBe(true);
       } finally {
         await admin.query(
           `UPDATE widgets SET status = 'live'

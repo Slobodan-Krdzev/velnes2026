@@ -3,7 +3,10 @@ import type {
   MemberRecSchema} from '@velnes/contracts';
 import {
   CapacityResponseSchema,
+  DiscountCodeCreateSchema,
   DiscountCodeListSchema,
+  DiscountCodePatchSchema,
+  DiscountCodeRowSchema,
   PersonalOfferListSchema,
   MemberRecListSchema,
   OfferCreateSchema,
@@ -12,10 +15,12 @@ import {
 } from '@velnes/contracts';
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
+import { sql } from 'kysely';
 import { z } from 'zod';
 import { withTenant } from '../../db/index.js';
 import { can, permsFor } from '../auth/authz.service.js';
 import { localIso } from '../scheduling/scheduling.service.js';
+import { logAudit } from '../audit/audit.service.js';
 import { personalOffersAll } from '../customers/customers.service.js';
 import {
   createOffer,
@@ -35,6 +40,30 @@ function sendErr(reply: FastifyReply, e: unknown) {
   throw e;
 }
 
+/** The row every code door answers with; status is derived, never stored. */
+function codeRow(d: {
+  id: string;
+  code: string;
+  type: 'Percentage' | 'Fixed amount';
+  value: number;
+  used: number;
+  usageLimit: number | null;
+  starts: Date;
+  ends: Date;
+  active: boolean;
+}) {
+  const today = localIso(new Date());
+  const starts = localIso(d.starts);
+  const ends = localIso(d.ends);
+  const status = !d.active ? 'Off' : today < starts ? 'Scheduled' : today > ends ? 'Expired' : 'Active';
+  return { id: d.id, code: d.code, type: d.type, value: d.value, used: d.used, usageLimit: d.usageLimit, starts, ends, active: d.active, status: status as 'Active' | 'Scheduled' | 'Expired' | 'Off' };
+}
+
+async function actorName(trx: Parameters<typeof permsFor>[0], id: string): Promise<string> {
+  const a = await trx.selectFrom('employees').select('name').where('id', '=', id).executeTakeFirst();
+  return a?.name ?? '';
+}
+
 export function marketingRoutes(app: FastifyInstance) {
   const r = app.withTypeProvider<ZodTypeProvider>();
 
@@ -46,28 +75,111 @@ export function marketingRoutes(app: FastifyInstance) {
     handler: async (req, reply) =>
       withTenant(req.claims.ten, async (trx) => {
         if (!(await gate(trx, req.claims, reply))) return reply;
-        const rows = await trx.selectFrom('discountCodes').selectAll().orderBy('starts').execute();
-        const today = localIso(new Date());
-        return {
-          codes: rows.map((d) => {
-            const starts = localIso(d.starts);
-            const ends = localIso(d.ends);
-            return {
-              id: d.id,
-              code: d.code,
-              type: d.type,
-              value: d.value,
-              used: d.used,
-              usageLimit: d.usageLimit,
-              starts,
-              ends,
-              status: (today < starts ? 'Scheduled' : today > ends ? 'Expired' : 'Active') as
-                | 'Active'
-                | 'Scheduled'
-                | 'Expired',
-            };
-          }),
-        };
+        const rows = await trx.selectFrom('discountCodes').selectAll().orderBy('starts', 'desc').execute();
+        return { codes: rows.map(codeRow) };
+      }),
+  });
+
+  // A new code. Behind the same right as the rest of marketing; the
+  // code is unique per salon, and a clash says so rather than 500.
+  r.route({
+    method: 'POST',
+    url: '/discount-codes',
+    preHandler: [app.authenticate],
+    schema: { body: DiscountCodeCreateSchema, response: { 200: DiscountCodeRowSchema, 403: Err, 409: Err } },
+    handler: async (req, reply) =>
+      withTenant(req.claims.ten, async (trx) => {
+        if (!(await gate(trx, req.claims, reply))) return reply;
+        const clash = await trx
+          .selectFrom('discountCodes')
+          .select('id')
+          .where(sql<boolean>`upper(code) = upper(${req.body.code})`)
+          .executeTakeFirst();
+        if (clash) return reply.code(409).send({ error: 'EXISTS', message: 'That code already exists' });
+        const row = await trx
+          .insertInto('discountCodes')
+          .values({
+            tenantId: req.claims.ten,
+            code: req.body.code,
+            type: req.body.type,
+            value: req.body.value,
+            usageLimit: req.body.usageLimit,
+            starts: new Date(req.body.starts),
+            ends: new Date(req.body.ends),
+          })
+          .returningAll()
+          .executeTakeFirstOrThrow();
+        await logAudit(trx, req.claims.ten, {
+          actorEmployeeId: req.claims.sub,
+          actorName: await actorName(trx, req.claims.sub),
+          action: 'Discount code created',
+          object: `Code · ${row.code}`,
+          after: `${row.type === 'Percentage' ? `${row.value}%` : `${row.value} MKD`} · ${req.body.starts} → ${req.body.ends}`,
+        });
+        return codeRow(row);
+      }),
+  });
+
+  // The switch, the cap, the end date. Off pauses the code at the till
+  // and in the Velnes app the same second.
+  r.route({
+    method: 'PATCH',
+    url: '/discount-codes/:id',
+    preHandler: [app.authenticate],
+    schema: {
+      params: z.object({ id: z.uuid() }),
+      body: DiscountCodePatchSchema,
+      response: { 200: DiscountCodeRowSchema, 403: Err, 404: Err },
+    },
+    handler: async (req, reply) =>
+      withTenant(req.claims.ten, async (trx) => {
+        if (!(await gate(trx, req.claims, reply))) return reply;
+        const before = await trx.selectFrom('discountCodes').selectAll().where('id', '=', req.params.id).executeTakeFirst();
+        if (!before) return reply.code(404).send({ error: 'NOT_FOUND', message: 'Unknown code' });
+        const row = await trx
+          .updateTable('discountCodes')
+          .set({
+            ...(req.body.active !== undefined ? { active: req.body.active } : {}),
+            ...(req.body.usageLimit !== undefined ? { usageLimit: req.body.usageLimit } : {}),
+            ...(req.body.ends !== undefined ? { ends: new Date(req.body.ends) } : {}),
+          })
+          .where('id', '=', req.params.id)
+          .returningAll()
+          .executeTakeFirstOrThrow();
+        if (req.body.active !== undefined && req.body.active !== before.active)
+          await logAudit(trx, req.claims.ten, {
+            actorEmployeeId: req.claims.sub,
+            actorName: await actorName(trx, req.claims.sub),
+            action: req.body.active ? 'Discount code switched on' : 'Discount code switched off',
+            object: `Code · ${row.code}`,
+            before: before.active ? 'on' : 'off',
+            after: row.active ? 'on' : 'off',
+          });
+        return codeRow(row);
+      }),
+  });
+
+  // Only a code nobody has used may go; a used one stays for the
+  // record and is switched off instead.
+  r.route({
+    method: 'DELETE',
+    url: '/discount-codes/:id',
+    preHandler: [app.authenticate],
+    schema: { params: z.object({ id: z.uuid() }), response: { 200: z.object({ ok: z.literal(true) }), 403: Err, 404: Err, 409: Err } },
+    handler: async (req, reply) =>
+      withTenant(req.claims.ten, async (trx) => {
+        if (!(await gate(trx, req.claims, reply))) return reply;
+        const row = await trx.selectFrom('discountCodes').selectAll().where('id', '=', req.params.id).executeTakeFirst();
+        if (!row) return reply.code(404).send({ error: 'NOT_FOUND', message: 'Unknown code' });
+        if (row.used > 0) return reply.code(409).send({ error: 'IN_USE', message: 'Used codes stay for the record — switch it off instead' });
+        await trx.deleteFrom('discountCodes').where('id', '=', row.id).execute();
+        await logAudit(trx, req.claims.ten, {
+          actorEmployeeId: req.claims.sub,
+          actorName: await actorName(trx, req.claims.sub),
+          action: 'Discount code deleted',
+          object: `Code · ${row.code}`,
+        });
+        return { ok: true as const };
       }),
   });
 

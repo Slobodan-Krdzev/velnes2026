@@ -25,13 +25,43 @@ row-level, not an if-statement. Email verification and team
 invitations mint their tokens now and wait for SMTP, honestly.
 
 **Approval provisions the tenant world in one transaction**: the
-business, a locked Owner role at the widest legal scopes, the owner
-account with the wizard's own password (sign-in works the same
-minute), the legal entity **verified** (the compound decision), the
-location at `APPROVED` — activation stays with the owner, behind the
-readiness gate — and the picked starter services
-(`REG_SERVICE_TEMPLATES`, business-level, online off). Idempotent:
-approving twice returns the same world.
+business, the two standard roles (`standardRoles()` — a locked Owner
+at the widest legal scopes and the basic Employee kit, see
+FOUNDATIONS › Authorization), the owner account with the wizard's own
+password (sign-in works the same minute), the legal entity
+**verified** (the compound decision), the location, and the wizard's
+services and products. Idempotent: approving twice returns the same
+world.
+
+**Approval publishes (2026-09-22).** Alex's rule replaces the
+prototype's "approval does not publish anything": a salon HQ approves
+is bookable on the consumer app the same minute. So activation now
+inserts every wizard service `online`, gives the owner a skill row for
+each of them (the owner delivers what they listed), and then walks the
+location `APPROVED → ACTIVE` through the one lifecycle writer — the readiness gate is the same one an owner
+passes, and the log names the HQ reviewer as actor. `locTransition`
+accepts that claims-less, named-actor call as the one hand besides the
+owner's allowed on the switch; a draft that somehow is not ready (no
+wizard draft is: the schema demands a service) stays `APPROVED` with
+the checklist saying why. Wizard colleagues arrive holding the
+Employee role rather than none. HQ's own create-business door still
+leaves its bare first location at `APPROVED`: it has no catalog to be
+ready with. **No website widget is created**: that is the salon's
+separate product, and the consumer app books through the public doors
+with the salon's own key (`salon:<slug>`, see CONSUMER-APP) — approval
+with live services is all it takes to be on the Velnes app (Alex,
+2026-09-22). Pinned by `registrations.test.ts` (ACTIVE + online, the
+lifecycle log row, no widget, the search projection, the consumer
+salon door answering `bookable: true`, the consumer key opening the
+services door) and the register loop in `e2e/platform.spec.ts`. The publishing itself is one idempotent
+function, `publishSalon()`, and a salon approved before this rule
+existed — APPROVED, services offline — is brought to the same
+state by `pnpm --filter @velnes/api exec tsx
+--env-file-if-exists=../../.env src/db/publish-salon.ts <slug>`, which
+runs the very same function under the tenant and reports what it did.
+The readiness gate's staff item now follows the booking door's rule
+(a bookable member with no skill rows does everything), so the gate
+can no longer refuse a salon the booking page would sell.
 
 ## Revelapps HQ (apps/hq)
 
@@ -384,13 +414,32 @@ The classic wizard now sits on the same flower-pattern sand ground as
 the AI-onboarding screen (shared `OB_PATTERN`), so the two front doors
 feel like one product.
 
-**Categories from HQ.** The salon-type dropdown (step 2) no longer holds
-a hardcoded list — it reads the verticals Revelapps HQ curates. A new
-`business_categories` table (migration 20260906120042) is public-read /
-HQ-write; HQ manages it under Categories → **Business categories** (add,
-rename, enable/disable, super-only), and the anonymous wizard fetches the
-enabled ones from `GET /business-categories`. Disabling a category drops
-it from the wizard while HQ still sees it.
+**The wizard, 2026-09-22.** Step 4 puts the address fields down the
+left — street, number, city, postal code and a **country** with its flag
+(North Macedonia, Albania, Kosovo; `loc.country`, ISO alpha-2, written
+to `locations.country` and `businesses.country` at activation, with the
+postal code to `locations.zip`) — and a squarer map beside them. Step 5
+is two columns, services left and products right, each with its own
+"add" form on top that folds away; a product now carries its **size in
+ml**, **opening stock**, **sell price** and **cost** (`products.cost`,
+`size_amount`/`size_unit`; the opening stock lands on the first
+location's `location_catalog_products.stock` *and* as an `adjustment`
+movement ref `registration`, so the stock room's history starts at the
+truth). Step 6 adds the **salon card photo**: one gallery entry carries
+`card: true`, the consumer app's `cardPhoto()` prefers it over the first
+photograph, and the flag survives Settings › Company edits
+(`GalleryPhotoSchema.card`).
+
+**Categories from HQ.** The salon-type dropdown (step 2) and the
+category a salon files each service under read **one list**: the
+taxonomy HQ curates under Categories (`service_categories`, via the
+public `/service-categories` door). Until 2026-09-22 the Type dropdown
+read a second, separate list (`business_categories`, with its own HQ
+section), and a category added in HQ never reached the wizard — Alex
+chose one list. The HQ **Business categories** section is retired; the
+table and its doors remain for the seeded types already stored on
+businesses, and a draft naming a type that HQ has since renamed keeps
+it selectable rather than silently changing it.
 
 **A real map.** The Location step (step 4) drops the demo grid for a real
 **OpenStreetMap** via Leaflet: click the map or drag the pin to the exact

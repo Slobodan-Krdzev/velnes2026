@@ -278,6 +278,8 @@ export function Shell() {
                             navigate('/support', { state: { ticket: n.refId } });
                           else if (n.kind.startsWith('category'))
                             navigate('/catalog', { state: { tab: 'categories' } });
+                          else if (n.kind.startsWith('booking') && n.refId)
+                            navigate('/calendar', { state: { appointment: n.refId } });
                         }}
                       >
                         <span className="grow" style={{ textAlign: 'left' }}>
@@ -335,15 +337,17 @@ export function Shell() {
                       </span>
                     </span>
                   </div>
-                  <button
-                    className="menu-row"
-                    onClick={() => {
-                      navigate('/settings', { state: { tab: 'team', profile: me.id } });
-                      setEnvMenu(false);
-                    }}
-                  >
-                    {t('shell.settings')}
-                  </button>
+                  {can('users.manage') ? (
+                    <button
+                      className="menu-row"
+                      onClick={() => {
+                        navigate('/settings', { state: { tab: 'team', profile: me.id } });
+                        setEnvMenu(false);
+                      }}
+                    >
+                      {t('shell.settings')}
+                    </button>
+                  ) : null}
                   <div className="menu-sep" />
                   <div className="menu-label">{t('shell.language')}</div>
                   {LANGS.map((l) => (

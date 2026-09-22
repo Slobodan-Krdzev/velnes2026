@@ -4,6 +4,7 @@ import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { closeDb } from '../../db/index.js';
 import { demo } from '../../db/seed-demo.js';
+import { resetAdmittedCache } from '../../public/discovery.routes.js';
 import { buildServer } from '../../server.js';
 
 const ADMIN_URL = (
@@ -104,7 +105,7 @@ describe('registrations and the HQ intake table', () => {
         'audit_log', 'mail_outbox', 'refresh_tokens', 'user_credentials', 'employee_skills',
         'employee_locations', 'legal_entity_locations', 'legal_entities',
         'location_catalog_products', 'products', 'location_lifecycle_log',
-        'locations', 'services', 'employees', 'roles',
+        'widgets', 'locations', 'services', 'employees', 'roles',
       ])
         await admin.query(`DELETE FROM ${t} WHERE tenant_id=$1`, [b]);
       await admin.query(`DELETE FROM businesses WHERE id=$1`, [b]);
@@ -254,15 +255,22 @@ describe('registrations and the HQ intake table', () => {
     });
     expect(meRes.json().tenantId).toBe(newBusinessId);
 
-    // Their world: one APPROVED location (never auto-active), the
-    // picked starter services, and RLS keeping the demo salon out.
+    // Their world: one location already ACTIVE — an approved salon is
+    // bookable the same minute — the picked starter services, and RLS
+    // keeping the demo salon out.
     const locs = await app.inject({
       method: 'GET',
       url: `${API_PREFIX}/locations`,
       headers: { authorization: `Bearer ${login.json().accessToken}` },
     });
     expect(locs.json().locations).toHaveLength(1);
-    expect(locs.json().locations[0].lifecycle).toBe('APPROVED');
+    expect(locs.json().locations[0].lifecycle).toBe('ACTIVE');
+    expect(locs.json().locations[0].online).toBe(true);
+    const step = await admin.query(
+      `SELECT from_state, to_state, reason FROM location_lifecycle_log WHERE tenant_id=$1`,
+      [newBusinessId],
+    );
+    expect(step.rows).toEqual([{ from_state: 'APPROVED', to_state: 'ACTIVE', reason: 'Registration approved' }]);
     const svc = await admin.query(`SELECT name FROM services WHERE tenant_id=$1 ORDER BY sort`, [
       newBusinessId,
     ]);
@@ -270,6 +278,24 @@ describe('registrations and the HQ intake table', () => {
       'Physiotherapy session',
       'Sports massage',
     ]);
+    // Every wizard service is online, and the owner is skilled in all
+    // of them — the readiness gate's two catalog requirements.
+    const online = await admin.query(
+      `SELECT count(*)::int AS n FROM services WHERE tenant_id=$1 AND online AND status='active'`,
+      [newBusinessId],
+    );
+    expect(online.rows[0].n).toBe(2);
+    const skills = await admin.query(
+      `SELECT count(*)::int AS n FROM employee_skills sk
+         JOIN employees e ON e.id = sk.employee_id
+        WHERE sk.tenant_id=$1 AND e.access='owner'`,
+      [newBusinessId],
+    );
+    expect(skills.rows[0].n).toBe(2);
+    // No website widget is made: that is the salon's separate product,
+    // and the consumer app does not need one.
+    const widget = await admin.query(`SELECT id FROM widgets WHERE tenant_id=$1`, [newBusinessId]);
+    expect(widget.rows).toHaveLength(0);
     // The salon's own product, stocked at 0 at the created location.
     const prod = await admin.query(
       `SELECT p.name, lcp.stock FROM products p
@@ -308,11 +334,70 @@ describe('registrations and the HQ intake table', () => {
     expect(team.rows.map((r) => r.name)).toEqual(['Ana Trajkovska', 'Marko Ilievski']);
     expect(team.rows.every((r) => r.status === 'invited' && r.bookable === false)).toBe(true);
     expect(team.rows.every((r) => Number(r.locs) === 1)).toBe(true);
+    // Two standard roles, and both colleagues hold the basic Employee
+    // one: book appointments, take payments, nothing else.
+    const roles = await admin.query(
+      `SELECT name, std, locked FROM roles WHERE tenant_id=$1 ORDER BY name`,
+      [newBusinessId],
+    );
+    expect(roles.rows).toEqual([
+      { name: 'Employee', std: true, locked: false },
+      { name: 'Owner', std: true, locked: true },
+    ]);
+    const held = await admin.query(
+      `SELECT r.name, r.perms FROM employees e JOIN roles r ON r.id = e.role_id
+        WHERE e.tenant_id=$1 AND e.access='staff'`,
+      [newBusinessId],
+    );
+    expect(held.rows.map((r) => r.name)).toEqual(['Employee', 'Employee']);
+    const perms = held.rows[0].perms as Record<string, string>;
+    expect(perms['appointments.create']).toBe('location');
+    expect(perms['pos.checkout']).toBe('location');
+    expect(perms['catalog.view']).toBe('none');
+    expect(perms['customers.view_assigned']).toBe('none');
+    expect(perms['reports.view_own']).toBe('none');
+    expect(perms['users.manage']).toBe('none');
     const invites = await admin.query(
       `SELECT count(*)::int AS n FROM mail_outbox WHERE tenant_id=$1 AND kind='employee_invite'`,
       [newBusinessId],
     );
     expect(invites.rows[0].n).toBe(2);
+  });
+
+  it('the approved salon is on the consumer app at once, bookable, services on offer', async () => {
+    resetAdmittedCache();
+    const biz = await admin.query(`SELECT slug FROM businesses WHERE id=$1`, [newBusinessId]);
+    const salon = await app.inject({
+      method: 'GET',
+      url: `${API_PREFIX}/public/discovery/salons/${biz.rows[0].slug}`,
+    });
+    expect(salon.statusCode).toBe(200);
+    expect(salon.json().bookable).toBe(true);
+    expect(salon.json().locations).toHaveLength(1);
+    // The consumer key opens the booking doors without any widget.
+    const key = salon.json().publishableKey as string;
+    expect(key).toBe(`salon:${biz.rows[0].slug}`);
+    const services = await app.inject({
+      method: 'GET',
+      url: `${API_PREFIX}/public/services?key=${encodeURIComponent(key)}&locationId=${salon.json().locations[0].id}`,
+    });
+    expect(services.statusCode).toBe(200);
+    expect(services.json().services.map((s: { name: string }) => s.name)).toEqual([
+      'Physiotherapy session',
+      'Sports massage',
+    ]);
+    // The widget's own configuration door is not a consumer thing.
+    const cfg = await app.inject({ method: 'GET', url: `${API_PREFIX}/public/widget?key=${encodeURIComponent(key)}` });
+    expect(cfg.statusCode).toBe(404);
+    const cards = await app.inject({ method: 'GET', url: `${API_PREFIX}/public/discovery/salons` });
+    const card = cards.json().salons.find((x: { id: string }) => x.id === newBusinessId);
+    expect(card?.bookable).toBe(true);
+    // The wizard's services are searchable the same minute.
+    const found = await admin.query(
+      `SELECT display FROM search_documents WHERE tenant_id=$1 AND kind='service' ORDER BY display`,
+      [newBusinessId],
+    );
+    expect(found.rows.map((r) => r.display)).toEqual(['Physiotherapy session', 'Sports massage']);
   });
 
   it('runs the New-locations queue: compound review verifies the entity in the same act', async () => {

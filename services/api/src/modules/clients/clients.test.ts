@@ -200,6 +200,50 @@ describe('client users — the consumer account', () => {
     expect(bell.json().unread).toBeGreaterThan(0);
   });
 
+  it('sees the personal offers salons made to them — live ones only', async () => {
+    // The salon made this person a promise: one treatment, one price.
+    const link = await admin.query(
+      `SELECT customer_id FROM client_customer_links WHERE client_user_id=$1`,
+      [clientId],
+    );
+    const customerId = link.rows[0].customer_id as string;
+    const soon = new Date();
+    soon.setDate(soon.getDate() + 30);
+    const gone = new Date();
+    gone.setDate(gone.getDate() - 1);
+    const iso = (d: Date) => d.toISOString().slice(0, 10);
+    const mk = (validUntil: string, status: string, price: number) =>
+      admin.query(
+        `INSERT INTO personal_offers (tenant_id, customer_id, service_id, location_id, special_price, normal_price, valid_until, intent, status)
+         VALUES ($1,$2,$3,$4,$5,1500,$6,'Welcome back!',$7)`,
+        [demo.business, customerId, demo.s2, demo.locAerodrom, price, validUntil, status],
+      );
+    await mk(iso(soon), 'live', 1200);
+    await mk(iso(gone), 'live', 900); // expired by date — not stored, derived
+    await mk(iso(soon), 'cancelled', 800);
+
+    const res = await app.inject({
+      method: 'GET',
+      url: `${C}/me/offers`,
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(res.statusCode).toBe(200);
+    const offers = res.json().offers as { specialPrice: number; normalPrice: number; salon: { slug: string }; locationName: string; serviceName: string; validUntil: string; intent: string }[];
+    expect(offers).toHaveLength(1);
+    expect(offers[0]).toMatchObject({
+      specialPrice: 1200,
+      normalPrice: 1500,
+      validUntil: iso(soon),
+      intent: 'Welcome back!',
+      salon: { slug: 'velnes-fizio' },
+      locationName: 'Aerodrom',
+    });
+    expect(offers[0]!.serviceName.length).toBeGreaterThan(0);
+
+    // A stranger's account sees none of it.
+    await admin.query(`DELETE FROM personal_offers WHERE customer_id=$1`, [customerId]);
+  });
+
   it('lists my appointments across salons, with the salon’s own labels', async () => {
     const res = await app.inject({
       method: 'GET',

@@ -11,6 +11,7 @@ import { ApiError, get, post } from '@velnes/client';
 import { PhoneInput } from '@velnes/ui';
 import { useLocations } from '../../api/queries.js';
 import { useToast } from '../../lib/toast.js';
+import { LocationMap } from '../register/LocationMap.js';
 
 /** The prototype's viewNewLoc: five steps (four when starting from
  *  scratch). Create is one door; submit-to-HQ can ride in the same
@@ -36,6 +37,8 @@ type Draft = {
     rooms: string;
     invPrefix: string;
     country: string;
+    lat: number | null;
+    lng: number | null;
   };
   legalMode: 'existing' | 'new';
   legalId: string | null;
@@ -57,6 +60,7 @@ export function NewLocationWizard({ done }: { done: () => void }) {
     loc: {
       name: '', address: '', city: '', zip: '', phone: '',
       tz: 'Europe/Skopje', rooms: '2', invPrefix: '', country: 'North Macedonia',
+      lat: null, lng: null,
     },
     legalMode: 'existing',
     legalId: null,
@@ -77,7 +81,7 @@ export function NewLocationWizard({ done }: { done: () => void }) {
     5: t('nloc.stepReview'),
   };
   const idx = steps.indexOf(n.step);
-  const setLoc = (k: keyof Draft['loc'], v: string) =>
+  const setLoc = (k: Exclude<keyof Draft['loc'], 'lat' | 'lng'>, v: string) =>
     setN((d) => ({ ...d, loc: { ...d.loc, [k]: v } }));
   const setLegal = (k: keyof Draft['legal'], v: string) =>
     setN((d) => ({ ...d, legal: { ...d.legal, [k]: v } }));
@@ -94,6 +98,8 @@ export function NewLocationWizard({ done }: { done: () => void }) {
       phone: n.loc.phone,
       rooms: Number(n.loc.rooms || 2),
       invPrefix: n.loc.invPrefix,
+      lat: n.loc.lat,
+      lng: n.loc.lng,
       mode: n.mode === 'copy' ? 'copy' : 'scratch',
       srcLocationId: n.mode === 'copy' ? srcId : null,
       copy: n.copy,
@@ -119,7 +125,8 @@ export function NewLocationWizard({ done }: { done: () => void }) {
     }
   };
 
-  const fld = (label: string, key: keyof Draft['loc'], ph?: string) => (
+  type TextKey = Exclude<keyof Draft['loc'], 'lat' | 'lng'>;
+  const fld = (label: string, key: TextKey, ph?: string) => (
     <label className="field">
       <span>{label}</span>
       <input
@@ -240,6 +247,16 @@ export function NewLocationWizard({ done }: { done: () => void }) {
               {fld(t('nloc.tz'), 'tz')}
               {fld(t('nloc.rooms'), 'rooms')}
               {fld(t('nloc.invPrefix'), 'invPrefix', 'DEB-')}
+            </div>
+            {/* The pin: dropped here at creation, the same map the
+                registration wizard uses — the consumer app's map obeys it. */}
+            <div style={{ marginTop: 16, maxWidth: 760 }}>
+              <LocationMap
+                lat={n.loc.lat}
+                lng={n.loc.lng}
+                onPick={(la, ln) => setN((d) => ({ ...d, loc: { ...d.loc, lat: la, lng: ln } }))}
+              />
+              <div className="note">{t('lset.pinNote')}</div>
             </div>
             {foreign ? (
               <div className="note warn" style={{ marginTop: 12, maxWidth: 760 }}>

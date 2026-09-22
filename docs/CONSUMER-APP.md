@@ -44,7 +44,7 @@ subsystem does not exist yet, the surface is simply absent.
 | Treatments, prices, durations | the existing `GET /public/services` (per location) |
 | Open times | the existing `GET /public/availability` — the one availability engine, no second opinion |
 | Open times for a visit | `POST /public/slots` — one answer for the whole visit, however many treatments |
-| Booking (guest) | `POST /public/book` → `confirmChain()` → `confirmBooking()`, the same door the widget uses |
+| Booking (guest) | `POST /public/book` → `confirmChain()` → `confirmBooking()`, the same door the widget uses — with the salon's own key, source `marketplace` |
 | Booking (signed in) | `POST /client/book` → the same `confirmBooking()`, plus the customer link and both notifications |
 | My Velnes | `GET /client/me`, `/me/appointments`, `/me/notifications`, `/me/salons` |
 
@@ -60,9 +60,199 @@ key-free: a consumer browsing many salons has no publishable key, so the
 salon page hands back the salon's own key for the booking doors rather
 than letting the app invent one.
 
+**Requests, and mails with links (2026-09-22).** A salon that confirms
+bookings by hand gets a request, not a booking: the confirmed screen
+says "Request sent", My Velnes shows the appointment as "Awaiting the
+salon", and nobody pays until the salon accepts (SCHEDULING › Booking
+requests). Every Velnes-app booking now leaves a trace beyond the
+calendar: guests ring the salon's bell too, and the customer is mailed
+at every step — booked, requested, accepted (with the payment link),
+declined (with the salon's note). Links are built on
+`CONSUMER_APP_URL` (`.env.example`): a signed-in customer's goes to
+their appointment page, a guest's to `/pay/<id>?t=<token>&s=<salon>`,
+the token an HMAC of the appointment id under the API secret — a
+capability for that one appointment's payment screen, since a guest
+has no account to sign into.
+
+**Pay later (2026-09-22).** Both links open the payment screen with
+the appointment loaded. `/pay/:id` is the same `BookPay` as after Book
+now, fed by the quote instead of route state: a guest's link carries
+the token and the salon slug, a signed-in client's bare id goes
+through their session. A link opened too early (the salon has not
+accepted), too late (cancelled) or twice (already paid) says so
+instead of showing a form. The client's appointment page (My Velnes ›
+Appointments › one appointment) shows "Pay now · amount" while a
+booked appointment is unpaid, and "Paid online" once it is —
+`GET /client/me/appointments` now carries `paid`, read from the
+appointment's own `paid` column, which the online payment sets.
+
+**Phone and tablet chrome (2026-09-22).** Below 900px the top bar (the
+mark, the business link) and the bottom tab bar are rendered once,
+above the routes (`app/MobileChrome.tsx`), fixed, on every screen —
+salon page, booking steps, payment, account, sign-in included; the
+pages' own context bars (a salon's back-and-name, the results search,
+the account title) sit under the top bar and stay sticky there, and
+the salon's Book-now bar rides above the tab bar. The tab bar's
+active tab follows the route; nothing is active on a salon page or a
+booking step. Full-screen sheets (search, map, location prompt) still
+cover the chrome. The pages no longer carry their own tab bars.
+
+**Newest to Velnes (2026-09-23).** A second slider under "Recommended":
+`GET /discovery/newest` returns the open, listed salons whose business
+was created within the last `NEWEST_SALON_DAYS` (30 — for a registered
+salon that is the moment HQ approved it), newest first, up to eight,
+each with its `joinedAt`. The card's line says "Joined N days ago" (or
+"Joined today"); the row is hidden when no salon is that new. Pinned by
+`public/newest.test.ts`.
+
+**Sliding rows (2026-09-23).** The home page's "Recommended" and
+"Available now near you" rows are sliders, not four-card grids:
+`features/discovery/Rail.tsx` wraps a horizontal track, its arrows
+scroll the track a view at a time and never leave the page (the old
+arrow opened the results screen — Alex: "the arrows on the swipers
+should swipe the slider"), an arrow greys out at its end, and the mouse
+wheel pushes the row through the same `useWheelScroll` hook the
+category shelf uses (a wheel that is already scrolling the page passes
+through; a rail at its end hands the rest back). The phone's
+"Recommended" row is swiped and takes the wheel too. The row shows
+every salon the door recommends (up to eight), not the first four.
+Pinned by `Rail.test.tsx`.
+
+**Recommended for you (2026-09-23).** The home page's "Recommended"
+row is no longer the first four listed salons. `GET
+/discovery/recommended` (optional viewer token, optional `lat/lng`)
+answers three ways and says which: `history` — a signed-in viewer who
+allows personalisation is scored from the same `viewerHistory` the
+search ranker reads (a favourite salon or pro +3, a salon they have
+completed a visit at +2 with a 120-day recency fade, the categories
+they book or favourite elsewhere +1.5/+1, closeness within 15 km up to
++1); `nearby` — a guest, or a viewer with personalisation off, gets
+the open salons around their position; `default` — no viewer and no
+position leaves the listed order as it is. Every card carries a
+`reason` (`booked`, `favourite`, `category`, `nearby`) that the card
+says out loud, so a recommendation is never a mystery. Pinned by
+`discovery/recommended.test.ts`.
+
+**Available now near you (2026-09-23).** The home page's "Available
+near you" became "Available now near you": it asks the search door for
+*now* alone (`POST /discovery/search` with `q: 'now'`, the same
+now-mode the results page and the "Available now" chip use) and shows
+the treatments whose `availableAt` — a start within the next half
+hour, from the booking gate itself — is set, sorted by distance from
+the viewer's position when one is known, else in the door's own
+order with a line saying location would sort it. Each card's slot
+button books that very start (`?service=&date=&time=`); with nothing
+startable the whole section is absent, and reappears on its own as
+soon as the door has something (Alex, 2026-09-23). The earlier cards read a
+salon's *first* treatment and today's first slots, which was a claim
+about the wrong treatment.
+
+**Velnes Premium, explained (2026-09-22).** `/premium`
+(`features/premium/Premium.tsx`) tells a customer what membership is
+in their terms — the first window on last-minute offers, ×1.5 loyalty
+at every salon, honest member prices, one membership everywhere — and
+says plainly that joining is not open yet (nothing is drawn that does
+nothing). Linked from the home footer's "Membership" and a card on My
+Velnes' overview. The rules quoted are the platform's real ones
+(`PREMIUM_RULES`, `PREMIUM_LOYALTY_MULT`, the offer phases); sign-up
+and billing stay deferred. Related: the workspace flightdeck no longer
+shows the members-first "fill capacity" hero to a salon with no
+Premium members (it would have read "0 members get first access").
+
+**Option groups (2026-09-22).** The salon page now shows a service's
+option groups under it once it is in the visit — a "one choice" group
+and a "stackable" one alike as tappable cards, each option with its
+± price and ± minutes, required groups marked and turning amber until
+answered. The chosen options add to the line's price and time on the
+page, ride along in the slots request (so the day is offered for the
+real duration) and in the booking (`modifierOptionIds`), so the
+calendar block, the till line and the invoice carry them. Book now is
+held while a required group is unanswered and says which one — the
+door's `MISSING_REQUIRED` can no longer be hit from the app.
+
+**Paying (2026-09-22).** After Book now the screen switches to the
+payment section (`/book/pay`, `features/booking/pay.tsx`): the visit,
+one field for the salon's own promo code or gift card (both may
+apply; the discount is shown and charged), and three ways to pay —
+Card and Pay at the venue in the app's styling, Apple Pay in Apple's
+own black button. The full price is charged; deposits stay deferred.
+A guest pays with the `payToken` the booking handed back (an HMAC
+capability for that one appointment) through `POST /public/pay/quote`
+and `POST /public/pay`; a signed-in client through `POST /client/pay/
+quote` and `POST /client/pay` under their own session, which also
+rings their bell. Both doors run `quotePayment` / `payAppointment`
+(`modules/payments`): a request that the salon has not accepted yet is
+refused (`NOT_PAYABLE`), a paid visit is never charged twice
+(`ALREADY_PAID`), a bad code is named (`BAD_CODE`), the mock provider's
+decline is `CARD_DECLINED`. A payment is a real sale in the till (TILL
+› Online payment is a sale) — invoice, transaction, codes redeemed —
+so the salon's calendar, till and reports all see it; pay at the venue
+records the choice in the history and leaves the till to collect. The
+salon's bell rings on payment and the customer gets a receipt mail.
+The confirmed screen then says paid (card, invoice number) or booked
+with payment at the salon. Pinned by `payments.test.ts`. The mock is
+labelled on screen ("test mode") so nobody mistakes it for money.
+
+**Saved cards (2026-09-22).** A signed-in client who ticks "Save this
+card" while paying keeps it on the account: `client_payment_methods`
+holds the brand, the last four digits, the expiry, the name and the
+provider's token — never the number, which only ever crossed the wire
+to the (mock) provider. Next time the pay screen offers the saved card
+first ("Use Visa ••4242"), with a way to use another; `POST
+/client/pay` charges a `savedCardId` through the token, refuses an
+expired one, and saves a new card only when asked and only once (same
+last four + expiry). My Velnes › Payment methods lists and forgets
+them (`GET`/`DELETE /client/me/cards`). A guest never saves a card,
+whatever the request says. Private to the client by RLS
+(`app.client_id`), readable by HQ for support. Pinned by
+`cards.test.ts`.
+
+**No widget needed (2026-09-22).** That key is `salon:<slug>`
+(`consumerKey()` in `@velnes/contracts`), not a widget's publishable
+key. The public doors resolve it to a virtual row over the salon's
+ACTIVE locations (`consumerRow()` in `public.routes.ts`): no domain
+list, no widget attribution, source `marketplace`, and the widget's
+own configuration door refuses it. Admission to discovery is the
+ACTIVE location alone — Alex's rule: the website booking widget is a
+separate product not every salon will have, so a salon HQ approved
+with live services is on the Velnes app whether or not it ever buys
+one. Pinned in `discovery.test.ts` (a widget set to draft changes
+nothing), `suggest.test.ts`, and `registrations.test.ts` (a freshly
+approved salon, no widget row at all, answers the services door).
+
 A salon appears only if it publishes a marketplace listing, and the page
 honors the switches the salon already owns (`showTeam`, `showPrices`).
 Turning `listed` off removes it from results and 404s its page — tested.
+
+## Offers for you
+
+A salon's **personal offer** (Phase 9: one customer, one treatment, a
+pinned price, a date) now reaches the customer: `GET /client/me/offers`
+walks the client's salon links and returns, from each salon's own
+context, the live offers for that salon's customer row — salon,
+location, treatment, your price against the normal price, until when,
+and the salon's own words. The profile overview shows them as
+**Offers for you**, soonest to expire first, each with *Book at this
+price*, which opens the salon page on that treatment at that location;
+there the treatment shows *Your price*, and the visit total uses it,
+so the quote is what the booking door charges — it already prices by
+customer and stamps the promise on the appointment. Redeemed, expired
+and cancelled offers stay the salon's history and are not shown.
+
+## Three languages
+
+The app speaks English, Macedonian and Albanian like every other
+Velnes app — `c.*` keys in `@velnes/i18n`, English kept verbatim from
+the prototype. The language follows the account when signed in
+(`client_users.lang`), else the browser's last choice, else the
+browser's own language; a pill in the header and the footer changes
+it. Salon-authored words (treatment names, descriptions) never
+translate, and neither do proper names (countries in the phone
+picker, the social links). Refusals from the booking doors are said
+in the app's language by code (`refusal.*`), English being the
+fallback. Dates on the salon page and in the date picker use keyed
+day and month names. Details in `docs/I18N.md`; the MK/SQ wording is
+the assistant's and, as elsewhere, awaits a native read.
 
 ## Booking
 
@@ -70,7 +260,8 @@ Selection happens on the salon page (location → treatment → option →
 professional → day → time); identity is collected in two steps, then the
 booking goes through `POST /public/book`. It creates or links a
 per-tenant `customers` row exactly as the booking page does today, and
-lands in the salon's calendar attributed to its widget.
+lands in the salon's calendar as source `marketplace` — no widget is
+involved.
 
 Two decisions worth recording:
 

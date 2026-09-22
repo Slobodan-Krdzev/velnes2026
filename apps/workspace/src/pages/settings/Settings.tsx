@@ -19,7 +19,7 @@ import {
 import { I, Icon, PhoneInput } from '@velnes/ui';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { z } from 'zod';
 import { api, get, patch, post } from '@velnes/client';
 import { useEmployees, useLocationCatalog, useLocations } from '../../api/queries.js';
@@ -120,6 +120,10 @@ export function SettingsPage() {
   // The full log opened from Team & access carries a way back; the
   // same section reached through the nav does not need one.
   const [auditFromTeam, setAuditFromTeam] = useState(false);
+
+  // Nothing here is theirs to see — a basic Employee typing /settings —
+  // so the page does not fall back to General; the calendar is home.
+  if (!first) return <Navigate to="/calendar" replace />;
 
   return (
     <>

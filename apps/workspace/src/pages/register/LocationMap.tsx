@@ -26,10 +26,14 @@ export function LocationMap({
   lat,
   lng,
   onPick,
+  square = false,
 }: {
   lat: number | null;
   lng: number | null;
   onPick: (lat: number, lng: number) => void;
+  /** Beside the address fields rather than under them: a squarer map
+   *  that fills its column (Alex, 2026-09-22). */
+  square?: boolean;
 }) {
   const { t } = useTranslation();
   const boxRef = useRef<HTMLDivElement | null>(null);
@@ -115,7 +119,11 @@ export function LocationMap({
         ref={boxRef}
         role="application"
         aria-label={t('reg.pinHint')}
-        style={{ height: 300, borderRadius: 14, overflow: 'hidden', border: '1px solid var(--line)' }}
+        style={
+          square
+            ? { aspectRatio: '1 / 1', minHeight: 320, maxHeight: 440, borderRadius: 14, overflow: 'hidden', border: '1px solid var(--line)' }
+            : { height: 300, borderRadius: 14, overflow: 'hidden', border: '1px solid var(--line)' }
+        }
       />
       <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
         {/* Device precision: the exact spot beats a dragged guess, and

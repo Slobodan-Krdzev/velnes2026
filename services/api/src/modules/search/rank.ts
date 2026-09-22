@@ -20,7 +20,7 @@ export interface RankSalon {
   name: string;
   lat: number | null;
   lng: number | null;
-  /** A live widget exists, so the booking doors answer for it. */
+  /** An ACTIVE location exists, so the booking doors answer for it. */
   bookable: boolean;
   /** ISO date; drives the new-salon window. */
   createdAt: string;
@@ -229,7 +229,7 @@ export function rank(
     const components: Record<string, number> = {};
 
     // Real when the request asked for now: a start within the half
-    // hour is 1, none is 0. Otherwise the old proxy — a live widget.
+    // hour is 1, none is 0. Otherwise the old proxy — an open location.
     components.availability =
       c.availableAt !== undefined ? (c.availableAt ? 1 : 0) : c.salon.bookable ? 1 : 0;
 

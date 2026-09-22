@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { t } from '../../lib/i18n-core.js';
 import { useNavigate } from 'react-router-dom';
 import {
   useAvailability,
@@ -13,7 +14,8 @@ import {
   useFavourites,
   useSession,
 } from '../../lib/api/session.js';
-import type { FavouriteKind } from '@velnes/contracts';
+import type { DiscoveryServiceCard, FavouriteKind } from '@velnes/contracts';
+import { distanceLbl } from '../../lib/geo.js';
 
 /* Icons lifted from the prototype's SVG map — exact markup. */
 export const IcArr = (
@@ -115,8 +117,8 @@ export function FavHeart({
     <button
       className={on ? `${className} on` : className}
       aria-pressed={on}
-      aria-label={on ? `Remove ${label} from favourites` : `Save ${label} to favourites`}
-      title={failed ? 'Could not save that — try again' : undefined}
+      aria-label={on ? t('c.fav.remove', { name: label }) : t('c.fav.save', { name: label })}
+      title={failed ? t('c.fav.failed') : undefined}
       onClick={(e) => {
         e.stopPropagation();
         e.preventDefault();
@@ -156,9 +158,26 @@ export function SalonCard({ s }: { s: SalonVM }) {
         <div className="rrow2">
           <span>{s.city}</span>
         </div>
+        {s.reason ? <div className="rwhy">{reasonLbl(s.reason)}</div> : null}
       </div>
     </article>
   );
+}
+
+/** The reason under a recommended salon, in the viewer's language. */
+function reasonLbl(r: NonNullable<SalonVM['reason']>): string {
+  switch (r.kind) {
+    case 'booked':
+      return t('c.reco.booked');
+    case 'favourite':
+      return t('c.reco.favourite');
+    case 'category':
+      return t('c.reco.category', { cat: r.category });
+    case 'nearby':
+      return t('c.res.fromYou', { d: distanceLbl(r.km) });
+    case 'new':
+      return r.days < 1 ? t('c.reco.joinedToday') : t('c.reco.joinedDays', { n: r.days });
+  }
 }
 
 /** "Available near you" — live data end to end: the salon's first online
@@ -189,7 +208,7 @@ export function NearYouD({ s }: { s: SalonVM }) {
           {s.name} · {s.city}
         </div>
         <div className="from">
-          from <b>{fmtMKD(from)}</b>
+          {t('c.cards.from')} <b>{fmtMKD(from)}</b>
         </div>
         <div className="slotrow">
           {slots.map((t) => (
@@ -233,7 +252,7 @@ export function NearYouM({ s }: { s: SalonVM }) {
             {s.name} · {s.city}
           </span>
           <span className="from">
-            from <b>{fmtMKD(from)}</b>
+            {t('c.cards.from')} <b>{fmtMKD(from)}</b>
           </span>
         </div>
         <div className="slotrow" style={{ marginTop: '7px' }}>
@@ -291,13 +310,13 @@ function MostChosenPanel({ onOpen }: { onOpen: (slug: string) => void }) {
   const cats = data?.categories ?? [];
   if (!cats.length) return null;
   return (
-    <div className="sugg" id="d-sugg" role="listbox" aria-label="Most chosen">
+    <div className="sugg" id="d-sugg" role="listbox" aria-label={t('c.cards.mostChosen')}>
       <div className="h">
         <span className="spark" style={{ display: 'inline-flex', gap: '7px', alignItems: 'center' }}>
           {IcSpark}
-          <span style={{ color: 'var(--ink)' }}>Velnes thinks along with you</span>
+          <span style={{ color: 'var(--ink)' }}>{t('c.cards.thinks')}</span>
         </span>
-        <span className="tiny-tag">Most chosen</span>
+        <span className="tiny-tag">{t('c.cards.mostChosen')}</span>
       </div>
       {cats.slice(0, 4).map((c) => (
         <button
@@ -354,10 +373,10 @@ export function SugPanelD({
   };
 
   return (
-    <div className="sugg" id="d-sugg" role="listbox" aria-label="Suggestions">
+    <div className="sugg" id="d-sugg" role="listbox" aria-label={t('c.cards.suggestions')}>
       {loading && !items.length ? (
         <div className="sug-foot" style={{ justifyContent: 'flex-start' }}>
-          <span className="sm muted">Looking…</span>
+          <span className="sm muted">{t('c.cards.looking')}</span>
         </div>
       ) : null}
 
@@ -365,7 +384,7 @@ export function SugPanelD({
         <div className="h">
           <span className="spark" style={{ display: 'inline-flex', gap: '7px', alignItems: 'center' }}>
             {IcSpark}
-            <span style={{ color: 'var(--ink)' }}>Velnes thinks along with you</span>
+            <span style={{ color: 'var(--ink)' }}>{t('c.cards.thinks')}</span>
           </span>
         </div>
       ) : null}
@@ -401,7 +420,7 @@ export function SugPanelD({
             <span className="ph" style={{ backgroundImage: 'var(--im)' }}></span>
             <span>
               <b>{sv.name}</b>
-              <span className="sm muted">at {sv.salonName}</span>
+              <span className="sm muted">{t('c.cards.at', { salon: sv.salonName })}</span>
             </span>
             <span className="btn btn-g" style={{ minHeight: '42px' }}>
               Book {IcArr}
@@ -426,11 +445,11 @@ export function SugPanelD({
               <b>{sa.name}</b>
               <span className="sm muted" style={{ display: 'inline-flex', gap: '6px', alignItems: 'center', marginTop: '4px' }}>
                 <span className="vok">{IcVok}</span>
-                {sa.city ?? 'Book directly at this salon'}
+                {sa.city ?? t('c.cards.bookDirect')}
               </span>
             </span>
             <span className="btn btn-g" style={{ minHeight: '42px' }}>
-              View salon {IcArr}
+              {t('c.cards.viewSalon')} {IcArr}
             </span>
           </button>
         );
@@ -439,7 +458,7 @@ export function SugPanelD({
       {empty ? (
         <div className="sug-foot" style={{ justifyContent: 'flex-start' }}>
           <span className="sm muted">
-            Nothing matched &ldquo;{q.trim()}&rdquo; — try a treatment, or a salon name.
+            {t('c.cards.nothingMatched', { q: q.trim() })}
           </span>
         </div>
       ) : null}
@@ -448,11 +467,11 @@ export function SugPanelD({
         <div className="sug-foot">
           <span style={{ display: 'inline-flex', gap: '6px', alignItems: 'center' }}>
             <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: 'var(--ok)' }}></span>
-            Every option is live &amp; bookable
+            {t('c.cards.live')}
           </span>
           <span style={{ display: 'inline-flex', gap: '6px', alignItems: 'center' }} className="spark">
             {IcSpark}
-            <span className="muted">No match? We&rsquo;ll show smart alternatives.</span>
+            <span className="muted">{t('c.cards.noMatch')}</span>
           </span>
         </div>
       ) : null}
@@ -472,7 +491,7 @@ function MostChosenListM({ onOpen }: { onOpen: (slug: string) => void }) {
         <span className="spark" style={{ display: 'inline-flex', gap: '7px', alignItems: 'center', color: 'var(--ink)', fontWeight: '700' }}>
           {IcSpark}Velnes thinks along with you
         </span>
-        <span className="tiny-tag">Most chosen</span>
+        <span className="tiny-tag">{t('c.cards.mostChosen')}</span>
       </div>
       {cats.slice(0, 4).map((c) => (
         <button
@@ -524,9 +543,9 @@ export function SugListM({
   };
 
   return (
-    <div className="list" role="listbox" aria-label="Suggestions">
+    <div className="list" role="listbox" aria-label={t('c.cards.suggestions')}>
       {loading && !items.length ? (
-        <div className="sm muted" style={{ padding: '6px 0' }}>Looking…</div>
+        <div className="sm muted" style={{ padding: '6px 0' }}>{t('c.cards.looking')}</div>
       ) : null}
 
       {data.categories.length ? (
@@ -544,8 +563,8 @@ export function SugListM({
             <span>
               <b>{c.name}</b>
               <span className="sm muted">
-                {c.salonCount} {c.salonCount === 1 ? 'salon' : 'salons'} ·{' '}
-                <span className="avail" style={{ fontSize: '12px' }}>instantly bookable</span>
+                {c.salonCount === 1 ? t('c.cards.salonOne', { n: c.salonCount }) : t('c.cards.salonMany', { n: c.salonCount })} ·{' '}
+                <span className="avail" style={{ fontSize: '12px' }}>{t('c.cards.instantly')}</span>
               </span>
             </span>
           </button>
@@ -585,7 +604,7 @@ export function SugListM({
             <span>
               <b>{sa.name}</b>
               <span className="sm muted" style={{ display: 'block', marginTop: '4px' }}>
-                {sa.city ?? 'Book directly at this salon'}
+                {sa.city ?? t('c.cards.bookDirect')}
               </span>
             </span>
           </button>
@@ -598,5 +617,105 @@ export function SugListM({
         </div>
       ) : null}
     </div>
+  );
+}
+
+
+/* ── "Available now near you" — a treatment that can start within the
+   next half hour, from the search door's own now-mode answer, nearest
+   first (Alex, 2026-09-23). The slot button books that very start. ── */
+export interface NowNear {
+  s: DiscoveryServiceCard;
+  /** Distance from the viewer, null when no position is known. */
+  km: number | null;
+}
+
+function nowNearBits(n: NowNear) {
+  const today = new Date().toISOString().slice(0, 10);
+  const price = n.s.price != null ? Math.min(n.s.price, n.s.priceFrom ?? n.s.price) : null;
+  const at = n.s.availableAt ?? null;
+  return {
+    today,
+    price,
+    at,
+    href: `/salon/${n.s.salon.slug}?service=${encodeURIComponent(n.s.id)}`,
+    slotHref: at ? `/salon/${n.s.salon.slug}?service=${encodeURIComponent(n.s.id)}&date=${today}&time=${at}` : null,
+    away: n.km == null ? null : t('c.res.fromYou', { d: distanceLbl(n.km) }),
+  };
+}
+
+export function NowNearD({ n }: { n: NowNear }) {
+  const nav = useNavigate();
+  const b = nowNearBits(n);
+  return (
+    <article className="card ac">
+      <div className="ph" style={{ backgroundImage: n.s.salon.photo ? `url("${n.s.salon.photo}")` : 'var(--ih)' }}></div>
+      <div className="bd">
+        <h3>{n.s.name}</h3>
+        <div className="meta">
+          {n.s.salon.name}
+          {n.s.salon.city ? ` · ${n.s.salon.city}` : ''}
+          {b.away ? ` · ${b.away}` : ''}
+        </div>
+        {b.price != null ? (
+          <div className="from">
+            {t('c.cards.from')} <b>{fmtMKD(b.price)}</b>
+          </div>
+        ) : null}
+        <div className="slotrow">
+          {b.slotHref ? (
+            <button className="slot-s" onClick={() => nav(b.slotHref!)}>
+              {t('c.home.nowAt', { t: b.at })}
+            </button>
+          ) : null}
+        </div>
+        <button
+          className="btn btn-g"
+          style={{ minHeight: '38px', padding: '6px 14px', fontSize: '13.5px', marginTop: '7px', width: '100%' }}
+          onClick={() => nav(b.href)}
+        >
+          {t('c.res.viewBook')} {IcArr}
+        </button>
+      </div>
+    </article>
+  );
+}
+
+export function NowNearM({ n }: { n: NowNear }) {
+  const nav = useNavigate();
+  const b = nowNearBits(n);
+  return (
+    <article className="card m-venue" style={{ gridTemplateColumns: '96px 1fr' }}>
+      <div className="ph" style={{ backgroundImage: n.s.salon.photo ? `url("${n.s.salon.photo}")` : 'var(--ih)' }}></div>
+      <div>
+        <h3 style={{ fontSize: '15px' }}>{n.s.name}</h3>
+        <div className="meta">
+          <span>
+            {n.s.salon.name}
+            {n.s.salon.city ? ` · ${n.s.salon.city}` : ''}
+            {b.away ? ` · ${b.away}` : ''}
+          </span>
+          {b.price != null ? (
+            <span className="from">
+              {t('c.cards.from')} <b>{fmtMKD(b.price)}</b>
+            </span>
+          ) : null}
+        </div>
+        <div className="slotrow" style={{ marginTop: '7px' }}>
+          {b.slotHref ? (
+            <button className="slot-s" onClick={() => nav(b.slotHref!)}>
+              {t('c.home.nowAt', { t: b.at })}
+            </button>
+          ) : null}
+        </div>
+        <button
+          className="btn btn-g"
+          style={{ minHeight: '38px', padding: '6px 14px', fontSize: '13.5px', marginTop: '8px' }}
+          onClick={() => nav(b.href)}
+        >
+          {t('c.res.viewBook')} {IcArr}
+        </button>
+      </div>
+    </article>
   );
 }

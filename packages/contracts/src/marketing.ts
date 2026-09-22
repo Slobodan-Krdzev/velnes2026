@@ -138,15 +138,46 @@ export const PremiumOfferSchema = z.object({
 });
 export const PremiumOfferListSchema = z.object({ offers: z.array(PremiumOfferSchema) });
 
+export const DiscountCodeTypeSchema = z.enum(['Percentage', 'Fixed amount']);
+
 export const DiscountCodeRowSchema = z.object({
   id: z.uuid(),
   code: z.string(),
-  type: z.string(),
+  type: DiscountCodeTypeSchema,
   value: z.number(),
   used: z.number().int(),
   usageLimit: z.number().int().nullable(),
   starts: z.iso.date(),
   ends: z.iso.date(),
-  status: z.enum(['Active', 'Scheduled', 'Expired']),
+  /** The owner's switch — off pauses the code everywhere at once. */
+  active: z.boolean(),
+  status: z.enum(['Active', 'Scheduled', 'Expired', 'Off']),
 });
 export const DiscountCodeListSchema = z.object({ codes: z.array(DiscountCodeRowSchema) });
+
+/** A new code: upper-cased, letters/digits/dashes, a window, an optional cap. */
+export const DiscountCodeCreateSchema = z
+  .object({
+    code: z
+      .string()
+      .trim()
+      .min(3)
+      .max(24)
+      .regex(/^[A-Za-z0-9-]+$/, 'Letters, digits and dashes only')
+      .transform((c) => c.toUpperCase()),
+    type: DiscountCodeTypeSchema,
+    value: z.number().int().positive(),
+    starts: z.iso.date(),
+    ends: z.iso.date(),
+    usageLimit: z.number().int().positive().nullable().default(null),
+  })
+  .refine((c) => c.type !== 'Percentage' || c.value <= 100, { message: 'A percentage cannot exceed 100', path: ['value'] })
+  .refine((c) => c.ends >= c.starts, { message: 'The end date is before the start', path: ['ends'] });
+export type DiscountCodeCreate = z.infer<typeof DiscountCodeCreateSchema>;
+
+export const DiscountCodePatchSchema = z.object({
+  active: z.boolean().optional(),
+  usageLimit: z.number().int().positive().nullable().optional(),
+  ends: z.iso.date().optional(),
+});
+export type DiscountCodePatch = z.infer<typeof DiscountCodePatchSchema>;

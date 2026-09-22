@@ -112,10 +112,13 @@ describe('the new-location door', () => {
       method: 'POST',
       url: `${API_PREFIX}/locations`,
       headers: { authorization: `Bearer ${ownerToken}` },
-      payload: { ...base, name: 'Vodno', mode: 'scratch', srcLocationId: null },
+      payload: { ...base, name: 'Vodno', mode: 'scratch', srcLocationId: null, lat: 41.9631, lng: 21.3933 },
     });
     const l = LocationSchema.parse(res.json());
     made.push(l.id);
+    // The pin dropped at creation is stored — the consumer app's map obeys it.
+    expect(l.lat).toBe(41.9631);
+    expect(l.lng).toBe(21.3933);
     const active = await admin.query(
       `SELECT COUNT(*) FILTER (WHERE active) AS on, COUNT(*) AS total
        FROM location_catalog_services WHERE location_id=$1`,

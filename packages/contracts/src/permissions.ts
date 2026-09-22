@@ -132,3 +132,43 @@ export const RoleWriteSchema = z.object({
   perms: PermMapSchema,
 });
 export type RoleWrite = z.infer<typeof RoleWriteSchema>;
+
+/**
+ * The two standard roles every tenant is born with (Alex, 2026-09-22):
+ * an Owner, and a basic Employee who books appointments and runs the
+ * till at their own location — nothing else. Owners may add roles;
+ * these two are the floor.
+ */
+export function ownerPermMap(): PermMap {
+  return Object.fromEntries(PERM_KEYS.map((k) => [k, scopeChoices(k).at(-1) ?? 'none'])) as PermMap;
+}
+
+/** Every key spelled out, so a role never says "missing" where it means "none". */
+export function fullPermMap(o: PermMap): PermMap {
+  return Object.fromEntries(PERM_KEYS.map((k) => [k, o[k] ?? 'none'])) as PermMap;
+}
+
+export function employeePermMap(): PermMap {
+  return fullPermMap({
+    'appointments.view_own': 'own',
+    'appointments.create': 'location',
+    'appointments.edit': 'location',
+    'appointments.cancel': 'location',
+    'pos.checkout': 'location',
+  });
+}
+
+export const STANDARD_ROLES = {
+  owner: {
+    name: 'Owner',
+    locked: true,
+    description: 'Everything, everywhere. The account itself.',
+    perms: ownerPermMap,
+  },
+  employee: {
+    name: 'Employee',
+    locked: false,
+    description: 'Books appointments and runs the till at their location. Nothing else.',
+    perms: employeePermMap,
+  },
+} as const;

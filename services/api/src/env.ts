@@ -18,6 +18,10 @@ export const env = {
   /** 'mock' until the provider is decided (likely Resend): mails land
    *  in the outbox stamped mock_sent, nothing leaves the building. */
   mailTransport: process.env.MAIL_TRANSPORT ?? 'mock',
+  /** Where the consumer app lives — the base of every link a mail or a
+   *  notification hands a customer (their appointment, the payment
+   *  screen). Dev: the Vite server. */
+  consumerAppUrl: (process.env.CONSUMER_APP_URL ?? 'http://localhost:5178').replace(/\/+$/, ''),
   /** Where the flightdeck's opportunities and Kumo insight come from.
    *  'rules' (default) derives them from the salon's own data — real,
    *  honest, no external call. 'claude' hands the same job to the

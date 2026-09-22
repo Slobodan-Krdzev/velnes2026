@@ -830,3 +830,276 @@ a.pop-go:hover {
   padding: 6px 14px;
   font-size: 13px;
 }
+
+/* ── The language pill (LangMenu.tsx) ───────────────────────────────
+   Every other Velnes app switches language from its shell header; the
+   consumer app's prototype had none, so this borrows the header's
+   ghost-button look and the suggestion menu's list. */
+.langmenu {
+  position: relative;
+  display: inline-flex;
+}
+.langbtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 36px;
+  padding: 6px 10px;
+  border: 1px solid var(--line-soft);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.langbtn:hover {
+  background: var(--warm);
+}
+.langlist {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 60;
+  min-width: 160px;
+  display: grid;
+  padding: 6px;
+  background: #fff;
+  border: 1px solid var(--line-soft);
+  border-radius: 14px;
+  box-shadow: 0 14px 34px rgba(45, 26, 18, 0.16);
+}
+.langopt {
+  text-align: left;
+  padding: 9px 12px;
+  border: 0;
+  border-radius: 10px;
+  background: none;
+  font: inherit;
+  font-size: 13.5px;
+  color: var(--ink);
+  cursor: pointer;
+}
+.langopt:hover {
+  background: var(--warm);
+}
+.langopt.on {
+  font-weight: 700;
+  color: var(--brand);
+}
+/* In the phone footer the pill sits on the dark ground. */
+.m-foot .langbtn,
+.d-foot .langbtn {
+  background: transparent;
+  color: inherit;
+  border-color: rgba(255, 249, 247, 0.35);
+}
+.m-foot .langlist,
+.d-foot .langlist {
+  bottom: calc(100% + 6px);
+  top: auto;
+}
+
+/* The language row on the profile page: shaped like the section rows
+   above it, with the pill where their chevron sits. */
+.acc-menu > .acc-lang {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 11px 16px;
+  border-top: 1px solid var(--line-soft);
+  font-size: 14.5px;
+  font-weight: 700;
+  color: var(--ink);
+}
+.acc-chips .langmenu {
+  flex: 0 0 auto;
+}
+.acc-chips .langbtn {
+  min-height: 34px;
+  padding: 5px 11px;
+  font-size: 13px;
+}
+
+/* The three languages in the open, as chips (LangMenu inline). */
+.langseg {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.langseg-opt {
+  min-height: 32px;
+  padding: 5px 11px;
+  border: 1px solid var(--line-soft);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--ink);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.langseg-opt:hover {
+  background: var(--warm);
+}
+.langseg-opt.on {
+  background: var(--brand);
+  border-color: var(--brand);
+  color: #fff;
+}
+
+/* The phone's language card lives in the overview pane; the desktop
+   sidebar has its own row. */
+@media (min-width: 1024px) {
+  .acc-lang-m {
+    display: none;
+  }
+}
+
+/* ── Guest identity step, desktop: two columns, centred ─────────────
+   The booking summary on the left, "who is this for" + email + Continue
+   on the right, the pair centred in the viewport. Phones and tablets
+   keep the single column the prototype drew. */
+@media (min-width:1024px){
+  .authwrap.authwrap-split{max-width:980px;display:grid;grid-template-columns:1fr 1fr;
+    column-gap:56px;align-items:center;min-height:calc(100vh - 90px);padding-top:24px}
+  .authwrap-split .auth-info .minisum{margin-bottom:0}
+  .authwrap-split .auth-form>.fld:first-child{margin-top:0}
+}
+
+/* ── Payment section ──────────────────────────────────────────────── */
+.pay-code{display:flex;gap:8px}
+.pay-code .tin{flex:1;min-width:0}
+.pay-code .btn{min-height:50px;padding-inline:18px;white-space:nowrap}
+.minisum .r.pay-disc .k{color:#3E5A34}
+.minisum .r.pay-disc .v{color:#3E5A34}
+.minisum .r.pay-disc small{color:var(--muted);font-weight:500}
+.minisum .r.pay-total{margin-top:6px;padding-top:8px;border-top:1px solid var(--line);font-size:15px}
+.minisum .r.pay-total .k{color:var(--ink);font-weight:700}
+.pay-x{background:none;border:0;padding:0 0 0 6px;font:inherit;font-size:12px;color:var(--muted);text-decoration:underline;cursor:pointer}
+.pay-methods{display:grid;grid-template-columns:1fr;gap:10px;margin-top:6px}
+@media (min-width:700px){.pay-methods{grid-template-columns:1fr 1fr 1fr}}
+.pay-methods .fwopt{justify-content:flex-start;min-height:52px}
+/* Apple Pay keeps Apple's own look: black, white mark, no brand tint. */
+.apple-pay-btn{display:inline-flex;align-items:center;justify-content:center;gap:5px;min-height:52px;
+  padding:0 16px;border-radius:11px;background:#000;color:#fff;border:2px solid #000;
+  font:600 16px/1 -apple-system,BlinkMacSystemFont,"Helvetica Neue",Helvetica,Arial,sans-serif;cursor:pointer}
+.apple-pay-btn.on{box-shadow:0 0 0 3px rgba(0,0,0,.18)}
+.apple-pay-btn span{letter-spacing:-.01em}
+.pay-card{margin-top:4px}
+.pay-saved{display:grid;gap:8px}
+.pay-save{display:flex;align-items:center;gap:8px;margin-top:12px;font-size:13.5px;color:var(--ink)}
+.pay-save input{width:16px;height:16px;accent-color:var(--brand)}
+.pay-note{margin-top:10px}
+.auth-note.pay-mock{color:#9A6A1F}
+.btn.btn-dark svg{color:#fff}
+@media (min-width:1024px){
+  .authwrap.pay-wrap{max-width:1040px;align-items:start;min-height:calc(100vh - 90px)}
+}
+
+/* Social links beside the salon's badges: quiet round icons. */
+.sal-social{display:inline-flex;gap:6px;align-items:center;margin-left:4px}
+.sal-social a{display:inline-grid;place-items:center;width:30px;height:30px;border-radius:999px;
+  background:#fff;border:1px solid var(--line);color:var(--ink);transition:background .15s}
+.sal-social a:hover{background:var(--warm)}
+
+/* Option groups on the salon page: "required" turns amber until answered. */
+.mod-req{font-size:11.5px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;color:var(--muted)}
+.mod-req.unmet{color:#9A6A1F}
+
+/* ── Phone & tablet chrome: the top bar and the tab bar, on every screen,
+   always in view (Alex, 2026-09-22). Pages' own bars sit under the top
+   bar and stay sticky there. ─────────────────────────────────────── */
+:root{--m-top:56px;--m-tab:64px}
+.m-chrome{display:none}
+@media (max-width:899.98px){
+  .m-chrome{display:block}
+  .m-top{position:fixed;top:0;left:0;right:0;z-index:75;height:var(--m-top);display:flex;align-items:center;gap:14px;
+    padding:0 16px;background:rgba(255,249,247,.96);backdrop-filter:blur(8px);border-bottom:1px solid var(--line-soft)}
+  .m-top-mark{display:inline-flex;align-items:center;border:0;background:none;padding:0;cursor:pointer}
+  body{padding-top:var(--m-top);padding-bottom:calc(var(--m-tab) + env(safe-area-inset-bottom))}
+  .m-env,.a-env{min-height:calc(100vh - var(--m-top))}
+  .m-page{min-height:0}
+  /* Context bars stick just under the top bar. */
+  .m-dethead,.m-topbar,.acc-top,.m-head{top:var(--m-top)}
+  /* The salon's Book-now bar rides above the tab bar. */
+  .m-bookbar{bottom:calc(var(--m-tab) + env(safe-area-inset-bottom))}
+  .m-page.has-bar{padding-bottom:180px}
+  /* Full-screen sheets and modals cover the chrome as before. */
+  .m-sheet,.mapsheet,.gps-modal{top:0;bottom:0}
+}
+
+/* Tab bar icons: one size, one box, one baseline — five different SVG
+   sizes used to sit on five different lines. */
+.tab-i{justify-content:flex-end;min-height:44px}
+.tab-i > svg,.tab-i .vnav-ic{width:20px;height:20px;display:inline-flex;align-items:center;justify-content:center;flex:none}
+.tab-i > svg,.tab-i .vnav-ic > svg{width:20px;height:20px}
+.tab-i .vnav-ic{line-height:0}
+
+/* The desktop header is rendered once above the routes, sticky at the
+   top of every screen; below 900px the phone chrome takes over. */
+@media (max-width:899.98px){.d-head{display:none}}
+
+/* The magnifier in the phone's top field is a button: it opens the sheet. */
+.m-sheet-open{display:inline-flex;align-items:center;border:0;background:none;padding:0;color:inherit;cursor:pointer}
+
+/* ── Velnes Premium, explained ───────────────────────────────────── */
+.prem{padding:26px 18px 70px}
+.prem-wrap{max-width:900px;margin-inline:auto}
+.prem-hero{text-align:center;padding:24px 0 8px}
+.prem-badge{display:inline-flex;align-items:center;gap:8px;padding:8px 14px;border-radius:999px;background:var(--ink);color:#F6D38B;font-weight:800;font-size:13px;letter-spacing:.02em}
+.prem-hero h1{font-size:34px;margin:16px 0 10px}
+.prem-lead{max-width:600px;margin:0 auto;font-size:15.5px;line-height:1.5;color:var(--muted)}
+.prem-grid{display:grid;grid-template-columns:1fr;gap:12px;margin-top:26px}
+@media (min-width:700px){.prem-grid{grid-template-columns:1fr 1fr}}
+.prem-card{background:#fff;border:1px solid var(--line-soft);border-radius:16px;padding:18px;box-shadow:var(--shadow)}
+.prem-card .prem-ic{display:inline-grid;place-items:center;width:42px;height:42px;border-radius:12px;background:var(--warm);color:var(--brand);margin-bottom:10px}
+.prem-card b{display:block;font-size:16px;color:var(--ink);margin-bottom:4px}
+.prem-card p{margin:0;font-size:14px;line-height:1.5;color:var(--muted)}
+.prem-how{margin-top:28px;background:var(--warm);border-radius:16px;padding:20px 22px}
+.prem-how h2{margin:0 0 10px;font-size:18px}
+.prem-how ol{margin:0;padding-left:20px;display:grid;gap:8px;font-size:14.5px;line-height:1.45;color:var(--text)}
+.prem-cta{margin-top:24px;text-align:center;background:#fff;border:1px dashed var(--line);border-radius:16px;padding:22px}
+.prem-cta b{font-size:16px;color:var(--ink)}
+.prem-cta p{margin:6px auto 14px;max-width:520px;font-size:14px;color:var(--muted);line-height:1.5}
+.prem-actions{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+.acc-prem{border-left:4px solid #F6D38B}
+
+/* ── Velnes Premium band on the home page ────────────────────────── */
+.prem-band{margin:18px 0;padding:22px 24px;border-radius:18px;background:var(--ink);color:#fff;
+  background-image:radial-gradient(120% 140% at 100% 0%,rgba(246,211,139,.22),transparent 60%)}
+.prem-band-eyebrow{display:inline-block;font-size:11.5px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#F6D38B;margin-bottom:8px}
+.prem-band-body{display:flex;align-items:center;gap:18px;flex-wrap:wrap}
+.prem-band .tx{flex:1;min-width:240px}
+.prem-band b{display:block;font-size:20px;line-height:1.2;font-family:var(--fd);font-weight:400}
+.prem-band p{margin:6px 0 0;font-size:14px;line-height:1.5;color:rgba(255,255,255,.82);max-width:56ch}
+.prem-band .btn{white-space:nowrap}
+@media (max-width:899.98px){
+  .m-page .prem-band{margin:14px 16px;padding:18px}
+  .m-page .prem-band b{font-size:18px}
+  .m-page .prem-band .btn{width:100%;justify-content:center}
+}
+@media (min-width:900px){.d-env .prem-band{margin:28px auto;max-width:1280px}}
+
+/* "Available now near you" with nothing to show: say so, quietly. */
+.now-empty{padding:16px 18px;border:1px dashed var(--line);border-radius:14px;color:var(--muted);font-size:14px;background:#fff}
+
+/* Why a salon is recommended: one quiet line under the city. */
+.rc2 .rwhy{margin-top:4px;font-size:12px;font-weight:700;color:var(--brand-hover)}
+
+/* Sliding rows (Recommended, Available now): the arrows move the row,
+   never the page; the wheel pushes it; four cards fill a view. */
+.rail{position:relative;margin-top:8px}
+.rail-track{overflow-x:auto;scrollbar-width:none}
+.rail-track::-webkit-scrollbar{display:none}
+.rail-track > *{flex:0 0 auto}
+.rail-track .rc2 h3,.rail-track .ac h3{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rail-track.reco2{display:flex;gap:16px}
+.rail-track.reco2 > .rc2{flex:0 0 calc((100% - 48px) / 4)}
+.rail-track.avail4{display:flex;gap:14px}
+.rail-track.avail4 > .ac{flex:0 0 calc((100% - 42px) / 4)}
+.catrail-nav:disabled{opacity:.35;cursor:default;box-shadow:none}
+.catrail-nav:disabled:hover{border-color:var(--line-soft);color:var(--ink)}

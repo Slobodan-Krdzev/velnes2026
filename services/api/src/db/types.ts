@@ -7,7 +7,7 @@ import type { ColumnType } from "kysely";
 
 export type AppointmentKind = "absence" | "appointment" | "blocked" | "chore" | "note";
 
-export type AppointmentStatus = "booked" | "cancelled" | "confirmed" | "no_show";
+export type AppointmentStatus = "booked" | "cancelled" | "confirmed" | "no_show" | "requested";
 
 export type CheckoutStatus = "FAILED" | "PAID" | "PARTIALLY_PAID";
 
@@ -189,6 +189,7 @@ export interface Businesses {
   settings: Generated<Json>;
   since: Timestamp | null;
   slug: string | null;
+  socials: Generated<Json>;
   timingEnabled: Generated<boolean>;
   vat: string | null;
 }
@@ -243,6 +244,19 @@ export interface ClientFavourites {
   missingSince: Timestamp | null;
   refId: string;
   tenantId: string;
+}
+
+export interface ClientPaymentMethods {
+  brand: string;
+  clientUserId: string;
+  createdAt: Generated<Timestamp>;
+  expMonth: number;
+  expYear: number;
+  holder: Generated<string>;
+  id: Generated<string>;
+  last4: string;
+  provider: Generated<string>;
+  providerRef: string;
 }
 
 export interface ClientNotifications {
@@ -331,6 +345,7 @@ export interface Customers {
 }
 
 export interface DiscountCodes {
+  active: Generated<boolean>;
   code: string;
   ends: Timestamp;
   id: Generated<string>;
@@ -1153,6 +1168,7 @@ export interface DB {
   clientCustomerLinks: ClientCustomerLinks;
   clientFavourites: ClientFavourites;
   clientNotifications: ClientNotifications;
+  clientPaymentMethods: ClientPaymentMethods;
   clientUsers: ClientUsers;
   combos: Combos;
   customerActivity: CustomerActivity;

@@ -2404,3 +2404,34 @@ body.ob-src .ob-body{display:flex;align-items:center;justify-content:center;
   .ob-shots{grid-template-columns:repeat(2,1fr)}
 }
 
+
+
+/* ── Registration wizard layout (2026-09-22, not in the prototype) ──
+   Step 4: address fields down the left, the map beside them.
+   Step 5: services and products side by side, each with its own
+   folding "add" form on top. Both collapse to one column on phones. */
+.reg-loc{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.15fr);gap:20px;align-items:start}
+.reg-loc-fields{display:grid;gap:12px}
+.reg-loc-map .field>span{display:block}
+.reg-cat{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:22px;align-items:start}
+.reg-col{display:flex;flex-direction:column;gap:12px;min-width:0}
+.reg-col-h{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.reg-col table{width:100%}
+@media (max-width:900px){
+  .reg-loc,.reg-cat{grid-template-columns:1fr}
+}
+
+/* A booking request from the Velnes app: holds its slot, not yet a
+   booking — dashed until the salon accepts or declines. */
+.event.ev-requested{border:1.5px dashed var(--warning);border-left-width:4px;background:rgba(194,106,2,.08)}
+
+/* ⓘ beside a section title: a quiet round button, a small card under it. */
+.field-title{display:inline-flex;align-items:center;gap:6px}
+.infotip{display:inline-flex;vertical-align:middle}
+.infotip-btn{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:999px;border:1px solid var(--line);
+  background:var(--surface);color:var(--muted);cursor:pointer;padding:0}
+.infotip-btn:hover,.infotip-btn[aria-expanded="true"]{color:var(--ink);border-color:var(--ink)}
+.menu.infotip-card{left:0;right:auto;top:calc(100% + 6px);min-width:min(340px,86vw);max-width:380px;padding:12px 14px;text-align:left;cursor:default}
+.infotip-title{font-weight:800;font-size:13px;margin-bottom:6px}
+.infotip-p{margin:0 0 8px;font-size:13px;line-height:1.45;font-weight:500;color:var(--text)}
+.infotip-p:last-child{margin-bottom:0}

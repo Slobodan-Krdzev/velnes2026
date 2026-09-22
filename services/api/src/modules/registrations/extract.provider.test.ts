@@ -58,7 +58,16 @@ describe('the Claude onboarding extractor', () => {
       durationMin: 30,
       price: 0,
     });
-    expect(out!.products[0]).toEqual({ name: 'Face serum', category: 'Retail', price: 800 });
+    // Size, opening stock and cost are the owner's to fill in the wizard;
+    // a website rarely says.
+    expect(out!.products[0]).toEqual({
+      name: 'Face serum',
+      category: 'Retail',
+      price: 800,
+      sizeMl: null,
+      stock: 0,
+      cost: null,
+    });
     expect(out!.salon.type).toBe('Beauty salon');
     expect(out!.hours[0]).toEqual({ day: 'mon', open: '09:00', close: '18:00', closed: false });
   });

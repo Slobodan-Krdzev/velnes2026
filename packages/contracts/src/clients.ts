@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { MoneySchema } from './catalog.js';
 import { AVATAR_MAX_CHARS } from './auth.js';
 import { ClockSchema } from './scheduling.js';
 
@@ -112,6 +113,8 @@ export const ClientAppointmentSchema = z.object({
   durationMin: z.number().int(),
   price: z.number().int(),
   status: z.string(),
+  /** Paid online through the Velnes app — the link's "Pay now" is gone. */
+  paid: z.boolean().default(false),
   /** Free cancellation window the salon set for that location. */
   cancelHours: z.number().int(),
 });
@@ -169,6 +172,48 @@ export const ClientSalonLinkSchema = z.object({
   since: z.iso.date(),
 });
 export const ClientSalonLinksSchema = z.object({ salons: z.array(ClientSalonLinkSchema) });
+
+/**
+ * A personal offer, from the customer's side.
+ *
+ * The salon's promise to *this* person for *one* treatment (Phase 9,
+ * `personal_offers`), as they see it: which salon and location, what
+ * it is, what they pay against what everyone pays, until when. Only
+ * live ones travel — a redeemed or expired promise is history, and the
+ * salon page keeps the history. Booking it needs nothing special: the
+ * booking door already prices by customer and stamps the promise.
+ */
+export const ClientOfferSchema = z.object({
+  id: z.uuid(),
+  salon: z.object({ slug: z.string().nullable(), name: z.string() }),
+  locationId: z.uuid(),
+  locationName: z.string(),
+  serviceId: z.uuid(),
+  serviceName: z.string(),
+  variantId: z.uuid().nullable(),
+  variantLabel: z.string().nullable(),
+  specialPrice: MoneySchema,
+  normalPrice: MoneySchema,
+  validUntil: z.iso.date(),
+  /** The salon's own words, if it wrote any ("Welcome back!"). */
+  intent: z.string(),
+});
+export const ClientOffersSchema = z.object({ offers: z.array(ClientOfferSchema) });
+
+/** A card the account keeps — brand, last four, expiry, name. Never the
+ *  number: the provider's token is the only thing that can charge it. */
+export const ClientCardSchema = z.object({
+  id: z.uuid(),
+  brand: z.string(),
+  last4: z.string(),
+  expMonth: z.number().int(),
+  expYear: z.number().int(),
+  holder: z.string(),
+  createdAt: z.iso.datetime(),
+});
+export type ClientCard = z.infer<typeof ClientCardSchema>;
+export const ClientCardsSchema = z.object({ cards: z.array(ClientCardSchema) });
+export type ClientOffer = z.infer<typeof ClientOfferSchema>;
 
 
 /**
