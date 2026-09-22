@@ -15,9 +15,24 @@ export const env = {
     'postgres://velnes_api:velnes_api@localhost:5432/velnes',
   ),
   jwtSecret: required('JWT_SECRET', 'velnes-dev-secret-not-for-production'),
-  /** 'mock' until the provider is decided (likely Resend): mails land
-   *  in the outbox stamped mock_sent, nothing leaves the building. */
-  mailTransport: process.env.MAIL_TRANSPORT ?? 'mock',
+  /** 'smtp' delivers the outbox over SMTP (any provider); 'mock' stamps
+   *  rows mock_sent and nothing leaves the building (dev, tests). */
+  mailTransport: (process.env.MAIL_TRANSPORT ?? 'mock') as 'mock' | 'smtp',
+  smtp: {
+    host: process.env.SMTP_HOST ?? '',
+    port: Number(process.env.SMTP_PORT ?? 587),
+    /** true for implicit TLS on 465; false uses STARTTLS on 587. */
+    secure: process.env.SMTP_SECURE === 'true',
+    user: process.env.SMTP_USER ?? '',
+    pass: process.env.SMTP_PASS ?? '',
+  },
+  /** The From header, e.g. "Velnes <no-reply@velnes.mk>". */
+  mailFrom: process.env.MAIL_FROM ?? 'Velnes <no-reply@velnes.local>',
+  mailReplyTo: process.env.MAIL_REPLY_TO ?? '',
+  /** Where the staff apps live — the buttons in invites and reminders. */
+  workspaceAppUrl: (process.env.WORKSPACE_APP_URL ?? 'http://localhost:5173').replace(/\/+$/, ''),
+  hqAppUrl: (process.env.HQ_APP_URL ?? 'http://localhost:5177').replace(/\/+$/, ''),
+  supplierAppUrl: (process.env.SUPPLIER_APP_URL ?? 'http://localhost:5176').replace(/\/+$/, ''),
   /** Where the consumer app lives — the base of every link a mail or a
    *  notification hands a customer (their appointment, the payment
    *  screen). Dev: the Vite server. */
@@ -53,3 +68,8 @@ export const env = {
   accessTtl: '15m',
   refreshTtlDays: 30,
 };
+
+if (env.mailTransport === 'smtp' && !env.smtp.host)
+  throw new Error('SMTP_HOST must be set when MAIL_TRANSPORT=smtp');
+if (env.mailTransport !== 'smtp' && env.mailTransport !== 'mock')
+  throw new Error(`MAIL_TRANSPORT must be 'smtp' or 'mock', got '${env.mailTransport}'`);

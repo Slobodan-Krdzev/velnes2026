@@ -154,9 +154,9 @@ describe('booking requests — a salon that confirms by hand', () => {
     expect(res.json().status).toBe('booked');
     const hist = await admin.query(`SELECT what FROM appointment_history WHERE appointment_id = $1 ORDER BY at`, [out.ref]);
     expect(hist.rows.map((r) => r.what)).toEqual(['Requested', 'Accepted']);
-    const mail = await admin.query(`SELECT body FROM mail_outbox WHERE ref_id = $1 AND kind = 'booking_accepted'`, [out.ref]);
+    const mail = await admin.query(`SELECT body, meta FROM mail_outbox WHERE ref_id = $1 AND kind = 'booking_accepted'`, [out.ref]);
     expect(mail.rows).toHaveLength(1);
-    expect(mail.rows[0].body).toContain(`${env.consumerAppUrl}/pay/${out.ref}?t=${guestPayToken(out.ref)}`);
+    expect(mail.rows[0].meta.cta.url).toContain(`${env.consumerAppUrl}/pay/${out.ref}?t=${guestPayToken(out.ref)}`);
     // Deciding twice is refused, never silently repeated.
     const again = await app.inject({
       method: 'POST',
@@ -178,9 +178,10 @@ describe('booking requests — a salon that confirms by hand', () => {
     });
     expect(res.statusCode).toBe(200);
     expect(res.json().status).toBe('cancelled');
-    const mail = await admin.query(`SELECT body FROM mail_outbox WHERE ref_id = $1 AND kind = 'booking_declined'`, [out.ref]);
+    const mail = await admin.query(`SELECT body, meta FROM mail_outbox WHERE ref_id = $1 AND kind = 'booking_declined'`, [out.ref]);
     expect(mail.rows[0].body).toContain('Fully booked that afternoon');
     expect(mail.rows[0].body).not.toContain('/pay/');
+    expect(mail.rows[0].meta.cta.url).not.toContain('/pay/');
   });
 
   it('with auto-confirm on, the same booking lands booked and the customer is mailed the link at once', async () => {

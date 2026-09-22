@@ -25,7 +25,13 @@ Node file under systemd.
 1. Build locally or in CI: `pnpm build`.
 2. Upload `services/api/dist/index.js` → `/srv/velnes/api/dist/`,
    and each `apps/*/dist/*` → `/srv/velnes/<app>/`.
-3. `/srv/velnes/api/.env` holds `DATABASE_URL`, `PORT=3001` (never in git).
+3. `/srv/velnes/api/.env` (never in git) holds `NODE_ENV=production`,
+   `PORT=3001`, `API_DATABASE_URL`, `DATABASE_URL` (dbmate), `JWT_SECRET`,
+   the app URLs (`CONSUMER_APP_URL`, `EMPLOYEE_APP_URL`, `WORKSPACE_APP_URL`,
+   `HQ_APP_URL`, `SUPPLIER_APP_URL`) and mail: `MAIL_TRANSPORT=smtp`,
+   `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`,
+   `MAIL_FROM` — see `.env.example`. Point `MAIL_FROM` at a domain whose
+   SPF/DKIM the provider has verified, or mail lands in spam.
 4. Run migrations: `dbmate up` against the server DATABASE_URL.
 5. `systemctl restart velnes-api`.
 

@@ -1,3 +1,4 @@
+import { env } from '../../env.js';
 import type {
   AccessClaims,
   PurchaseOrder,
@@ -50,6 +51,7 @@ export async function notifyOrderSubmitted(trx: Trx, orderId: string) {
       body: `${salon} placed order ${o.ref}${total ? ` for ${total} ден` : ''} with ${o.supplierName}. Sign in to the supplier portal to accept and ship it.`,
       kind: 'order_placed',
       refId: o.id,
+      cta: { label: 'Open the order', url: `${env.supplierAppUrl}/orders` },
     });
 }
 

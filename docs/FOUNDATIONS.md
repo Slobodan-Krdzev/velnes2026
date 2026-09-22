@@ -59,3 +59,62 @@ custom Bookkeeping, the three legal entities — Aroma Nordic
 deliberately pending — and payment accounts. Demo password
 `velnes-demo`; the seeder refuses `NODE_ENV=production` and needs an
 RLS-exempt connection (`SEED_DATABASE_URL`).
+
+## Mail delivery (2026-09-23)
+
+**Every mail really goes out, in the Velnes look.** Alex, before
+hosting: "every verification, confirmation, decline, deletion, payment
+— everything we connected through email has to work." The one door is
+unchanged — `queueMail(trx, {to, subject, body, kind, refId, cta?,
+code?})` writes the row into `mail_outbox` inside the caller's
+transaction — and what happens next is the transport's:
+
+- **`MAIL_TRANSPORT=smtp`** — `modules/mail/mail.sender.ts` drains the
+  outbox: `sendPending()` takes the due `queued` rows, renders them and
+  hands each to nodemailer over SMTP (`SMTP_HOST`, `SMTP_PORT` 587 or
+  465 with `SMTP_SECURE=true`, `SMTP_USER`/`SMTP_PASS`, `MAIL_FROM`,
+  optional `MAIL_REPLY_TO`). Any provider that speaks SMTP works —
+  Resend (`smtp.resend.com`, user `resend`, password = API key), Brevo,
+  Mailgun, Postmark, a Google Workspace app password, the host's relay.
+  A row reads `sent` only once the provider accepted it (`message_id`
+  kept); a refused send records `error` and `attempts` and retries
+  after 1, 5, 15 and 60 minutes; the fifth refusal marks it `failed`.
+  `queueMail` nudges the sender 400 ms after queueing (the caller's
+  transaction has committed by then) and the API process runs a 30 s
+  heartbeat (`startMailLoop()` in `index.ts`) for the retries. The
+  sender reads under the HQ policy — it is the platform's own worker,
+  not a tenant.
+- **`MAIL_TRANSPORT=mock`** (dev, tests, the default) — rows are
+  stamped `mock_sent` and nothing leaves the building, exactly as
+  before.
+
+**The layout** (`mail.render.ts`) is the consumer app's palette on
+mail-client HTML — tables, inline styles, web-safe fallbacks: the
+"Velnes" wordmark in coral on warm white, the subject as an ink-brown
+display heading, the door's prose as paragraphs with bare links made
+live, a one-time `code` set large and letter-spaced, a `cta` as the
+coral button with the URL written under it for clients that strip
+buttons, and a footer saying whom the mail speaks for ("Sent by Velnes
+for Velnes Fizio Centar."). Everything a person typed is escaped; a
+plain-text alternative rides along. Every mail with somewhere to go
+now carries a button: booking confirmed/accepted → the appointment or
+payment screen, declined → the app, payment received → the account,
+booking request → the salon's calendar, owner/HQ/supplier invites and
+the onboarding reminder → their app (`WORKSPACE_APP_URL`, `HQ_APP_URL`,
+`SUPPLIER_APP_URL`), order placed → the supplier's orders, support
+tickets → HQ, employee invites → the personal sign-in link, the
+verification code → set large.
+
+**Pinned** by `mail.render.test.ts` (layout, code, button, escaping)
+and `mail.smtp.test.ts`, which boots a real SMTP server inside the
+test, registers a client and invites an employee through the real
+doors, drains the outbox, inspects the messages the server received
+(subject, From, coral, the code, the button, the salon footer), then
+closes the server and watches the sender retry with backoff and give
+up as `failed` with the reason.
+
+**Still deferred, honestly:** a hosted logo image (mail clients strip
+inline SVG, so the wordmark is text); per-tenant From names and reply
+addresses; bounce and complaint webhooks from the provider (a `sent`
+row means accepted by the provider, not delivered to the inbox);
+mails in the customer's language (bodies are English prose today).

@@ -668,10 +668,15 @@ export interface LoyaltyLedger {
 }
 
 export interface MailOutbox {
+  attempts: Generated<number>;
   body: Generated<string>;
   createdAt: Generated<Timestamp>;
+  error: string | null;
   id: Generated<string>;
   kind: string;
+  messageId: string | null;
+  meta: Generated<Json>;
+  nextAttemptAt: Timestamp | null;
   refId: string | null;
   sentAt: Timestamp | null;
   status: Generated<string>;

@@ -1,3 +1,4 @@
+import { env } from '../../env.js';
 import {
   HqApproveResponseSchema,
   HqAuditListSchema,
@@ -598,6 +599,7 @@ export function hqRoutes(app: FastifyInstance) {
           body: `${req.hqClaims.name} (Revelapps) nudged you: a few onboarding steps are still open. Sign in to finish them.`,
           kind: 'onboarding_reminder',
           refId: b.id,
+          cta: { label: 'Finish setting up', url: env.workspaceAppUrl },
         });
         return { ok: true as const };
       }),
@@ -1040,6 +1042,7 @@ export function hqRoutes(app: FastifyInstance) {
           body: `${req.hqClaims.name} invited you as ${req.body.role}. Two-factor is required at first sign-in.`,
           kind: 'hq_invite',
           refId: row.id,
+          cta: { label: 'Open Revelapps HQ', url: env.hqAppUrl },
         });
         return { id: row.id };
       });
@@ -1158,6 +1161,8 @@ export function hqRoutes(app: FastifyInstance) {
             kind: m.kind,
             status: m.status,
             createdAt: m.createdAt.toISOString(),
+            attempts: m.attempts,
+            error: m.error ?? null,
           })),
         };
       }),
@@ -1372,6 +1377,7 @@ export function hqRoutes(app: FastifyInstance) {
           body: `Revelapps invited you as the owner of ${sup.name} on the Velnes supplier portal. Two-factor is required at first sign-in.`,
           kind: 'supplier_invite',
           refId: row.id,
+          cta: { label: 'Open the supplier portal', url: env.supplierAppUrl },
         });
         return { id: row.id };
       });

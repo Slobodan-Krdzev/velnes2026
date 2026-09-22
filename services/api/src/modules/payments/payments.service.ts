@@ -1,3 +1,4 @@
+import { env } from '../../env.js';
 import { randomBytes } from 'node:crypto';
 import type { PayQuote, PayRequest, PayResult } from '@velnes/contracts';
 import type { Trx } from '../../db/index.js';
@@ -260,6 +261,7 @@ export async function payAppointment(
       }${quote.gift ? `\nGift card ${quote.gift.code}: −${quote.gift.amount} MKD.` : ''}\n\nInvoice ${sale.invoice.number}. See you there.`,
       kind: 'payment_received',
       refId: first.id,
+      cta: { label: 'See your appointment', url: `${env.consumerAppUrl}/account` },
     });
 
   return {

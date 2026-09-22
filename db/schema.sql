@@ -1446,6 +1446,11 @@ CREATE TABLE public.mail_outbox (
     status text DEFAULT 'queued'::text NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     sent_at timestamp with time zone,
+    meta jsonb DEFAULT '{}'::jsonb NOT NULL,
+    attempts integer DEFAULT 0 NOT NULL,
+    next_attempt_at timestamp with time zone,
+    error text,
+    message_id text,
     CONSTRAINT mail_outbox_status_check CHECK ((status = ANY (ARRAY['queued'::text, 'mock_sent'::text, 'sent'::text, 'failed'::text])))
 );
 
@@ -6500,4 +6505,5 @@ INSERT INTO public.schema_migrations (version) VALUES
     ('20260922170000'),
     ('20260922180000'),
     ('20260922190000'),
-    ('20260923120000');
+    ('20260923120000'),
+    ('20260923140000');

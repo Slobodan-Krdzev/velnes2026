@@ -995,7 +995,7 @@ export const en = {
     'hq_super manages the team and suppliers; hq_onboard decides intake; hq_support reads. The last active super can never be demoted or removed.',
   'hq.inviteNote': 'The invite travels through the outbox. The transport is mocked until the provider is decided — nothing is actually delivered yet.',
   'hq.outbox': 'Mail outbox',
-  'hq.outboxSub': 'Every mail the platform would send — mock transport, nothing delivers yet',
+  'hq.outboxSub': 'Every mail the platform sends — sent, still queued, or failed with the provider\'s reason',
   'hq.outboxEmpty': 'No mail yet.',
   'hq.categoryRequests': 'Category requests',
   'hq.categoryRequestsSub': 'Salons asking for a new shelf — approving tells every salon',

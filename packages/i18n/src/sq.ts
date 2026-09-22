@@ -988,7 +988,7 @@ export const sq: Record<TranslationKey, string> = {
     'hq_super menaxhon ekipin dhe furnitorët; hq_onboard vendos pranimin; hq_support lexon. Superi i fundit aktiv s’mund të ulet në gradë e as të hiqet.',
   'hq.inviteNote': 'Ftesa kalon nëpër daljen e postës. Transporti është i simuluar derisa të vendoset ofruesi — ende asgjë s’dorëzohet.',
   'hq.outbox': 'Posta dalëse',
-  'hq.outboxSub': 'Çdo letër që platforma do të dërgonte — transport i simuluar, ende s’dorëzohet gjë',
+  'hq.outboxSub': 'Çdo email që platforma dërgon — i dërguar, ende në radhë, ose i dështuar me arsyen e ofruesit',
   'hq.outboxEmpty': 'Ende pa letra.',
   'hq.categoryRequests': 'Kërkesat për kategori',
   'hq.categoryRequestsSub': 'Sallonet kërkojnë raft të ri — miratimi njofton çdo sallon',

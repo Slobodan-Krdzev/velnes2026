@@ -380,5 +380,8 @@ export const HqOutboxRowSchema = z.object({
   kind: z.string(),
   status: z.string(),
   createdAt: z.string(),
+  /** Delivery attempts, and the provider's last words when it refused. */
+  attempts: z.number().int(),
+  error: z.string().nullable(),
 });
 export const HqOutboxListSchema = z.object({ mails: z.array(HqOutboxRowSchema) });

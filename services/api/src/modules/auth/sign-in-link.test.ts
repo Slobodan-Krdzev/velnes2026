@@ -60,9 +60,9 @@ describe('personal sign-in links — a team member joins their own salon on the 
   });
 
   it('the invite mail already carries a link, and the old link dies when the owner mints a new one', async () => {
-    const mail = await admin.query(`SELECT body FROM mail_outbox WHERE to_email = $1 AND kind = 'employee_invite'`, [EMAIL]);
-    expect(mail.rows[0].body).toContain('/join/');
-    const fromMail = tokenOf(mail.rows[0].body.match(/\/join\/([A-Za-z0-9_-]+)/)![0]);
+    const mail = await admin.query(`SELECT meta FROM mail_outbox WHERE to_email = $1 AND kind = 'employee_invite'`, [EMAIL]);
+    expect(mail.rows[0].meta.cta.url).toContain('/join/');
+    const fromMail = tokenOf(mail.rows[0].meta.cta.url as string);
 
     const res = await mint(newId);
     expect(res.statusCode).toBe(200);

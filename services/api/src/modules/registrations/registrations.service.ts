@@ -480,9 +480,10 @@ export async function approveRegistration(id: string, reviewer: string) {
         tenantId: businessId,
         to: email,
         subject: 'You are invited to Velnes',
-        body: `${draft.salon.name} invited you to join their team on Velnes. Open this link on your phone to sign in: ${link.url} — it works once and is valid for 7 days.`,
+        body: `${draft.salon.name} invited you to join their team on Velnes.\n\nOpen the button below on your phone: it signs you straight into the salon and asks you to choose a password once. The link works once and is valid for 7 days.`,
         kind: 'employee_invite',
         refId: memberId,
+        cta: { label: 'Sign in on your phone', url: link.url },
       });
     }
 

@@ -67,6 +67,7 @@ async function sendCode(trx: Trx, email: string, first: string, code: string) {
       `It confirms this is your email address. If you did not create a Velnes ` +
       `account, you can ignore this message.`,
     kind: 'client_email_verify',
+    code,
   });
 }
 
