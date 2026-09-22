@@ -10,6 +10,7 @@ import {
   PermMapSchema,
   RoleListResponseSchema,
   RoleWriteSchema,
+  SignInLinkResponseSchema,
   type Employee,
 } from '@velnes/contracts';
 import type { FastifyInstance } from 'fastify';
@@ -21,6 +22,7 @@ import { logAudit } from '../audit/audit.service.js';
 import { effTreatment } from '../timing/timing.service.js';
 import { can, permsFor } from '../auth/authz.service.js';
 import { createEmployee, TeamError, updateEmployee } from './team.service.js';
+import { createSignInLink } from '../auth/sign-in-link.service.js';
 
 
 export function teamRoutes(app: FastifyInstance) {
@@ -226,6 +228,31 @@ export function teamRoutes(app: FastifyInstance) {
           }
           throw e;
         }
+      }),
+  });
+
+  /** Mint a personal sign-in link for a team member (Settings › Team).
+   *  Any earlier unused link for them stops working. */
+  r.route({
+    method: 'POST',
+    url: '/employees/:id/sign-in-link',
+    preHandler: [app.authenticate],
+    schema: {
+      params: z.object({ id: z.uuid() }),
+      response: {
+        200: SignInLinkResponseSchema,
+        403: z.object({ error: z.string(), message: z.string() }),
+        404: z.object({ error: z.string(), message: z.string() }),
+      },
+    },
+    handler: async (req, reply) =>
+      withTenant(req.claims.ten, async (trx) => {
+        const perms = await permsFor(trx, req.claims);
+        if (!can(perms, 'users.manage'))
+          return reply.code(403).send({ error: 'FORBIDDEN', message: 'Missing permission: users.manage' });
+        const link = await createSignInLink(trx, req.claims, req.params.id);
+        if (!link) return reply.code(404).send({ error: 'NOT_FOUND', message: 'No such team member' });
+        return link;
       }),
   });
 

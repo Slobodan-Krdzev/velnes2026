@@ -12,6 +12,7 @@ import { logAudit } from '../audit/audit.service.js';
 import { locReadiness, locTransition } from '../locations/locations.service.js';
 import { queueMail } from '../mail/mail.service.js';
 import { standardRoles } from '../team/role-kits.js';
+import { mintSignInLink } from '../auth/sign-in-link.service.js';
 
 export class RegistrationError extends Error {
   constructor(
@@ -474,11 +475,12 @@ export async function approveRegistration(id: string, reviewer: string) {
         .insertInto('employeeLocations')
         .values({ tenantId: businessId, employeeId: memberId, locationId })
         .execute();
+      const link = await mintSignInLink(trx, businessId, memberId, null);
       await queueMail(trx, {
         tenantId: businessId,
         to: email,
         subject: 'You are invited to Velnes',
-        body: `${draft.salon.name} invited you to join their team on Velnes. The invite is valid for 7 days.`,
+        body: `${draft.salon.name} invited you to join their team on Velnes. Open this link on your phone to sign in: ${link.url} — it works once and is valid for 7 days.`,
         kind: 'employee_invite',
         refId: memberId,
       });

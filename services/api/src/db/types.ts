@@ -382,6 +382,18 @@ export interface Employees {
   twofaEnabled: Generated<boolean>;
 }
 
+export interface EmployeeSignInLinks {
+  createdAt: Generated<Timestamp>;
+  createdBy: string | null;
+  employeeId: string;
+  expiresAt: Timestamp;
+  id: Generated<string>;
+  revokedAt: Timestamp | null;
+  tenantId: string;
+  tokenHash: string;
+  usedAt: Timestamp | null;
+}
+
 export interface EmployeeSkills {
   employeeId: string;
   serviceId: string;
@@ -1176,6 +1188,7 @@ export interface DB {
   discountCodes: DiscountCodes;
   employeeLocations: EmployeeLocations;
   employees: Employees;
+  employeeSignInLinks: EmployeeSignInLinks;
   employeeSkills: EmployeeSkills;
   empTimings: EmpTimings;
   giftCards: GiftCards;

@@ -22,6 +22,9 @@ export const env = {
    *  notification hands a customer (their appointment, the payment
    *  screen). Dev: the Vite server. */
   consumerAppUrl: (process.env.CONSUMER_APP_URL ?? 'http://localhost:5178').replace(/\/+$/, ''),
+  /** Where the employee app lives — the base of every personal sign-in
+   *  link (Settings › Team, the invite mail). Dev: the Vite server. */
+  employeeAppUrl: (process.env.EMPLOYEE_APP_URL ?? 'http://localhost:5174').replace(/\/+$/, ''),
   /** Where the flightdeck's opportunities and Kumo insight come from.
    *  'rules' (default) derives them from the salon's own data — real,
    *  honest, no external call. 'claude' hands the same job to the

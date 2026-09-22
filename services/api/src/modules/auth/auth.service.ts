@@ -9,7 +9,7 @@ import { logAudit } from '../audit/audit.service.js';
 import { can, permsFor } from './authz.service.js';
 
 export class AuthError extends Error {
-  constructor(public code: 'INVALID_CREDENTIALS' | 'NOT_ACTIVE' | 'INVALID_TOKEN') {
+  constructor(public code: 'INVALID_CREDENTIALS' | 'NOT_ACTIVE' | 'INVALID_TOKEN' | 'INVALID_LINK' | 'LINK_EXPIRED') {
     super(code);
   }
 }
@@ -65,7 +65,7 @@ async function authLookupById(employeeId: string): Promise<AuthLookupRow | undef
 
 const hashToken = (t: string) => createHash('sha256').update(t).digest('hex');
 
-async function issueRefreshToken(tenantId: string, employeeId: string, familyId?: string) {
+export async function issueRefreshToken(tenantId: string, employeeId: string, familyId?: string) {
   const token = randomBytes(32).toString('base64url');
   await db
     .insertInto('refreshTokens')
@@ -89,7 +89,7 @@ async function revokeFamily(familyId: string) {
     .execute();
 }
 
-async function sessionEmployee(
+export async function sessionEmployee(
   tenantId: string,
   employeeId: string,
 ): Promise<MeResponse> {

@@ -991,6 +991,20 @@ ALTER TABLE ONLY public.employee_locations FORCE ROW LEVEL SECURITY;
 -- Name: employee_skills; Type: TABLE; Schema: public; Owner: -
 --
 
+CREATE TABLE public.employee_sign_in_links (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    tenant_id uuid NOT NULL,
+    employee_id uuid NOT NULL,
+    token_hash text NOT NULL,
+    created_by uuid,
+    expires_at timestamp with time zone NOT NULL,
+    used_at timestamp with time zone,
+    revoked_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+ALTER TABLE ONLY public.employee_sign_in_links FORCE ROW LEVEL SECURITY;
+
 CREATE TABLE public.employee_skills (
     tenant_id uuid NOT NULL,
     employee_id uuid NOT NULL,
@@ -6485,4 +6499,5 @@ INSERT INTO public.schema_migrations (version) VALUES
     ('20260922150000'),
     ('20260922170000'),
     ('20260922180000'),
-    ('20260922190000');
+    ('20260922190000'),
+    ('20260923120000');

@@ -54,3 +54,31 @@ the board or the app changing (the prototype's "an AI model weighs the
 criteria you tick"). The mobile header wears the person's role, and the
 till (catalog tiles → basket with ± → TOTAL → Take payment) and agenda
 cards match the prototype on a phone viewport.
+
+## Personal sign-in links (2026-09-23)
+
+**How a team member gets into the app at all.** Until now an invited
+employee had no password and no door to get one: the invite mail was
+prose, nothing accepted it. Now the owner opens Settings › Team ›
+**Sign-in link** on any team member: the panel explains how signing in
+works (open the link on the phone, choose a password once, then "tap
+your name" at the app's address) and mints the link on demand — shown
+as a URL to copy and as a QR to scan. `POST /employees/:id/sign-in-link`
+(`users.manage`) stores only a sha256 of a 256-bit token in
+`employee_sign_in_links`, revokes the member's earlier unused link, and
+audits "Sign-in link created"; the same link rides in the invite mail
+from `POST /employees` and from registration approval. The employee app
+answers `/join/<token>`: `POST /auth/sign-in-link` looks the link up
+under the login-mode policy (the same narrow door email login uses),
+refuses a used, revoked or unknown link (`INVALID_LINK`) or one past
+`SIGN_IN_LINK_DAYS` = 7 (`LINK_EXPIRED`), marks it used, activates the
+person, signs them in with the ordinary access + rotating refresh
+tokens, and says whether a password is still to be chosen and which
+salon they are in. The device is bound to that salon (the roster is
+rewritten; a phone that belonged to another salon is told so). The
+first time, the join screen asks for a password — `POST /auth/password`
+(free the first time, the current one required after that) — so email
+login and tap-your-name work from then on. The tenant is always the
+link's: nobody chooses a salon, so nobody can land in the wrong one.
+`EMPLOYEE_APP_URL` is the base of every link. Pinned by
+`modules/auth/sign-in-link.test.ts`.
