@@ -6,6 +6,7 @@ import { MyVelnes } from './features/account/MyVelnes.js';
 import { BookingProvider } from './features/booking/store.js';
 import { BookConfirmed, BookIdentity, BookProfile, BookReview } from './features/booking/steps.js';
 import { BookPay } from './features/booking/pay.js';
+import { MobileChrome } from './app/MobileChrome.js';
 import { Home } from './features/discovery/Home.js';
 import { Results } from './features/discovery/Results.js';
 import { Salon } from './features/salon/Salon.js';
@@ -68,6 +69,7 @@ export function App() {
           <BookingProvider>
           <BrowserRouter>
             <ScrollToTop />
+            <MobileChrome />
             <Routes>
               <Route path="/" element={<Home />} />
               <Route path="/s/:category" element={<Results />} />

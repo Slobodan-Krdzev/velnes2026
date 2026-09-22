@@ -32,7 +32,7 @@ const IcPerson = (
 
 export type Tab = 'home' | 'search' | 'bookings' | 'favs' | 'profile';
 
-export function TabBar({ active, unread = 0 }: { active: Tab; unread?: number }) {
+export function TabBar({ active, unread = 0 }: { active: Tab | null; unread?: number }) {
   const nav = useNavigate();
   const { t } = useTranslation();
   const tab = (id: Tab, to: string, icon: React.ReactNode, label: string) => (

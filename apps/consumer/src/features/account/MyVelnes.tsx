@@ -6,7 +6,6 @@ import { useLang } from '../../lib/i18n.js';
 import { useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { DHeader } from '../../app/chrome.js';
-import { TabBar } from '../../app/TabBar.js';
 import type { z } from 'zod';
 import type { ClientAppointmentSchema } from '@velnes/contracts';
 import { SalonMap } from '../../components/SalonMap.js';
@@ -157,9 +156,6 @@ export function MyVelnes({ section = 'over' }: { section?: SecId }) {
               </div>
             </div>
           </section>
-        </div>
-        <div className="only-m">
-          <TabBar active="profile" />
         </div>
       </>
     );
@@ -632,9 +628,6 @@ export function MyVelnes({ section = 'over' }: { section?: SecId }) {
           </main>
           </div>
         </section>
-      </div>
-      <div className="only-m">
-        <TabBar active="profile" unread={unread} />
       </div>
     </>
   );

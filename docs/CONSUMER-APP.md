@@ -86,6 +86,17 @@ booked appointment is unpaid, and "Paid online" once it is —
 `GET /client/me/appointments` now carries `paid`, read from the
 appointment's own `paid` column, which the online payment sets.
 
+**Phone and tablet chrome (2026-09-22).** Below 900px the top bar (the
+mark, the business link) and the bottom tab bar are rendered once,
+above the routes (`app/MobileChrome.tsx`), fixed, on every screen —
+salon page, booking steps, payment, account, sign-in included; the
+pages' own context bars (a salon's back-and-name, the results search,
+the account title) sit under the top bar and stay sticky there, and
+the salon's Book-now bar rides above the tab bar. The tab bar's
+active tab follows the route; nothing is active on a salon page or a
+booking step. Full-screen sheets (search, map, location prompt) still
+cover the chrome. The pages no longer carry their own tab bars.
+
 **Option groups (2026-09-22).** The salon page now shows a service's
 option groups under it once it is in the visit — a "one choice" group
 and a "stackable" one alike as tappable cards, each option with its

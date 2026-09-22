@@ -18,7 +18,7 @@ import {
   type SearchFilters,
 } from '../../lib/api/queries.js';
 import type { SearchFacets } from '@velnes/contracts';
-import { useMyNotifications, useSession } from '../../lib/api/session.js';
+import { useSession } from '../../lib/api/session.js';
 import { distanceKm, distanceLbl, useUserLocation } from '../../lib/geo.js';
 import { GeoNotice } from '../../components/GeoNotice.js';
 import { useTranslation } from 'react-i18next';
@@ -36,7 +36,6 @@ import {
   SugPanelD,
 } from './cards.js';
 import { useSearchBox } from './useSearchBox.js';
-import { TabBar } from '../../app/TabBar.js';
 
 /** What "near me" means, in kilometres. The distance chips can widen
  *  or narrow it afterwards; this is where the button starts. */
@@ -494,7 +493,6 @@ export function Results() {
   useTranslation();
   const nav = useNavigate();
   const { category } = useParams();
-  const unread = useMyNotifications().data?.unread ?? 0;
   const geo = useUserLocation();
   const { signedIn } = useSession();
   const [mapOpen, setMapOpen] = useState(false);
@@ -1134,7 +1132,6 @@ export function Results() {
                 </div>
               </div>
             ) : null}
-            <TabBar active="search" unread={unread} />
 
             {/* The same sheet the home page opens, and the same one
                 search behind it. A results page nobody can search from
