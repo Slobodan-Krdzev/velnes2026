@@ -2592,7 +2592,7 @@ export const en = {
   'c.home.bestPricesSub': 'No hidden fees',
   'c.home.secure': 'Secure payments',
   'c.home.secureSub': 'Safe & encrypted',
-  'c.home.available': 'Available near you',
+  'c.home.available': 'Available now near you',
   'c.home.why': 'Why Velnes?',
   'c.home.whyRt': 'Real-time availability',
   'c.home.whyRtSub': 'Book instantly. No calls, no waiting.',
@@ -3071,6 +3071,10 @@ export const en = {
   'c.home.premTitle': 'Be first when a slot opens up',
   'c.home.premSub': 'One membership across every salon on Velnes: first access to last-minute offers, 1.5× loyalty points, and member prices you can see.',
   'c.home.premBtn': 'See what Premium gives you',
+  'c.home.availableSub': 'Treatments that can start within the next 30 minutes, nearest first.',
+  'c.home.nowAt': 'Now · {{t}}',
+  'c.home.noneNow': 'Nothing can start in the next 30 minutes right now. Browse all treatments instead.',
+  'c.home.nearestHint': 'Turn on location to put the nearest first.',
 } as const;
 
 export type TranslationKey = keyof typeof en;

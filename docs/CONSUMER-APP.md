@@ -97,6 +97,19 @@ active tab follows the route; nothing is active on a salon page or a
 booking step. Full-screen sheets (search, map, location prompt) still
 cover the chrome. The pages no longer carry their own tab bars.
 
+**Available now near you (2026-09-23).** The home page's "Available
+near you" became "Available now near you": it asks the search door for
+*now* alone (`POST /discovery/search` with `q: 'now'`, the same
+now-mode the results page and the "Available now" chip use) and shows
+the treatments whose `availableAt` — a start within the next half
+hour, from the booking gate itself — is set, sorted by distance from
+the viewer's position when one is known, else in the door's own
+order with a line saying location would sort it. Each card's slot
+button books that very start (`?service=&date=&time=`); an empty
+answer says so instead of drawing a hole. The earlier cards read a
+salon's *first* treatment and today's first slots, which was a claim
+about the wrong treatment.
+
 **Velnes Premium, explained (2026-09-22).** `/premium`
 (`features/premium/Premium.tsx`) tells a customer what membership is
 in their terms — the first window on last-minute offers, ×1.5 loyalty

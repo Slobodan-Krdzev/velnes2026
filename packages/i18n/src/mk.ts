@@ -2574,7 +2574,7 @@ export const mk: Record<TranslationKey, string> = {
   'c.home.bestPricesSub': 'Без скриени трошоци',
   'c.home.secure': 'Безбедни плаќања',
   'c.home.secureSub': 'Безбедно и шифрирано',
-  'c.home.available': 'Слободно во ваша близина',
+  'c.home.available': 'Достапно сега во ваша близина',
   'c.home.why': 'Зошто Velnes?',
   'c.home.whyRt': 'Достапност во реално време',
   'c.home.whyRtSub': 'Резервирајте веднаш. Без јавување, без чекање.',
@@ -3053,4 +3053,8 @@ export const mk: Record<TranslationKey, string> = {
   'c.home.premTitle': 'Бидете први кога ќе се ослободи термин',
   'c.home.premSub': 'Едно членство за сите салони на Velnes: прв пристап до понуди во последен момент, 1.5× поени за лојалност и цени за членови што ги гледате.',
   'c.home.premBtn': 'Видете што нуди Premium',
+  'c.home.availableSub': 'Третмани што можат да почнат во следните 30 минути, најблиските прво.',
+  'c.home.nowAt': 'Сега · {{t}}',
+  'c.home.noneNow': 'Моментално ништо не може да почне во следните 30 минути. Разгледајте ги сите третмани.',
+  'c.home.nearestHint': 'Вклучете локација за да бидат најблиските прво.',
 };

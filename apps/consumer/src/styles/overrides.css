@@ -1083,3 +1083,6 @@ a.pop-go:hover {
   .m-page .prem-band .btn{width:100%;justify-content:center}
 }
 @media (min-width:900px){.d-env .prem-band{margin:28px auto;max-width:1280px}}
+
+/* "Available now near you" with nothing to show: say so, quietly. */
+.now-empty{padding:16px 18px;border:1px dashed var(--line);border-radius:14px;color:var(--muted);font-size:14px;background:#fff}

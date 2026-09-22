@@ -2574,7 +2574,7 @@ export const sq: Record<TranslationKey, string> = {
   'c.home.bestPricesSub': 'Pa tarifa të fshehura',
   'c.home.secure': 'Pagesa të sigurta',
   'c.home.secureSub': 'Të sigurta dhe të enkriptuara',
-  'c.home.available': 'E lirë afër jush',
+  'c.home.available': 'E disponueshme tani afër jush',
   'c.home.why': 'Pse Velnes?',
   'c.home.whyRt': 'Disponueshmëri në kohë reale',
   'c.home.whyRtSub': 'Rezervoni menjëherë. Pa telefonata, pa pritje.',
@@ -3053,4 +3053,8 @@ export const sq: Record<TranslationKey, string> = {
   'c.home.premTitle': 'Jini të parët kur lirohet një termin',
   'c.home.premSub': 'Një anëtarësim për çdo sallon në Velnes: qasje e parë në ofertat e minutës së fundit, 1.5× pikë besnikërie dhe çmime për anëtarë që i shihni.',
   'c.home.premBtn': 'Shihni çfarë ju jep Premium',
+  'c.home.availableSub': 'Trajtime që mund të fillojnë brenda 30 minutave të ardhshme, më të afërtat së pari.',
+  'c.home.nowAt': 'Tani · {{t}}',
+  'c.home.noneNow': 'Asgjë nuk mund të fillojë brenda 30 minutave të ardhshme tani. Shfletoni të gjitha trajtimet.',
+  'c.home.nearestHint': 'Aktivizoni vendndodhjen që më të afërtat të dalin të parat.',
 };

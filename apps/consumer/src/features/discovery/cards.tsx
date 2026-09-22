@@ -14,7 +14,8 @@ import {
   useFavourites,
   useSession,
 } from '../../lib/api/session.js';
-import type { FavouriteKind } from '@velnes/contracts';
+import type { DiscoveryServiceCard, FavouriteKind } from '@velnes/contracts';
+import { distanceLbl } from '../../lib/geo.js';
 
 /* Icons lifted from the prototype's SVG map — exact markup. */
 export const IcArr = (
@@ -599,5 +600,105 @@ export function SugListM({
         </div>
       ) : null}
     </div>
+  );
+}
+
+
+/* ── "Available now near you" — a treatment that can start within the
+   next half hour, from the search door's own now-mode answer, nearest
+   first (Alex, 2026-09-23). The slot button books that very start. ── */
+export interface NowNear {
+  s: DiscoveryServiceCard;
+  /** Distance from the viewer, null when no position is known. */
+  km: number | null;
+}
+
+function nowNearBits(n: NowNear) {
+  const today = new Date().toISOString().slice(0, 10);
+  const price = n.s.price != null ? Math.min(n.s.price, n.s.priceFrom ?? n.s.price) : null;
+  const at = n.s.availableAt ?? null;
+  return {
+    today,
+    price,
+    at,
+    href: `/salon/${n.s.salon.slug}?service=${encodeURIComponent(n.s.id)}`,
+    slotHref: at ? `/salon/${n.s.salon.slug}?service=${encodeURIComponent(n.s.id)}&date=${today}&time=${at}` : null,
+    away: n.km == null ? null : t('c.res.fromYou', { d: distanceLbl(n.km) }),
+  };
+}
+
+export function NowNearD({ n }: { n: NowNear }) {
+  const nav = useNavigate();
+  const b = nowNearBits(n);
+  return (
+    <article className="card ac">
+      <div className="ph" style={{ backgroundImage: n.s.salon.photo ? `url("${n.s.salon.photo}")` : 'var(--ih)' }}></div>
+      <div className="bd">
+        <h3>{n.s.name}</h3>
+        <div className="meta">
+          {n.s.salon.name}
+          {n.s.salon.city ? ` · ${n.s.salon.city}` : ''}
+          {b.away ? ` · ${b.away}` : ''}
+        </div>
+        {b.price != null ? (
+          <div className="from">
+            {t('c.cards.from')} <b>{fmtMKD(b.price)}</b>
+          </div>
+        ) : null}
+        <div className="slotrow">
+          {b.slotHref ? (
+            <button className="slot-s" onClick={() => nav(b.slotHref!)}>
+              {t('c.home.nowAt', { t: b.at })}
+            </button>
+          ) : null}
+        </div>
+        <button
+          className="btn btn-g"
+          style={{ minHeight: '38px', padding: '6px 14px', fontSize: '13.5px', marginTop: '7px', width: '100%' }}
+          onClick={() => nav(b.href)}
+        >
+          {t('c.res.viewBook')} {IcArr}
+        </button>
+      </div>
+    </article>
+  );
+}
+
+export function NowNearM({ n }: { n: NowNear }) {
+  const nav = useNavigate();
+  const b = nowNearBits(n);
+  return (
+    <article className="card m-venue" style={{ gridTemplateColumns: '96px 1fr' }}>
+      <div className="ph" style={{ backgroundImage: n.s.salon.photo ? `url("${n.s.salon.photo}")` : 'var(--ih)' }}></div>
+      <div>
+        <h3 style={{ fontSize: '15px' }}>{n.s.name}</h3>
+        <div className="meta">
+          <span>
+            {n.s.salon.name}
+            {n.s.salon.city ? ` · ${n.s.salon.city}` : ''}
+            {b.away ? ` · ${b.away}` : ''}
+          </span>
+          {b.price != null ? (
+            <span className="from">
+              {t('c.cards.from')} <b>{fmtMKD(b.price)}</b>
+            </span>
+          ) : null}
+        </div>
+        <div className="slotrow" style={{ marginTop: '7px' }}>
+          {b.slotHref ? (
+            <button className="slot-s" onClick={() => nav(b.slotHref!)}>
+              {t('c.home.nowAt', { t: b.at })}
+            </button>
+          ) : null}
+        </div>
+        <button
+          className="btn btn-g"
+          style={{ minHeight: '38px', padding: '6px 14px', fontSize: '13.5px', marginTop: '8px' }}
+          onClick={() => nav(b.href)}
+        >
+          {t('c.res.viewBook')} {IcArr}
+        </button>
+      </div>
+    </article>
   );
 }
