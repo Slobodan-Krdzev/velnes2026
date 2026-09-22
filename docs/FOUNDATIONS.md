@@ -73,7 +73,11 @@ transaction — and what happens next is the transport's:
   outbox: `sendPending()` takes the due `queued` rows, renders them and
   hands each to nodemailer over SMTP (`SMTP_HOST`, `SMTP_PORT` 587 or
   465 with `SMTP_SECURE=true`, `SMTP_USER`/`SMTP_PASS`, `MAIL_FROM`,
-  optional `MAIL_REPLY_TO`). Any provider that speaks SMTP works —
+  optional `MAIL_REPLY_TO`). **Resend is the provider** (Alex,
+  2026-09-23): `RESEND_API_KEY` alone switches the transport on with
+  Resend's SMTP settings, and `pnpm --filter @velnes/api mail:test
+  <address>` sends one real mail in the layout to prove a setup. The
+  SMTP_* variables still override, so any provider that speaks SMTP works —
   Resend (`smtp.resend.com`, user `resend`, password = API key), Brevo,
   Mailgun, Postmark, a Google Workspace app password, the host's relay.
   A row reads `sent` only once the provider accepted it (`message_id`
