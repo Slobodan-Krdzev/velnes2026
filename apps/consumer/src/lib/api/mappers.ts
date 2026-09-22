@@ -1,3 +1,4 @@
+import { i18n } from '../i18n-core.js';
 import type {
   DiscoveryCategory,
   DiscoverySalonCard,
@@ -76,7 +77,7 @@ export function salonVM(s: DiscoverySalonCard): SalonVM {
 }
 
 export function minutesLbl(min: number): string {
-  return `${min} min`;
+  return i18n.t('c.min', { n: min });
 }
 
 /** A treatment as a result: the service itself, and the salon it is at.
@@ -142,7 +143,7 @@ export function serviceVM(s: DiscoveryServiceCard): ServiceVM {
 export function priceLbl(s: ServiceVM): string | null {
   if (!s.salon.showPrices) return null;
   if (s.priceFrom != null && s.price != null && s.priceFrom < s.price)
-    return `from ${fmtMKD(s.priceFrom)}`;
+    return i18n.t('c.from', { p: fmtMKD(s.priceFrom) });
   if (s.price != null) return fmtMKD(s.price);
   return null;
 }

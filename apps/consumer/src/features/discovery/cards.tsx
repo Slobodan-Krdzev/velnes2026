@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { t } from '../../lib/i18n-core.js';
 import { useNavigate } from 'react-router-dom';
 import {
   useAvailability,
@@ -115,8 +116,8 @@ export function FavHeart({
     <button
       className={on ? `${className} on` : className}
       aria-pressed={on}
-      aria-label={on ? `Remove ${label} from favourites` : `Save ${label} to favourites`}
-      title={failed ? 'Could not save that — try again' : undefined}
+      aria-label={on ? t('c.fav.remove', { name: label }) : t('c.fav.save', { name: label })}
+      title={failed ? t('c.fav.failed') : undefined}
       onClick={(e) => {
         e.stopPropagation();
         e.preventDefault();
@@ -189,7 +190,7 @@ export function NearYouD({ s }: { s: SalonVM }) {
           {s.name} · {s.city}
         </div>
         <div className="from">
-          from <b>{fmtMKD(from)}</b>
+          {t('c.cards.from')} <b>{fmtMKD(from)}</b>
         </div>
         <div className="slotrow">
           {slots.map((t) => (
@@ -233,7 +234,7 @@ export function NearYouM({ s }: { s: SalonVM }) {
             {s.name} · {s.city}
           </span>
           <span className="from">
-            from <b>{fmtMKD(from)}</b>
+            {t('c.cards.from')} <b>{fmtMKD(from)}</b>
           </span>
         </div>
         <div className="slotrow" style={{ marginTop: '7px' }}>
@@ -291,13 +292,13 @@ function MostChosenPanel({ onOpen }: { onOpen: (slug: string) => void }) {
   const cats = data?.categories ?? [];
   if (!cats.length) return null;
   return (
-    <div className="sugg" id="d-sugg" role="listbox" aria-label="Most chosen">
+    <div className="sugg" id="d-sugg" role="listbox" aria-label={t('c.cards.mostChosen')}>
       <div className="h">
         <span className="spark" style={{ display: 'inline-flex', gap: '7px', alignItems: 'center' }}>
           {IcSpark}
-          <span style={{ color: 'var(--ink)' }}>Velnes thinks along with you</span>
+          <span style={{ color: 'var(--ink)' }}>{t('c.cards.thinks')}</span>
         </span>
-        <span className="tiny-tag">Most chosen</span>
+        <span className="tiny-tag">{t('c.cards.mostChosen')}</span>
       </div>
       {cats.slice(0, 4).map((c) => (
         <button
@@ -354,10 +355,10 @@ export function SugPanelD({
   };
 
   return (
-    <div className="sugg" id="d-sugg" role="listbox" aria-label="Suggestions">
+    <div className="sugg" id="d-sugg" role="listbox" aria-label={t('c.cards.suggestions')}>
       {loading && !items.length ? (
         <div className="sug-foot" style={{ justifyContent: 'flex-start' }}>
-          <span className="sm muted">Looking…</span>
+          <span className="sm muted">{t('c.cards.looking')}</span>
         </div>
       ) : null}
 
@@ -365,7 +366,7 @@ export function SugPanelD({
         <div className="h">
           <span className="spark" style={{ display: 'inline-flex', gap: '7px', alignItems: 'center' }}>
             {IcSpark}
-            <span style={{ color: 'var(--ink)' }}>Velnes thinks along with you</span>
+            <span style={{ color: 'var(--ink)' }}>{t('c.cards.thinks')}</span>
           </span>
         </div>
       ) : null}
@@ -401,7 +402,7 @@ export function SugPanelD({
             <span className="ph" style={{ backgroundImage: 'var(--im)' }}></span>
             <span>
               <b>{sv.name}</b>
-              <span className="sm muted">at {sv.salonName}</span>
+              <span className="sm muted">{t('c.cards.at', { salon: sv.salonName })}</span>
             </span>
             <span className="btn btn-g" style={{ minHeight: '42px' }}>
               Book {IcArr}
@@ -426,11 +427,11 @@ export function SugPanelD({
               <b>{sa.name}</b>
               <span className="sm muted" style={{ display: 'inline-flex', gap: '6px', alignItems: 'center', marginTop: '4px' }}>
                 <span className="vok">{IcVok}</span>
-                {sa.city ?? 'Book directly at this salon'}
+                {sa.city ?? t('c.cards.bookDirect')}
               </span>
             </span>
             <span className="btn btn-g" style={{ minHeight: '42px' }}>
-              View salon {IcArr}
+              {t('c.cards.viewSalon')} {IcArr}
             </span>
           </button>
         );
@@ -439,7 +440,7 @@ export function SugPanelD({
       {empty ? (
         <div className="sug-foot" style={{ justifyContent: 'flex-start' }}>
           <span className="sm muted">
-            Nothing matched &ldquo;{q.trim()}&rdquo; — try a treatment, or a salon name.
+            {t('c.cards.nothingMatched', { q: q.trim() })}
           </span>
         </div>
       ) : null}
@@ -448,11 +449,11 @@ export function SugPanelD({
         <div className="sug-foot">
           <span style={{ display: 'inline-flex', gap: '6px', alignItems: 'center' }}>
             <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: 'var(--ok)' }}></span>
-            Every option is live &amp; bookable
+            {t('c.cards.live')}
           </span>
           <span style={{ display: 'inline-flex', gap: '6px', alignItems: 'center' }} className="spark">
             {IcSpark}
-            <span className="muted">No match? We&rsquo;ll show smart alternatives.</span>
+            <span className="muted">{t('c.cards.noMatch')}</span>
           </span>
         </div>
       ) : null}
@@ -472,7 +473,7 @@ function MostChosenListM({ onOpen }: { onOpen: (slug: string) => void }) {
         <span className="spark" style={{ display: 'inline-flex', gap: '7px', alignItems: 'center', color: 'var(--ink)', fontWeight: '700' }}>
           {IcSpark}Velnes thinks along with you
         </span>
-        <span className="tiny-tag">Most chosen</span>
+        <span className="tiny-tag">{t('c.cards.mostChosen')}</span>
       </div>
       {cats.slice(0, 4).map((c) => (
         <button
@@ -524,9 +525,9 @@ export function SugListM({
   };
 
   return (
-    <div className="list" role="listbox" aria-label="Suggestions">
+    <div className="list" role="listbox" aria-label={t('c.cards.suggestions')}>
       {loading && !items.length ? (
-        <div className="sm muted" style={{ padding: '6px 0' }}>Looking…</div>
+        <div className="sm muted" style={{ padding: '6px 0' }}>{t('c.cards.looking')}</div>
       ) : null}
 
       {data.categories.length ? (
@@ -544,8 +545,8 @@ export function SugListM({
             <span>
               <b>{c.name}</b>
               <span className="sm muted">
-                {c.salonCount} {c.salonCount === 1 ? 'salon' : 'salons'} ·{' '}
-                <span className="avail" style={{ fontSize: '12px' }}>instantly bookable</span>
+                {c.salonCount === 1 ? t('c.cards.salonOne', { n: c.salonCount }) : t('c.cards.salonMany', { n: c.salonCount })} ·{' '}
+                <span className="avail" style={{ fontSize: '12px' }}>{t('c.cards.instantly')}</span>
               </span>
             </span>
           </button>
@@ -585,7 +586,7 @@ export function SugListM({
             <span>
               <b>{sa.name}</b>
               <span className="sm muted" style={{ display: 'block', marginTop: '4px' }}>
-                {sa.city ?? 'Book directly at this salon'}
+                {sa.city ?? t('c.cards.bookDirect')}
               </span>
             </span>
           </button>

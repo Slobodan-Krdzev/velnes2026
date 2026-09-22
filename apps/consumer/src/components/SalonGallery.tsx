@@ -1,4 +1,5 @@
 import type { CSSProperties } from 'react';
+import { t } from '../lib/i18n-core.js';
 import { useCallback, useEffect, useState } from 'react';
 import './gallery.css';
 
@@ -81,7 +82,7 @@ export function SalonGallery({
         {photos.some((p) => p.img) ? (
           <button
             className="ph-open"
-            aria-label={`Open photos of ${salonName}`}
+            aria-label={t('c.gal.open', { salon: salonName })}
             onClick={() => setOpen(true)}
             style={current?.img ? undefined : { cursor: 'default' }}
           />
@@ -90,7 +91,7 @@ export function SalonGallery({
           <>
             <button
               className="galnav prev"
-              aria-label="Previous photo"
+              aria-label={t('c.gal.prev')}
               onClick={(e) => {
                 e.stopPropagation();
                 go(-1);
@@ -100,7 +101,7 @@ export function SalonGallery({
             </button>
             <button
               className="galnav next"
-              aria-label="Next photo"
+              aria-label={t('c.gal.next')}
               onClick={(e) => {
                 e.stopPropagation();
                 go(1);
@@ -117,7 +118,7 @@ export function SalonGallery({
                   key={p.id}
                   className={k === at ? 'on' : ''}
                   role="button"
-                  aria-label={`Photo ${k + 1}`}
+                  aria-label={t('c.gal.photo', { n: k + 1 })}
                   onClick={(e) => {
                     e.stopPropagation();
                     setI(k);
@@ -133,16 +134,16 @@ export function SalonGallery({
         <div
           className="gallightbox"
           role="dialog"
-          aria-label={`Photos of ${salonName}`}
+          aria-label={t('c.gal.photosOf', { salon: salonName })}
           onClick={() => setOpen(false)}
         >
-          <button className="close" aria-label="Close" onClick={() => setOpen(false)}>
+          <button className="close" aria-label={t('c.res.close')} onClick={() => setOpen(false)}>
             {CLOSE}
           </button>
           {n > 1 ? (
             <button
               className="galnav prev"
-              aria-label="Previous photo"
+              aria-label={t('c.gal.prev')}
               onClick={(e) => {
                 e.stopPropagation();
                 go(-1);
@@ -155,7 +156,7 @@ export function SalonGallery({
           {n > 1 ? (
             <button
               className="galnav next"
-              aria-label="Next photo"
+              aria-label={t('c.gal.next')}
               onClick={(e) => {
                 e.stopPropagation();
                 go(1);

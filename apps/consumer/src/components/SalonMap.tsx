@@ -1,4 +1,5 @@
 import L from 'leaflet';
+import { t } from '../lib/i18n-core.js';
 import 'leaflet/dist/leaflet.css';
 import './map.css';
 import markerIcon from 'leaflet/dist/images/marker-icon.png';
@@ -254,7 +255,7 @@ export function SalonMap({
         fillOpacity: 0.12,
       }).addTo(map);
       const dot = L.marker(at, { icon: YOU, zIndexOffset: 500 }).addTo(map);
-      dot.bindTooltip('You are here', { direction: 'top', offset: [0, -8] });
+      dot.bindTooltip(t('c.map.youAreHere'), { direction: 'top', offset: [0, -8] });
       youRef.current = { dot, ring };
     }
   }, [you?.lat, you?.lng, you?.accuracy, you, built]);
@@ -263,7 +264,7 @@ export function SalonMap({
     <div
       ref={boxRef}
       role="application"
-      aria-label="Map"
+      aria-label={t('c.map.map')}
       style={{
         height,
         borderRadius: radius,
@@ -316,7 +317,7 @@ function pinCard(p: MapPin): string {
     `<b class="pop-name">${escapeHtml(p.label)}</b>` +
     (p.sub ? `<span class="pop-sub">${escapeHtml(p.sub)}</span>` : '') +
     (badge || price ? `<span class="pop-meta">${badge}${price}</span>` : '') +
-    `<a class="pop-go" href="${escapeHtml(p.href ?? '#')}">View salon` +
+    `<a class="pop-go" href="${escapeHtml(p.href ?? '#')}">${t('c.cards.viewSalon')}` +
     '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h13M13 6l6 6-6 6"/></svg>' +
     '</a></span>'
   );

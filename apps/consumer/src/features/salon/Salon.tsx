@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import { t } from '../../lib/i18n-core.js';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import type { z } from 'zod';
 import type { PublicServiceSchema } from '@velnes/contracts';
@@ -64,7 +66,7 @@ function initials(name: string): string {
 }
 
 const IcStepDone = (
-  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-label="done"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>
+  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-label={t('c.sal.done')}><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>
 );
 
 /** The platform's last slot start (`DAY_END` 19:00 minus one 30-min
@@ -75,8 +77,8 @@ const todayIso = () => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 };
 
-const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const DAY_NAMES = () => t('c.date.days').split(',');
+const MONTHS = () => t('c.date.months').split(',');
 
 function dayChips(offset: number) {
   const out: { iso: string; lbl: string; small: string }[] = [];
@@ -84,8 +86,8 @@ function dayChips(offset: number) {
     const d = new Date();
     d.setDate(d.getDate() + i);
     const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-    const lbl = i === 0 ? 'Today' : i === 1 ? 'Tomorrow' : DAY_NAMES[d.getDay()]!;
-    const small = `${i < 2 ? `${DAY_NAMES[d.getDay()]} ` : ''}${d.getDate()} ${MONTHS[d.getMonth()]}`;
+    const lbl = i === 0 ? t('c.date.today') : i === 1 ? t('c.date.tomorrow') : DAY_NAMES()[d.getDay()]!;
+    const small = `${i < 2 ? `${DAY_NAMES()[d.getDay()]} ` : ''}${d.getDate()} ${MONTHS()[d.getMonth()]}`;
     out.push({ iso, lbl, small });
   }
   return out;
@@ -111,7 +113,7 @@ function TrCard({
     on && chosen
       ? fmtMKD(chosen.price)
       : s.variants.length
-        ? `from ${fmtMKD(Math.min(s.price, s.priceFrom ?? s.price))}`
+        ? t('c.from', { p: fmtMKD(Math.min(s.price, s.priceFrom ?? s.price)) })
         : fmtMKD(s.price);
   return (
     <button className={`tr-card${desktop ? ' dtr' : ''}${on ? ' on' : ''}`} onClick={onToggle}>
@@ -272,7 +274,7 @@ function useSalonPage() {
   useEffect(() => {
     if (empId !== 'any' && !team.some((e) => e.id === empId)) setEmpId('any');
   }, [teamKey, empId]);
-  const empName = team.find((e) => e.id === empId)?.name ?? 'Any available professional';
+  const empName = team.find((e) => e.id === empId)?.name ?? t('c.sal.anyProAvail');
   return {
     slug: slug ?? '',
     detail,
@@ -362,13 +364,13 @@ function BookCard({ p, desktop }: { p: Page; desktop: boolean }) {
           darkened the number; Alex asked for a check mark in its place. */}
       <div className="stepper">
         <span className={`step ${p.lines.length ? 'done' : 'on'}`} data-step="1">
-          <span className="n">{p.lines.length ? IcStepDone : 1}</span>Treatment
+          <span className="n">{p.lines.length ? IcStepDone : 1}</span>{t('c.sal.stepTreatment')}
         </span>
         <span className={`step ${p.lines.length && p.time ? 'done' : p.lines.length ? 'on' : ''}`} data-step="2">
-          <span className="n">{p.lines.length && p.time ? IcStepDone : 2}</span>Date &amp; time
+          <span className="n">{p.lines.length && p.time ? IcStepDone : 2}</span>{t('c.sal.stepDate')}
         </span>
         <span className={`step ${p.lines.length && p.time ? 'on' : ''}`} data-step="3">
-          <span className="n">3</span>Confirm
+          <span className="n">3</span>{t('c.sal.stepConfirm')}
         </span>
       </div>
       {d.locations.length > 1 ? (
@@ -376,12 +378,10 @@ function BookCard({ p, desktop }: { p: Page; desktop: boolean }) {
           <div className="pro-row" style={{ marginTop: '4px' }}>
             <span className="av">{IcPin}</span>
             <span className="who2">
-              <small>Location</small>
+              <small>{t('c.sal.location')}</small>
               <b>{p.location?.name}</b>
             </span>
-            <button className="chg" type="button" onClick={() => p.setLocOpen(!p.locOpen)}>
-              Choose →
-            </button>
+            <button className="chg" type="button" onClick={() => p.setLocOpen(!p.locOpen)}>{t('c.sal.choose')}</button>
           </div>
           {p.locOpen ? (
             <div className="pro-grid">
@@ -398,10 +398,10 @@ function BookCard({ p, desktop }: { p: Page; desktop: boolean }) {
           ) : null}
         </>
       ) : null}
-      <div className="bk-h" style={desktop ? undefined : { marginTop: '4px' }}>1. Choose your treatment</div>
+      <div className="bk-h" style={desktop ? undefined : { marginTop: '4px' }}>{t('c.sal.step1')}</div>
       <div className="bk-sub spark">
         {IcSpark}
-        <span className="muted">Most booked treatments</span>
+        <span className="muted">{t('c.sal.mostBooked')}</span>
       </div>
       <div className="tr-grid">
         {head.map((s) => (
@@ -432,7 +432,7 @@ function BookCard({ p, desktop }: { p: Page; desktop: boolean }) {
             </div>
           ) : null}
           <button className="btn btn-g viewall" onClick={() => p.setAllOpen(!p.allOpen)}>
-            {p.allOpen ? 'Show fewer treatments' : `View all ${p.services.length} treatments`} {IcArr}
+            {p.allOpen ? t('c.sal.showFewer') : t('c.sal.viewAllN', { n: p.services.length })} {IcArr}
           </button>
         </>
       ) : null}
@@ -450,7 +450,7 @@ function BookCard({ p, desktop }: { p: Page; desktop: boolean }) {
               >
                 <span className="pav any">{IcClock}</span>
                 <span>
-                  <b>Standard</b>
+                  <b>{t('c.sal.standard')}</b>
                   <span className="sm muted">
                     {minutesLbl(l.svc.durationMin)} · {fmtMKD(l.svc.price)}
                   </span>
@@ -477,20 +477,18 @@ function BookCard({ p, desktop }: { p: Page; desktop: boolean }) {
       <div className="pro-row">
         <span className="av">{IcPerson}</span>
         <span className="who2">
-          <small>Professional</small>
+          <small>{t('c.sal.professional')}</small>
           <b data-sum="pro">{p.empName}</b>
         </span>
-        <button className="chg" type="button" onClick={() => p.setProOpen(!p.proOpen)}>
-          Choose →
-        </button>
+        <button className="chg" type="button" onClick={() => p.setProOpen(!p.proOpen)}>{t('c.sal.choose')}</button>
       </div>
       {p.proOpen ? (
         <div className="pro-grid">
           <button className={`pro-card${p.empId === 'any' ? ' on' : ''}`} onClick={() => p.setEmpId('any')}>
             <span className="pav any">{IcPerson}</span>
             <span>
-              <b>Any professional</b>
-              <span className="sm muted">First available · fastest option</span>
+              <b>{t('c.sal.anyPro')}</b>
+              <span className="sm muted">{t('c.sal.firstAvail')}</span>
             </span>
           </button>
           {p.team.map((e) => (
@@ -528,13 +526,13 @@ function BookCard({ p, desktop }: { p: Page; desktop: boolean }) {
             }}
           >
             {d.name} products
-            <span className="tiny-tag" style={{ marginLeft: '9px' }}>{d.products.length} products</span>
+            <span className="tiny-tag" style={{ marginLeft: '9px' }}>{t('c.sal.productsN', { n: d.products.length })}</span>
             <span className="chv">{IcChevD}</span>
           </div>
           {p.prodOpen ? (
             <div>
               <div className="bk-sub">
-                <span className="muted">Available at the salon — ask for them at your visit.</span>
+                <span className="muted">{t('c.sal.products')}</span>
               </div>
               <div className="tr-grid">
                 {d.products.map((pr) => (
@@ -546,7 +544,7 @@ function BookCard({ p, desktop }: { p: Page; desktop: boolean }) {
                       </span>
                     </span>
                     <span className="in2">
-                      <span>Product</span>
+                      <span>{t('c.sal.product')}</span>
                       <b>{fmtMKD(pr.price)}</b>
                     </span>
                   </button>
@@ -560,13 +558,13 @@ function BookCard({ p, desktop }: { p: Page; desktop: boolean }) {
           a treatment is in the visit — a day and time for no treatment
           is not a step anyone can complete. Alex, 2026-09-21. */}
       <div className="bk-h" style={{ marginTop: '20px' }}>
-        2. Choose date &amp; time
-        {!p.lines.length ? <span className="sm muted bk-hint">Choose a treatment first</span> : null}
+        {t('c.sal.step2')}
+        {!p.lines.length ? <span className="sm muted bk-hint">{t('c.sal.chooseFirst')}</span> : null}
       </div>
       <div className={p.lines.length ? undefined : 'bk-off'} aria-disabled={!p.lines.length}>
       <div className="dayrow" ref={dayRef}>
         {p.dayOffset > 0 ? (
-          <button className="daychip daychip--cal" onClick={p.prevDays} aria-label="Earlier days">
+          <button className="daychip daychip--cal" onClick={p.prevDays} aria-label={t('c.sal.earlier')}>
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14.5 6 8.5 12l6 6" /></svg>
           </button>
         ) : null}
@@ -576,7 +574,7 @@ function BookCard({ p, desktop }: { p: Page; desktop: boolean }) {
             <small>{day.small}</small>
           </button>
         ))}
-        <button className="daychip daychip--cal" onClick={p.nextDays} aria-label="Later days">
+        <button className="daychip daychip--cal" onClick={p.nextDays} aria-label={t('c.sal.later')}>
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9.5 6l6 6-6 6" /></svg>
         </button>
       </div>
@@ -591,14 +589,13 @@ function BookCard({ p, desktop }: { p: Page; desktop: boolean }) {
             /* Not a full day — a day nobody fits. The prototype only had
                "try another date"; here that would be every date. */
             <div className="sm bk-why" style={{ gridColumn: '1/-1' }}>
-              With &ldquo;Any available professional&rdquo;, nobody at {p.location?.name ?? 'this location'} fits this
-              visit in the time the catalog quotes for it. Choose a professional to see their own times.
+              {t('c.sal.nobodyAtPace', { loc: p.location?.name ?? t('c.sal.thisLocation') })}
               <button type="button" className="btn btn-g" onClick={() => p.setProOpen(true)}>
-                Choose a professional
+                {t('c.sal.choosePro')}
               </button>
             </div>
           ) : p.slotsAnswered ? (
-            <div className="sm muted" style={{ gridColumn: '1/-1', padding: '8px 2px' }}>No open times this day — try another date.</div>
+            <div className="sm muted" style={{ gridColumn: '1/-1', padding: '8px 2px' }}>{t('c.sal.noTimes')}</div>
           ) : null
         ) : null}
       </div>
@@ -647,6 +644,7 @@ function goBook(p: Page, nav: (to: string) => void, setDraft: ReturnType<typeof 
 }
 
 export function Salon() {
+  useTranslation();
   const nav = useNavigate();
   const geo = useUserLocation();
   const p = useSalonPage();
@@ -664,9 +662,9 @@ export function Salon() {
   const book = () => goBook(p, nav, setDraft);
   const teamCard = (idPrefix: string) => (
     <div className="scard" id={`${idPrefix}-team`}>
-      <h2>Team at {d.name}</h2>
-      <div className="sm muted" style={{ margin: '-8px 0 12px' }}>Meet the team.</div>
-      <div className="tsub">{d.name} team</div>
+      <h2>{t('c.sal.teamAt', { salon: d.name })}</h2>
+      <div className="sm muted" style={{ margin: '-8px 0 12px' }}>{t('c.sal.meetTeam')}</div>
+      <div className="tsub">{t('c.sal.teamHeading', { salon: d.name })}</div>
       {d.team.map((t) => (
         <button key={t.id} className="trow">
           {t.avatar ? (
@@ -698,7 +696,7 @@ export function Salon() {
       : null;
   const locationCard = (idPrefix: string) => (
     <div className="scard" id={`${idPrefix}-info`}>
-      <h2>Location</h2>
+      <h2>{t('c.sal.location')}</h2>
       {mapPins.length ? (
         <SalonMap
           pins={mapPins}
@@ -716,7 +714,7 @@ export function Salon() {
           <b style={{ color: 'var(--ink)' }}>{printedAddress}</b>
           {away ? <span className="sm muted">{away} from you</span> : null}
           {!mapPins.length ? (
-            <span className="sm muted">This salon hasn’t placed itself on the map yet.</span>
+            <span className="sm muted">{t('c.sal.noPin')}</span>
           ) : null}
         </span>
         <a
@@ -726,7 +724,7 @@ export function Salon() {
           target="_blank"
           rel="noreferrer"
         >
-          Get directions
+          {t('c.sal.directions')}
         </a>
       </div>
     </div>
@@ -748,7 +746,7 @@ export function Salon() {
    */
   const notBookableCard = (
     <div className="scard">
-      <h2>Booking</h2>
+      <h2>{t('c.sal.booking')}</h2>
       <p style={{ margin: '0 0 2px', fontSize: '14px' }}>
         {d.name} has not opened online booking on Velnes yet, so there is nothing
         to reserve here for now.
@@ -762,8 +760,7 @@ export function Salon() {
         </p>
       ) : (
         <p className="sm muted" style={{ margin: '10px 0 0' }}>
-          No contact number published either — this listing is as far as it goes
-          for now.
+          {t('c.sal.noContact')}
         </p>
       )}
     </div>
@@ -775,7 +772,7 @@ export function Salon() {
   const about = d.description || d.pitch;
   const aboutCard = !about ? null : (
     <div className="scard">
-      <h2>About {d.name}</h2>
+      <h2>{t('c.sal.about', { salon: d.name })}</h2>
       <div className="about2">
         <div>
           <p style={{ margin: '0', fontSize: '14px' }}>{about}</p>
@@ -794,7 +791,7 @@ export function Salon() {
               <div className="pillsearch">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="M20 20l-4.2-4.2" /></svg>
                 <input value={d.name} readOnly />
-                <button style={{ border: '0', background: 'none', color: 'var(--muted)' }} onClick={() => nav('/')} aria-label="Clear">
+                <button style={{ border: '0', background: 'none', color: 'var(--muted)' }} onClick={() => nav('/')} aria-label={t('c.res.clear')}>
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 6l12 12M18 6 6 18" /></svg>
                 </button>
               </div>
@@ -811,8 +808,8 @@ export function Salon() {
               </div>
               {d.pitch ? <p style={{ margin: '12px 0 0', fontSize: '14.5px', maxWidth: '46ch' }}>{d.pitch}</p> : null}
               <div className="badges">
-                {d.bookable ? <span className="note">{IcBolt} Instant booking</span> : null}
-                <span className="note">{IcVok} Verified salon</span>
+                {d.bookable ? <span className="note">{IcBolt} {t('c.sal.instantBooking')}</span> : null}
+                <span className="note">{IcVok} {t('c.sal.verified')}</span>
               </div>
               {d.bookable ? null : notBookableCard}
               {aboutCard}
@@ -824,8 +821,8 @@ export function Salon() {
           {d.bookable && p.lines.length ? (
             <div className={`dcart${p.cartMin ? ' min' : ''}`} id="dcart">
               <div className="dcart-h">
-                Your booking
-                <button className="dcart-min" aria-label="Minimize booking panel" onClick={() => p.setCartMin(!p.cartMin)}>
+                {t('c.sal.yourBooking')}
+                <button className="dcart-min" aria-label={t('c.sal.minimize')} onClick={() => p.setCartMin(!p.cartMin)}>
                   {IcChevD}
                 </button>
               </div>
@@ -848,7 +845,7 @@ export function Salon() {
                         <b style={{ color: 'var(--ink)' }}>{fmtMKD(l.price)}</b>
                         <button
                           className="x"
-                          aria-label={`Remove ${l.svc.name}`}
+                          aria-label={t('c.sal.remove', { name: l.svc.name })}
                           onClick={() => p.remove(l.serviceId)}
                         >
                           ✕
@@ -860,15 +857,15 @@ export function Salon() {
                     {p.dayLbl} · {p.time || '—'} · {minutesLbl(p.durationMin)} · {p.empName}
                   </div>
                   <div className="dcart-tot">
-                    <span>Total</span>
+                    <span>{t('c.sal.total')}</span>
                     <b>{showPrice}</b>
                   </div>
                   <button className="btn btn-p" style={{ width: '100%' }} disabled={!p.lines.length || !p.time} onClick={book}>
-                    Book now
+                    {t('c.sal.bookNow')}
                   </button>
                   {!p.lines.length || !p.time ? (
                     <div className="sm muted" style={{ textAlign: 'center', marginTop: '7px' }}>
-                      {!p.lines.length ? 'Choose a treatment first.' : 'Pick a time that fits the whole visit.'}
+                      {!p.lines.length ? t('c.sal.chooseFirstDot') : t('c.sal.pickTime')}
                     </div>
                   ) : null}
                 </div>
@@ -881,12 +878,12 @@ export function Salon() {
         <section data-screen="salon">
           <div className={d.bookable ? 'm-page has-bar' : 'm-page'}>
             <div className="m-dethead">
-              <button className="dh-btn" onClick={() => nav(-1 as never)} aria-label="Back">
+              <button className="dh-btn" onClick={() => nav(-1 as never)} aria-label={t('c.sal.back')}>
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H6M11 6l-6 6 6 6" /></svg>
               </button>
               <span className="dh-title">{d.name}</span>
               <span style={{ display: 'flex' }}>
-                <button className="dh-btn" aria-label="Save">
+                <button className="dh-btn" aria-label={t('c.sal.save')}>
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round"><path d="M12 20s-7.4-4.6-7.4-9.4A4.3 4.3 0 0 1 12 8a4.3 4.3 0 0 1 7.4 2.6C19.4 15.4 12 20 12 20z" /></svg>
                 </button>
               </span>
@@ -916,8 +913,8 @@ export function Salon() {
               </div>
               {d.pitch ? <p style={{ margin: '10px 0 0', fontSize: '13.5px' }}>{d.pitch}</p> : null}
               <div className="badges" style={{ gap: '8px 16px' }}>
-                {d.bookable ? <span className="note" style={{ fontSize: '12.5px' }}>{IcBolt} Instant booking</span> : null}
-                <span className="note" style={{ fontSize: '12.5px' }}>{IcVok} Verified salon</span>
+                {d.bookable ? <span className="note" style={{ fontSize: '12.5px' }}>{IcBolt} {t('c.sal.instantBooking')}</span> : null}
+                <span className="note" style={{ fontSize: '12.5px' }}>{IcVok} {t('c.sal.verified')}</span>
               </div>
             </div>
             {d.bookable ? <BookCard p={p} desktop={false} /> : notBookableCard}
@@ -942,14 +939,14 @@ export function Salon() {
                     </span>
                   </span>
                   <span className="tot">
-                    <small>Total</small>
+                    <small>{t('c.sal.total')}</small>
                     <b data-sum="price">{showPrice}</b>
                   </span>
                 </div>
                 <button className="btn btn-p" disabled={!p.lines.length || !p.time} onClick={book}>
-                  Book now {IcArr}
+                  {t('c.sal.bookNow')} {IcArr}
                 </button>
-                <span className="safe">{IcVok} Safe and simple booking</span>
+                <span className="safe">{IcVok} {t('c.sal.safe')}</span>
               </div>
             ) : null}
           </div>

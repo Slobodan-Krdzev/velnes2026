@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { t } from '../lib/i18n-core.js';
 
 /**
  * The date-of-birth calendar — the prototype's own.
@@ -24,7 +25,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
  * other's format.
  */
 
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const MONTHS = () => t('c.date.monthsLong').split(',');
 const FIRST_YEAR = 1930;
 /** Where the calendar opens when there is no date yet — the
  *  prototype's own default, and a reasonable guess for an adult. */
@@ -33,7 +34,7 @@ const DEFAULT_YEAR = 1995;
 /** ISO → what the person reads. Empty for no date. */
 export function dobLabel(iso: string): string {
   const p = parse(iso);
-  return p ? `${p.d} ${MONTHS[p.m]} ${p.y}` : '';
+  return p ? `${p.d} ${MONTHS()[p.m]} ${p.y}` : '';
 }
 
 function parse(iso: string): { y: number; m: number; d: number } | null {
@@ -117,7 +118,7 @@ export function DobPicker({
         id={id}
         className="acc-inp"
         readOnly
-        placeholder="Choose a date"
+        placeholder={t('c.dob.choose')}
         aria-haspopup="dialog"
         aria-expanded={open}
         value={dobLabel(value)}
@@ -125,41 +126,41 @@ export function DobPicker({
         style={{ cursor: 'pointer' }}
       />
       {open ? (
-        <div className="cal" role="dialog" aria-label="Choose a date">
+        <div className="cal" role="dialog" aria-label={t('c.dob.choose')}>
           <div className="cal-hd">
-            <button type="button" className="cal-nav" onClick={() => step(-1)} aria-label="Previous month">
+            <button type="button" className="cal-nav" onClick={() => step(-1)} aria-label={t('c.dob.prevMonth')}>
               &#8249;
             </button>
             <select
-              aria-label="Month"
+              aria-label={t('c.dob.month')}
               value={month}
               onChange={(e) => setMonth(Number(e.target.value))}
             >
-              {MONTHS.map((m, i) => (
+              {MONTHS().map((m, i) => (
                 <option key={m} value={i}>
                   {m}
                 </option>
               ))}
             </select>
-            <select aria-label="Year" value={year} onChange={(e) => setYear(Number(e.target.value))}>
+            <select aria-label={t('c.dob.year')} value={year} onChange={(e) => setYear(Number(e.target.value))}>
               {years.map((y) => (
                 <option key={y} value={y}>
                   {y}
                 </option>
               ))}
             </select>
-            <button type="button" className="cal-nav" onClick={() => step(1)} aria-label="Next month">
+            <button type="button" className="cal-nav" onClick={() => step(1)} aria-label={t('c.dob.nextMonth')}>
               &#8250;
             </button>
           </div>
           <div className="cal-dw">
-            <span>Mo</span>
-            <span>Tu</span>
-            <span>We</span>
-            <span>Th</span>
-            <span>Fr</span>
-            <span>Sa</span>
-            <span>Su</span>
+            <span>{t('c.dob.mo')}</span>
+            <span>{t('c.dob.tu')}</span>
+            <span>{t('c.dob.we')}</span>
+            <span>{t('c.dob.th')}</span>
+            <span>{t('c.dob.fr')}</span>
+            <span>{t('c.dob.sa')}</span>
+            <span>{t('c.dob.su')}</span>
           </div>
           <div className="cal-g">
             {Array.from({ length: startDow }, (_, i) => (
@@ -192,7 +193,7 @@ export function DobPicker({
                 setOpen(false);
               }}
             >
-              Clear
+              {t('c.res.clear')}
             </button>
           ) : null}
         </div>

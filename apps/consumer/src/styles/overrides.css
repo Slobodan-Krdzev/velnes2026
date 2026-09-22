@@ -830,3 +830,73 @@ a.pop-go:hover {
   padding: 6px 14px;
   font-size: 13px;
 }
+
+/* ── The language pill (LangMenu.tsx) ───────────────────────────────
+   Every other Velnes app switches language from its shell header; the
+   consumer app's prototype had none, so this borrows the header's
+   ghost-button look and the suggestion menu's list. */
+.langmenu {
+  position: relative;
+  display: inline-flex;
+}
+.langbtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 36px;
+  padding: 6px 10px;
+  border: 1px solid var(--line-soft);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.langbtn:hover {
+  background: var(--warm);
+}
+.langlist {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 60;
+  min-width: 160px;
+  display: grid;
+  padding: 6px;
+  background: #fff;
+  border: 1px solid var(--line-soft);
+  border-radius: 14px;
+  box-shadow: 0 14px 34px rgba(45, 26, 18, 0.16);
+}
+.langopt {
+  text-align: left;
+  padding: 9px 12px;
+  border: 0;
+  border-radius: 10px;
+  background: none;
+  font: inherit;
+  font-size: 13.5px;
+  color: var(--ink);
+  cursor: pointer;
+}
+.langopt:hover {
+  background: var(--warm);
+}
+.langopt.on {
+  font-weight: 700;
+  color: var(--brand);
+}
+/* In the phone footer the pill sits on the dark ground. */
+.m-foot .langbtn,
+.d-foot .langbtn {
+  background: transparent;
+  color: inherit;
+  border-color: rgba(255, 249, 247, 0.35);
+}
+.m-foot .langlist,
+.d-foot .langlist {
+  bottom: calc(100% + 6px);
+  top: auto;
+}

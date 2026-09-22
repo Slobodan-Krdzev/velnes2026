@@ -10,6 +10,8 @@ import { Results } from './features/discovery/Results.js';
 import { Salon } from './features/salon/Salon.js';
 import { SessionProvider, useFavourites, useSession } from './lib/api/session.js';
 import { GeoProvider } from './lib/geo.js';
+import { I18nextProvider } from 'react-i18next';
+import { LangSync, i18n } from './lib/i18n.js';
 
 const qc = new QueryClient({
   defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false } },
@@ -56,9 +58,11 @@ function ScrollToTop() {
 
 export function App() {
   return (
+    <I18nextProvider i18n={i18n}>
     <QueryClientProvider client={qc}>
       <SessionProvider>
         <PendingFavourite />
+        <LangSync />
         <GeoProvider>
           <BookingProvider>
           <BrowserRouter>
@@ -89,5 +93,6 @@ export function App() {
         </GeoProvider>
       </SessionProvider>
     </QueryClientProvider>
+    </I18nextProvider>
   );
 }

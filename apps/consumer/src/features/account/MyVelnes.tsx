@@ -1,4 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query';
+import { useTranslation } from 'react-i18next';
+import { t } from '../../lib/i18n-core.js';
 import { useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { DHeader } from '../../app/chrome.js';
@@ -33,23 +35,25 @@ const BACK = (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14.5 6 8.5 12l6 6" /></svg>
 );
 
-const SECS = [
-  { id: 'general', t: 'General', sub: 'Account info & password' },
-  { id: 'appts', t: 'Appointments', sub: 'Upcoming & history' },
+// Functions, not constants: the labels must follow a language switch,
+// and a module-level `t()` would have run once, at load.
+const secs = () => [
+  { id: 'general' as const, t: t('c.acc.general'), sub: t('c.acc.generalSub') },
+  { id: 'appts' as const, t: t('c.acc.appts'), sub: t('c.acc.apptsSub') },
   // Third, where the prototype puts it.
-  { id: 'favs', t: 'Favourites', sub: 'Salons, pros & services' },
-  { id: 'notifs', t: 'Notifications', sub: '' },
-] as const;
-type SecId = (typeof SECS)[number]['id'] | 'over' | 'appt';
+  { id: 'favs' as const, t: t('c.acc.favs'), sub: t('c.acc.favsSub') },
+  { id: 'notifs' as const, t: t('c.acc.notifs'), sub: '' },
+];
+type SecId = 'general' | 'appts' | 'favs' | 'notifs' | 'over' | 'appt';
 
-const TITLES: Record<string, string> = {
-  over: 'My Velnes',
-  general: 'General',
-  appts: 'Appointments',
+const titles = (): Record<string, string> => ({
+  over: t('c.acc.title'),
+  general: t('c.acc.general'),
+  appts: t('c.acc.appts'),
   appt: 'Appointment',
-  favs: 'Favourites',
-  notifs: 'Notifications',
-};
+  favs: t('c.acc.favs'),
+  notifs: t('c.acc.notifs'),
+});
 
 function initials(p: { first: string; last: string; email: string }) {
   return ((p.first[0] ?? p.email[0] ?? 'V') + (p.last[0] ?? '')).toUpperCase();
@@ -81,9 +85,9 @@ function bucketOf(a: Appt): 'up' | 'past' | 'canc' {
 
 function StatusBadge({ a }: { a: Appt }) {
   const b = bucketOf(a);
-  if (b === 'canc') return <span className="acc-badge off">Cancelled</span>;
-  if (b === 'past') return <span className="acc-badge mut">Completed</span>;
-  return <span className="acc-badge ok">Confirmed</span>;
+  if (b === 'canc') return <span className="acc-badge off">{t('c.acc.cancelled')}</span>;
+  if (b === 'past') return <span className="acc-badge mut">{t('c.acc.completed')}</span>;
+  return <span className="acc-badge ok">{t('c.acc.confirmed')}</span>;
 }
 
 function ApptRow({ a, onOpen }: { a: Appt; onOpen: () => void }) {
@@ -110,6 +114,7 @@ function ApptRow({ a, onOpen }: { a: Appt; onOpen: () => void }) {
 }
 
 export function MyVelnes({ section = 'over' }: { section?: SecId }) {
+  useTranslation();
   const nav = useNavigate();
   const params = useParams();
   const qc = useQueryClient();
@@ -138,12 +143,8 @@ export function MyVelnes({ section = 'over' }: { section?: SecId }) {
           <section className="acc">
             <div className="auth-wrap">
             <div className="acc-empty">
-              <b>Sign in to see your Velnes</b>
-              Your appointments, notifications and account live here.
-              <br />
-              <button className="btn btn-p" onClick={() => nav('/login')}>
-                Log in
-              </button>
+              <b>{t('c.acc.signIn')}</b>{t('c.acc.signInSub')}<br />
+              <button className="btn btn-p" onClick={() => nav('/login')}>{t('c.acc.login')}</button>
               </div>
             </div>
           </section>
@@ -167,7 +168,7 @@ export function MyVelnes({ section = 'over' }: { section?: SecId }) {
         qc.invalidateQueries({ queryKey: ['my-notifications'] }),
       ]);
     } catch (e) {
-      setErr(e instanceof ApiError ? e.message : 'Could not cancel — please try again.');
+      setErr(e instanceof ApiError ? e.message : t('c.acc.cancelFailed'));
     }
     setBusy(false);
   };
@@ -209,7 +210,7 @@ export function MyVelnes({ section = 'over' }: { section?: SecId }) {
                   e.stopPropagation();
                   go('notifs');
                 }}
-                aria-label="Notifications"
+                aria-label={t('c.acc.notifs')}
               >
                 {BELL}
                 <span className="acc-bdg" hidden={unread === 0}>
@@ -218,7 +219,7 @@ export function MyVelnes({ section = 'over' }: { section?: SecId }) {
               </button>
             </div>
             <div className="acc-chips" ref={chipsRef}>
-              {SECS.map((s) => (
+              {secs().map((s) => (
                 <button
                   key={s.id}
                   className="acc-chip"
@@ -236,12 +237,10 @@ export function MyVelnes({ section = 'over' }: { section?: SecId }) {
                   signOut();
                   nav('/');
                 }}
-              >
-                Log out
-              </button>
+              >{t('c.acc.logout')}</button>
             </div>
             <nav className="acc-menu">
-              {SECS.map((s) => (
+              {secs().map((s) => (
                 <button
                   key={s.id}
                   aria-current={sec === s.id || (sec === 'appt' && s.id === 'appts')}
@@ -265,7 +264,7 @@ export function MyVelnes({ section = 'over' }: { section?: SecId }) {
                 }}
                 style={{ color: 'var(--muted)' }}
               >
-                <span>Log out</span>
+                <span>{t('c.acc.logout')}</span>
               </button>
             </nav>
           </aside>
@@ -275,11 +274,11 @@ export function MyVelnes({ section = 'over' }: { section?: SecId }) {
               {sec !== 'over' ? (
                 <>
                   {parent ? (
-                    <button className="acc-back" onClick={() => go('appts')} aria-label="Back">
+                    <button className="acc-back" onClick={() => go('appts')} aria-label={t('c.acc.back')}>
                       {BACK}
                     </button>
                   ) : null}
-                  <span className="acc-tt serif">{TITLES[sec]}</span>
+                  <span className="acc-tt serif">{titles()[sec]}</span>
                 </>
               ) : null}
             </div>
@@ -303,7 +302,7 @@ export function MyVelnes({ section = 'over' }: { section?: SecId }) {
                       </div>
                     </div>
                   </div>
-                  <div className="acc-lbl">Next appointment</div>
+                  <div className="acc-lbl">{t('c.acc.nextAppt')}</div>
                   {list.filter((a) => bucketOf(a) === 'up').length ? (
                     list
                       .filter((a) => bucketOf(a) === 'up')
@@ -313,17 +312,13 @@ export function MyVelnes({ section = 'over' }: { section?: SecId }) {
                       ))
                   ) : (
                     <div className="acc-empty">
-                      <b>Nothing booked yet</b>
-                      When you book, your appointment appears here.
-                      <br />
-                      <button className="btn btn-p" onClick={() => nav('/')}>
-                        Find a salon
-                      </button>
+                      <b>{t('c.acc.nothingBooked')}</b>{t('c.acc.nothingBookedSub')}<br />
+                      <button className="btn btn-p" onClick={() => nav('/')}>{t('c.acc.findSalon')}</button>
                     </div>
                   )}
                   {salons.data?.salons.length ? (
                     <>
-                      <div className="acc-lbl">Your salons</div>
+                      <div className="acc-lbl">{t('c.acc.yourSalons')}</div>
                       <div className="acc-card">
                         {salons.data.salons.map((s) => (
                           <div
@@ -356,9 +351,9 @@ export function MyVelnes({ section = 'over' }: { section?: SecId }) {
                   <div className="acc-seg">
                     {(
                       [
-                        ['up', 'Upcoming'],
-                        ['past', 'Past'],
-                        ['canc', 'Cancelled'],
+                        ['up', t('c.acc.upcoming')],
+                        ['past', t('c.acc.past')],
+                        ['canc', t('c.acc.cancelled')],
                       ] as const
                     ).map(([id, label]) => (
                       <button key={id} aria-selected={tab === id} onClick={() => setTab(id)}>
@@ -376,23 +371,15 @@ export function MyVelnes({ section = 'over' }: { section?: SecId }) {
                     <div className="acc-empty">
                       {tab === 'up' ? (
                         <>
-                          <b>No upcoming appointments</b>
-                          You don’t have any upcoming appointments.
-                          <br />
-                          <button className="btn btn-p" onClick={() => nav('/')}>
-                            Find a salon
-                          </button>
+                          <b>{t('c.acc.noUpcoming')}</b>{t('c.acc.noUpcomingSub')}<br />
+                          <button className="btn btn-p" onClick={() => nav('/')}>{t('c.acc.findSalon')}</button>
                         </>
                       ) : tab === 'past' ? (
                         <>
-                          <b>No past appointments</b>
-                          Appointments you complete will appear here.
-                        </>
+                          <b>{t('c.acc.noPast')}</b>{t('c.acc.noPastSub')}</>
                       ) : (
                         <>
-                          <b>No cancelled appointments</b>
-                          Cancelled appointments will appear here.
-                        </>
+                          <b>{t('c.acc.noCancelled')}</b>{t('c.acc.noCancelledSub')}</>
                       )}
                     </div>
                   )}
@@ -414,37 +401,37 @@ export function MyVelnes({ section = 'over' }: { section?: SecId }) {
                     </div>
                     <div style={{ height: '10px' }}></div>
                     <div className="acc-kv">
-                      <span>Date</span>
+                      <span>{t('c.acc.date')}</span>
                       <b>{current.date}</b>
                     </div>
                     <div className="acc-kv">
-                      <span>Time</span>
+                      <span>{t('c.acc.time')}</span>
                       <b>
                         {current.time} – {current.end}
                       </b>
                     </div>
                     <div className="acc-kv">
-                      <span>Duration</span>
+                      <span>{t('c.acc.duration')}</span>
                       <b>{minutesLbl(current.durationMin)}</b>
                     </div>
                     {current.employeeName ? (
                       <div className="acc-kv">
-                        <span>Professional</span>
+                        <span>{t('c.acc.professional')}</span>
                         <b>{current.employeeName}</b>
                       </div>
                     ) : null}
                     <div className="acc-kv">
-                      <span>Price</span>
+                      <span>{t('c.acc.price')}</span>
                       <b>{fmtMKD(current.price)}</b>
                     </div>
                     <div className="acc-kv">
-                      <span>Booking reference</span>
+                      <span>{t('c.acc.reference')}</span>
                       <b>{current.ref}</b>
                     </div>
                   </div>
                   {current.locationAddress || current.lat != null ? (
                     <div className="acc-card">
-                      <div className="acc-lbl">Where</div>
+                      <div className="acc-lbl">{t('c.acc.where')}</div>
                       {current.lat != null && current.lng != null ? (
                         <SalonMap
                           pins={[
@@ -470,7 +457,7 @@ export function MyVelnes({ section = 'over' }: { section?: SecId }) {
                   {bucketOf(current) === 'up' ? (
                     <>
                       <div className="acc-card">
-                        <div className="acc-lbl">Cancellation policy</div>
+                        <div className="acc-lbl">{t('c.acc.policy')}</div>
                         <div className="sm" style={{ color: 'var(--ink)' }}>
                           Free cancellation up to {current.cancelHours} hours before your appointment.
                         </div>
@@ -482,9 +469,7 @@ export function MyVelnes({ section = 'over' }: { section?: SecId }) {
                             className="btn btn-p"
                             style={{ width: '100%' }}
                             onClick={() => nav(`/salon/${current.salonSlug}`)}
-                          >
-                            Book again
-                          </button>
+                          >{t('c.acc.bookAgain')}</button>
                         ) : null}
                         <button
                           className="btn btn-g"
@@ -492,7 +477,7 @@ export function MyVelnes({ section = 'over' }: { section?: SecId }) {
                           disabled={busy}
                           onClick={() => void cancel(current.id)}
                         >
-                          {busy ? 'Cancelling…' : 'Cancel appointment'}
+                          {busy ? 'Cancelling…' : t('c.acc.cancelAppt')}
                         </button>
                       </div>
                     </>
@@ -501,9 +486,7 @@ export function MyVelnes({ section = 'over' }: { section?: SecId }) {
                       className="btn btn-p"
                       style={{ width: '100%' }}
                       onClick={() => nav(`/salon/${current.salonSlug}`)}
-                    >
-                      Book again
-                    </button>
+                    >{t('c.acc.bookAgain')}</button>
                   ) : null}
                 </>
               ) : null}
@@ -515,9 +498,7 @@ export function MyVelnes({ section = 'over' }: { section?: SecId }) {
               {sec === 'notifs' ? (
                 <>
                   <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '8px' }}>
-                    <button className="acc-link" onClick={() => void markRead(null)}>
-                      Mark all as read
-                    </button>
+                    <button className="acc-link" onClick={() => void markRead(null)}>{t('c.acc.markRead')}</button>
                   </div>
                   {notifs.data?.notifications.length ? (
                     <div className="acc-card">
@@ -551,9 +532,7 @@ export function MyVelnes({ section = 'over' }: { section?: SecId }) {
                     </div>
                   ) : (
                     <div className="acc-empty">
-                      <b>No notifications</b>
-                      You’re all caught up.
-                    </div>
+                      <b>{t('c.acc.noNotifs')}</b>{t('c.acc.noNotifsSub')}</div>
                   )}
                 </>
               ) : null}
@@ -584,24 +563,20 @@ function Favourites() {
   const { data, isLoading, isError, toggle } = useFavourites();
 
   if (isLoading)
-    return <div className="sm muted" style={{ padding: '18px 4px' }}>Loading your favourites…</div>;
+    return <div className="sm muted" style={{ padding: '18px 4px' }}>{t('c.acc.favsLoading')}</div>;
   if (isError || !data)
     return (
-      <div className="acc-err">
-        Could not load your favourites just now. Refresh to try again.
-      </div>
+      <div className="acc-err">{t('c.acc.favsError')}</div>
     );
 
   const total = data.salons.length + data.services.length + data.pros.length;
   if (!total)
     return (
       <div className="acc-empty">
-        <b>No favourites yet</b>
-        Save salons and professionals you love so they&rsquo;re easy to find again.
+        <b>{t('c.acc.noFavs')}</b>
+        {t('c.acc.noFavsSub')}
         <br />
-        <button className="btn btn-p" onClick={() => nav('/')}>
-          Explore Velnes
-        </button>
+        <button className="btn btn-p" onClick={() => nav('/')}>{t('c.acc.explore')}</button>
       </div>
     );
 
@@ -626,7 +601,7 @@ function Favourites() {
       <button
         className="acc-link"
         style={{ fontSize: '19px', lineHeight: '1' }}
-        aria-label={`Remove ${f.name} from favourites`}
+        aria-label={t('c.fav.remove', { name: f.name })}
         onClick={() => void toggle(f.kind, f.id)}
       >
         ♥
@@ -645,25 +620,25 @@ function Favourites() {
     <>
       {data.salons.length ? (
         <div className="acc-card">
-          <div className="acc-lbl">Salons</div>
+          <div className="acc-lbl">{t('c.acc.salons')}</div>
           {data.salons.map((f) =>
-            row(f, { label: 'View salon', go: () => nav(`/salon/${f.salonSlug}`) }),
+            row(f, { label: t('c.acc.viewSalon'), go: () => nav(`/salon/${f.salonSlug}`) }),
           )}
         </div>
       ) : null}
 
       {data.pros.length ? (
         <div className="acc-card">
-          <div className="acc-lbl">Professionals</div>
+          <div className="acc-lbl">{t('c.acc.pros')}</div>
           {data.pros.map((f) =>
-            row(f, { label: 'View salon', go: () => nav(`/salon/${f.salonSlug}`) }),
+            row(f, { label: t('c.acc.viewSalon'), go: () => nav(`/salon/${f.salonSlug}`) }),
           )}
         </div>
       ) : null}
 
       {data.services.length ? (
         <div className="acc-card">
-          <div className="acc-lbl">Services</div>
+          <div className="acc-lbl">{t('c.acc.services')}</div>
           {data.services.map((f) =>
             row(f, {
               label: 'Book',
@@ -678,8 +653,8 @@ function Favourites() {
       {data.hidden ? (
         <div className="sm muted" style={{ padding: '10px 4px' }}>
           {data.hidden === 1
-            ? 'One more is saved but not bookable right now — it will come back here if it returns.'
-            : `${data.hidden} more are saved but not bookable right now — they will come back here if they return.`}
+            ? t('c.acc.hiddenOne')
+            : t('c.acc.hiddenMany', { n: data.hidden })}
         </div>
       ) : null}
     </>
@@ -716,9 +691,9 @@ function General() {
       await qc.invalidateQueries({ queryKey: ['me'] });
       // Results are ordered with this, so what is on screen is now stale.
       await qc.invalidateQueries({ queryKey: ['category-services'] });
-      setMsg(on ? 'Results will use your bookings.' : 'Results will ignore your bookings.');
+      setMsg(on ? t('c.acc.persOn') : t('c.acc.persOff'));
     } catch (e) {
-      setErr(e instanceof ApiError ? e.message : 'Could not save that — please try again.');
+      setErr(e instanceof ApiError ? e.message : t('c.acc.saveFailed'));
     } finally {
       setSavingPers(false);
     }
@@ -741,7 +716,7 @@ function General() {
       setEdit(false);
       setMsg('Saved.');
     } catch (e) {
-      setErr(e instanceof ApiError ? e.message : 'Could not save — please try again.');
+      setErr(e instanceof ApiError ? e.message : t('c.acc.saveFailed2'));
     }
   };
 
@@ -752,97 +727,89 @@ function General() {
       await api('/me/password', { method: 'POST', body: JSON.stringify(pw) });
       setPw({ current: '', next: '' });
       setPwOpen(false);
-      setMsg('Password changed.');
+      setMsg(t('c.acc.pwChanged'));
       await qc.invalidateQueries({ queryKey: ['my-notifications'] });
     } catch (e) {
-      setErr(e instanceof ApiError ? e.message : 'Could not change your password.');
+      setErr(e instanceof ApiError ? e.message : t('c.acc.pwFailed'));
     }
   };
 
   return (
     <>
       <div className="acc-card">
-        <div className="acc-lbl">Account info</div>
+        <div className="acc-lbl">{t('c.acc.info')}</div>
         {edit ? (
           <>
-            <label className="acc-flbl">First name</label>
+            <label className="acc-flbl">{t('c.acc.first')}</label>
             <input className="acc-inp" value={d.first} onChange={(e) => setD({ ...d, first: e.target.value })} />
-            <label className="acc-flbl">Last name</label>
+            <label className="acc-flbl">{t('c.acc.last')}</label>
             <input className="acc-inp" value={d.last} onChange={(e) => setD({ ...d, last: e.target.value })} />
-            <label className="acc-flbl">Phone</label>
+            <label className="acc-flbl">{t('c.acc.phone')}</label>
             <input className="acc-inp" value={d.phone} onChange={(e) => setD({ ...d, phone: e.target.value })} />
-            <label className="acc-flbl">Date of birth</label>
+            <label className="acc-flbl">{t('c.acc.dob')}</label>
             <input
               className="acc-inp"
               type="date"
               value={d.dob}
               onChange={(e) => setD({ ...d, dob: e.target.value })}
             />
-            <label className="acc-flbl">Preferred language</label>
+            <label className="acc-flbl">{t('c.acc.lang')}</label>
             <select
               className="acc-inp"
               value={d.lang}
               onChange={(e) => setD({ ...d, lang: e.target.value as 'en' | 'mk' | 'sq' })}
             >
-              <option value="en">English</option>
-              <option value="mk">Македонски</option>
-              <option value="sq">Shqip</option>
+              <option value="en">{t('lang.en')}</option>
+              <option value="mk">{t('lang.mk')}</option>
+              <option value="sq">{t('lang.sq')}</option>
             </select>
             <div style={{ display: 'flex', gap: '10px', marginTop: '12px' }}>
-              <button className="btn btn-p" style={{ flex: 1 }} onClick={save}>
-                Save
-              </button>
-              <button className="btn btn-g" style={{ flex: 1 }} onClick={() => setEdit(false)}>
-                Cancel
-              </button>
+              <button className="btn btn-p" style={{ flex: 1 }} onClick={save}>{t('c.acc.save')}</button>
+              <button className="btn btn-g" style={{ flex: 1 }} onClick={() => setEdit(false)}>{t('c.acc.cancel')}</button>
             </div>
           </>
         ) : (
           <>
             <div className="acc-kv">
-              <span>Name</span>
+              <span>{t('c.acc.name')}</span>
               <b>{`${profile.first} ${profile.last}`.trim()}</b>
             </div>
             <div className="acc-kv">
-              <span>Phone</span>
+              <span>{t('c.acc.phone')}</span>
               <b>{profile.phone ?? '—'}</b>
             </div>
             <div className="acc-kv">
-              <span>Date of birth</span>
+              <span>{t('c.acc.dob')}</span>
               <b>{profile.dob ?? '—'}</b>
             </div>
             <div className="acc-kv">
-              <span>Preferred language</span>
+              <span>{t('c.acc.lang')}</span>
               <b>{{ en: 'English', mk: 'Македонски', sq: 'Shqip' }[profile.lang]}</b>
             </div>
-            <button className="btn btn-g" style={{ width: '100%', marginTop: '12px' }} onClick={() => setEdit(true)}>
-              Edit info
-            </button>
+            <button className="btn btn-g" style={{ width: '100%', marginTop: '12px' }} onClick={() => setEdit(true)}>{t('c.acc.edit')}</button>
           </>
         )}
       </div>
 
       <div className="acc-card">
-        <div className="acc-lbl">Sign-in</div>
+        <div className="acc-lbl">{t('c.acc.signin')}</div>
         <div className="acc-kv">
-          <span>Email</span>
+          <span>{t('c.acc.email')}</span>
           <b>
-            {profile.email} {profile.emailVerified ? <span className="acc-badge ok">Verified</span> : null}
+            {profile.email} {profile.emailVerified ? <span className="acc-badge ok">{t('c.acc.verified')}</span> : null}
           </b>
         </div>
-        <div className="sm muted" style={{ margin: '6px 0 2px' }}>
-          Your email is used to sign in and can’t be changed in the app.
-        </div>
+        <div className="sm muted" style={{ margin: '6px 0 2px' }}>{t('c.acc.emailNote')}</div>
         {pwOpen ? (
           <>
-            <label className="acc-flbl">Current password</label>
+            <label className="acc-flbl">{t('c.acc.curPw')}</label>
             <input
               type="password"
               className="acc-inp"
               value={pw.current}
               onChange={(e) => setPw({ ...pw, current: e.target.value })}
             />
-            <label className="acc-flbl">New password</label>
+            <label className="acc-flbl">{t('c.acc.newPw')}</label>
             <input
               type="password"
               className="acc-inp"
@@ -850,23 +817,17 @@ function General() {
               onChange={(e) => setPw({ ...pw, next: e.target.value })}
             />
             <div style={{ display: 'flex', gap: '10px', marginTop: '12px' }}>
-              <button className="btn btn-p" style={{ flex: 1 }} onClick={changePw}>
-                Change password
-              </button>
-              <button className="btn btn-g" style={{ flex: 1 }} onClick={() => setPwOpen(false)}>
-                Cancel
-              </button>
+              <button className="btn btn-p" style={{ flex: 1 }} onClick={changePw}>{t('c.acc.changePw')}</button>
+              <button className="btn btn-g" style={{ flex: 1 }} onClick={() => setPwOpen(false)}>{t('c.acc.cancel')}</button>
             </div>
           </>
         ) : (
           <>
             <div className="acc-kv" style={{ marginTop: '14px' }}>
-              <span>Password</span>
+              <span>{t('c.acc.password')}</span>
               <b>••••••••</b>
             </div>
-            <button className="btn btn-g" style={{ width: '100%', marginTop: '10px' }} onClick={() => setPwOpen(true)}>
-              Change password
-            </button>
+            <button className="btn btn-g" style={{ width: '100%', marginTop: '10px' }} onClick={() => setPwOpen(true)}>{t('c.acc.changePw')}</button>
           </>
         )}
         {err ? <div className="acc-err">{err}</div> : null}
@@ -878,27 +839,26 @@ function General() {
       </div>
 
       <div className="acc-card">
-        <div className="acc-lbl">Search results</div>
+        <div className="acc-lbl">{t('c.acc.results')}</div>
         <div className="acc-kv" style={{ alignItems: 'flex-start' }}>
           <span style={{ maxWidth: '62%' }}>
-            Use my bookings to order results
+            {t('c.acc.useBookings')}
             <br />
             <span className="sm muted">
-              Treatments you have booked before, and the salons you booked them at, come
-              first. Only your own bookings are used, and no salon is told about them.
+              {t('c.acc.useBookingsSub')}
             </span>
           </span>
           <button
             type="button"
             role="switch"
             aria-checked={profile.personalisedResults}
-            aria-label="Use my bookings to order results"
+            aria-label={t('c.acc.useBookings')}
             disabled={savingPers}
             className={`btn ${profile.personalisedResults ? 'btn-p' : 'btn-g'}`}
             style={{ minHeight: '34px', padding: '6px 14px', fontSize: '13px' }}
             onClick={() => setPersonalised(!profile.personalisedResults)}
           >
-            {profile.personalisedResults ? 'On' : 'Off'}
+            {profile.personalisedResults ? t('c.acc.on') : t('c.acc.off')}
           </button>
         </div>
       </div>
@@ -908,28 +868,28 @@ function General() {
           sentence there to be true. What is saved is the answer — the
           provider PATCHes it — never a position. */}
       <div className="acc-card">
-        <div className="acc-lbl">Location</div>
+        <div className="acc-lbl">{t('c.acc.location')}</div>
         <div className="acc-kv" style={{ alignItems: 'flex-start' }}>
           <span style={{ maxWidth: '62%' }}>
-            Use my location for &ldquo;Near me&rdquo;
+            {t('c.acc.useLocation')}
             <br />
             <span className="sm muted">
               {geo.status === 'denied'
-                ? 'Your browser is blocking location for this site — allow it in the address-bar site settings as well.'
-                : 'A fresh fix is taken each time you open the home page and is never stored — only this choice is.'}
+                ? t('c.acc.locBlocked')
+                : t('c.acc.locNote')}
             </span>
           </span>
           <button
             type="button"
             role="switch"
             aria-checked={geo.decision === 'allowed'}
-            aria-label="Use my location for Near me"
+            aria-label={t('c.acc.useLocationAria')}
             disabled={geo.status === 'unsupported'}
             className={`btn ${geo.decision === 'allowed' ? 'btn-p' : 'btn-g'}`}
             style={{ minHeight: '34px', padding: '6px 14px', fontSize: '13px' }}
             onClick={() => geo.decide(geo.decision !== 'allowed')}
           >
-            {geo.decision === 'allowed' ? 'On' : 'Off'}
+            {geo.decision === 'allowed' ? t('c.acc.on') : t('c.acc.off')}
           </button>
         </div>
       </div>

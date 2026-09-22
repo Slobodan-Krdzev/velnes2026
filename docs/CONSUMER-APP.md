@@ -64,6 +64,21 @@ A salon appears only if it publishes a marketplace listing, and the page
 honors the switches the salon already owns (`showTeam`, `showPrices`).
 Turning `listed` off removes it from results and 404s its page — tested.
 
+## Three languages
+
+The app speaks English, Macedonian and Albanian like every other
+Velnes app — `c.*` keys in `@velnes/i18n`, English kept verbatim from
+the prototype. The language follows the account when signed in
+(`client_users.lang`), else the browser's last choice, else the
+browser's own language; a pill in the header and the footer changes
+it. Salon-authored words (treatment names, descriptions) never
+translate, and neither do proper names (countries in the phone
+picker, the social links). Refusals from the booking doors are said
+in the app's language by code (`refusal.*`), English being the
+fallback. Dates on the salon page and in the date picker use keyed
+day and month names. Details in `docs/I18N.md`; the MK/SQ wording is
+the assistant's and, as elsewhere, awaits a native read.
+
 ## Booking
 
 Selection happens on the salon page (location → treatment → option →

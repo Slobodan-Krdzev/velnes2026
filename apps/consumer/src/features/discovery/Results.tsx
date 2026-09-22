@@ -21,6 +21,8 @@ import type { SearchFacets } from '@velnes/contracts';
 import { useMyNotifications, useSession } from '../../lib/api/session.js';
 import { distanceKm, distanceLbl, useUserLocation } from '../../lib/geo.js';
 import { GeoNotice } from '../../components/GeoNotice.js';
+import { useTranslation } from 'react-i18next';
+import { t } from '../../lib/i18n-core.js';
 import { SalonMap } from '../../components/SalonMap.js';
 import {
   CatCard,
@@ -147,10 +149,10 @@ function useLiveLine(s: ServiceVM) {
       ? distanceKm(position, { lat: s.salon.lat, lng: s.salon.lng })
       : null;
   return {
-    av: s.availableAt ? `Available now · starts ${s.availableAt}` : null,
+    av: s.availableAt ? t('c.availNow', { t: s.availableAt }) : null,
     // The price of this treatment, not the salon's cheapest anything.
     pr: priceLbl(s),
-    away: km === null ? null : `${distanceLbl(km)} from you`,
+    away: km === null ? null : t('c.res.fromYou', { d: distanceLbl(km) }),
   };
 }
 
@@ -165,10 +167,8 @@ function salonHref(s: ServiceVM) {
  *  saying "nothing under Spa-Inclusive" about a slug that names no
  *  category at all would be a small lie. */
 function emptyLine(title: string, unknown: boolean, typed: boolean) {
-  if (typed) return `Nothing matched “${title}” — try a treatment, a salon, or a category.`;
-  return unknown
-    ? 'Nothing to browse under that name — try a category from the home page.'
-    : `Nothing published under ${title} yet — new salons join Velnes every week.`;
+  if (typed) return t('c.res.emptyTyped', { q: title });
+  return unknown ? t('c.res.emptyUnknown') : t('c.res.emptyCategory', { q: title });
 }
 
 /**
@@ -182,9 +182,9 @@ function searchNote(
   widened: 'category' | 'radius' | null,
   title: string,
 ): string | null {
-  if (widened === 'radius') return 'Not much within your distance, so we looked further out.';
-  if (how === 'fuzzy') return `Nothing is called “${title}” — these are the closest we found.`;
-  if (widened === 'category') return `Showing ${title} first, then others like it.`;
+  if (widened === 'radius') return t('c.res.widenedRadius');
+  if (how === 'fuzzy') return t('c.res.fuzzy', { q: title });
+  if (widened === 'category') return t('c.res.widenedCategory', { q: title });
   return null;
 }
 
@@ -197,9 +197,7 @@ function searchNote(
  */
 function unpricedNote(n: number): string | null {
   if (!n) return null;
-  return n === 1
-    ? 'One treatment is hidden while a price filter is on, because its salon does not publish prices.'
-    : `${n} treatments are hidden while a price filter is on, because their salons do not publish prices.`;
+  return n === 1 ? t('c.res.unpricedOne') : t('c.res.unpricedMany', { n });
 }
 
 /** Salons the text reached but that were not certain enough to open on
@@ -209,12 +207,10 @@ function SalonHits({ salons, title }: { salons: SalonHit[]; title: string }) {
   return (
     <div style={{ marginBottom: '18px' }}>
       <h2 className="serif" style={{ fontSize: '17px', margin: '0 0 2px' }}>
-        {salons.length > 1 ? `Salons called “${title}”` : 'The salon you meant?'}
+        {salons.length > 1 ? t('c.res.salonsCalled', { q: title }) : t('c.res.salonMeant')}
       </h2>
       <div className="sm muted" style={{ marginBottom: '8px' }}>
-        {salons.length > 1
-          ? 'More than one carries that name — pick the one you meant.'
-          : 'Matched by name.'}
+        {salons.length > 1 ? t('c.res.salonsPick') : t('c.res.matchedByName')}
       </div>
       {salons.map((s) => (
         <a
@@ -268,7 +264,7 @@ function FilterBar({
       {cats.length ? (
         <div className="chips">
           <Pick on={!filters.categoryId} set={() => set({ categoryId: null })}>
-            All
+            {t('c.res.all')}
           </Pick>
           {cats.map((c) => (
             <Pick
@@ -284,16 +280,16 @@ function FilterBar({
       {bands ? (
         <div className="chips">
           <Pick on={!filters.priceBand} set={() => set({ priceBand: null })}>
-            Any price
+            {t('c.res.anyPrice')}
           </Pick>
           <Pick on={filters.priceBand === 'low'} set={() => set({ priceBand: 'low' })}>
-            Up to {fmtMKD(bands.lowMax)}
+            {t('c.res.upTo', { p: fmtMKD(bands.lowMax) })}
           </Pick>
           <Pick on={filters.priceBand === 'mid'} set={() => set({ priceBand: 'mid' })}>
             {fmtMKD(bands.lowMax)}&ndash;{fmtMKD(bands.midMax)}
           </Pick>
           <Pick on={filters.priceBand === 'high'} set={() => set({ priceBand: 'high' })}>
-            Over {fmtMKD(bands.midMax)}
+            {t('c.res.over', { p: fmtMKD(bands.midMax) })}
           </Pick>
         </div>
       ) : null}
@@ -302,11 +298,11 @@ function FilterBar({
       {canDistance ? (
         <div className="chips">
           <Pick on={!filters.radiusKm} set={() => set({ radiusKm: null })}>
-            Any distance
+            {t('c.res.anyDistance')}
           </Pick>
           {[2, 5, 10].map((km) => (
             <Pick key={km} on={filters.radiusKm === km} set={() => set({ radiusKm: km })}>
-              Within {km} km
+              {t('c.res.withinKm', { km })}
             </Pick>
           ))}
         </div>
@@ -346,11 +342,10 @@ function SearchLanding({ cats }: { cats: CategoryVM[] }) {
   return (
     <>
       <h2 className="serif" style={{ fontSize: '19px', margin: '0 0 2px' }}>
-        Browse treatments
+        {t('c.res.browse')}
       </h2>
       <div className="sm muted" style={{ marginBottom: '14px' }}>
-        Or type what you are after — a treatment, a salon, or the thing you
-        would call it.
+        {t('c.res.browseSub')}
       </div>
       <div className="catgrid">
         {cats.map((c) => (
@@ -371,13 +366,13 @@ function BestD({ s }: { s: ServiceVM }) {
   const { av, pr, away } = useLiveLine(s);
   return (
     <article className="best">
-      <span className="flag" style={{ zIndex: 2 }}>Best match</span>
+      <span className="flag" style={{ zIndex: 2 }}>{t('c.res.bestMatch')}</span>
       <div className="grid">
         <div className="ph" style={{ backgroundImage: s.salon.photo }}></div>
         <div className="bd">
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
             <h3>{s.name}</h3>
-            {av ? <span className="tiny-tag" style={{ background: '#EAF2E4', color: '#3E5A34' }}>Available now</span> : null}
+            {av ? <span className="tiny-tag" style={{ background: '#EAF2E4', color: '#3E5A34' }}>{t('c.now')}</span> : null}
           </div>
           <div className="sm muted">
             {IcPin} {whereLine(s, away)} <span className="vok">{IcVok}</span>
@@ -387,14 +382,14 @@ function BestD({ s }: { s: ServiceVM }) {
         </div>
       </div>
       <div className="foot">
-        <span className="sm muted">Flexible cancellation up to 2 h before</span>
+        <span className="sm muted">{t('c.res.cancel2h')}</span>
         {pr ? (
           <span className="price">
             <b>{pr}</b>
           </span>
         ) : null}
         <button className="btn btn-p" onClick={() => nav(salonHref(s))}>
-          Book now {IcArr}
+          {t('c.res.bookNow')} {IcArr}
         </button>
       </div>
     </article>
@@ -423,7 +418,7 @@ function AltD({ s }: { s: ServiceVM }) {
           style={{ minHeight: '38px', padding: '6px 14px', fontSize: '13.5px', marginTop: '6px' }}
           onClick={() => nav(salonHref(s))}
         >
-          View &amp; book {IcArr}
+          {t('c.res.viewBook')} {IcArr}
         </button>
       </div>
     </article>
@@ -436,7 +431,7 @@ function BestM({ s }: { s: ServiceVM }) {
   return (
     <article className="m-best">
       <div className="ph" style={{ backgroundImage: s.salon.photo }}>
-        <span className="flag">Best match</span>
+        <span className="flag">{t('c.res.bestMatch')}</span>
       </div>
       <div className="bd">
         <h3>{s.name}</h3>
@@ -448,7 +443,7 @@ function BestM({ s }: { s: ServiceVM }) {
       </div>
       <div className="foot">
         <button className="btn btn-p" style={{ flex: 1 }} onClick={() => nav(salonHref(s))}>
-          Book now {IcArr}
+          {t('c.res.bookNow')} {IcArr}
         </button>
         {pr ? (
           <span className="pr">
@@ -485,7 +480,7 @@ function AltM({ s }: { s: ServiceVM }) {
             style={{ minHeight: '36px', padding: '5px 13px', fontSize: '13px' }}
             onClick={() => nav(salonHref(s))}
           >
-            View &amp; book
+            {t('c.res.viewBook')}
           </button>
         </div>
       </div>
@@ -494,6 +489,9 @@ function AltM({ s }: { s: ServiceVM }) {
 }
 
 export function Results() {
+  // Subscribes the page to the language; everything below re-renders
+  // on a switch and reads the module-level `t`.
+  useTranslation();
   const nav = useNavigate();
   const { category } = useParams();
   const unread = useMyNotifications().data?.unread ?? 0;
@@ -706,17 +704,17 @@ export function Results() {
    *  rather than just sitting there unlit. */
   const geoNote =
     geo.status === 'denied'
-      ? 'Location is blocked for this site in your browser — allow it in the address-bar site settings, then press “Near me” again.'
+      ? t('c.geo.blocked')
       : geo.decision === 'refused'
-        ? `Enable the button for better results — ${signedIn ? 'turn location on under My Velnes › General, or' : 'turn location on'}`
+        ? `${t('c.geo.enableHint')} ${signedIn ? t('c.geo.turnOnSigned') : t('c.geo.turnOn')}`
         : geo.status === 'unsupported'
           ? typeof window !== 'undefined' && window.isSecureContext === false
-            ? 'Location needs a secure (https) connection — this page was opened over plain http.'
-            : 'This browser cannot share a location, so “Near me” has nothing to go on.'
+            ? t('c.geo.unsupportedHttp')
+            : t('c.geo.unsupported')
           : geo.status === 'unavailable'
-            ? 'Your device could not work out where you are just now. Try again in a moment.'
+            ? t('c.geo.unavailable')
             : null;
-  const nearLabel = geo.status === 'asking' ? 'Locating…' : 'Near me';
+  const nearLabel = geo.status === 'asking' ? t('c.locating') : t('c.near');
   /**
    * "Available now" — the same question the word "now" asks in the
    * search bar, as a button. Lit when either asked it, so typing
@@ -728,7 +726,7 @@ export function Results() {
   const toggleNow = useCallback(() => setFilters({ now: !filters.now }), [filters.now, setFilters]);
   const nowNote =
     nowRequested && loaded && rows.length > 0 && availableNow === 0
-      ? 'Nothing can start within the next 30 minutes. Here is what is available soon, and similar treatments — or try again a little later.'
+      ? t('c.nowNone')
       : null;
   /**
    * The way back after a refusal, right where the sentence is. The
@@ -756,7 +754,7 @@ export function Results() {
           cursor: 'pointer',
         }}
       >
-        {signedIn ? 'turn it on here' : 'here'}
+        {signedIn ? t('c.geo.hereSigned') : t('c.geo.here')}
       </button>
     ) : null;
 
@@ -787,7 +785,7 @@ export function Results() {
         // rating: there are no reviews yet, and a star nobody earned is
         // worse than no star at all.
         photo: s.salon.hasPhoto ? s.salon.photo : null,
-        badge: s.salon.bookable ? 'Instant booking' : null,
+        badge: s.salon.bookable ? t('c.res.instant') : null,
         price: priceLbl(s),
         href: `/salon/${s.salon.slug}`,
         onClick: () => nav(`/salon/${s.salon.slug}`),
@@ -804,11 +802,11 @@ export function Results() {
               <div className={`pillsearch-wrap${box.open ? ' open' : ''}`} ref={box.boxRef}>
                 <div className="pillsearch">
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="M20 20l-4.2-4.2" /></svg>
-                  <input data-res="q" placeholder="What are you looking for?" aria-label="Search" aria-controls="d-sugg" {...box.inputProps} />
+                  <input data-res="q" placeholder={t('c.res.searchPh')} aria-label={t('c.res.search')} aria-controls="d-sugg" {...box.inputProps} />
                   <button
                     style={{ border: '0', background: 'none', color: 'var(--muted)' }}
                     onClick={() => nav('/')}
-                    aria-label="Clear"
+                    aria-label={t('c.res.clear')}
                   >
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 6l12 12M18 6 6 18" /></svg>
                   </button>
@@ -830,8 +828,8 @@ export function Results() {
                 title={
                   geoNote ??
                   (nearOn
-                    ? `Within ${NEAR_KM} km of you — click to stop`
-                    : `Show only what is within ${NEAR_KM} km of you`)
+                    ? t('c.nearTitleOn', { km: NEAR_KM })
+                    : t('c.nearTitleOff', { km: NEAR_KM }))
                 }
               >
                 {IcPin}
@@ -841,10 +839,10 @@ export function Results() {
                 className={`chip${nowOn ? ' on' : ''}`}
                 onClick={toggleNow}
                 aria-pressed={nowOn}
-                title="Only what can start within the next 30 minutes, soonest first"
+                title={t('c.nowTitle')}
               >
                 {IcBolt}
-                Available now
+                {t('c.now')}
               </button>
             </div>
             {nowNote ? (
@@ -867,16 +865,16 @@ export function Results() {
               <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '14px', marginBottom: '12px' }}>
                 <div>
                   <div className="spark" style={{ display: 'inline-flex', gap: '8px', alignItems: 'center', fontWeight: '700', color: 'var(--ink)', fontSize: '16px' }}>
-                    {IcSpark}Velnes thinks along with you
+                    {IcSpark}{t('c.res.thinks')}
                   </div>
                   <div className="sm muted" style={{ marginTop: '2px' }}>
                     {personalised
-                      ? 'Ordered using your own bookings and where you are — you can turn this off in My Velnes.'
+                      ? t('c.res.orderPersonal')
                       : geo.status === 'on'
-                        ? 'Ordered by how near they are, and what they cost.'
-                        : 'Ordered by what they cost, and how soon you can book.'}
+                        ? t('c.res.orderNear')
+                        : t('c.res.orderPrice')}
                     {import.meta.env.DEV && rankVersion ? (
-                      <span style={{ opacity: 0.6 }}> · ranking v{rankVersion}</span>
+                      <span style={{ opacity: 0.6 }}> · {t('c.res.rankVersion', { v: rankVersion })}</span>
                     ) : null}
                   </div>
                 </div>
@@ -907,8 +905,8 @@ export function Results() {
                 ) : null}
                 {alts.length ? (
                   <>
-                    <h2 className="serif" style={{ fontSize: '19px', margin: '22px 0 2px' }}>Smart alternatives</h2>
-                    <div className="sm muted" style={{ marginBottom: '12px' }}>Also great options, if you&rsquo;d like something different.</div>
+                    <h2 className="serif" style={{ fontSize: '19px', margin: '22px 0 2px' }}>{t('c.res.alts')}</h2>
+                    <div className="sm muted" style={{ marginBottom: '12px' }}>{t('c.res.altsSub')}</div>
                     {alts.map((s) => (
                       <AltD key={s.id} s={s} />
                     ))}
@@ -921,15 +919,15 @@ export function Results() {
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>
                   </span>
                   <span>
-                    <b style={{ color: 'var(--ink)' }}>Every option is live &amp; bookable</b>
-                    <br />No waiting, no requests.
+                    <b style={{ color: 'var(--ink)' }}>{t('c.res.live')}</b>
+                    <br />{t('c.res.noWaiting')}
                   </span>
                 </span>
                 <span className="note">
                   <span className="spark">{IcSpark}</span>
                   <span>
-                    <b style={{ color: 'var(--ink)' }}>No perfect match? No problem.</b>
-                    <br />Velnes finds smart alternatives that do fit your moment.
+                    <b style={{ color: 'var(--ink)' }}>{t('c.res.noPerfect')}</b>
+                    <br />{t('c.res.altFit')}
                   </span>
                 </span>
               </div>
@@ -946,7 +944,7 @@ export function Results() {
                   pins.length
                     ? undefined
                     : loaded
-                      ? 'No salon here has placed itself on the map yet.'
+                      ? t('c.res.noPins')
                       : undefined
                 }
               />
@@ -961,7 +959,7 @@ export function Results() {
               <div className="searchrow">
                 {/* The phone's results screen has no header of its own, so
                     the mark sits here and doubles as the way home. */}
-                <button className="m-mark" onClick={() => nav('/')} aria-label="Velnes home">
+                <button className="m-mark" onClick={() => nav('/')} aria-label={t('c.hdr.home')}>
                   {IcMark}
                 </button>
                 {/* On a phone the bar opens the full-screen sheet, exactly
@@ -973,11 +971,11 @@ export function Results() {
                   onClick={() => setSheet(true)}
                 >
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="M20 20l-4.2-4.2" /></svg>
-                  <input value={title} placeholder="What are you looking for?" data-res="q" readOnly aria-label="Search" />
+                  <input value={title} placeholder={t('c.res.searchPh')} data-res="q" readOnly aria-label={t('c.res.search')} />
                   {!landing ? (
                     <button
                       className={`m-filt${nFilters ? ' on' : ''}`}
-                      aria-label={nFilters ? `Filters, ${nFilters} applied` : 'Filters'}
+                      aria-label={nFilters ? t('c.res.filtersApplied', { n: nFilters }) : t('c.res.filters')}
                       aria-expanded={filtersOpen}
                       onClick={(e) => {
                         e.stopPropagation();
@@ -994,20 +992,20 @@ export function Results() {
                       e.stopPropagation();
                       nav('/');
                     }}
-                    aria-label="Clear"
+                    aria-label={t('c.res.clear')}
                   >
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 6l12 12M18 6 6 18" /></svg>
                   </button>
                 </div>
-                <button className="map-btn" aria-label="Map view" onClick={() => setMapOpen(true)}>
+                <button className="map-btn" aria-label={t('c.res.mapView')} onClick={() => setMapOpen(true)}>
                   <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M9 4 3 6.5v13L9 17l6 2.5 6-2.5v-13L15 6.5z" /><path d="M9 4v13M15 6.5v13" /></svg>
-                  Map
+                  {t('c.res.map')}
                 </button>
               </div>
               {filtersOpen && !landing ? (
                 <>
                   <div className="m-filt-scrim" onClick={() => setFiltersOpen(false)} aria-hidden="true" />
-                  <div className="m-filt-panel" role="dialog" aria-label="Filters">
+                  <div className="m-filt-panel" role="dialog" aria-label={t('c.res.filters')}>
                     <FilterBar
                       facets={facets}
                       filters={filters}
@@ -1021,11 +1019,11 @@ export function Results() {
                           className="btn btn-g"
                           onClick={() => setFilters({ categoryId: null, priceBand: null, radiusKm: null, now: false })}
                         >
-                          Clear
+                          {t('c.res.clear')}
                         </button>
                       ) : null}
                       <button type="button" className="btn btn-p" onClick={() => setFiltersOpen(false)}>
-                        Show results
+                        {t('c.res.showResults')}
                       </button>
                     </div>
                   </div>
@@ -1041,8 +1039,8 @@ export function Results() {
                 title={
                   geoNote ??
                   (nearOn
-                    ? `Within ${NEAR_KM} km of you — click to stop`
-                    : `Show only what is within ${NEAR_KM} km of you`)
+                    ? t('c.nearTitleOn', { km: NEAR_KM })
+                    : t('c.nearTitleOff', { km: NEAR_KM }))
                 }
               >
                 {IcPin}
@@ -1052,10 +1050,10 @@ export function Results() {
                 className={`chip${nowOn ? ' on' : ''}`}
                 onClick={toggleNow}
                 aria-pressed={nowOn}
-                title="Only what can start within the next 30 minutes, soonest first"
+                title={t('c.nowTitle')}
               >
                 {IcBolt}
-                Available now
+                {t('c.now')}
               </button>
             </div>
             {nowNote ? (
@@ -1066,7 +1064,7 @@ export function Results() {
             {rows.length ? (
               <div style={{ padding: '12px 16px 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
                 <span className="spark" style={{ display: 'inline-flex', gap: '7px', alignItems: 'center', fontWeight: '700', color: 'var(--ink)' }}>
-                  {IcSpark}Velnes thinks along with you
+                  {IcSpark}{t('c.res.thinks')}
                 </span>
               </div>
             ) : null}
@@ -1099,8 +1097,8 @@ export function Results() {
               {alts.length ? (
                 <>
                   <div style={{ padding: '6px 16px 4px' }}>
-                    <h2 className="serif" style={{ fontSize: '18px' }}>Smart alternatives</h2>
-                    <div className="sm muted">Also great options, if you&rsquo;d like something different.</div>
+                    <h2 className="serif" style={{ fontSize: '18px' }}>{t('c.res.alts')}</h2>
+                    <div className="sm muted">{t('c.res.altsSub')}</div>
                   </div>
                   {alts.map((s) => (
                     <AltM key={s.id} s={s} />
@@ -1110,9 +1108,9 @@ export function Results() {
             </div>
             <div className="m-band">
               <span className="i">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg> Every option is live &amp; bookable
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg> {t('c.res.live')}
               </span>
-              <span className="i">{IcSpark} No perfect match? Velnes finds alternatives that do fit.</span>
+              <span className="i">{IcSpark} {t('c.res.noPerfectM')}</span>
             </div>
             {mapOpen ? (
               <div className="mapsheet open" style={{ display: 'flex', flexDirection: 'column' }}>
@@ -1120,7 +1118,7 @@ export function Results() {
                   <h2 className="serif">
                     {pins.length} {pins.length === 1 ? 'place' : 'places'} near you
                   </h2>
-                  <button className="iconb" onClick={() => setMapOpen(false)} aria-label="Close">
+                  <button className="iconb" onClick={() => setMapOpen(false)} aria-label={t('c.res.close')}>
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 6l12 12M18 6 6 18" /></svg>
                   </button>
                 </div>
@@ -1147,12 +1145,12 @@ export function Results() {
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="M20 20l-4.2-4.2" /></svg>
                   <input
                     ref={sheetInput}
-                    placeholder="What are you looking for?"
-                    aria-label="Search"
+                    placeholder={t('c.res.searchPh')}
+                    aria-label={t('c.res.search')}
                     {...box.inputProps}
                   />
                 </div>
-                <button className="iconb" onClick={() => setSheet(false)} aria-label="Close">
+                <button className="iconb" onClick={() => setSheet(false)} aria-label={t('c.res.close')}>
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 6l12 12M18 6 6 18" /></svg>
                 </button>
               </div>

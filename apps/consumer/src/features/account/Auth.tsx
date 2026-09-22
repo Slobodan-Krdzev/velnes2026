@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import { t } from '../../lib/i18n-core.js';
 import { useNavigate } from 'react-router-dom';
 import { ApiError } from '../../lib/api/client.js';
 import { clientAuth, useSession } from '../../lib/api/session.js';
@@ -29,6 +31,7 @@ const LANGS: [string, 'en' | 'mk' | 'sq'][] = [
 ];
 
 export function Login() {
+  useTranslation();
   const nav = useNavigate();
   const { setSession } = useSession();
   const [email, setEmail] = useState('');
@@ -36,8 +39,8 @@ export function Login() {
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
   const submit = async () => {
-    if (email.indexOf('@') < 1 || email.indexOf('.') < 0) return setErr('Please enter a valid email.');
-    if (!pw) return setErr('Please enter your password.');
+    if (email.indexOf('@') < 1 || email.indexOf('.') < 0) return setErr(t('c.auth.needEmail'));
+    if (!pw) return setErr(t('c.auth.needPassword'));
     setErr('');
     setBusy(true);
     try {
@@ -46,7 +49,7 @@ export function Login() {
       nav('/account');
     } catch (e) {
       setBusy(false);
-      setErr(e instanceof ApiError ? e.message : 'Something went wrong — please try again.');
+      setErr(e instanceof ApiError ? e.message : t('c.auth.wrong'));
     }
   };
   return (
@@ -61,13 +64,9 @@ export function Login() {
             velnes
           </a>
           <div className="acc-card" style={{ padding: '22px 18px' }}>
-            <h2 className="serif" style={{ margin: '0 0 2px', fontSize: '23px', color: 'var(--ink)' }}>
-              Welcome back
-            </h2>
-            <div className="sm muted" style={{ marginBottom: '8px' }}>
-              Log in to manage your appointments and notifications.
-            </div>
-            <label className="acc-flbl">Email</label>
+            <h2 className="serif" style={{ margin: '0 0 2px', fontSize: '23px', color: 'var(--ink)' }}>{t('c.auth.welcomeBack')}</h2>
+            <div className="sm muted" style={{ marginBottom: '8px' }}>{t('c.auth.loginSub')}</div>
+            <label className="acc-flbl">{t('c.auth.email')}</label>
             <input
               className="acc-inp"
               value={email}
@@ -75,7 +74,7 @@ export function Login() {
               autoComplete="email"
               onChange={(e) => setEmail(e.target.value)}
             />
-            <label className="acc-flbl">Password</label>
+            <label className="acc-flbl">{t('c.auth.password')}</label>
             <input
               type="password"
               className="acc-inp"
@@ -89,14 +88,12 @@ export function Login() {
             />
             {err ? <div className="acc-err">{err}</div> : null}
             <button className="btn btn-p" style={{ width: '100%', marginTop: '14px' }} disabled={busy} onClick={submit}>
-              {busy ? 'Signing in…' : 'Log in'}
+              {busy ? t('c.auth.signingIn') : t('c.auth.login')}
             </button>
           </div>
           <div className="sm" style={{ textAlign: 'center', marginTop: '14px', color: 'var(--muted)' }}>
             New to Velnes?{' '}
-            <button className="acc-link" onClick={() => nav('/register')}>
-              Create an account
-            </button>
+            <button className="acc-link" onClick={() => nav('/register')}>{t('c.auth.create')}</button>
           </div>
         </div>
       </section>
@@ -119,6 +116,7 @@ interface Draft {
 }
 
 export function Register() {
+  useTranslation();
   const nav = useNavigate();
   const { setSession } = useSession();
   const [step, setStep] = useState(1);
@@ -141,17 +139,17 @@ export function Register() {
 
   const next = async () => {
     setErr('');
-    if (step === 1 && !d.first.trim()) return setErr('Please enter your first name.');
+    if (step === 1 && !d.first.trim()) return setErr(t('c.auth.needFirst'));
     if (step === 2 && (d.email.indexOf('@') < 1 || d.email.indexOf('.') < 0))
-      return setErr('Please enter a valid email.');
+      return setErr(t('c.auth.needEmail'));
     if (step === 3 && d.num.replace(/[^\d]/g, '').length < 6)
-      return setErr('Please enter a valid phone number.');
+      return setErr(t('c.auth.needPhone'));
     if (step === 4) {
-      if (d.pw.length < 8) return setErr('Password must be at least 8 characters.');
-      if (d.pw !== d.rep) return setErr('Passwords don’t match.');
+      if (d.pw.length < 8) return setErr(t('c.auth.pwShort'));
+      if (d.pw !== d.rep) return setErr(t('c.auth.pwMismatch'));
     }
     if (step === 5) {
-      if (!d.terms) return setErr('Please accept the terms to continue.');
+      if (!d.terms) return setErr(t('c.auth.needTerms'));
       // The account is created here; the code goes out immediately.
       setBusy(true);
       try {
@@ -187,13 +185,13 @@ export function Register() {
         setStep(6);
       } catch (e) {
         setBusy(false);
-        setErr(e instanceof ApiError ? e.message : 'Something went wrong — please try again.');
+        setErr(e instanceof ApiError ? e.message : t('c.auth.wrong'));
       }
       return;
     }
     if (step === 6) {
       const code = d.code.replace(/[^\d]/g, '');
-      if (code.length !== 6) return setErr('That code doesn’t look right.');
+      if (code.length !== 6) return setErr(t('c.auth.badCode'));
       setBusy(true);
       try {
         const s = await clientAuth.verify(d.email.trim(), code);
@@ -201,7 +199,7 @@ export function Register() {
         nav('/account');
       } catch (e) {
         setBusy(false);
-        setErr(e instanceof ApiError ? e.message : 'Something went wrong — please try again.');
+        setErr(e instanceof ApiError ? e.message : t('c.auth.wrong'));
       }
       return;
     }
@@ -216,12 +214,12 @@ export function Register() {
 
   const sub = [
     '',
-    'What’s your name? This is how salons will greet you.',
-    'Your email — you’ll use it to log in.',
-    'Your phone — salons use it for appointment updates.',
-    'Create a password — at least 8 characters.',
-    'Almost done — a few last details.',
-    'Verify your email — one last step.',
+    t('c.auth.hintName'),
+    t('c.auth.hintEmail'),
+    t('c.auth.hintPhone'),
+    t('c.auth.hintPw'),
+    t('c.auth.hintAlmost'),
+    t('c.auth.hintVerify'),
   ][step];
 
   return (
@@ -229,33 +227,29 @@ export function Register() {
       <section className="acc">
         <div className="auth-wrap">
           <div className="acc-card" style={{ padding: '22px 18px' }}>
-            <button className="acc-link" style={{ color: 'var(--muted)' }} onClick={back}>
-              ‹ Back
-            </button>
+            <button className="acc-link" style={{ color: 'var(--muted)' }} onClick={back}>{t('c.auth.back')}</button>
             <div className="reg-dots">
               {[1, 2, 3, 4, 5, 6].map((i) => (
                 <i key={i} className={i <= step ? 'on' : ''}></i>
               ))}
             </div>
-            <h2 className="serif" style={{ margin: '0 0 2px', fontSize: '23px', color: 'var(--ink)' }}>
-              Welcome to Velnes
-            </h2>
+            <h2 className="serif" style={{ margin: '0 0 2px', fontSize: '23px', color: 'var(--ink)' }}>{t('c.auth.welcome')}</h2>
             <div className="sm muted" style={{ marginBottom: '6px' }}>
               {sub}
             </div>
 
             {step === 1 ? (
               <>
-                <label className="acc-flbl">First name</label>
+                <label className="acc-flbl">{t('c.auth.first')}</label>
                 <input className="acc-inp" value={d.first} onChange={(e) => set({ first: e.target.value })} />
-                <label className="acc-flbl">Last name</label>
+                <label className="acc-flbl">{t('c.auth.last')}</label>
                 <input className="acc-inp" value={d.last} onChange={(e) => set({ last: e.target.value })} />
               </>
             ) : null}
 
             {step === 2 ? (
               <>
-                <label className="acc-flbl">Email</label>
+                <label className="acc-flbl">{t('c.auth.email')}</label>
                 <input
                   className="acc-inp"
                   inputMode="email"
@@ -268,9 +262,9 @@ export function Register() {
 
             {step === 3 ? (
               <>
-                <label className="acc-flbl">Phone number</label>
+                <label className="acc-flbl">{t('c.auth.phone')}</label>
                 <div className="ph-wrap">
-                  <select aria-label="Country code" value={d.cc} onChange={(e) => set({ cc: e.target.value })}>
+                  <select aria-label={t('c.auth.cc')} value={d.cc} onChange={(e) => set({ cc: e.target.value })}>
                     {COUNTRY_CODES.map((c) => (
                       <option key={c[0]} value={c[0]} title={c[2]}>
                         {c[1]} {c[0]}
@@ -279,7 +273,7 @@ export function Register() {
                   </select>
                   <input
                     inputMode="tel"
-                    placeholder="70 123 456"
+                    placeholder={t('c.auth.phonePh')}
                     value={d.num}
                     onChange={(e) => set({ num: e.target.value })}
                   />
@@ -289,7 +283,7 @@ export function Register() {
 
             {step === 4 ? (
               <>
-                <label className="acc-flbl">Password</label>
+                <label className="acc-flbl">{t('c.auth.password')}</label>
                 <input
                   type="password"
                   className="acc-inp"
@@ -297,7 +291,7 @@ export function Register() {
                   value={d.pw}
                   onChange={(e) => set({ pw: e.target.value })}
                 />
-                <label className="acc-flbl">Repeat password</label>
+                <label className="acc-flbl">{t('c.auth.repeat')}</label>
                 <input
                   type="password"
                   className="acc-inp"
@@ -310,11 +304,9 @@ export function Register() {
 
             {step === 5 ? (
               <>
-                <label className="acc-flbl" htmlFor="reg-dob">
-                  Date of birth (optional)
-                </label>
+                <label className="acc-flbl" htmlFor="reg-dob">{t('c.auth.dob')}</label>
                 <DobPicker id="reg-dob" value={d.dob} onChange={(dob) => set({ dob })} />
-                <label className="acc-flbl">Preferred language</label>
+                <label className="acc-flbl">{t('c.auth.lang')}</label>
                 <select
                   className="acc-inp"
                   value={d.lang}
@@ -335,17 +327,16 @@ export function Register() {
                     checked={d.terms}
                     onChange={(e) => set({ terms: e.target.checked })}
                   />
-                  <span>I agree to the Velnes Terms of Service and Privacy Policy.</span>
+                  <span>{t('c.auth.terms')}</span>
                 </label>
               </>
             ) : null}
 
             {step === 6 ? (
               <>
-                <p className="sm" style={{ color: 'var(--ink)', margin: '4px 0 0' }}>
-                  We sent a 6-digit code to <b>{d.email}</b>.
+                <p className="sm" style={{ color: 'var(--ink)', margin: '4px 0 0' }}>{t('c.auth.sentCode')} <b>{d.email}</b>.
                 </p>
-                <label className="acc-flbl">Verification code</label>
+                <label className="acc-flbl">{t('c.auth.code')}</label>
                 <input
                   className="acc-inp"
                   inputMode="numeric"
@@ -358,22 +349,18 @@ export function Register() {
                   className="acc-link"
                   style={{ marginTop: '8px' }}
                   onClick={() => void clientAuth.resend(d.email.trim())}
-                >
-                  Send the code again
-                </button>
+                >{t('c.auth.resend')}</button>
               </>
             ) : null}
 
             {err ? <div className="acc-err">{err}</div> : null}
             <button className="btn btn-p" style={{ width: '100%', marginTop: '16px' }} disabled={busy} onClick={next}>
-              {busy ? 'Just a moment…' : step === 6 ? 'Verify & create account' : 'Continue'}
+              {busy ? t('c.auth.moment') : step === 6 ? t('c.auth.verifyCreate') : t('c.bk.continue')}
             </button>
           </div>
           <div className="sm" style={{ textAlign: 'center', marginTop: '14px', color: 'var(--muted)' }}>
             Step {step} of 6 · Already have an account?{' '}
-            <button className="acc-link" onClick={() => nav('/login')}>
-              Log in
-            </button>
+            <button className="acc-link" onClick={() => nav('/login')}>{t('c.auth.login')}</button>
           </div>
         </div>
       </section>
