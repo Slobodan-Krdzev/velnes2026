@@ -1,3 +1,4 @@
+import { env } from '../../env.js';
 import { randomUUID } from 'node:crypto';
 import { PLAN_PRICES, type HqOnboardSteps, type HqRole } from '@velnes/contracts';
 import type { z } from 'zod';
@@ -246,6 +247,7 @@ export async function hqCreateBusiness(
       body: `${actor.name} (Revelapps) created ${input.name} for you. You set your own password and two-factor at first sign-in; Revelapps never holds customer passwords.`,
       kind: 'owner_invite',
       refId: ownerId,
+      cta: { label: 'Open your workspace', url: env.workspaceAppUrl },
     });
     await logAudit(trx, businessId, {
       actorName: actor.name,

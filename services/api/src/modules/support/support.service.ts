@@ -1,3 +1,4 @@
+import { env } from '../../env.js';
 import type { SupportCategory, SupportMessage, SupportStatus, SupportTicket } from '@velnes/contracts';
 import type { Trx } from '../../db/index.js';
 import { queueMail } from '../mail/mail.service.js';
@@ -122,6 +123,7 @@ export async function createTicket(
     subject: `New support ticket — ${opts.subject}`,
     body: `${opts.originName} (${opts.createdBy}) opened a ${opts.category} ticket:\n\n${opts.body}`,
     kind: 'support_ticket',
+    cta: { label: 'Open in HQ', url: `${env.hqAppUrl}/tickets` },
     refId: row.id,
   });
   await notifyHq(trx, row.id, `New support ticket — ${opts.subject}`, `${opts.originName} · ${snippet(opts.body)}`);
@@ -179,6 +181,7 @@ export async function replyToTicket(
       body: `${t.originName} (${msg.authorName}) replied:\n\n${msg.body}`,
       kind: 'support_ticket',
       refId: ticketId,
+      cta: { label: 'Open in HQ', url: `${env.hqAppUrl}/tickets` },
     });
     await notifyHq(trx, ticketId, `New reply — ${t.subject}`, `${t.originName} · ${snippet(msg.body)}`);
   }

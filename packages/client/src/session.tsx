@@ -1,7 +1,9 @@
 import {
   LoginResponseSchema,
   MeResponseSchema,
+  OkResponseSchema,
   PreviewResponseSchema,
+  SignInLinkRedeemResponseSchema,
   type Lang,
   type MeResponse,
   type PermKey,
@@ -34,6 +36,12 @@ interface Session {
   booting: boolean;
   login: (email: string, password: string) => Promise<void>;
   loginById: (employeeId: string, password: string) => Promise<void>;
+  /** A personal sign-in link opened on this device: signs its one
+   *  person into their own salon. Says whether a password is still to
+   *  be chosen, and the salon's name. */
+  signInWithLink: (token: string) => Promise<{ needsPassword: boolean; salonName: string; tenantId: string }>;
+  /** Choose (first time) or change (with the current one) your password. */
+  setPassword: (password: string, current?: string) => Promise<void>;
   logout: () => Promise<void>;
   setLang: (lang: Lang) => Promise<void>;
   /** Set or clear the signed-in user's own avatar photo (data URL). */
@@ -129,6 +137,17 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         setAccessToken(res.accessToken);
         setRefreshToken(res.refreshToken);
         adopt(await get(MeResponseSchema, '/auth/me'));
+      },
+      signInWithLink: async (token) => {
+        const res = await post(SignInLinkRedeemResponseSchema, '/auth/sign-in-link', { token });
+        setAccessToken(res.accessToken);
+        setRefreshToken(res.refreshToken);
+        const m = await get(MeResponseSchema, '/auth/me');
+        adopt(m);
+        return { needsPassword: res.needsPassword, salonName: res.salonName, tenantId: m.tenantId };
+      },
+      setPassword: async (password, current) => {
+        await post(OkResponseSchema, '/auth/password', current ? { password, current } : { password });
       },
       logout: async () => {
         const rt = getRefreshToken();

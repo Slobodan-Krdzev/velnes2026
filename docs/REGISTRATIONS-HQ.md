@@ -182,14 +182,15 @@ purchase_order_lines, hq_write on suppliers) — products, connected +
 pending salons, order count and value per supplier; super-only create
 (starts unverified) and verify/unverify.
 
-**The mail outbox** models SMTP honestly until the provider is
-decided (likely Resend): every mail the platform would send goes
-through `queueMail` into `mail_outbox`; the mock transport stamps
-rows `mock_sent` and nothing leaves the building. Wired senders:
-salon employee invites, customer email-verification on change, HQ
-team invites. HQ sees the whole outbox on the team tab (GET
-`/hq/outbox`); a real Resend adapter later flips queued → sent with
-no schema change.
+**The mail outbox** is the record of every mail the platform sends:
+everything goes through `queueMail` into `mail_outbox`. With
+`MAIL_TRANSPORT=smtp` (2026-09-23, "Mail delivery" in
+`docs/FOUNDATIONS.md`) the sender delivers queued rows over SMTP and
+they read `sent` (with the provider's Message-ID) or, after five
+refused attempts, `failed` with the provider's words; with `mock` (dev,
+tests) rows are stamped `mock_sent` and nothing leaves the building.
+HQ sees the whole outbox on the team tab (GET `/hq/outbox`), now with
+attempts and the last error beside a failed row.
 
 ## Full prototype parity for the two tabs (2026-09-03, second pass)
 

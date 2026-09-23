@@ -570,12 +570,13 @@ per treatment.
 These are absent rather than faked, and each needs a platform decision
 before it can be real:
 
-- **SMTP delivery.** The verification flow is real; the transport is
-  not. `env.mailTransport = 'mock'` stamps outbox rows `mock_sent` and
-  nothing leaves the building. A provider decision (Resend was the
-  guess) turns it on without touching the flow. Until then a dev-only
-  door, `GET /client/dev/last-code`, reads the code back out of the
-  outbox — it exists only while the transport is mock.
+- **SMTP delivery — built (2026-09-23).** `MAIL_TRANSPORT=smtp` with
+  SMTP_HOST/PORT/USER/PASS and MAIL_FROM delivers the outbox over any
+  SMTP provider in the Velnes layout; see "Mail delivery" in
+  `docs/FOUNDATIONS.md`. In dev and tests the transport stays `mock`
+  (rows `mock_sent`, nothing leaves) and the dev-only door
+  `GET /client/dev/last-code` reads the code back out of the outbox — it
+  exists only while the transport is mock.
 - **Password reset.** There is no "forgot password" door yet; it needs
   the same mail decision.
 - **Phone verification.** Phones are collected and shown to the salon

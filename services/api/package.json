@@ -8,13 +8,19 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "build": "esbuild src/index.ts --bundle --platform=node --format=esm --external:pg-native --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\" --outfile=dist/index.js",
-    "seed": "tsx src/db/seed-cli.ts"
+    "seed": "tsx src/db/seed-cli.ts",
+    "mail:test": "tsx src/modules/mail/send-test.ts"
   },
   "devDependencies": {
+    "@types/mailparser": "^3.4.6",
+    "@types/nodemailer": "^8.0.2",
     "@types/pg": "^8.23.1",
+    "@types/smtp-server": "^3.5.13",
     "@velnes/config": "workspace:^",
     "esbuild": "^0.28.2",
     "kysely-codegen": "^0.20.0",
+    "mailparser": "^3.9.28",
+    "smtp-server": "^3.19.13",
     "tsx": "^4.23.12"
   },
   "dependencies": {
@@ -27,6 +33,7 @@
     "fastify-plugin": "^6.0.0",
     "fastify-type-provider-zod": "^7.0.0",
     "kysely": "^0.29.5",
+    "nodemailer": "^10.0.10",
     "pg": "^8.23.0",
     "unpdf": "^1.8.1",
     "zod": "^4.4.3"

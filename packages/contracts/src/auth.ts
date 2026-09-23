@@ -96,6 +96,34 @@ export const PreviewResponseSchema = z.object({
 export type PreviewResponse = z.infer<typeof PreviewResponseSchema>;
 
 /** Claims carried in the access JWT. */
+/**
+ * Personal sign-in links for the employee app (Alex, 2026-09-23). The
+ * owner mints one per team member; opening it on the phone signs that
+ * person into their own salon and asks for a password once. Single
+ * use, `SIGN_IN_LINK_DAYS` to live, minting again revokes the old.
+ */
+export const SIGN_IN_LINK_DAYS = 7;
+export const SignInLinkResponseSchema = z.object({
+  employeeId: z.string(),
+  url: z.string(),
+  expiresAt: z.string(),
+});
+export type SignInLinkResponse = z.infer<typeof SignInLinkResponseSchema>;
+export const SignInLinkRedeemRequestSchema = z.object({ token: z.string().min(16).max(200) });
+export const SignInLinkRedeemResponseSchema = LoginResponseSchema.extend({
+  /** True until the person has chosen a password. */
+  needsPassword: z.boolean(),
+  salonName: z.string(),
+});
+export type SignInLinkRedeemResponse = z.infer<typeof SignInLinkRedeemResponseSchema>;
+export const PASSWORD_MIN = 8;
+export const OkResponseSchema = z.object({ ok: z.literal(true) });
+export const SetPasswordRequestSchema = z.object({
+  password: z.string().min(PASSWORD_MIN).max(200),
+  /** Required once a password exists; absent on the first set. */
+  current: z.string().max(200).optional(),
+});
+
 export const AccessClaimsSchema = z.object({
   sub: z.uuid(), // employee id
   ten: z.uuid(), // tenant (business) id

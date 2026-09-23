@@ -3,12 +3,16 @@ import {
   LoginByIdRequestSchema,
   MePatchSchema,
   LoginResponseSchema,
+  OkResponseSchema,
   LogoutRequestSchema,
   MeResponseSchema,
   PreviewRequestSchema,
   PreviewResponseSchema,
   RefreshRequestSchema,
   RefreshResponseSchema,
+  SetPasswordRequestSchema,
+  SignInLinkRedeemRequestSchema,
+  SignInLinkRedeemResponseSchema,
 } from '@velnes/contracts';
 import type { FastifyInstance } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
@@ -26,6 +30,7 @@ import {
   startPreview,
 } from './auth.service.js';
 import { env } from '../../env.js';
+import { redeemSignInLink, setOwnPassword } from './sign-in-link.service.js';
 
 const ErrorSchema = z.object({ error: z.string() });
 
@@ -88,6 +93,48 @@ export function authRoutes(app: FastifyInstance) {
           expiresIn: env.accessTtl,
         });
         return { accessToken, refreshToken };
+      } catch (e) {
+        if (e instanceof AuthError) return reply.code(401).send({ error: e.code });
+        throw e;
+      }
+    },
+  });
+
+  /** A personal sign-in link, opened on the phone: signs that one
+   *  person into their own salon (Alex, 2026-09-23). Single use. */
+  r.route({
+    method: 'POST',
+    url: '/auth/sign-in-link',
+    schema: {
+      body: SignInLinkRedeemRequestSchema,
+      response: { 200: SignInLinkRedeemResponseSchema, 401: ErrorSchema },
+    },
+    handler: async (req, reply) => {
+      try {
+        const { employee, refreshToken, needsPassword, salonName } = await redeemSignInLink(req.body.token);
+        const accessToken = await reply.jwtSign(claimsFor(employee), { expiresIn: env.accessTtl });
+        return { accessToken, refreshToken, employee, needsPassword, salonName };
+      } catch (e) {
+        if (e instanceof AuthError) return reply.code(401).send({ error: e.code });
+        throw e;
+      }
+    },
+  });
+
+  /** Choose or change your own password: free the first time (the link
+   *  brought you in), the current one required after that. */
+  r.route({
+    method: 'POST',
+    url: '/auth/password',
+    preHandler: [app.authenticate],
+    schema: {
+      body: SetPasswordRequestSchema,
+      response: { 200: OkResponseSchema, 401: ErrorSchema },
+    },
+    handler: async (req, reply) => {
+      try {
+        await setOwnPassword(req.claims, req.body.password, req.body.current);
+        return { ok: true as const };
       } catch (e) {
         if (e instanceof AuthError) return reply.code(401).send({ error: e.code });
         throw e;

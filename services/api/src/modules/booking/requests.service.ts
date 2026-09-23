@@ -111,6 +111,7 @@ export async function afterBooked(trx: Trx, ctx: BookedVisitCtx): Promise<Client
       body: `${ctx.customerName} asked for ${what} on ${when} at ${loc?.name ?? salon.name}.\n\nOpen Velnes › Calendar to accept or decline the request. The customer is told either way, and pays only once you accept.`,
       kind: 'booking_request',
       refId: first.id,
+      cta: { label: 'Open the calendar', url: `${env.workspaceAppUrl}/calendar` },
     });
 
   if (ctx.customerEmail)
@@ -120,9 +121,10 @@ export async function afterBooked(trx: Trx, ctx: BookedVisitCtx): Promise<Client
       subject: requested ? `Request sent to ${salon.name}` : `Booked at ${salon.name}`,
       body: requested
         ? `Your request for ${what} on ${when} is with ${salon.name}. They confirm requests themselves — you will get an e-mail as soon as they answer, and you pay only once it is accepted.`
-        : `${what} on ${when} at ${salon.name} is booked.\n\nSee the appointment or pay for it here: ${payLink(first.id, ctx.clientUserId, salon.slug)}`,
+        : `${what} on ${when} at ${salon.name} is booked.\n\nThe button below opens your appointment, where you can pay for it now or at the salon.`,
       kind: requested ? 'booking_requested' : 'booking_confirmed',
       refId: first.id,
+      ...(requested ? {} : { cta: { label: 'See your appointment', url: payLink(first.id, ctx.clientUserId, salon.slug) } }),
     });
 
   if (!ctx.clientUserId) return null;
@@ -161,10 +163,11 @@ export async function afterDecided(
       to: customer.email,
       subject: accepted ? `${salon.name} accepted your booking` : `${salon.name} could not take your booking`,
       body: accepted
-        ? `${salon.name} accepted ${what} on ${when}.\n\nPay for it here: ${link}\n\nYou can also pay at the salon.`
-        : `${salon.name} could not take ${what} on ${when}.${reason ? `\n\nTheir note: ${reason}` : ''}\n\nNothing was charged. Pick another time here: ${env.consumerAppUrl}`,
+        ? `${salon.name} accepted ${what} on ${when}.\n\nThe button below opens the payment screen. You can also pay at the salon.`
+        : `${salon.name} could not take ${what} on ${when}.${reason ? `\n\nTheir note: ${reason}` : ''}\n\nNothing was charged. The button below takes you back to Velnes to pick another time.`,
       kind: accepted ? 'booking_accepted' : 'booking_declined',
       refId: a.id,
+      cta: accepted ? { label: 'Pay for your booking', url: link } : { label: 'Pick another time', url: env.consumerAppUrl },
     });
 
   if (!customer.clientUserId) return null;

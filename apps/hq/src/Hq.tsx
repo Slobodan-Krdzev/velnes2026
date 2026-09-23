@@ -2839,9 +2839,14 @@ function Team({ say, me }: { say: (m: string) => void; me: HqUser }) {
                   <td>{m.subject}</td>
                   <td className="muted">{m.kind}</td>
                   <td className="right">
-                    <span className={`badge ${m.status === 'mock_sent' ? 'warning' : 'success'}`}>
+                    <span className={`badge ${m.status === 'sent' ? 'success' : m.status === 'failed' ? 'danger' : 'warning'}`}>
                       {m.status}
                     </span>
+                    {m.error ? (
+                      <div className="muted" style={{ fontSize: 12, marginTop: 4, maxWidth: 260, marginLeft: 'auto' }} title={m.error}>
+                        {m.attempts}× · {m.error.slice(0, 80)}
+                      </div>
+                    ) : null}
                   </td>
                 </tr>
               ))}

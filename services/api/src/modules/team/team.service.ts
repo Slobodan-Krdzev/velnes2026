@@ -3,6 +3,7 @@ import { sql } from 'kysely';
 import type { Trx } from '../../db/index.js';
 import { logAudit } from '../audit/audit.service.js';
 import { queueMail } from '../mail/mail.service.js';
+import { mintSignInLink } from '../auth/sign-in-link.service.js';
 import { employeeRoleId } from './role-kits.js';
 
 /**
@@ -164,13 +165,15 @@ export async function createEmployee(trx: Trx, claims: AccessClaims, b: Employee
     before: '—',
     after: role,
   });
+  const link = await mintSignInLink(trx, claims.ten, row.id, claims.sub);
   await queueMail(trx, {
     tenantId: claims.ten,
     to: b.email,
     subject: 'You are invited to Velnes',
-    body: `${(await actorName(trx, claims.sub)) || 'Your salon'} invited you as ${role !== '—' ? role : 'a team member'}. The invite is valid for 7 days.`,
+    body: `${(await actorName(trx, claims.sub)) || 'Your salon'} invited you as ${role !== '—' ? role : 'a team member'}.\n\nOpen the button below on your phone: it signs you straight into your salon and asks you to choose a password once. The link works once and is valid for 7 days.`,
     kind: 'employee_invite',
     refId: row.id,
+    cta: { label: 'Sign in on your phone', url: link.url },
   });
   return employeeRow(trx, row.id);
 }

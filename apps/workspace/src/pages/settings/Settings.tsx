@@ -28,6 +28,7 @@ import { WeekHoursEditor } from './bits.js';
 import { BookingSection } from './BookingSection.js';
 import { CompanySection } from './CompanySection.js';
 import { CustomersSettingsSection } from './CustomersSettingsSection.js';
+import { SignInLinkPanel } from './SignInLinkPanel.js';
 import { EmployeePanel, EmployeesSection } from './EmployeesSection.js';
 import { GeneralSection } from './GeneralSection.js';
 import { HoursSection } from './HoursSection.js';
@@ -912,6 +913,7 @@ function TeamSection({ openAudit, openProfileId }: { openAudit: () => void; open
   });
   const [inviting, setInviting] = useState(false);
   const [locsFor, setLocsFor] = useState<string | null>(null);
+  const [linkFor, setLinkFor] = useState<Employee | null>(null);
   const [editing, setEditing] = useState<Employee | null>(null);
   // The account menu's Settings link opens the signed-in user's own panel.
   const openedProfile = useRef(false);
@@ -1056,6 +1058,9 @@ function TeamSection({ openAudit, openProfileId }: { openAudit: () => void; open
                         {t('tset.previewAccess')}
                       </button>
                     )}
+                    <button className="btn btn-subtle btn-sm" onClick={() => setLinkFor(e)}>
+                      {t('tset.signInLink')}
+                    </button>
                     <button className="btn btn-ghost btn-sm" onClick={() => setEditing(e)}>
                       {t('common.edit')}
                     </button>
@@ -1116,6 +1121,7 @@ function TeamSection({ openAudit, openProfileId }: { openAudit: () => void; open
           }}
         />
       ) : null}
+      {linkFor ? <SignInLinkPanel employee={linkFor} onClose={() => setLinkFor(null)} /> : null}
       {locsFor ? (
         <UserLocsPanel
           employee={employees.data?.employees.find((e) => e.id === locsFor) ?? null}

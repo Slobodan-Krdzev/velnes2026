@@ -1,3 +1,4 @@
+import { env } from '../../env.js';
 import {
   PO_PERM_GROUPS,
   PortalCompanySchema,
@@ -834,6 +835,7 @@ export function portalRoutes(app: FastifyInstance) {
           body: `${req.supplierClaims.name} invited you as ${req.body.role}. Two-factor is required at first sign-in.`,
           kind: 'supplier_invite',
           refId: row.id,
+          cta: { label: 'Open the supplier portal', url: env.supplierAppUrl },
         });
         return { id: row.id };
       }),
