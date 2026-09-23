@@ -26,7 +26,8 @@ modify anything under `reference/`.
 - `pnpm typecheck` / `pnpm lint` / `pnpm test` / `pnpm build`
 - Local DB: native Homebrew Postgres 16 (`brew services start
   postgresql@16`), db/user/password `velnes`. NO Docker anywhere —
-  Alex's decision 2026-08-24; VPS deploys natively per `deploy/DEPLOY.md`.
+  Alex's decision 2026-08-24; the API deploys natively to the shared VPS
+  (PM2 + Nginx, PostgreSQL 16) per `deploy/DEPLOY.md`; web apps on Vercel.
 - Migrations: dbmate (SQL in `db/migrations/`), types via kysely-codegen
 
 ## Layout

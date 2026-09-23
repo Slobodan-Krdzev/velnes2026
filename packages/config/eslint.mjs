@@ -33,4 +33,11 @@ export default tseslint.config(
       globals: { window: 'readonly', document: 'readonly', console: 'readonly', URL: 'readonly' },
     },
   },
+  {
+    // Plain Node scripts: the deploy tooling and the API build script.
+    files: ['deploy/**/*.{js,cjs,mjs}', 'services/*/scripts/**/*.{js,cjs,mjs}'],
+    languageOptions: {
+      globals: { process: 'readonly', console: 'readonly', module: 'writable', require: 'readonly', URL: 'readonly' },
+    },
+  },
 );

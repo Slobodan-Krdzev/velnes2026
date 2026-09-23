@@ -480,8 +480,9 @@ Two different things, deliberately kept apart (Alex, 2026-09-21):
   undo that.
 
 **Production.** Browsers expose geolocation only on a secure origin —
-https or `localhost`. The consumer app is served over https by Caddy
-(`Caddyfile`, automatic TLS), so nothing else is needed; if it were
+https or `localhost`. The consumer app is served over https by Vercel
+(and the API by Nginx + certbot, `deploy/DEPLOY.md`), so nothing else is
+needed; if it were
 ever opened over plain http, the provider reports `unsupported` and
 "Near me" says "needs a secure (https) connection" instead of
 pretending to ask. No `Permissions-Policy` header is set anywhere.
