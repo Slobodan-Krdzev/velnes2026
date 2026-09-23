@@ -187,9 +187,12 @@ the real API hostname:
 node deploy/vercel-rewrites.mjs https://api.<domain>
 ```
 
-The HQ app additionally reads `VITE_WORKSPACE_URL` and the workspace
-`VITE_EMPLOYEE_URL` / `VITE_SUPPORT_WHATSAPP` at build time — set them
-in each project's environment variables.
+No environment variables are required on Vercel. The HQ app finds the
+workspace, and the workspace finds the employee app, from their own
+hostname (`workspace.<domain>` ↔ `employee.<domain>`, `siblingAppUrl` in
+`@velnes/ui`); `VITE_WORKSPACE_URL` / `VITE_EMPLOYEE_URL` are optional
+overrides only. The workspace shows a WhatsApp support button only when
+`VITE_SUPPORT_WHATSAPP` is set to a number at build time.
 
 ## Each release
 

@@ -1,6 +1,6 @@
 import { SIGN_IN_LINK_DAYS, SignInLinkResponseSchema } from '@velnes/contracts';
 import { post } from '@velnes/client';
-import { I, Icon } from '@velnes/ui';
+import { I, Icon, siblingAppUrl } from '@velnes/ui';
 import QRCode from 'qrcode';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -8,7 +8,7 @@ import { PanelPortal } from '../../lib/Panel.js';
 
 /** Where the employee app lives, for the how-to text before a link
  *  exists; once one is minted its own origin is the truth. */
-const EMPLOYEE_APP = (import.meta.env.VITE_EMPLOYEE_URL ?? 'http://localhost:5174').replace(/\/+$/, '');
+const EMPLOYEE_APP = siblingAppUrl(import.meta.env.VITE_EMPLOYEE_URL, 'employee', 5174);
 
 /**
  * Settings › Team › "Sign-in link" (Alex, 2026-09-23): the one place
