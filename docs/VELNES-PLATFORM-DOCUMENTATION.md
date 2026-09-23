@@ -51,10 +51,12 @@ All five speak to **one API**. No app touches the database directly.
   kits (owner / manager / front desk / staff + custom roles), scoped
   by location.
 - **Deploy:** Linux VPS, fully native — no Docker (Alex's decision,
-  24 Aug 2026): native PostgreSQL 16 + native **Caddy** (TLS, routing)
-  + the API as a single bundled Node file under systemd
-  (`deploy/DEPLOY.md`). Sized for hundreds of salons on one 8–16 GB
-  VPS; scale by splitting the widget/API before anything else.
+  24 Aug 2026): native PostgreSQL 16, the existing **Nginx** on the
+  shared VPS (TLS via certbot), the API as a bundle plus its twelve npm
+  runtime packages under **PM2** (fork, one instance) on 127.0.0.1:6000;
+  the six web apps on Vercel (`deploy/DEPLOY.md`, 23 Sep 2026). Sized for
+  hundreds of salons on one 8–16 GB VPS; scale by splitting the
+  widget/API before anything else.
 - **Testing:** Vitest for unit/contract tests, Playwright for the
   critical end-to-end journeys. Suites green before merge — the
   prototype's discipline carries over.
@@ -298,8 +300,7 @@ velnes/
   reference/
     prototype/        # index.html + tests/ + DOCS/ (read-only spec)
   docs/               # this documentation
-  deploy/             # systemd unit + native VPS deploy guide
-  Caddyfile
+  deploy/             # VPS deploy guide, Nginx block, PM2 ecosystem, release script
 ```
 
 ## 12. Delivery methodology (carried from the prototype)

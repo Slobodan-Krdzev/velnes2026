@@ -1,4 +1,5 @@
 import cors from '@fastify/cors';
+import { env } from './env.js';
 import rateLimit from '@fastify/rate-limit';
 import { API_PREFIX } from '@velnes/contracts';
 import Fastify from 'fastify';
@@ -43,6 +44,10 @@ export async function buildServer() {
     // URLs of ≤600k chars each (GALLERY_* in @velnes/contracts), so
     // the default 1 MiB body would refuse a full, legal gallery.
     bodyLimit: 10 * 1024 * 1024,
+    // Behind Nginx on the same box every request arrives from
+    // 127.0.0.1; the visitor is in X-Forwarded-For. Trust that header
+    // from the proxy only (TRUST_PROXY), so rate limits key on people.
+    trustProxy: env.trustProxy,
   }).withTypeProvider<ZodTypeProvider>();
 
   app.setValidatorCompiler(validatorCompiler);

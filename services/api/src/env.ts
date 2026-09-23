@@ -31,6 +31,14 @@ export const env = {
     user: process.env.SMTP_USER ?? (resendKey ? 'resend' : ''),
     pass: process.env.SMTP_PASS ?? resendKey,
   },
+  /** Whose X-Forwarded-* headers to believe: the reverse proxy on the
+   *  same box (deploy/nginx). 'true' trusts every hop; 'false' none.
+   *  The rate limiters key on req.ip, so this decides whether they see
+   *  the visitor or the proxy. */
+  trustProxy: ((): boolean | string => {
+    const v = process.env.TRUST_PROXY ?? '127.0.0.1';
+    return v === 'true' ? true : v === 'false' ? false : v;
+  })(),
   /** The From header, e.g. "Velnes <no-reply@velnes.mk>". */
   mailFrom: process.env.MAIL_FROM ?? 'Velnes <no-reply@velnes.local>',
   mailReplyTo: process.env.MAIL_REPLY_TO ?? '',
