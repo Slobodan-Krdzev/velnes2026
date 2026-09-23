@@ -3,6 +3,7 @@ import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode } from 'react
 export { EMP_COLORS, empColorOf, I, Icon, VelnesMark } from './icons.js';
 export { PhoneInput } from './phone.js';
 export { fileToResizedDataURL } from './image.js';
+export { siblingAppUrl } from './sibling.js';
 
 /** Primitives emitting the prototype's exact class names — all
  *  styling comes from prototype.css (lifted verbatim). */

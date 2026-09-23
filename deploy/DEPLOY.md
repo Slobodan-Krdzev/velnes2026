@@ -78,10 +78,17 @@ sudo chmod +x /usr/local/bin/dbmate
 sudo -u postgres psql
 ```
 ```sql
-CREATE ROLE velnes     LOGIN PASSWORD '<strong 1>';
+CREATE ROLE velnes     LOGIN BYPASSRLS PASSWORD '<strong 1>';
 CREATE ROLE velnes_api LOGIN PASSWORD '<strong 2>';
 CREATE DATABASE velnes OWNER velnes;
 ```
+
+`BYPASSRLS` on the owner is required: several migrations insert the
+platform taxonomy (service categories, search terms) into tables that
+have `FORCE ROW LEVEL SECURITY`, and `FORCE` applies to the owner too.
+On dev and CI the migration role is a superuser, which hid this. The
+API role `velnes_api` never bypasses RLS. Use hex passwords
+(`openssl rand -hex 24`) so the connection URLs need no escaping.
 
 Migrations run from `deploy/release.sh` as `velnes` (below). Never run
 the demo seed on production; it refuses under `NODE_ENV=production`.
@@ -167,7 +174,7 @@ One Vercel project per app, all from this repository:
 | Root Directory | `apps/<app>` (enable "Include source files outside of the Root Directory") |
 | Framework | Vite |
 | Install Command | `pnpm install --frozen-lockfile` (run from the repo root) |
-| Build Command | `pnpm --filter @velnes/contracts build && pnpm --filter @velnes/<app> build` |
+| Build Command | `pnpm --filter @velnes/<app> build` |
 | Output Directory | `dist` |
 | Node.js Version | 22.x |
 
@@ -180,9 +187,12 @@ the real API hostname:
 node deploy/vercel-rewrites.mjs https://api.<domain>
 ```
 
-The HQ app additionally reads `VITE_WORKSPACE_URL` and the workspace
-`VITE_EMPLOYEE_URL` / `VITE_SUPPORT_WHATSAPP` at build time — set them
-in each project's environment variables.
+No environment variables are required on Vercel. The HQ app finds the
+workspace, and the workspace finds the employee app, from their own
+hostname (`workspace.<domain>` ↔ `employee.<domain>`, `siblingAppUrl` in
+`@velnes/ui`); `VITE_WORKSPACE_URL` / `VITE_EMPLOYEE_URL` are optional
+overrides only. The workspace shows a WhatsApp support button only when
+`VITE_SUPPORT_WHATSAPP` is set to a number at build time.
 
 ## Each release
 

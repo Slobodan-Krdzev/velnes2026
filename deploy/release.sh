@@ -15,26 +15,16 @@ REMOTE_DIR="${2:-/srv/velnes/api}"
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
 
 echo "▶ build"
-(cd "$HERE" && pnpm --filter @velnes/contracts build >/dev/null && pnpm --filter @velnes/api build)
+(cd "$HERE" && pnpm --filter @velnes/api build)
 
 echo "▶ upload → $TARGET:$REMOTE_DIR"
 ssh "$TARGET" "mkdir -p '$REMOTE_DIR/migrations'"
 rsync -az --delete --exclude node_modules --exclude .env --exclude ecosystem.config.cjs \
+  --exclude release-remote.sh --exclude migrations \
   "$HERE/services/api/dist/" "$TARGET:$REMOTE_DIR/"
 rsync -az --delete "$HERE/db/migrations/" "$TARGET:$REMOTE_DIR/migrations/"
-rsync -az "$HERE/deploy/ecosystem.config.cjs" "$TARGET:$REMOTE_DIR/ecosystem.config.cjs"
+rsync -az "$HERE/deploy/ecosystem.config.cjs" "$HERE/deploy/release-remote.sh" "$TARGET:$REMOTE_DIR/"
 
 echo "▶ install runtime dependencies, migrate, restart"
-ssh "$TARGET" bash -s "$REMOTE_DIR" <<'REMOTE'
-set -euo pipefail
-DIR="$1"; cd "$DIR"
-test -f .env || { echo "missing $DIR/.env — copy deploy/env.production.example first"; exit 1; }
-npm ci --omit=dev --no-audit --no-fund
-set -a; . ./.env; set +a
-dbmate -u "${DATABASE_URL}" -d "$DIR/migrations" --no-dump-schema up
-if pm2 describe velnes-api >/dev/null 2>&1; then pm2 restart velnes-api --update-env; else pm2 start "$DIR/ecosystem.config.cjs"; fi
-pm2 save >/dev/null
-sleep 3
-curl -fsS "http://127.0.0.1:${PORT:-6000}/api/v1/health" && echo && pm2 describe velnes-api | grep -E "status|restarts" | head -2
-REMOTE
+ssh "$TARGET" bash "$REMOTE_DIR/release-remote.sh" "$REMOTE_DIR"
 echo "✔ released"

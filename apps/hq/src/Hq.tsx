@@ -22,7 +22,7 @@ import {
   type SupportTicket,
 } from '@velnes/contracts';
 import type { Lang } from '@velnes/i18n';
-import { I, Icon, VelnesMark } from '@velnes/ui';
+import { I, Icon, VelnesMark, siblingAppUrl } from '@velnes/ui';
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
@@ -134,7 +134,7 @@ export function Hq({
       .map((p2) => p2[0])
       .join('')
       .slice(0, 2);
-  const workspaceUrl = import.meta.env.VITE_WORKSPACE_URL ?? 'http://localhost:5173';
+  const workspaceUrl = siblingAppUrl(import.meta.env.VITE_WORKSPACE_URL, 'workspace', 5173);
 
   return (
     <>
