@@ -63,7 +63,7 @@ test('a stranger registers, HQ activates, the owner signs into their own world',
   const hq = await context.newPage();
   await hqSignIn(hq);
   const row = hq.locator('tr', { hasText: `Studio Nova ${runId}` });
-  await expect(row.getByText('Awaiting SMTP')).toBeVisible();
+  await expect(row.getByText('Not verified')).toBeVisible();
   await row.getByRole('button', { name: 'Verify & activate' }).click();
   await expect(hq.getByText(new RegExp(ownerEmail))).toBeVisible();
 
