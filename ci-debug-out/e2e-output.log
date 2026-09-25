@@ -1,0 +1,211 @@
+$ playwright test
+Applying: 20260824120001_tenant_plumbing.sql
+Applied: 20260824120001_tenant_plumbing.sql in 4.967285ms
+Applying: 20260824120002_tenancy_core.sql
+Applied: 20260824120002_tenancy_core.sql in 21.325583ms
+Applying: 20260824120003_auth_audit.sql
+Applied: 20260824120003_auth_audit.sql in 7.563132ms
+Applying: 20260824150004_catalog.sql
+Applied: 20260824150004_catalog.sql in 18.647506ms
+Applying: 20260824150005_products_stock.sql
+Applied: 20260824150005_products_stock.sql in 10.911728ms
+Applying: 20260824180006_scheduling.sql
+Applied: 20260824180006_scheduling.sql in 18.763267ms
+Applying: 20260824180007_timing.sql
+Applied: 20260824180007_timing.sql in 4.685524ms
+Applying: 20260824180008_employee_hours.sql
+Applied: 20260824180008_employee_hours.sql in 1.102638ms
+Applying: 20260824210009_till.sql
+Applied: 20260824210009_till.sql in 25.704432ms
+Applying: 20260825090010_employee_lang.sql
+Applied: 20260825090010_employee_lang.sql in 1.323458ms
+Applying: 20260825170011_widgets.sql
+Applied: 20260825170011_widgets.sql in 6.476098ms
+Applying: 20260825190012_widget_attribution.sql
+Applied: 20260825190012_widget_attribution.sql in 2.179107ms
+Applying: 20260826090013_hq_registrations.sql
+Applied: 20260826090013_hq_registrations.sql in 5.784221ms
+Applying: 20260826100014_hq_read_links.sql
+Applied: 20260826100014_hq_read_links.sql in 1.074706ms
+Applying: 20260826110015_location_address.sql
+Applied: 20260826110015_location_address.sql in 1.159789ms
+Applying: 20260826130016_customers_ci.sql
+Applied: 20260826130016_customers_ci.sql in 6.413403ms
+Applying: 20260826150017_marketing_offers.sql
+Applied: 20260826150017_marketing_offers.sql in 7.215346ms
+Applying: 20260826170018_suppliers.sql
+Applied: 20260826170018_suppliers.sql in 16.049107ms
+Applying: 20260826200019_business_settings.sql
+Applied: 20260826200019_business_settings.sql in 1.788105ms
+Applying: 20260903120020_hq_categories.sql
+Applied: 20260903120020_hq_categories.sql in 5.779123ms
+Applying: 20260903160021_customer_email_verified.sql
+Applied: 20260903160021_customer_email_verified.sql in 1.303012ms
+Applying: 20260903170022_product_img.sql
+Applied: 20260903170022_product_img.sql in 1.049261ms
+Applying: 20260903190023_category_requests.sql
+Applied: 20260903190023_category_requests.sql in 4.955704ms
+Applying: 20260903200024_notice_audience.sql
+Applied: 20260903200024_notice_audience.sql in 1.231577ms
+Applying: 20260903210025_notice_target.sql
+Applied: 20260903210025_notice_target.sql in 1.461877ms
+Applying: 20260903220026_mail_outbox_hq_suppliers.sql
+Applied: 20260903220026_mail_outbox_hq_suppliers.sql in 3.460185ms
+Applying: 20260903230027_hq_invited.sql
+Applied: 20260903230027_hq_invited.sql in 1.198754ms
+Applying: 20260903240028_brands_hq_roles.sql
+Applied: 20260903240028_brands_hq_roles.sql in 6.320733ms
+Applying: 20260904090029_supplier_login_lookup.sql
+Applied: 20260904090029_supplier_login_lookup.sql in 1.183991ms
+Applying: 20260904100030_hq_onboarding_read.sql
+Applied: 20260904100030_hq_onboarding_read.sql in 1.193966ms
+Applying: 20260904110031_hq_role_perms.sql
+Applied: 20260904110031_hq_role_perms.sql in 1.468236ms
+Applying: 20260904120032_portal_payments_read.sql
+Applied: 20260904120032_portal_payments_read.sql in 1.593201ms
+Applying: 20260904130033_supplier_roles.sql
+Applied: 20260904130033_supplier_roles.sql in 3.514744ms
+Applying: 20260904140034_portal_invite_mail.sql
+Applied: 20260904140034_portal_invite_mail.sql in 1.081567ms
+Applying: 20260904150035_supplier_product_delete.sql
+Applied: 20260904150035_supplier_product_delete.sql in 1.768936ms
+Applying: 20260904160036_supplier_notifications.sql
+Applied: 20260904160036_supplier_notifications.sql in 3.180421ms
+Applying: 20260904170037_order_supplier_note.sql
+Applied: 20260904170037_order_supplier_note.sql in 1.227006ms
+Applying: 20260904180038_supplier_users_hq_invite.sql
+Applied: 20260904180038_supplier_users_hq_invite.sql in 1.11716ms
+Applying: 20260904190039_combos.sql
+Applied: 20260904190039_combos.sql in 3.799007ms
+Applying: 20260904200040_support_tickets.sql
+Applied: 20260904200040_support_tickets.sql in 4.854679ms
+Applying: 20260905090041_notice_ref.sql
+Applied: 20260905090041_notice_ref.sql in 1.08645ms
+Applying: 20260906120042_business_categories.sql
+Applied: 20260906120042_business_categories.sql in 3.055162ms
+Applying: 20260914120050_ai_assistant.sql
+Applied: 20260914120050_ai_assistant.sql in 5.640123ms
+Applying: 20260915120100_assistant_entitlement.sql
+Applied: 20260915120100_assistant_entitlement.sql in 1.257306ms
+Applying: 20260916150200_service_category_media.sql
+Applied: 20260916150200_service_category_media.sql in 1.032152ms
+Applying: 20260916170300_avatars.sql
+Applied: 20260916170300_avatars.sql in 1.001121ms
+Applying: 20260916180400_supplier_self_update.sql
+Applied: 20260916180400_supplier_self_update.sql in 1.166455ms
+Applying: 20260918120500_location_geo.sql
+Applied: 20260918120500_location_geo.sql in 1.635074ms
+Applying: 20260918140600_client_users.sql
+Applied: 20260918140600_client_users.sql in 8.316111ms
+Applying: 20260919090700_location_geo_placeholders.sql
+Applied: 20260919090700_location_geo_placeholders.sql in 1.540751ms
+Applying: 20260920120800_search_config.sql
+Applied: 20260920120800_search_config.sql in 4.266124ms
+Applying: 20260920140900_client_personalised_results.sql
+Applied: 20260920140900_client_personalised_results.sql in 1.100851ms
+Applying: 20260920160000_activate_imported_locations.sql
+Applied: 20260920160000_activate_imported_locations.sql in 1.505598ms
+Applying: 20260920180000_client_favourites.sql
+Applied: 20260920180000_client_favourites.sql in 4.172503ms
+Applying: 20260921090000_search_documents.sql
+Applied: 20260921090000_search_documents.sql in 9.57734ms
+Applying: 20260921100000_service_category_terms.sql
+Applied: 20260921100000_service_category_terms.sql in 5.613543ms
+Applying: 20260921120000_search_config_text_relevance.sql
+Applied: 20260921120000_search_config_text_relevance.sql in 1.602374ms
+Applying: 20260921140000_search_misses.sql
+Applied: 20260921140000_search_misses.sql in 3.408392ms
+Applying: 20260921160000_client_location_consent.sql
+Applied: 20260921160000_client_location_consent.sql in 1.176194ms
+Applying: 20260922120000_employee_role.sql
+Applied: 20260922120000_employee_role.sql in 2.316551ms
+Applying: 20260922150000_booking_requests.sql
+Applied: 20260922150000_booking_requests.sql in 984.654µs
+Applying: 20260922170000_client_payment_methods.sql
+Applied: 20260922170000_client_payment_methods.sql in 3.37099ms
+Applying: 20260922180000_business_socials.sql
+Applied: 20260922180000_business_socials.sql in 1.217188ms
+Applying: 20260922190000_discount_code_active.sql
+Applied: 20260922190000_discount_code_active.sql in 1.101576ms
+Applying: 20260923120000_employee_sign_in_links.sql
+Applied: 20260923120000_employee_sign_in_links.sql in 4.39528ms
+Applying: 20260923140000_mail_outbox_delivery.sql
+Applied: 20260923140000_mail_outbox_delivery.sql in 2.151405ms
+Applying: 20260925100000_registration_mail.sql
+Applied: 20260925100000_registration_mail.sql in 1.391119ms
+Seeded the demo world into velnes.
+Demo login: maria@velnes.mk (and colleagues) · password: velnes-demo
+
+Running 8 tests using 2 workers
+·····×·F·
+
+  1) e2e/platform.spec.ts:24:5 › a stranger registers, HQ activates, the owner signs into their own world 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: locator('tr').filter({ hasText: 'Studio Nova mugt46yl' }).getByText('Awaiting SMTP')
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" with timeout 5000ms
+      - waiting for locator('tr').filter({ hasText: 'Studio Nova mugt46yl' }).getByText('Awaiting SMTP')
+
+
+      64 |   await hqSignIn(hq);
+      65 |   const row = hq.locator('tr', { hasText: `Studio Nova ${runId}` });
+    > 66 |   await expect(row.getByText('Awaiting SMTP')).toBeVisible();
+         |                                                ^
+      67 |   await row.getByRole('button', { name: 'Verify & activate' }).click();
+      68 |   await expect(hq.getByText(new RegExp(ownerEmail))).toBeVisible();
+      69 |
+        at /home/runner/work/velnes2026/velnes2026/e2e/platform.spec.ts:66:48
+
+    Error Context: test-results/platform-a-stranger-regist-12fa1--signs-into-their-own-world/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/platform-a-stranger-regist-12fa1--signs-into-their-own-world/trace.zip
+    Usage:
+
+        pnpm exec playwright show-trace test-results/platform-a-stranger-regist-12fa1--signs-into-their-own-world/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Retry #1 ───────────────────────────────────────────────────────────────────────────────────────
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: locator('tr').filter({ hasText: 'Studio Nova mugt4d41' }).getByText('Awaiting SMTP')
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" with timeout 5000ms
+      - waiting for locator('tr').filter({ hasText: 'Studio Nova mugt4d41' }).getByText('Awaiting SMTP')
+
+
+      64 |   await hqSignIn(hq);
+      65 |   const row = hq.locator('tr', { hasText: `Studio Nova ${runId}` });
+    > 66 |   await expect(row.getByText('Awaiting SMTP')).toBeVisible();
+         |                                                ^
+      67 |   await row.getByRole('button', { name: 'Verify & activate' }).click();
+      68 |   await expect(hq.getByText(new RegExp(ownerEmail))).toBeVisible();
+      69 |
+        at /home/runner/work/velnes2026/velnes2026/e2e/platform.spec.ts:66:48
+
+    Error Context: test-results/platform-a-stranger-regist-12fa1--signs-into-their-own-world-retry1/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/platform-a-stranger-regist-12fa1--signs-into-their-own-world-retry1/trace.zip
+    Usage:
+
+        pnpm exec playwright show-trace test-results/platform-a-stranger-regist-12fa1--signs-into-their-own-world-retry1/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  1 failed
+    e2e/platform.spec.ts:24:5 › a stranger registers, HQ activates, the owner signs into their own world 
+  7 passed (25.9s)
+[ELIFECYCLE] Command failed with exit code 1.
