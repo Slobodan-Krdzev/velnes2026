@@ -211,10 +211,26 @@ export type RegistrationImportResult = z.infer<typeof RegistrationImportResultSc
 export const RegistrationCreateResponseSchema = z.object({
   id: z.uuid(),
   status: RegistrationStatusSchema,
-  // The applicant's own door back in — kept client-side; SMTP will
-  // carry it by mail once a provider is decided.
+  // The applicant's own door back in — kept client-side; the
+  // verification mail carries it too (see RegistrationVerifyResponse).
   resubmitToken: z.uuid(),
 });
+
+/** What the e-mail link hands back: the address is confirmed, and the
+ *  applicant learns where the machine stands. The resubmit token rides
+ *  along so the mail link is a way back into the wizard from any
+ *  device — the e-mail token proves the address, which is the stronger
+ *  claim of the two. */
+export const RegistrationVerifyResponseSchema = z.object({
+  id: z.uuid(),
+  status: RegistrationStatusSchema,
+  hqReason: z.string().nullable(),
+  salonName: z.string(),
+  email: z.string(),
+  resubmitToken: z.uuid(),
+  verifiedAt: z.iso.datetime(),
+});
+export type RegistrationVerifyResponse = z.infer<typeof RegistrationVerifyResponseSchema>;
 
 export const RegistrationStatusResponseSchema = z.object({
   id: z.uuid(),

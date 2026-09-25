@@ -8,6 +8,7 @@ import {
 import argon2 from 'argon2';
 import { sql } from 'kysely';
 import { db, withHq, type Trx } from '../../db/index.js';
+import { env } from '../../env.js';
 import { logAudit } from '../audit/audit.service.js';
 import { locReadiness, locTransition } from '../locations/locations.service.js';
 import { queueMail } from '../mail/mail.service.js';
@@ -21,6 +22,30 @@ export class RegistrationError extends Error {
   ) {
     super(message);
   }
+}
+
+/** Where every mail to the applicant points: the workspace's status
+ *  page, unlocked by the e-mail token. One link for the whole journey —
+ *  the page reads where the machine stands and shows that. */
+const statusUrl = (id: string, emailToken: string) =>
+  `${env.workspaceAppUrl}/registration/${id}?token=${emailToken}`;
+
+/** The verification mail: sent at registration, and again whenever the
+ *  applicant resubmits under a different address. Tenant-less — no
+ *  salon exists yet. */
+async function queueVerifyMail(trx: Trx, id: string, emailToken: string, draft: RegistrationDraft) {
+  await queueMail(trx, {
+    tenantId: null,
+    to: draft.acct.email,
+    subject: `Confirm your e-mail for ${draft.salon.name}`,
+    body:
+      `Hi ${draft.acct.name},\n\n` +
+      `Thank you for registering ${draft.salon.name} on Velnes. Confirm this e-mail address with the button below.\n\n` +
+      `After that, Revelapps HQ reviews every new salon before it goes live — we will e-mail you here the moment that is done.`,
+    kind: 'registration_verify',
+    refId: id,
+    cta: { label: 'Confirm my e-mail', url: statusUrl(id, emailToken) },
+  });
 }
 
 /** Owner role: every permission at its widest legal scope — the kit in
@@ -69,16 +94,51 @@ export async function createRegistration(draft: RegistrationDraft) {
     await sql`select set_config('app.public', '1', true)`.execute(trx);
     const id = randomUUID();
     const resubmitToken = randomUUID();
+    const emailToken = randomUUID();
     await trx
       .insertInto('registrations')
       .values({
         id,
         draft: JSON.stringify(draft),
         resubmitToken,
+        emailToken,
+        emailSentAt: new Date(),
         log: JSON.stringify([{ to: 'pending_review', at: new Date().toISOString() }]),
       })
       .execute();
+    await queueVerifyMail(trx, id, emailToken, draft);
     return { id, status: 'pending_review' as const, resubmitToken };
+  });
+}
+
+/**
+ * The e-mail link's door: confirm the address — once; a second click
+ * keeps the first stamp — and say where the machine stands. A wrong
+ * token sees nothing, by RLS. Hands back the resubmit token too, so the
+ * mail is a way back into the wizard from any device.
+ */
+export async function verifyRegistrationEmail(id: string, token: string) {
+  return db.transaction().execute(async (trx) => {
+    await sql`select set_config('app.reg_email_token', ${token}, true)`.execute(trx);
+    const row = await trx
+      .selectFrom('registrations')
+      .select(['id', 'status', 'hqReason', 'draft', 'resubmitToken', 'emailVerifiedAt'])
+      .where('id', '=', id)
+      .executeTakeFirst();
+    if (!row) return null;
+    const verifiedAt = row.emailVerifiedAt ?? new Date();
+    if (!row.emailVerifiedAt)
+      await trx.updateTable('registrations').set({ emailVerifiedAt: verifiedAt }).where('id', '=', id).execute();
+    const draft = row.draft as RegistrationDraft;
+    return {
+      id: row.id,
+      status: row.status,
+      hqReason: row.hqReason,
+      salonName: draft.salon.name,
+      email: draft.acct.email,
+      resubmitToken: row.resubmitToken,
+      verifiedAt: verifiedAt.toISOString(),
+    };
   });
 }
 
@@ -95,12 +155,16 @@ export async function resubmitRegistration(id: string, token: string, draft: Reg
     await sql`select set_config('app.reg_token', ${token}, true)`.execute(trx);
     const row = await trx
       .selectFrom('registrations')
-      .select(['id', 'status', 'log'])
+      .select(['id', 'status', 'log', 'draft', 'emailToken'])
       .where('id', '=', id)
       .executeTakeFirst();
     if (!row) throw new RegistrationError('NOT_FOUND', 'Unknown registration');
     if (row.status !== 'changes_required')
       throw new RegistrationError('WRONG_STATE', 'Only a sent-back registration can be resubmitted');
+    // A different address is an unconfirmed one: fresh token, fresh mail.
+    const before = (row.draft as RegistrationDraft).acct.email.trim().toLowerCase();
+    const emailChanged = before !== draft.acct.email.trim().toLowerCase();
+    const emailToken = emailChanged ? randomUUID() : row.emailToken;
     await trx
       .updateTable('registrations')
       .set({
@@ -108,6 +172,7 @@ export async function resubmitRegistration(id: string, token: string, draft: Reg
         draft: JSON.stringify(draft),
         hqReason: null,
         ts: new Date(),
+        ...(emailChanged ? { emailToken, emailVerifiedAt: null, emailSentAt: new Date() } : {}),
         log: JSON.stringify([
           ...(row.log as unknown[]),
           { from: 'changes_required', to: 'resubmitted', at: new Date().toISOString() },
@@ -115,6 +180,7 @@ export async function resubmitRegistration(id: string, token: string, draft: Reg
       })
       .where('id', '=', id)
       .execute();
+    if (emailChanged) await queueVerifyMail(trx, id, emailToken, draft);
     return { id, status: 'resubmitted' as const };
   });
 }
@@ -132,7 +198,7 @@ export async function reviewRegistration(
   return withHq(async (trx) => {
     const row = await trx
       .selectFrom('registrations')
-      .select(['id', 'status', 'log', 'draft'])
+      .select(['id', 'status', 'log', 'draft', 'emailToken'])
       .where('id', '=', id)
       .executeTakeFirst();
     if (!row) throw new RegistrationError('NOT_FOUND', 'Unknown registration');
@@ -155,6 +221,36 @@ export async function reviewRegistration(
       })
       .where('id', '=', id)
       .execute();
+    // The decision reaches the applicant by mail — the same link as the
+    // verification mail, so the status page tells them what to do next.
+    const draft = row.draft as RegistrationDraft;
+    if (to === 'changes_required')
+      await queueMail(trx, {
+        tenantId: null,
+        to: draft.acct.email,
+        subject: `Revelapps HQ asks for a change to ${draft.salon.name}`,
+        body:
+          `Hi ${draft.acct.name},\n\n` +
+          `Revelapps HQ reviewed the registration of ${draft.salon.name} and needs one thing corrected before it can go live:\n\n` +
+          `${reason!.trim()}\n\n` +
+          `Everything you filled in is still there — open the wizard, correct it and resubmit.`,
+        kind: 'registration_changes',
+        refId: row.id,
+        cta: { label: 'Review and resubmit', url: statusUrl(row.id, row.emailToken) },
+      });
+    else
+      await queueMail(trx, {
+        tenantId: null,
+        to: draft.acct.email,
+        subject: `Your Velnes registration for ${draft.salon.name} was declined`,
+        body:
+          `Hi ${draft.acct.name},\n\n` +
+          `Revelapps HQ declined the registration of ${draft.salon.name}.` +
+          (reason?.trim() ? `\n\n${reason.trim()}` : '') +
+          `\n\nYou can start a new registration at any time.`,
+        kind: 'registration_declined',
+        refId: row.id,
+      });
     return { id, status: to };
   });
 }
@@ -502,6 +598,22 @@ export async function approveRegistration(id: string, reviewer: string) {
       })
       .where('id', '=', id)
       .execute();
+
+    // The owner hears it from us, not by refreshing the wizard: the
+    // same link as the verification mail now leads to sign-in and on to
+    // the flightdeck.
+    await queueMail(trx, {
+      tenantId: businessId,
+      to: draft.acct.email,
+      subject: `${draft.salon.name} is live on Velnes`,
+      body:
+        `Hi ${draft.acct.name},\n\n` +
+        `Revelapps HQ approved ${draft.salon.name}. Your salon, your catalog and your location are ready, and customers can book from this minute.\n\n` +
+        `Sign in with this e-mail and the password you chose at registration to open your flightdeck.`,
+      kind: 'registration_approved',
+      refId: id,
+      cta: { label: 'Open your flightdeck', url: statusUrl(id, row.emailToken) },
+    });
 
     await logAudit(trx, businessId, {
       actorEmployeeId: null,

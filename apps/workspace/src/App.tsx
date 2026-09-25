@@ -18,6 +18,7 @@ import { TillPage } from './pages/till/Till.js';
 import { Login } from './pages/Login.js';
 import { Onboarding } from './pages/Onboarding.js';
 import { Register } from './pages/Register.js';
+import { RegistrationStatus } from './pages/RegistrationStatus.js';
 import { SessionProvider, useSession } from '@velnes/client';
 import { Shell } from './shell/Shell.js';
 
@@ -45,6 +46,7 @@ export function App() {
               <Route path="/login" element={<Login />} />
               <Route path="/onboarding" element={<Onboarding />} />
               <Route path="/register" element={<Register />} />
+              <Route path="/registration/:id" element={<RegistrationStatus />} />
               <Route
                 element={
                   <Protected>

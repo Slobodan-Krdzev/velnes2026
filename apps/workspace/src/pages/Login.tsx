@@ -1,7 +1,7 @@
 import { Button, Input } from '@velnes/ui';
 import { useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { ApiError } from '@velnes/client';
 import { useSession } from '@velnes/client';
 
@@ -10,7 +10,10 @@ export function Login() {
   const { t } = useTranslation();
   const { login } = useSession();
   const navigate = useNavigate();
-  const [email, setEmail] = useState('');
+  // Arriving from the registration mail's link: the salon is live, the
+  // address is known — say so and prefill it.
+  const arrived = (useLocation().state ?? null) as { notice?: 'live'; email?: string } | null;
+  const [email, setEmail] = useState(arrived?.email ?? '');
   const [password, setPassword] = useState('');
   const [working, setWorking] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -49,6 +52,9 @@ export function Login() {
         <p className="muted" style={{ fontWeight: 500, margin: '0 0 18px' }}>
           {t('login.subtitle')}
         </p>
+        {arrived?.notice === 'live' ? (
+          <div className="note" style={{ margin: '0 0 14px' }}>{t('login.liveNotice')}</div>
+        ) : null}
         <div className="field">
           <label htmlFor="login-email">{t('login.email')}</label>
           <Input
