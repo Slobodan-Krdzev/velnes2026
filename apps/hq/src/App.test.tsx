@@ -120,7 +120,7 @@ describe('Revelapps HQ', () => {
     mockApi(calls);
     await signIn();
     expect(screen.getByText('Studio Nova')).toBeDefined();
-    expect(screen.getByText('Awaiting SMTP')).toBeDefined();
+    expect(screen.getByText('Not verified')).toBeDefined();
     expect(screen.getAllByText('Debar Maalo').length).toBeGreaterThan(0);
     expect(screen.getByText('new — compound')).toBeDefined();
     expect(screen.getByText('6 of 6 steps')).toBeDefined();

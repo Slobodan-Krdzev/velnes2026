@@ -6,6 +6,7 @@ import {
   RegistrationImportResultSchema,
   RegistrationStatusResponseSchema,
   RegistrationStatusSchema,
+  RegistrationVerifyResponseSchema,
   type RegistrationDraft,
 } from '@velnes/contracts';
 import type { FastifyInstance, FastifyReply } from 'fastify';
@@ -17,6 +18,7 @@ import {
   registrationByToken,
   RegistrationError,
   resubmitRegistration,
+  verifyRegistrationEmail,
 } from './registrations.service.js';
 import { ImportError, importSalon } from './import.service.js';
 
@@ -135,6 +137,25 @@ export function registrationsRoutes(app: FastifyInstance) {
         hqReason: row.hqReason,
         draft: { ...draft, acct: { name: draft.acct.name, email: draft.acct.email } },
       };
+    },
+  });
+
+  // The e-mail link's door: the token from the mail confirms the
+  // address and tells the applicant where they stand. Anonymous, rate-
+  // limited; a wrong token sees nothing (RLS).
+  r.route({
+    method: 'POST',
+    url: '/registrations/:id/verify-email',
+    config: { rateLimit: { max: 20, timeWindow: '15 minutes' } },
+    schema: {
+      params: z.object({ id: z.uuid() }),
+      querystring: z.object({ token: z.uuid() }),
+      response: { 200: RegistrationVerifyResponseSchema, 404: Err },
+    },
+    handler: async (req, reply) => {
+      const out = await verifyRegistrationEmail(req.params.id, req.query.token);
+      if (!out) return reply.code(404).send({ error: 'NOT_FOUND', message: 'This link is not valid' });
+      return out;
     },
   });
 

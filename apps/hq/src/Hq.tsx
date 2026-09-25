@@ -1427,7 +1427,7 @@ function Customers({ say, me }: { say: (m: string) => void; me: HqUser }) {
                       {rw.emailVerifiedAt ? (
                         <span className="badge success">{t('hq.verified')}</span>
                       ) : (
-                        <span className="badge">{t('hq.awaitingSmtp')}</span>
+                        <span className="badge">{t('hq.emailUnverified')}</span>
                       )}
                     </td>
                     <td className="right">

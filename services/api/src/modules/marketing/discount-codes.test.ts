@@ -25,6 +25,17 @@ const iso = (days: number) => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 };
 
+// The booking half of the story needs a day with a free slot at
+// Aerodrom. A fixed "45 days ahead" is a different weekday every day
+// and lands, some weeks, on one the seeded team has fully off — so the
+// test pins its own precondition: a Thursday, 45–51 days out (the
+// payments suite pins one a week nearer).
+const bookDay = (() => {
+  const d = new Date();
+  d.setDate(d.getDate() + 51 - ((d.getDay() + 5) % 7));
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+})();
+
 describe('discount codes — made in Marketing, switched off in one place, honoured everywhere', () => {
   beforeAll(async () => {
     await app.ready();
@@ -70,13 +81,14 @@ describe('discount codes — made in Marketing, switched off in one place, honou
     const slots = await app.inject({
       method: 'POST',
       url: `${API_PREFIX}/public/slots`,
-      payload: { key: 'salon:velnes-fizio', locationId: demo.locAerodrom, date: iso(45), employeeId: 'any', items: [{ serviceId: demo.s1 }] },
+      payload: { key: 'salon:velnes-fizio', locationId: demo.locAerodrom, date: bookDay, employeeId: 'any', items: [{ serviceId: demo.s1 }] },
     });
     const slot = slots.json().slots.find((x: { free: boolean }) => x.free);
+    expect(slot, `no free slot at Aerodrom on ${bookDay}`).toBeDefined();
     const booked = await app.inject({
       method: 'POST',
       url: `${API_PREFIX}/public/book`,
-      payload: { widgetKey: 'salon:velnes-fizio', key: `codes-${Date.now()}-${Math.random()}`, locationId: demo.locAerodrom, serviceId: demo.s1, date: iso(45), time: slot.t, employeeId: 'any', items: [{ serviceId: demo.s1 }], name: 'Code Tester', phone: '+389 70 999 660', email: 'codes@example.test' },
+      payload: { widgetKey: 'salon:velnes-fizio', key: `codes-${Date.now()}-${Math.random()}`, locationId: demo.locAerodrom, serviceId: demo.s1, date: bookDay, time: slot.t, employeeId: 'any', items: [{ serviceId: demo.s1 }], name: 'Code Tester', phone: '+389 70 999 660', email: 'codes@example.test' },
     });
     expect(booked.statusCode).toBe(200);
     const quoteOff = await app.inject({ method: 'POST', url: `${API_PREFIX}/public/pay/quote`, payload: { key: 'salon:velnes-fizio', token: booked.json().payToken, appointmentId: booked.json().ref, promoCode: 'TESTCODE10' } });

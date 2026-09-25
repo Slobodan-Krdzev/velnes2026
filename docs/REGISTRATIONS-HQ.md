@@ -497,3 +497,34 @@ persistent "Your tax number / VAT registration isn't set yet" note with a
 Settings link, regardless of sales activity. Registration step 1 also
 gained a **Confirm password** field — a wizard-only value (never sent to
 the API) validated to match before advancing.
+
+## The applicant hears from us: verification + decision mails (2026-09-25)
+
+Until now the applicant was never e-mailed — the wizard's "1 · E-mail
+check" promised a link the platform did not send, and HQ's decision was
+only visible by returning to the wizard on the same browser. Now the
+reserved `email_token` earns its keep. **On submit** the anonymous door
+queues a tenant-less `registration_verify` mail whose button is the
+workspace's new status page, `/registration/:id?token=<email_token>`.
+**One door** behind it, `POST /registrations/:id/verify-email?token=`,
+is matched by a new RLS policy on the e-mail token (the resubmit token
+opens it no more than the e-mail token opens resubmit); it stamps
+`email_verified_at` once (a second click keeps the first stamp) and hands
+back status, HQ's reason, the salon name and the **resubmit token** —
+the e-mail token proves the address, the stronger claim, so the mail
+link is the applicant's way back into the wizard from any device. A
+resubmit under a different address resets verification, mints a fresh
+token (the old link dies) and sends the mail again. **HQ's decisions
+mail the same link**: request-changes carries the reason and a "Review
+and resubmit" button; decline says so plainly with no button; approve
+sends "*Salon* is live on Velnes" with "Open your flightdeck". The status
+page reads where the machine stands: under review → "we will e-mail you
+when that is done"; changes required → the reason and the wizard;
+declined → start anew; active → the sign-in page with the address
+prefilled and a "your salon is live" note, and sign-in lands on the
+flightdeck (the owner chose a password minutes earlier; a password-less
+sign-in from the mail is a separate door, not built). The wizard's
+done screen and HQ's "Awaiting SMTP" badge now say what is true
+("Not verified"). Mail bodies are English only — the applicant's
+language is not captured at registration yet (deferral, with the
+i18n of every other platform mail).

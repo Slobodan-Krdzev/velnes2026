@@ -351,7 +351,7 @@ export function Register() {
         <div style={{ textAlign: 'left', margin: '14px 0' }} className="stacked">
           <div className="kv">
             <span className="k">{t('reg.doneMail')}</span>
-            <span className="v">{t('reg.doneMailV')}</span>
+            <span className="v">{t('reg.doneMailV', { email: r.acct.email })}</span>
           </div>
           <div className="kv">
             <span className="k">{t('reg.doneHq')}</span>
@@ -1046,7 +1046,7 @@ export function Register() {
   );
 }
 
-function Centered({ children, wide }: { children: React.ReactNode; wide?: boolean }) {
+export function Centered({ children, wide }: { children: React.ReactNode; wide?: boolean }) {
   return (
     <div
       style={{

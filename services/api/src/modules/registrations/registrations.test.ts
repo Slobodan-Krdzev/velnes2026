@@ -46,6 +46,8 @@ const draft = (email: string, salon = 'Studio Nova') => ({
 
 let regId = '';
 let regToken = '';
+let emailToken = ''; // the token in the latest verification mail
+let declinedId = '';
 let hqToken = '';
 let supportToken = '';
 let newBusinessId = '';
@@ -88,7 +90,9 @@ describe('registrations and the HQ intake table', () => {
 
   afterAll(async () => {
     // The registration references the business — release it first.
-    await admin.query(`DELETE FROM registrations WHERE id=$1`, [regId]);
+    // Its tenant-less mails (verification, HQ's decisions) go with it.
+    await admin.query(`DELETE FROM mail_outbox WHERE ref_id = ANY($1)`, [[regId, declinedId]]);
+    await admin.query(`DELETE FROM registrations WHERE id = ANY($1)`, [[regId, declinedId]]);
     if (createdBusinessId) {
       const b = createdBusinessId;
       await admin.query(`UPDATE businesses SET owner_employee_id=NULL WHERE id=$1`, [b]);
@@ -133,6 +137,24 @@ describe('registrations and the HQ intake table', () => {
     regToken = res.json().resubmitToken;
     expect(res.json().status).toBe('pending_review');
 
+    // The verification mail is queued in the same act — tenant-less
+    // (no salon exists yet), its button the status page unlocked by
+    // the e-mail token.
+    const mail = await admin.query(
+      `SELECT to_email, subject, meta FROM mail_outbox WHERE ref_id=$1 AND kind='registration_verify'`,
+      [regId],
+    );
+    expect(mail.rows).toHaveLength(1);
+    expect(mail.rows[0].to_email).toBe('petra@studionova.mk');
+    expect(mail.rows[0].subject).toContain('Studio Nova');
+    const url = new URL(mail.rows[0].meta.cta.url);
+    expect(url.pathname).toBe(`/registration/${regId}`);
+    emailToken = url.searchParams.get('token') ?? '';
+    expect(emailToken).toMatch(/^[0-9a-f-]{36}$/);
+    const stamped = await admin.query(`SELECT email_sent_at, email_verified_at FROM registrations WHERE id=$1`, [regId]);
+    expect(stamped.rows[0].email_sent_at).not.toBeNull();
+    expect(stamped.rows[0].email_verified_at).toBeNull();
+
     // The applicant sees their own row — never the password back out.
     const mine = await app.inject({
       method: 'GET',
@@ -146,6 +168,48 @@ describe('registrations and the HQ intake table', () => {
       url: `${API_PREFIX}/registrations/${regId}?token=${randomUUID()}`,
     });
     expect(wrong.statusCode).toBe(404);
+  });
+
+  it('the e-mail link confirms the address once and hands back the way into the wizard', async () => {
+    // A wrong token sees nothing — RLS on the e-mail token, not an if.
+    const wrong = await app.inject({
+      method: 'POST',
+      url: `${API_PREFIX}/registrations/${regId}/verify-email?token=${randomUUID()}`,
+    });
+    expect(wrong.statusCode).toBe(404);
+    // The resubmit token opens no verification door either.
+    const cross = await app.inject({
+      method: 'POST',
+      url: `${API_PREFIX}/registrations/${regId}/verify-email?token=${regToken}`,
+    });
+    expect(cross.statusCode).toBe(404);
+
+    const ok = await app.inject({
+      method: 'POST',
+      url: `${API_PREFIX}/registrations/${regId}/verify-email?token=${emailToken}`,
+    });
+    expect(ok.statusCode).toBe(200);
+    expect(ok.json().status).toBe('pending_review');
+    expect(ok.json().salonName).toBe('Studio Nova');
+    expect(ok.json().email).toBe('petra@studionova.mk');
+    expect(ok.json().resubmitToken).toBe(regToken);
+    const first = ok.json().verifiedAt as string;
+
+    // A second click keeps the first stamp.
+    const again = await app.inject({
+      method: 'POST',
+      url: `${API_PREFIX}/registrations/${regId}/verify-email?token=${emailToken}`,
+    });
+    expect(again.json().verifiedAt).toBe(first);
+
+    // HQ sees the address as verified.
+    const queue = await app.inject({
+      method: 'GET',
+      url: `${API_PREFIX}/hq/registrations`,
+      headers: { authorization: `Bearer ${hqToken}` },
+    });
+    const row = queue.json().registrations.find((x: { id: string }) => x.id === regId);
+    expect(row.emailVerifiedAt).toBe(first);
   });
 
   it('refuses an email that already has an account', async () => {
@@ -202,7 +266,61 @@ describe('registrations and the HQ intake table', () => {
       payload: { reason: 'The tax number is missing a digit' },
     });
     expect(sent.json().status).toBe('changes_required');
+    // The decision reaches the applicant by mail, reason included, with
+    // the same link the verification mail carried.
+    const changesMail = await admin.query(
+      `SELECT to_email, body, meta FROM mail_outbox WHERE ref_id=$1 AND kind='registration_changes'`,
+      [regId],
+    );
+    expect(changesMail.rows).toHaveLength(1);
+    expect(changesMail.rows[0].to_email).toBe('petra@studionova.mk');
+    expect(changesMail.rows[0].body).toContain('The tax number is missing a digit');
+    expect(changesMail.rows[0].meta.cta.url).toContain(`/registration/${regId}?token=${emailToken}`);
 
+    // Resubmitting under a different address makes it unconfirmed again:
+    // fresh token, fresh mail, the old link dead.
+    const moved = draft('petra.moved@studionova.mk');
+    moved.legal.taxId = 'MK4032011509999';
+    const movedRes = await app.inject({
+      method: 'POST',
+      url: `${API_PREFIX}/registrations/${regId}/resubmit?token=${regToken}`,
+      payload: moved,
+    });
+    expect(movedRes.statusCode).toBe(200);
+    expect(movedRes.json().status).toBe('resubmitted');
+    const verifyMails = async () =>
+      (
+        await admin.query(
+          `SELECT to_email, meta FROM mail_outbox WHERE ref_id=$1 AND kind='registration_verify' ORDER BY created_at`,
+          [regId],
+        )
+      ).rows as { to_email: string; meta: { cta: { url: string } } }[];
+    let mails = await verifyMails();
+    expect(mails.map((m) => m.to_email)).toEqual(['petra@studionova.mk', 'petra.moved@studionova.mk']);
+    const oldLink = await app.inject({
+      method: 'POST',
+      url: `${API_PREFIX}/registrations/${regId}/verify-email?token=${emailToken}`,
+    });
+    expect(oldLink.statusCode).toBe(404);
+    const reset = await admin.query(`SELECT email_verified_at FROM registrations WHERE id=$1`, [regId]);
+    expect(reset.rows[0].email_verified_at).toBeNull();
+    emailToken = new URL(mails[1]!.meta.cta.url).searchParams.get('token') ?? '';
+    const newLink = await app.inject({
+      method: 'POST',
+      url: `${API_PREFIX}/registrations/${regId}/verify-email?token=${emailToken}`,
+    });
+    expect(newLink.statusCode).toBe(200);
+    expect(newLink.json().status).toBe('resubmitted');
+    expect(newLink.json().email).toBe('petra.moved@studionova.mk');
+
+    // Back to the address the story signs in with — a change is a change.
+    const sentAgain = await app.inject({
+      method: 'POST',
+      url: `${API_PREFIX}/hq/registrations/${regId}/request-changes`,
+      headers: { authorization: `Bearer ${hqToken}` },
+      payload: { reason: 'Use the address you registered with' },
+    });
+    expect(sentAgain.json().status).toBe('changes_required');
     const fixed = draft('petra@studionova.mk');
     fixed.legal.taxId = 'MK4032011509999';
     const back = await app.inject({
@@ -212,6 +330,9 @@ describe('registrations and the HQ intake table', () => {
     });
     expect(back.statusCode).toBe(200);
     expect(back.json().status).toBe('resubmitted');
+    mails = await verifyMails();
+    expect(mails).toHaveLength(3);
+    emailToken = new URL(mails[2]!.meta.cta.url).searchParams.get('token') ?? '';
 
     const queue = await app.inject({
       method: 'GET',
@@ -362,6 +483,45 @@ describe('registrations and the HQ intake table', () => {
       [newBusinessId],
     );
     expect(invites.rows[0].n).toBe(2);
+
+    // The owner hears it by mail — a tenant mail now, the button the
+    // same link, which the status page turns into sign-in.
+    const live = await admin.query(
+      `SELECT to_email, subject, meta FROM mail_outbox WHERE tenant_id=$1 AND kind='registration_approved'`,
+      [newBusinessId],
+    );
+    expect(live.rows).toHaveLength(1);
+    expect(live.rows[0].to_email).toBe('petra@studionova.mk');
+    expect(live.rows[0].subject).toBe('Studio Nova is live on Velnes');
+    expect(live.rows[0].meta.cta.url).toContain(`/registration/${regId}?token=${emailToken}`);
+    const door = await app.inject({
+      method: 'POST',
+      url: `${API_PREFIX}/registrations/${regId}/verify-email?token=${emailToken}`,
+    });
+    expect(door.json().status).toBe('active');
+  });
+
+  it('a decline reaches the applicant by mail too', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: `${API_PREFIX}/registrations`,
+      payload: draft('nikola@studioduo.test', 'Studio Duo'),
+    });
+    expect(res.statusCode).toBe(200);
+    declinedId = res.json().id;
+    const declined = await app.inject({
+      method: 'POST',
+      url: `${API_PREFIX}/hq/registrations/${declinedId}/decline`,
+      headers: { authorization: `Bearer ${hqToken}` },
+    });
+    expect(declined.json().status).toBe('declined');
+    const mail = await admin.query(
+      `SELECT kind, to_email, meta FROM mail_outbox WHERE ref_id=$1 ORDER BY created_at`,
+      [declinedId],
+    );
+    expect(mail.rows.map((m: { kind: string }) => m.kind)).toEqual(['registration_verify', 'registration_declined']);
+    expect(mail.rows[1].to_email).toBe('nikola@studioduo.test');
+    expect(mail.rows[1].meta.cta).toBeUndefined(); // nowhere to go
   });
 
   it('the approved salon is on the consumer app at once, bookable, services on offer', async () => {
