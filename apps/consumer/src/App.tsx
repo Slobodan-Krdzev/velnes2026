@@ -11,6 +11,7 @@ import { Premium } from './features/premium/Premium.js';
 import { DHeader } from './app/chrome.js';
 import { Home } from './features/discovery/Home.js';
 import { Results } from './features/discovery/Results.js';
+import { SearchSheetProvider } from './features/discovery/SearchSheet.js';
 import { Salon } from './features/salon/Salon.js';
 import { SessionProvider, useFavourites, useSession } from './lib/api/session.js';
 import { GeoProvider } from './lib/geo.js';
@@ -70,6 +71,7 @@ export function App() {
         <GeoProvider>
           <BookingProvider>
           <BrowserRouter>
+          <SearchSheetProvider>
             <ScrollToTop />
             {/* The desktop header, once, sticky above every route — and the
                 phone chrome likewise. Each hides itself on the other's side
@@ -101,6 +103,7 @@ export function App() {
               <Route path="/account/appointments/:id" element={<MyVelnes section="appts" />} />
               <Route path="*" element={<Home />} />
             </Routes>
+          </SearchSheetProvider>
           </BrowserRouter>
           </BookingProvider>
         </GeoProvider>

@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from './App.js';
 
@@ -32,7 +32,11 @@ beforeEach(() => {
   vi.stubGlobal(
     'fetch',
     vi.fn(async (url: string) => {
-      const body = url.includes('/discovery/categories')
+      const body = url.includes('/discovery/suggest')
+        ? { categories: [{ id: '11111111-1111-4111-8111-111111111111', name: 'Massage', salonCount: 1 }], services: [], salons: [] }
+        : url.includes('/discovery/towns')
+          ? { towns: [{ name: 'Skopje', salons: 1 }] }
+          : url.includes('/discovery/categories')
         ? categories
         : // the detail door is a deeper path than the list door
           /\/discovery\/salons\/./.test(url)
@@ -75,5 +79,34 @@ describe('the consumer app', () => {
     // is claimed that could not run.
     await waitFor(() => expect(new URLSearchParams(window.location.search).get('near')).toBeNull());
     expect(new URLSearchParams(window.location.search).get('km')).toBeNull();
+  });
+
+  it('the Search tab opens the sheet; What, Where and When are applied together, on Search', async () => {
+    render(<App />);
+    await screen.findAllByText('Massage tomorrow');
+    // The tab bar renders before the routes, so its Search is the first.
+    fireEvent.click(screen.getAllByRole('button', { name: 'Search' })[0]!);
+    const dlg = await screen.findByRole('dialog', { name: 'Search' });
+    // What: typing brings the suggestions; a category becomes the answer
+    // and the sheet moves on to Where — nothing has navigated yet.
+    fireEvent.change(within(dlg).getByRole('textbox'), { target: { value: 'mass' } });
+    // Suggestion rows act on mousedown, so the field keeps its focus.
+    fireEvent.mouseDown(await within(dlg).findByText('Massage'));
+    expect(window.location.pathname).toBe('/');
+    // Where: a town salons are in.
+    fireEvent.click(await within(dlg).findByText('Skopje'));
+    // When: available now — a start within the next 30 minutes.
+    fireEvent.click(within(dlg).getByText('When?'));
+    fireEvent.click(within(dlg).getByRole('button', { name: /Available now/ }));
+    expect(window.location.pathname).toBe('/');
+    // Search: one URL, everything at once — the category page, in that
+    // town, now.
+    fireEvent.click(within(dlg).getByRole('button', { name: 'Search' }));
+    await waitFor(() => expect(window.location.pathname).toBe('/s/massage'));
+    const q = new URLSearchParams(window.location.search);
+    expect(q.get('now')).toBe('1');
+    expect(q.get('city')).toBe('Skopje');
+    expect(q.get('near')).toBeNull();
+    expect(screen.queryByRole('dialog', { name: 'Search' })).toBeNull();
   });
 });

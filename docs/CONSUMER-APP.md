@@ -674,3 +674,32 @@ sticky offsets hang on — is zero. The home's suggestion chips sit in a
 scrolling row under the pill, "Available now" first. The tab bar is
 unchanged. The business link lives on in the home page's closing band
 and footer.
+
+**The phone's search sheet (2026-09-28).** One place a phone searches
+and filters: a full-screen sheet (`SearchSheet.tsx`, mounted once above
+the routes) opened by the home pill, the results pill and the Search
+tab. It is a **form**, Airbnb-style but in Velnes's own clothes — one
+card per question, the active one open, the others folded into a row
+stating their answer, a foot with *Clear all* and a prominent *Search*.
+Choosing changes only the sheet's state; nothing runs and the URL does
+not move until Search, when everything is applied together as one URL.
+The questions are the ones the doors can answer honestly: **What?** the
+field with the shared suggestions (a category becomes the answer; a
+treatment or a salon is a destination and opens directly, as always;
+an empty field offers *Most chosen*); **Where?** *Nearby* — the results
+page's own location flow, the question first if never asked, then 2 /
+5 / 10 km — or one of the towns salons are actually in, from the new
+`GET /public/discovery/towns` (admitted salons only, most first), which
+travels as the new `city` filter on both search doors (`businesses.city`,
+case-insensitive, hard admission like every filter); **When?** *Any
+time* or *Available now* (a bookable start no more than 30 minutes
+away — the door's now-mode) and deliberately no dates, because the
+search door knows none yet; **Price** the three bands, only when the
+answer the sheet opened over has them. Something must be asked for
+Search to be live — a treatment, a category, or *now*, which is the
+whole-catalogue question on its own; a town or a price alone narrows
+nothing. The results page's small filters dropdown and its earlier
+suggestions-only sheet are gone on the phone; the desktop is untouched.
+Deferral: date-based availability ("today", "this weekend", a picked
+day) as its own phase, since it needs a day-wide availability mode in
+the search door.

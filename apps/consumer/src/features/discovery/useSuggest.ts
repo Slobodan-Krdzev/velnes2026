@@ -33,6 +33,10 @@ export interface SuggestItem {
   kind: 'category' | 'service' | 'salon';
   /** Where choosing it goes. */
   href: string;
+  /** What it is called — the sheet shows a picked category by name. */
+  label: string;
+  /** A category's slug, for the sheet to search it later. */
+  slug?: string;
 }
 
 export function useSuggest(q: string) {
@@ -79,6 +83,8 @@ export function useSuggest(q: string) {
         key: `category-${c.id}`,
         kind: 'category' as const,
         href: `/s/${slugify(c.name)}`,
+        label: c.name,
+        slug: slugify(c.name),
       })),
       ...data.services.map((s) => ({
         key: `service-${s.id}`,
@@ -86,11 +92,13 @@ export function useSuggest(q: string) {
         // Straight to the treatment at its salon, already in the cart —
         // the link the salon page has understood since Phase A.
         href: `/salon/${s.salonSlug}?service=${encodeURIComponent(s.id)}`,
+        label: s.name,
       })),
       ...data.salons.map((s) => ({
         key: `salon-${s.id}`,
         kind: 'salon' as const,
         href: `/salon/${s.slug}`,
+        label: s.name,
       })),
     ],
     [data],

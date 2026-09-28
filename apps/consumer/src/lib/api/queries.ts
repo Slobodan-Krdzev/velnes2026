@@ -9,6 +9,7 @@ import type {
   DiscoverySalonsSchema,
   DiscoveryCategoryServicesSchema,
   DiscoveryRankedServicesSchema,
+  DiscoveryTownsSchema,
   MostChosenSchema,
   SearchResultsSchema,
   PriceBand,
@@ -39,8 +40,20 @@ export interface SearchFilters {
   /** "Available now": what can start within the next half hour first,
    *  with a word from the door when nothing can. Not admission. */
   now: boolean;
+  /** A town the salon is in — the sheet's "Where" when not "Nearby". */
+  city: string | null;
 }
-export const NO_FILTERS: SearchFilters = { priceBand: null, categoryId: null, radiusKm: null, now: false };
+export const NO_FILTERS: SearchFilters = { priceBand: null, categoryId: null, radiusKm: null, now: false, city: null };
+type Towns = z.infer<typeof DiscoveryTownsSchema>;
+
+/** The towns admitted salons are in — the sheet's "Where" list. */
+export function useTowns() {
+  return useQuery({
+    queryKey: ['towns'],
+    queryFn: () => pub<Towns>('/discovery/towns'),
+    staleTime: 5 * 60_000,
+  });
+}
 type SearchResults = z.infer<typeof SearchResultsSchema>;
 type MostChosen = z.infer<typeof MostChosenSchema>;
 type Availability = z.infer<typeof AvailabilityResponseSchema>;
@@ -145,6 +158,7 @@ export function useRankedCategoryServices(
       filters.priceBand,
       filters.radiusKm,
       filters.now,
+      filters.city,
     ],
     queryFn: () =>
       pubPost<RankedServices>(
@@ -155,6 +169,7 @@ export function useRankedCategoryServices(
           radiusKm: at ? filters.radiusKm : null,
           priceBand: filters.priceBand,
           now: filters.now,
+          city: filters.city,
         },
         token,
       ),
@@ -253,6 +268,7 @@ export function useSearch(
       filters.categoryId,
       filters.radiusKm,
       filters.now,
+      filters.city,
     ],
     queryFn: () =>
       pubPost<SearchResults>(
@@ -267,6 +283,7 @@ export function useSearch(
           priceBand: filters.priceBand,
           categoryId: filters.categoryId,
           now: filters.now,
+          city: filters.city,
         },
         token,
       ),

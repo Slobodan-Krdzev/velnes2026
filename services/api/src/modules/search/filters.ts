@@ -29,6 +29,9 @@ export interface Filters {
   priceBand: PriceBand | null;
   /** Narrows a text query that spanned several categories. */
   categoryId: string | null;
+  /** A town, matched against the salon's city case-insensitively. An
+   *  explicit choice like the others: never widened. */
+  city?: string | null;
 }
 
 /**
@@ -138,6 +141,11 @@ export function applyFilters(
   let widened: 'radius' | null = null;
 
   if (filters.categoryId) out = out.filter((c) => c.categoryId === filters.categoryId);
+
+  if (filters.city) {
+    const want = filters.city.trim().toLowerCase();
+    out = out.filter((c) => (c.salon.city ?? '').trim().toLowerCase() === want);
+  }
 
   let hiddenUnpriced = 0;
   if (filters.priceBand && terciles) {

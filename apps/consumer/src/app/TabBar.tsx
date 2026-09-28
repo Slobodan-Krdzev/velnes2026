@@ -1,5 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { useSearchSheet } from '../features/discovery/SearchSheet.js';
 
 /**
  * The phone's bottom bar, in one place.
@@ -35,15 +36,15 @@ export type Tab = 'home' | 'search' | 'bookings' | 'favs' | 'profile';
 export function TabBar({ active, unread = 0 }: { active: Tab | null; unread?: number }) {
   const nav = useNavigate();
   const { t } = useTranslation();
-  // The Search tab does not just open the results screen — it asks for
-  // the search box itself, so the keyboard is up as soon as you land.
-  // A fresh stamp each tap, so tapping it again while already there
-  // re-opens the box rather than doing nothing.
+  const sheet = useSearchSheet();
+  // The Search tab opens the search sheet over whatever screen is up —
+  // the one place a phone searches and filters (Alex, 2026-09-28) —
+  // rather than a results screen with a field to find.
   const tab = (id: Tab, to: string, icon: React.ReactNode, label: string) => (
     <button
       className={`tab-i${active === id ? ' on' : ''}`}
       aria-current={active === id ? 'page' : undefined}
-      onClick={() => (id === 'search' ? nav(to, { state: { focusSearch: Date.now() } }) : nav(to))}
+      onClick={() => (id === 'search' ? sheet.open() : nav(to))}
     >
       {icon}
       {label}

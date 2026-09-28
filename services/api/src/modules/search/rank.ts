@@ -24,6 +24,8 @@ export interface RankSalon {
   bookable: boolean;
   /** ISO date; drives the new-salon window. */
   createdAt: string;
+  /** The salon's town (`businesses.city`); the city filter reads it. */
+  city?: string | null;
 }
 
 export interface RankCandidate {

@@ -285,7 +285,19 @@ export const DiscoveryViewerSchema = z.object({
    * empty page for asking a reasonable question.
    */
   now: z.boolean().default(false),
+  /** A town the salon is in (`businesses.city`, matched case-insensitively).
+   *  The "Where" of the phone's search sheet when it is not "Nearby" —
+   *  hard admission like every filter, never widened. */
+  city: z.string().trim().min(1).max(80).nullable().default(null),
 });
+
+/** The towns salons are actually in — the phone's "Where" list. Only
+ *  admitted (listed, open) salons count, so a town is a promise there is
+ *  something to book there. Most salons first, then by name. */
+export const DiscoveryTownsSchema = z.object({
+  towns: z.array(z.object({ name: z.string(), salons: z.number().int() })),
+});
+export type DiscoveryTowns = z.infer<typeof DiscoveryTownsSchema>;
 
 /** The ranked form of a category's services. Same rows as the
  *  unpersonalised door, ordered by the ranker. */
@@ -382,6 +394,8 @@ export const SearchRequestSchema = z.object({
    *  query ("massage now", "масажа сега", "masazh tani") means the same
    *  thing, so either sets it. */
   now: z.boolean().default(false),
+  /** See `DiscoveryViewerSchema.city`. */
+  city: z.string().trim().min(1).max(80).nullable().default(null),
 });
 
 /**

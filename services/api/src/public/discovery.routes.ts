@@ -13,6 +13,7 @@ import {
   SearchSuggestionsSchema,
   SearchSuggestRequestSchema,
   DiscoverySalonsSchema,
+  DiscoveryTownsSchema,
   DiscoveryRecommendedSchema,
   DiscoveryNewestSchema,
   NEWEST_SALON_DAYS,
@@ -648,6 +649,7 @@ export function candidatesOf(
         slug: s.salon.slug,
         businessId: m.businessId,
         name: s.salon.name,
+        city: s.salon.city,
         lat: s.salon.lat,
         lng: s.salon.lng,
         bookable: s.salon.bookable,
@@ -905,6 +907,28 @@ export async function discoveryRoutes(app: FastifyInstance) {
         if (salons.length === 8) break;
       }
       return { days: NEWEST_SALON_DAYS, salons };
+    },
+  });
+
+  // The towns salons are in — the phone's "Where" list. Admitted salons
+  // only (listed and open), so every town named has something to book.
+  r.route({
+    method: 'GET',
+    url: '/discovery/towns',
+    schema: { response: { 200: DiscoveryTownsSchema } },
+    handler: async () => {
+      const admitted = await admittedBusinessesCached();
+      const counts = new Map<string, { name: string; salons: number }>();
+      for (const b of admitted) {
+        const name = (b.city ?? '').trim();
+        if (!name) continue;
+        const k = name.toLowerCase();
+        const row = counts.get(k) ?? { name, salons: 0 };
+        row.salons += 1;
+        counts.set(k, row);
+      }
+      const towns = [...counts.values()].sort((a, b) => b.salons - a.salons || a.name.localeCompare(b.name));
+      return { towns };
     },
   });
 
@@ -1167,6 +1191,7 @@ export async function discoveryRoutes(app: FastifyInstance) {
           radiusKm: req.body.radiusKm,
           priceBand: req.body.priceBand,
           categoryId: req.body.categoryId,
+          city: req.body.city,
         },
         position,
         terciles,
@@ -1196,7 +1221,7 @@ export async function discoveryRoutes(app: FastifyInstance) {
       // they did not narrow it themselves: an empty answer to "under
       // 700 MKD within 2 km" is a filter doing its job, not a gap in
       // what the platform sells. "now" on its own names no gap either.
-      const narrowed = Boolean(req.body.priceBand || req.body.categoryId || req.body.radiusKm);
+      const narrowed = Boolean(req.body.priceBand || req.body.categoryId || req.body.radiusKm || req.body.city);
       if (!narrowed && !nowOnly) await noteMiss(q, ranked.length, read.how);
       const byId = new Map(services.map((s) => [s.id, s]));
       return {
@@ -1292,7 +1317,7 @@ export async function discoveryRoutes(app: FastifyInstance) {
       const terciles = priceTercilesOf(candidates);
       const cut = applyFilters(
         candidates,
-        { radiusKm: req.body.radiusKm, priceBand: req.body.priceBand, categoryId: null },
+        { radiusKm: req.body.radiusKm, priceBand: req.body.priceBand, categoryId: null, city: req.body.city },
         position,
         terciles,
       );

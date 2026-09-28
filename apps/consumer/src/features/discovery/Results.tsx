@@ -32,10 +32,10 @@ import {
   IcPin,
   IcSpark,
   IcVok,
-  SugListM,
   SugPanelD,
 } from './cards.js';
 import { useSearchBox } from './useSearchBox.js';
+import { useSearchSheet } from './SearchSheet.js';
 
 /** What "near me" means, in kilometres. The distance chips can widen
  *  or narrow it afterwards; this is where the button starts. */
@@ -493,18 +493,13 @@ export function Results() {
   const { signedIn } = useSession();
   const [mapOpen, setMapOpen] = useState(false);
   /**
-   * The phone's filters live behind one button in the search pill —
-   * a sliders icon beside the clear "×" — and drop down from the top
-   * bar. Two rows of chips above the results pushed the first result
-   * below the fold on a phone; a count on the button says what is
-   * applied while they are folded away. Not in the prototype, which
-   * had no filters at all (Alex, 2026-09-21).
+   * The phone searches and filters in one place: the search sheet
+   * (SearchSheet.tsx, Alex 2026-09-28), which the pill opens over this
+   * page with the current answer's price bands. The dropdown of filter
+   * chips that used to hang from the pill, and the suggestions-only
+   * sheet before it, are gone — one form, applied on Search.
    */
-  const [filtersOpen, setFiltersOpen] = useState(false);
-  /** The mobile search sheet, which is where typing happens on a phone. */
-  const [sheet, setSheet] = useState(false);
-  const sheetInput = useRef<HTMLInputElement>(null);
-  const topInput = useRef<HTMLInputElement>(null);
+  const sheet = useSearchSheet();
   const [params, setParams] = useSearchParams();
   const query = params.get('q');
 
@@ -523,6 +518,7 @@ export function Results() {
       categoryId: params.get('cat'),
       radiusKm: Number.isFinite(km) && km > 0 ? km : null,
       now: params.get('now') === '1',
+      city: params.get('city'),
     };
   }, [params]);
   const setFilters = useCallback(
@@ -536,6 +532,7 @@ export function Results() {
       if ('categoryId' in patch) put('cat', patch.categoryId ?? null);
       if ('radiusKm' in patch) put('km', patch.radiusKm ?? null);
       if ('now' in patch) put('now', patch.now ? 1 : null);
+      if ('city' in patch) put('city', patch.city ?? null);
       // `near` is an intent, never a filter (see below): any write of
       // the real filters consumes it.
       next.delete('near');
@@ -586,7 +583,7 @@ export function Results() {
    * it — but never while somebody is mid-edit, which is why this
    * watches the derived title rather than the input.
    */
-  const box = useSearchBox(() => setSheet(false));
+  const box = useSearchBox();
   const seeded = useRef<string | null>(null);
   const setBoxQ = box.setQ;
   useEffect(() => {
@@ -595,26 +592,14 @@ export function Results() {
     setBoxQ(title);
   }, [title, setBoxQ]);
 
-  /**
-   * The sheet is always mounted and merely hidden, so `autoFocus` never
-   * fires — it only applies when an element first mounts. Without this
-   * the sheet opens onto a keyboard with nowhere to type.
-   */
-  useEffect(() => {
-    if (!sheet) return;
-    const el = sheetInput.current;
-    el?.focus();
-    el?.select();
-  }, [sheet]);
-  // Arrived from the tab bar's Search: the results screen as it is,
-  // with the field at the top focused so the keyboard is up — the phone's
-  // top field, or the desktop top bar's. The sheet stays where it was.
+  // Arrived asking for the search box (a `focusSearch` stamp in the
+  // route state): the desktop top bar's field gets the focus. The phone
+  // has no field to focus — its Search tab opens the sheet instead.
   const routeLoc = useLocation();
   const asked = (routeLoc.state as { focusSearch?: number } | null)?.focusSearch;
   useEffect(() => {
-    if (!asked) return;
-    const el =
-      window.innerWidth < 900 ? topInput.current : document.querySelector<HTMLInputElement>('.d-topbar input[data-res="q"]');
+    if (!asked || window.innerWidth < 900) return;
+    const el = document.querySelector<HTMLInputElement>('.d-topbar input[data-res="q"]');
     el?.focus();
     el?.select();
   }, [asked]);
@@ -653,10 +638,6 @@ export function Results() {
     if (radius != null && geo.decision === 'allowed' && geo.status === 'off') geo.locate();
     // Entry only, like the home page.
   }, []);
-  /** What the folded-away filters button has to say for itself. */
-  const nFilters =
-    [filters.categoryId, filters.priceBand, filters.radiusKm].filter((v) => v != null).length +
-    (filters.now ? 1 : 0);
   /** Lit means "filtering near you", not merely "location is on". */
   const nearOn = geo.status === 'on' && radius != null;
   /**
@@ -673,12 +654,15 @@ export function Results() {
   const askNear = useCallback(() => {
     if (nearBlocked) return;
     setWantNear(true);
-    if (geo.status === 'on') setFilters({ radiusKm: NEAR_KM });
+    // A distance already chosen (the sheet's 2 / 5 / 10 km) is kept.
+    if (geo.status === 'on') {
+      if (radius == null) setFilters({ radiusKm: NEAR_KM });
+    }
     // Never asked yet — this click is the question. Otherwise: a fresh
     // fix, since the decision is already yes.
     else if (geo.decision === null) geo.decide(true);
     else geo.locate();
-  }, [nearBlocked, geo, setFilters]);
+  }, [nearBlocked, geo, radius, setFilters]);
   const toggleNear = useCallback(() => {
     if (nearOn) {
       setWantNear(false);
@@ -701,20 +685,22 @@ export function Results() {
   const nearIntent = params.get('near') === '1';
   useEffect(() => {
     if (!nearIntent) return;
-    if (radius != null) {
-      // Already filtering near them: nothing to ask, only tidy the URL.
+    const tidy = () => {
       const next = new URLSearchParams(params);
       next.delete('near');
       setParams(next, { replace: true });
-      return;
-    }
+    };
     if (geo.status === 'on') {
-      askNear(); // writes the radius, which drops `near` with it
+      // A fix in hand: the radius is written now (which drops `near`
+      // with it), or was already chosen and only the word is tidied.
+      if (radius == null) askNear();
+      else tidy();
       return;
     }
-    const next = new URLSearchParams(params);
-    next.delete('near');
-    setParams(next, { replace: true });
+    // No fix yet: the word goes, the question is asked; a chosen
+    // distance stays in the URL and comes alive when the position does
+    // (or is dropped by the dead-radius rule if it never does).
+    tidy();
     askNear();
     // On the intent only: what it does next is the button's own logic.
   }, [nearIntent]);
@@ -1007,29 +993,18 @@ export function Results() {
                 <button className="m-mark" onClick={() => nav('/')} aria-label={t('c.hdr.home')}>
                   {IcMark}
                 </button>
-                {/* The phone's field is a real search box (Alex, 2026-09-22):
-                    the tab bar's Search focuses it, typing stays here and
-                    Enter searches. The magnifier still opens the full-screen
-                    sheet with its suggestions. */}
-                <div className="m-search" style={{ boxShadow: 'none', border: '1px solid var(--line)' }}>
-                  <button type="button" className="m-sheet-open" onClick={() => setSheet(true)} aria-label={t('c.res.search')}>
+                {/* The pill opens the search sheet — the one place a phone
+                    searches and filters (Alex, 2026-09-28); it shows what
+                    was asked, and the × starts over. */}
+                <div
+                  className="m-search"
+                  style={{ boxShadow: 'none', border: '1px solid var(--line)' }}
+                  onClick={() => sheet.open({ facets })}
+                >
+                  <button type="button" className="m-sheet-open" aria-label={t('c.res.search')}>
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="M20 20l-4.2-4.2" /></svg>
                   </button>
-                  <input ref={topInput} placeholder={t('c.res.searchPh')} data-res="q" aria-label={t('c.res.search')} {...box.inputProps} />
-                  {!landing ? (
-                    <button
-                      className={`m-filt${nFilters ? ' on' : ''}`}
-                      aria-label={nFilters ? t('c.res.filtersApplied', { n: nFilters }) : t('c.res.filters')}
-                      aria-expanded={filtersOpen}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setFiltersOpen((o) => !o);
-                      }}
-                    >
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M4 7h10M18 7h2M4 17h4M12 17h8" /><circle cx="15.5" cy="7" r="2" /><circle cx="9.5" cy="17" r="2" /></svg>
-                      {nFilters ? <span className="n">{nFilters}</span> : null}
-                    </button>
-                  ) : null}
+                  <input value={title} placeholder={t('c.res.searchPh')} data-res="q" aria-label={t('c.res.search')} readOnly />
                   <button
                     style={{ border: '0', background: 'none', color: 'var(--muted)' }}
                     onClick={(e) => {
@@ -1046,33 +1021,6 @@ export function Results() {
                   {t('c.res.map')}
                 </button>
               </div>
-              {filtersOpen && !landing ? (
-                <>
-                  <div className="m-filt-scrim" onClick={() => setFiltersOpen(false)} aria-hidden="true" />
-                  <div className="m-filt-panel" role="dialog" aria-label={t('c.res.filters')}>
-                    <FilterBar
-                      facets={facets}
-                      filters={filters}
-                      set={setFilters}
-                      canDistance={geo.status === 'on'}
-                    />
-                    <div className="m-filt-foot">
-                      {nFilters ? (
-                        <button
-                          type="button"
-                          className="btn btn-g"
-                          onClick={() => setFilters({ categoryId: null, priceBand: null, radiusKm: null, now: false })}
-                        >
-                          {t('c.res.clear')}
-                        </button>
-                      ) : null}
-                      <button type="button" className="btn btn-p" onClick={() => setFiltersOpen(false)}>
-                        {t('c.res.showResults')}
-                      </button>
-                    </div>
-                  </div>
-                </>
-              ) : null}
             </div>
             <div className="m-chiprow">
               <button
@@ -1179,33 +1127,6 @@ export function Results() {
               </div>
             ) : null}
 
-            {/* The same sheet the home page opens, and the same one
-                search behind it. A results page nobody can search from
-                is a dead end with a search bar drawn on it. */}
-            <div className={sheet ? 'm-sheet open' : 'm-sheet'}>
-              <div className="top">
-                <div className="m-search">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="M20 20l-4.2-4.2" /></svg>
-                  <input
-                    ref={sheetInput}
-                    placeholder={t('c.res.searchPh')}
-                    aria-label={t('c.res.search')}
-                    {...box.inputProps}
-                  />
-                </div>
-                <button className="iconb" onClick={() => setSheet(false)} aria-label={t('c.res.close')}>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 6l12 12M18 6 6 18" /></svg>
-                </button>
-              </div>
-              <div className="list">
-                <SugListM
-                  q={box.q}
-                  active={box.keys.active}
-                  onChoose={box.choose}
-                  onOpenCategory={box.openCat}
-                />
-              </div>
-            </div>
           </div>
         </section>
       </div>
