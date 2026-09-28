@@ -2526,7 +2526,7 @@ export const mk: Record<TranslationKey, string> = {
   'c.res.widenedRadiusKm': 'Нема ништо на {{km}} km од вас — прикажуваме што има подалеку, најблиското прво.',
   'c.res.loading': 'Бараме што има…',
   'c.res.emptyRadius': 'Нема ништо под {{q}} на {{km}} km од вас — најблиското е подалеку.',
-  'c.res.emptyCity': 'Сè уште нема ништо под {{q}} во {{city}}.',
+  'c.res.emptyCity': 'Сè уште нема ништо објавено под {{q}} во {{city}} — нови салони се приклучуваат на Velnes секоја недела.',
   'c.res.showAllDistances': 'Прикажи ги сите растојанија',
   'c.res.searchEverywhere': 'Пребарај насекаде',
   'c.res.fuzzy': 'Ништо не се вика „{{q}}“ — ова е најблиското што го најдовме.',

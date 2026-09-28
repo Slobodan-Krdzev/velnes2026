@@ -2526,7 +2526,7 @@ export const sq: Record<TranslationKey, string> = {
   'c.res.widenedRadiusKm': 'Asgjë brenda {{km}} km nga ju — po shfaqim çfarë ka më larg, më e afërta e para.',
   'c.res.loading': 'Po kërkojmë çfarë ka…',
   'c.res.emptyRadius': 'Asgjë nën {{q}} brenda {{km}} km nga ju — më e afërta është më larg.',
-  'c.res.emptyCity': 'Ende asgjë nën {{q}} në {{city}}.',
+  'c.res.emptyCity': 'Ende asgjë e publikuar nën {{q}} në {{city}} — sallone të reja i bashkohen Velnes çdo javë.',
   'c.res.showAllDistances': 'Shfaq të gjitha distancat',
   'c.res.searchEverywhere': 'Kërko kudo',
   'c.res.fuzzy': 'Asgjë nuk quhet “{{q}}” — këto janë më të afërtat që gjetëm.',

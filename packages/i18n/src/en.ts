@@ -2544,7 +2544,7 @@ export const en = {
   'c.res.widenedRadiusKm': 'Nothing within {{km}} km of you — showing what is further out, nearest first.',
   'c.res.loading': 'Finding what is available…',
   'c.res.emptyRadius': 'Nothing under {{q}} within {{km}} km of you — the nearest is further out.',
-  'c.res.emptyCity': 'Nothing under {{q}} in {{city}} yet.',
+  'c.res.emptyCity': 'Nothing published under {{q}} in {{city}} yet — new salons join Velnes every week.',
   'c.res.showAllDistances': 'Show all distances',
   'c.res.searchEverywhere': 'Search everywhere',
   'c.res.fuzzy': 'Nothing is called “{{q}}” — these are the closest we found.',
