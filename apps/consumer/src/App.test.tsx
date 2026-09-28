@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from './App.js';
 
@@ -49,6 +49,9 @@ beforeEach(() => {
   );
 });
 afterEach(() => {
+  // One App per test: without this the renders pile up in the document
+  // and a later test clicks into an earlier test's tree.
+  cleanup();
   vi.unstubAllGlobals();
   // A test that navigated leaves the next one at home again.
   window.history.replaceState({}, '', '/');
