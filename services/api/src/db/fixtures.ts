@@ -286,6 +286,10 @@ export async function addFixtureBatch(opts: AddOptions): Promise<FixtureSalon[]>
     if (!svcCats.length) throw new Error('The target database has no service categories — seed the taxonomy first');
 
     const out: FixtureSalon[] = [];
+    const fail = (e: unknown): never => {
+      const msg = e instanceof Error ? e.message : String(e);
+      throw new Error(`${msg}\n${out.length} salon(s) of batch "${opts.batch}" were made before this — \`fixtures remove --batch ${opts.batch}\` takes them away.`);
+    };
     // A batch-wide offset spreads a second batch over other names and
     // places than the first, without a second list.
     const offset = [...opts.batch].reduce((a, c) => a + c.charCodeAt(0), 0);
@@ -297,7 +301,10 @@ export async function addFixtureBatch(opts: AddOptions): Promise<FixtureSalon[]>
       const name = `${base} ${SUFFIX[kind.type] ?? kind.type}`;
       const slugBase = slugify(`${name}-${place.city}`);
       const [ownerFirst, ownerLast] = PEOPLE[(offset + i) % PEOPLE.length]!;
-      const ownerEmail = `${slugify(ownerFirst!)}.${slugify(ownerLast!)}.${slugBase}@${FIXTURE_DOMAIN}`;
+      // Addresses carry salon and batch, so two batches — or a batch
+      // made twice — never collide on the platform's one-account-per-email rule.
+      const mailTag = `${slugBase}.${opts.batch}`;
+      const ownerEmail = `${slugify(ownerFirst!)}.${slugify(ownerLast!)}.${mailTag}@${FIXTURE_DOMAIN}`;
       const hue = (offset * 7 + i * 47) % 360;
 
       const draft: RegistrationDraft = {
@@ -315,57 +322,68 @@ export async function addFixtureBatch(opts: AddOptions): Promise<FixtureSalon[]>
         hours: hoursFor(offset + i),
       };
 
-      const reg = await createRegistration(draft);
-      const world = await approveRegistration(reg.id, 'fixtures');
-      const businessId = world.businessId;
+      try {
+        const reg = await createRegistration(draft);
+        const world = await approveRegistration(reg.id, 'fixtures');
+        const businessId = world.businessId;
+        // The tag first — the one thing that says "fixture", and the handle
+        // `remove` works by. Written with the owner role (RLS is on
+        // tenants), and before anything else, so a failure further down
+        // still leaves a salon that `remove` can find.
+        await admin.query(`UPDATE businesses SET fixture_batch = $1 WHERE id = $2`, [opts.batch, businessId]);
 
-      // Staff: two or three, active, bookable, with passwords and skills
-      // over most of the catalogue — the part a sign-up leaves as invites.
-      const staffNames: string[] = [];
-      const nStaff = 2 + (i % 2);
-      const hash = await argon2.hash(FIXTURE_PASSWORD);
-      await db.transaction().execute(async (trx) => {
-        await sql`select set_config('app.tenant_id', ${businessId}, true)`.execute(trx);
-        const role = await trx.selectFrom('roles').select('id').where('name', '=', 'Employee').executeTakeFirst();
-        const loc = await trx.selectFrom('locations').select(['id', 'hours']).where('tenantId', '=', businessId).executeTakeFirstOrThrow();
-        const services = await trx.selectFrom('services').select('id').where('tenantId', '=', businessId).orderBy('sort').execute();
-        const palette = ['coral', 'sage', 'sky', 'plum'];
-        for (let s = 0; s < nStaff; s++) {
-          const [first, last] = PEOPLE[(offset + i * 3 + s + 1) % PEOPLE.length]!;
-          const staffId = randomUUID();
-          const email = `${slugify(first!)}.${slugify(last!)}.${slugBase}@${FIXTURE_DOMAIN}`;
-          await trx.insertInto('employees').values({
-            id: staffId, tenantId: businessId, name: `${first} ${last}`, roleTitle: s === 0 ? 'Senior therapist' : 'Therapist',
-            email, phone: null, access: 'staff', roleId: role?.id ?? null, bookable: true, status: 'active',
-            color: palette[s % palette.length]!, hours: JSON.stringify(loc.hours),
-          }).execute();
-          await trx.insertInto('userCredentials').values({ employeeId: staffId, tenantId: businessId, passwordHash: hash }).execute();
-          await trx.insertInto('employeeLocations').values({ tenantId: businessId, employeeId: staffId, locationId: loc.id }).execute();
-          // Each colleague skips a different service, so "any professional" and
-          // "this professional" can differ in the calendar.
-          for (const [n, svc] of services.entries())
-            if ((n + s) % 4 !== 3)
-              await trx.insertInto('employeeSkills').values({ tenantId: businessId, employeeId: staffId, serviceId: svc.id }).execute();
-          staffNames.push(`${first} ${last}`);
-        }
-        // The consumer card's pitch and the salon page's description —
-        // merged into settings the way the Settings door merges them.
-        const b = await trx.selectFrom('businesses').select('settings').where('id', '=', businessId).executeTakeFirstOrThrow();
-        // Over the full, defaulted shape: a partial marketplace block
-        // would fail the listing's parse and hide the salon.
-        const settings = BusinessSettingsSchema.parse(b.settings ?? {});
-        settings.marketplace = { ...settings.marketplace, pitch: kind.pitch, description: kind.description };
-        await trx.updateTable('businesses')
-          .set({ settings: JSON.stringify(settings), description: kind.description })
-          .where('id', '=', businessId).execute();
-      });
+        // Staff: two or three, active, bookable, with passwords and skills
+        // over most of the catalogue — the part a sign-up leaves as invites.
+        const staffNames: string[] = [];
+        const nStaff = 2 + (i % 2);
+        const hash = await argon2.hash(FIXTURE_PASSWORD);
+        await db.transaction().execute(async (trx) => {
+          await sql`select set_config('app.tenant_id', ${businessId}, true)`.execute(trx);
+          const role = await trx.selectFrom('roles').select('id').where('name', '=', 'Employee').executeTakeFirst();
+          const loc = await trx.selectFrom('locations').select(['id', 'hours']).where('tenantId', '=', businessId).executeTakeFirstOrThrow();
+          const services = await trx.selectFrom('services').select('id').where('tenantId', '=', businessId).orderBy('sort').execute();
+          const palette = ['coral', 'sage', 'sky', 'plum'];
+          // Colleagues are people other than the owner, and other than each
+          // other: the address is the name, and one address is one account.
+          const used = new Set<number>([(offset + i) % PEOPLE.length]);
+          for (let s = 0; s < nStaff; s++) {
+            let p = (offset + i * 3 + s + 1) % PEOPLE.length;
+            while (used.has(p)) p = (p + 1) % PEOPLE.length;
+            used.add(p);
+            const [first, last] = PEOPLE[p]!;
+            const staffId = randomUUID();
+            const email = `${slugify(first!)}.${slugify(last!)}.${mailTag}@${FIXTURE_DOMAIN}`;
+            await trx.insertInto('employees').values({
+              id: staffId, tenantId: businessId, name: `${first} ${last}`, roleTitle: s === 0 ? 'Senior therapist' : 'Therapist',
+              email, phone: null, access: 'staff', roleId: role?.id ?? null, bookable: true, status: 'active',
+              color: palette[s % palette.length]!, hours: JSON.stringify(loc.hours),
+            }).execute();
+            await trx.insertInto('userCredentials').values({ employeeId: staffId, tenantId: businessId, passwordHash: hash }).execute();
+            await trx.insertInto('employeeLocations').values({ tenantId: businessId, employeeId: staffId, locationId: loc.id }).execute();
+            // Each colleague skips a different service, so "any professional" and
+            // "this professional" can differ in the calendar.
+            for (const [n, svc] of services.entries())
+              if ((n + s) % 4 !== 3)
+                await trx.insertInto('employeeSkills').values({ tenantId: businessId, employeeId: staffId, serviceId: svc.id }).execute();
+            staffNames.push(`${first} ${last}`);
+          }
+          // The consumer card's pitch and the salon page's description —
+          // merged into settings the way the Settings door merges them.
+          const b = await trx.selectFrom('businesses').select('settings').where('id', '=', businessId).executeTakeFirstOrThrow();
+          // Over the full, defaulted shape: a partial marketplace block
+          // would fail the listing's parse and hide the salon.
+          const settings = BusinessSettingsSchema.parse(b.settings ?? {});
+          settings.marketplace = { ...settings.marketplace, pitch: kind.pitch, description: kind.description };
+          await trx.updateTable('businesses')
+            .set({ settings: JSON.stringify(settings), description: kind.description })
+            .where('id', '=', businessId).execute();
+        });
 
-      // The tag — the one thing that says "fixture", and the handle
-      // `remove` works by. Written with the owner role: RLS is on tenants.
-      await admin.query(`UPDATE businesses SET fixture_batch = $1 WHERE id = $2`, [opts.batch, businessId]);
-
-      const biz = await admin.query(`SELECT slug FROM businesses WHERE id = $1`, [businessId]);
-      out.push({ businessId, slug: biz.rows[0].slug, name, city: place.city, type: kind.type, ownerEmail, staff: staffNames });
+        const biz = await admin.query(`SELECT slug FROM businesses WHERE id = $1`, [businessId]);
+        out.push({ businessId, slug: biz.rows[0].slug, name, city: place.city, type: kind.type, ownerEmail, staff: staffNames });
+      } catch (e) {
+        fail(e);
+      }
       log(`+ ${name} (${place.city}) · owner ${ownerEmail}`);
     }
     return out;
