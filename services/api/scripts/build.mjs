@@ -6,6 +6,7 @@
  *   index.js           the API, with the workspace packages
  *                      (@velnes/contracts …) bundled in
  *   create-hq-user.js  the first-HQ-user bootstrap, same shape
+ *   fixtures.js        test salons, added and removed by batch (db/fixtures.ts)
  *   package.json       the npm runtime dependencies, exact versions
  *   package-lock.json  so `npm ci --omit=dev` on the server is exact
  *
@@ -41,7 +42,11 @@ rmSync(dist, { recursive: true, force: true });
 mkdirSync(dist, { recursive: true });
 
 await build({
-  entryPoints: { index: join(root, 'src/index.ts'), 'create-hq-user': join(root, 'src/db/create-hq-user.ts') },
+  entryPoints: {
+    index: join(root, 'src/index.ts'),
+    'create-hq-user': join(root, 'src/db/create-hq-user.ts'),
+    fixtures: join(root, 'src/db/fixtures-cli.ts'),
+  },
   outdir: dist,
   bundle: true,
   platform: 'node',

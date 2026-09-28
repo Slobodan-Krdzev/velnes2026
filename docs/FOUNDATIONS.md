@@ -60,6 +60,33 @@ deliberately pending — and payment accounts. Demo password
 `velnes-demo`; the seeder refuses `NODE_ENV=production` and needs an
 RLS-exempt connection (`SEED_DATABASE_URL`).
 
+**Fixture salons (2026-09-28).** `pnpm --filter @velnes/api fixtures add
+--batch <name> [--count 12]` adds a batch of complete test salons and
+`fixtures remove --batch <name>` takes them away again without a trace;
+`fixtures list` says what is there. They are made through the front
+door — a registration draft filed and approved exactly as HQ approves,
+so business, roles, owner, verified entity, ACTIVE location with a map
+pin, services online, products and gallery come from the same code a
+sign-up runs through — plus two or three *active, bookable* colleagues
+with skills and passwords (a sign-up's team is only invited), a pitch
+and a description for the consumer card. Every account's password is
+`velnes-fixture`; owner and staff addresses end in
+`@fixture.velnes.test`. What tells them apart is one column,
+`businesses.fixture_batch` (NULL for real salons); removal deletes every
+tenant-scoped table's rows for the batch's businesses in foreign-key
+order — both the table list and the order are read from the schema at
+run time, so a tenant table added later cannot be forgotten — then the
+registrations, then the businesses, in one transaction; nothing outside
+the batch is touched, by construction. Mail is forced to the mock
+transport for the run (the doors queue verification and approval mails;
+none may leave for addresses that do not exist), and categories are
+snapped to names the target taxonomy already has, never created. The
+CLI needs both connections: `API_DATABASE_URL` for the doors and
+`DATABASE_URL` (the owner role) for tagging and removal, which cross
+tenants. It ships in the production bundle as `fixtures.js` (see
+`deploy/DEPLOY.md`). Deferral: HQ does not yet badge a fixture salon in
+its lists; the appointment book of a fixture salon starts empty.
+
 ## Mail delivery (2026-09-23)
 
 **Every mail really goes out, in the Velnes look.** Alex, before

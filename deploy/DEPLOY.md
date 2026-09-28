@@ -209,3 +209,20 @@ Payments are a mock provider (keep "pay at venue" until one is chosen).
 Bounce/complaint webhooks from Resend are not wired (a `sent` row means
 the provider accepted the mail). Nightly `pg_dump` off the box is the
 only backup plan and is not automated here.
+
+## Test salons on the server
+
+The bundle ships `fixtures.js` (docs/FOUNDATIONS.md, "Fixture salons").
+On the VPS, from the app directory, with the same `.env` the API runs on:
+
+```
+cd /srv/velnes/api
+node --env-file=.env fixtures.js add --batch demo-2026-09 --count 12
+node --env-file=.env fixtures.js list
+node --env-file=.env fixtures.js remove --batch demo-2026-09
+```
+
+Every fixture account's password is `velnes-fixture`. Removal is by
+batch name and touches nothing else. The API keeps running throughout;
+the consumer app's admission cache notices new or removed salons within
+a minute.

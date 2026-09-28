@@ -10,7 +10,8 @@
     "build": "node scripts/build.mjs",
     "hq:create": "tsx --env-file-if-exists=../../.env src/db/create-hq-user.ts",
     "seed": "tsx src/db/seed-cli.ts",
-    "mail:test": "tsx src/modules/mail/send-test.ts"
+    "mail:test": "tsx src/modules/mail/send-test.ts",
+    "fixtures": "tsx --env-file-if-exists=../../.env src/db/fixtures-cli.ts"
   },
   "devDependencies": {
     "@types/mailparser": "^3.4.6",

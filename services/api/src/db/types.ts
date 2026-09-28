@@ -180,6 +180,7 @@ export interface Businesses {
   country: string;
   createdAt: Generated<Timestamp>;
   description: Generated<string>;
+  fixtureBatch: string | null;
   gallery: Generated<Json>;
   id: Generated<string>;
   name: string;
