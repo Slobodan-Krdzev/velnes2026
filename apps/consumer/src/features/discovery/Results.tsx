@@ -161,7 +161,17 @@ function salonHref(s: ServiceVM) {
  *  carries is not the same as one nobody has published in yet, and
  *  saying "nothing under Spa-Inclusive" about a slug that names no
  *  category at all would be a small lie. */
-function emptyLine(title: string, unknown: boolean, typed: boolean) {
+function emptyLine(
+  title: string,
+  unknown: boolean,
+  typed: boolean,
+  narrowed: { km: number | null; city: string | null },
+) {
+  // A filter that emptied the page is the reason, and is named — "nothing
+  // published" about a category three salons publish in, 40 km away,
+  // was a lie the radius told (Alex, 2026-09-28).
+  if (narrowed.km) return t('c.res.emptyRadius', { q: title, km: narrowed.km });
+  if (narrowed.city) return t('c.res.emptyCity', { q: title, city: narrowed.city });
   if (typed) return t('c.res.emptyTyped', { q: title });
   return unknown ? t('c.res.emptyUnknown') : t('c.res.emptyCategory', { q: title });
 }
@@ -932,7 +942,18 @@ export function Results() {
                 {/* "Nothing matched" would be a lie when the salon block
                     above is standing there having matched. */}
                 {best ? <BestD s={best} /> : loaded && !salons.length ? (
-                  <div className="sm muted" style={{ padding: '18px 4px' }}>{emptyLine(title, unknown, Boolean(query))}</div>
+                  <div style={{ padding: '18px 4px' }}>
+                    <div className="sm muted">{emptyLine(title, unknown, Boolean(query), { km: filters.radiusKm, city: filters.city })}</div>
+                    {filters.radiusKm ? (
+                      <button type="button" className="btn btn-g" style={{ marginTop: 12 }} onClick={() => setFilters({ radiusKm: null })}>
+                        {t('c.res.showAllDistances')}
+                      </button>
+                    ) : filters.city ? (
+                      <button type="button" className="btn btn-g" style={{ marginTop: 12 }} onClick={() => setFilters({ city: null })}>
+                        {t('c.res.searchEverywhere')}
+                      </button>
+                    ) : null}
+                  </div>
                 ) : null}
                 {alts.length ? (
                   <>
@@ -1084,7 +1105,18 @@ export function Results() {
               ) : null}
 
               {best ? <BestM s={best} /> : loaded && !salons.length ? (
-                <div className="sm muted" style={{ padding: '18px 16px' }}>{emptyLine(title, unknown, Boolean(query))}</div>
+                <div style={{ padding: '18px 16px' }}>
+                  <div className="sm muted">{emptyLine(title, unknown, Boolean(query), { km: filters.radiusKm, city: filters.city })}</div>
+                  {filters.radiusKm ? (
+                    <button type="button" className="btn btn-g" style={{ marginTop: 12 }} onClick={() => setFilters({ radiusKm: null })}>
+                      {t('c.res.showAllDistances')}
+                    </button>
+                  ) : filters.city ? (
+                    <button type="button" className="btn btn-g" style={{ marginTop: 12 }} onClick={() => setFilters({ city: null })}>
+                      {t('c.res.searchEverywhere')}
+                    </button>
+                  ) : null}
+                </div>
               ) : null}
               {alts.length ? (
                 <>
