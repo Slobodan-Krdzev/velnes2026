@@ -4,7 +4,7 @@ import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import type { PriceBand, SearchFacets } from '@velnes/contracts';
 import { fmtMKD, slugify } from '../../lib/api/mappers.js';
 import { t } from '../../lib/i18n-core.js';
-import { useMostChosen, useTowns } from '../../lib/api/queries.js';
+import { useCategories, useMostChosen, useTowns } from '../../lib/api/queries.js';
 import { useUserLocation } from '../../lib/geo.js';
 import { FAMOUS_TOWNS, matchTowns, normTown } from '../../lib/towns.js';
 import { IcBolt, IcPin, IcSearch, IcSpark } from './cards.js';
@@ -116,12 +116,21 @@ function SearchSheet({ opts, onClose }: { opts: OpenOptions; onClose: () => void
   const geo = useUserLocation();
   const towns = useTowns().data?.towns ?? [];
   const mostChosen = useMostChosen().data?.categories ?? [];
+  const onOffer = useCategories().data?.categories ?? [];
+  /** What an empty field offers: the most booked categories first, then
+   *  every other category on offer — the same fallback the results
+   *  landing uses, so a platform with no bookings yet (a fresh
+   *  production) still offers its whole shelf rather than a blank. */
+  const browse = useMemo(() => {
+    const seen = new Set(mostChosen.map((c) => c.id));
+    return [...mostChosen, ...onOffer.filter((c) => !seen.has(c.id))];
+  }, [mostChosen, onOffer]);
   const facets = opts.facets ?? null;
 
   // A category page names its category in the title the results page
   // derived; here the slug is enough and the name is looked up from the
   // most-chosen list when it happens to be there.
-  const catNameFor = (slug: string) => mostChosen.find((c) => slugify(c.name) === slug)?.name ?? null;
+  const catNameFor = (slug: string) => browse.find((c) => slugify(c.name) === slug)?.name ?? null;
   const [st, setSt] = useState<SheetState>(() => {
     const base = fromUrl(params, pathname, null);
     if (base.what?.kind === 'category') base.what = { ...base.what, name: catNameFor(base.what.slug) ?? base.what.name };
@@ -309,13 +318,13 @@ function SearchSheet({ opts, onClose }: { opts: OpenOptions; onClose: () => void
             </div>
             <div className="ss-list">
               {suggest.short ? (
-                mostChosen.length ? (
+                browse.length ? (
                   <>
                     <div className="ss-sub">
                       {IcSpark}
-                      {t('c.cards.mostChosen')}
+                      {mostChosen.length ? t('c.cards.mostChosen') : t('c.res.browse')}
                     </div>
-                    {mostChosen.slice(0, 6).map((c) => (
+                    {browse.slice(0, 8).map((c) => (
                       <button key={c.id} type="button" className="ss-opt" onClick={() => pickCategory(slugify(c.name), c.name)}>
                         <span className="ss-opt-ic">{IcSearch}</span>
                         <span>

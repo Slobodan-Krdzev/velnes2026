@@ -87,6 +87,9 @@ describe('the consumer app', () => {
     // The tab bar renders before the routes, so its Search is the first.
     fireEvent.click(screen.getAllByRole('button', { name: 'Search' })[0]!);
     const dlg = await screen.findByRole('dialog', { name: 'Search' });
+    // An empty field offers the shelf — every category on offer — even
+    // with no bookings to make a "most chosen".
+    expect(await within(dlg).findByText('Haircuts')).toBeTruthy();
     // What: typing brings the suggestions; a category becomes the answer
     // and the sheet moves on to Where — nothing has navigated yet.
     fireEvent.change(within(dlg).getByRole('textbox'), { target: { value: 'mass' } });
