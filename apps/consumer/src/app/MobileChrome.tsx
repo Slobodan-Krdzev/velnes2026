@@ -1,4 +1,5 @@
 import { useTranslation } from 'react-i18next';
+import { businessOnboardingUrl } from '../lib/business.js';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useMyNotifications, useSession } from '../lib/api/session.js';
 import { TabBar, type Tab } from './TabBar.js';
@@ -46,8 +47,7 @@ export function MobileChrome() {
         <a
           className="btn btn-g"
           data-link="business"
-          href="#"
-          onClick={(e) => e.preventDefault()}
+          href={businessOnboardingUrl()}
           style={{ marginLeft: 'auto', minHeight: '34px', padding: '6px 12px', fontSize: '12.5px', whiteSpace: 'nowrap' }}
         >
           {t('c.hdr.business')}
