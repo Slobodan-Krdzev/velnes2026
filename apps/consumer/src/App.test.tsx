@@ -93,7 +93,9 @@ describe('the consumer app', () => {
     // Suggestion rows act on mousedown, so the field keeps its focus.
     fireEvent.mouseDown(await within(dlg).findByText('Massage'));
     expect(window.location.pathname).toBe('/');
-    // Where: a town salons are in.
+    // Where: a town — typed to narrow the suggestions, then picked. (A
+    // town nobody has salons in can be typed and used as it is.)
+    fireEvent.change(within(dlg).getByRole('textbox', { name: 'Search a town' }), { target: { value: 'sko' } });
     fireEvent.click(await within(dlg).findByText('Skopje'));
     // When: available now — a start within the next 30 minutes.
     fireEvent.click(within(dlg).getByText('When?'));

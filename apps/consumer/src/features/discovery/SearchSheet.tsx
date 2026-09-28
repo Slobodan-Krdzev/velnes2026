@@ -128,6 +128,8 @@ function SearchSheet({ opts, onClose }: { opts: OpenOptions; onClose: () => void
   });
   const [section, setSection] = useState<Section>(opts.section ?? 'what');
   const [text, setText] = useState(st.what?.kind === 'text' ? st.what.text : '');
+  /** Where, typed: filters the suggested towns, or names one of your own. */
+  const [whereText, setWhereText] = useState('');
   const input = useRef<HTMLInputElement>(null);
   const suggest = useSuggest(text);
 
@@ -177,6 +179,16 @@ function SearchSheet({ opts, onClose }: { opts: OpenOptions; onClose: () => void
    *  fresh fix if allowed — started now so the position is in hand by
    *  the time Search is pressed. The URL still carries the intent. */
   const nearBlocked = geo.decision === 'refused' || geo.status === 'unsupported';
+  const pickTown = (name: string) => {
+    patch({ city: name, nearby: false, radiusKm: null });
+    setWhereText('');
+    setSection('when');
+  };
+  const typedTown = whereText.trim();
+  const townMatches = typedTown
+    ? towns.filter((tw) => tw.name.toLowerCase().includes(typedTown.toLowerCase()))
+    : towns;
+  const typedIsKnown = towns.some((tw) => tw.name.toLowerCase() === typedTown.toLowerCase());
   const pickNearby = () => {
     if (st.nearby) {
       patch({ nearby: false, radiusKm: null });
@@ -341,13 +353,43 @@ function SearchSheet({ opts, onClose }: { opts: OpenOptions; onClose: () => void
                 ))}
               </div>
             ) : null}
-            {towns.length ? <div className="ss-sub">{t('c.ss.towns')}</div> : null}
-            {towns.map((tw) => (
+            {/* A town, typed or picked. The suggestions are the towns
+                salons are actually in, most first — a name here is a
+                promise there is something to book — and anything typed
+                can be used as it is; a town with nothing in it answers
+                honestly on the results page. */}
+            <div className="m-search ss-field" style={{ marginTop: 6 }}>
+              {IcPin}
+              <input
+                value={whereText}
+                placeholder={t('c.ss.wherePh')}
+                aria-label={t('c.ss.wherePh')}
+                onChange={(e) => setWhereText(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && typedTown) pickTown(townMatches[0]?.name ?? typedTown);
+                }}
+              />
+              {whereText ? (
+                <button type="button" className="ss-x" onClick={() => setWhereText('')} aria-label={t('c.res.clear')}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 6l12 12M18 6 6 18" /></svg>
+                </button>
+              ) : null}
+            </div>
+            {typedTown && !typedIsKnown ? (
+              <button type="button" className="ss-opt" onClick={() => pickTown(typedTown)}>
+                <span className="ss-opt-ic">{IcSearch}</span>
+                <span>
+                  <b>{t('c.ss.useTown', { town: typedTown })}</b>
+                </span>
+              </button>
+            ) : null}
+            {townMatches.length ? <div className="ss-sub">{typedTown ? t('c.ss.towns') : t('c.ss.suggested')}</div> : null}
+            {townMatches.map((tw) => (
               <button
                 key={tw.name}
                 type="button"
                 className={`ss-opt${!st.nearby && st.city === tw.name ? ' on' : ''}`}
-                onClick={() => patch({ city: st.city === tw.name ? null : tw.name, nearby: false, radiusKm: null })}
+                onClick={() => pickTown(tw.name)}
                 aria-pressed={!st.nearby && st.city === tw.name}
               >
                 <span className="ss-opt-ic">{IcPin}</span>
@@ -416,6 +458,7 @@ function SearchSheet({ opts, onClose }: { opts: OpenOptions; onClose: () => void
           onClick={() => {
             setSt(EMPTY);
             setText('');
+            setWhereText('');
             setSection('what');
           }}
           disabled={!anything && !text}

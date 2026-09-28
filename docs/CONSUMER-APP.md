@@ -688,10 +688,14 @@ field with the shared suggestions (a category becomes the answer; a
 treatment or a salon is a destination and opens directly, as always;
 an empty field offers *Most chosen*); **Where?** *Nearby* — the results
 page's own location flow, the question first if never asked, then 2 /
-5 / 10 km — or one of the towns salons are actually in, from the new
-`GET /public/discovery/towns` (admitted salons only, most first), which
-travels as the new `city` filter on both search doors (`businesses.city`,
-case-insensitive, hard admission like every filter); **When?** *Any
+5 / 10 km — or a town: a field to type one, and under it the suggested
+towns, which are the ones salons are actually in, from the new
+`GET /public/discovery/towns` (admitted salons only, most first, so a
+suggestion is a promise there is something to book); typing narrows the
+suggestions, and a town nobody is in yet can still be used as typed
+(the results page then answers honestly). The town travels as the new
+`city` filter on both search doors (`businesses.city`, case-insensitive,
+hard admission like every filter); **When?** *Any
 time* or *Available now* (a bookable start no more than 30 minutes
 away — the door's now-mode) and deliberately no dates, because the
 search door knows none yet; **Price** the three bands, only when the
