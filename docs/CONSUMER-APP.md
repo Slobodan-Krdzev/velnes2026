@@ -711,3 +711,17 @@ suggestions-only sheet are gone on the phone; the desktop is untouched.
 Deferral: date-based availability ("today", "this weekend", a picked
 day) as its own phase, since it needs a day-wide availability mode in
 the search door.
+
+**Near me widens on the category page too; empty pages name their
+filter; results load as a skeleton (2026-09-28).** Coming from the
+sheet, *Nearby* plus a category landed on an empty page whenever the
+nearest salon was more than 10 km away — the category door kept its
+radius hard while typed search widened once. Alex chose consistency:
+the category door now widens once too, and the page says so with the
+distance ("Nothing within 10 km of you — showing what is further out,
+nearest first"). When a distance or a town does empty a page, the line
+names it ("nothing within 10 km of you", "nothing in Tetovo yet") with a
+button to show all distances or search everywhere, instead of the old
+"nothing published yet", which was false. And while a door is answering
+the results area shows a greyed skeleton of the answer — a best-match
+card and two alternatives, breathing — rather than a blank.

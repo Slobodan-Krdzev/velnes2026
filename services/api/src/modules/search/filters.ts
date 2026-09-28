@@ -112,23 +112,17 @@ export interface Admission {
 /**
  * Admission, in one place.
  *
- * A price band and a category are never widened: they are explicit
- * choices, and quietly ignoring one because it returned little would be
- * answering a question nobody asked.
+ * A price band, a category and a town are never widened: they are
+ * explicit choices, and quietly ignoring one because it returned little
+ * would be answering a question nobody asked.
  *
  * The radius is the one exception, and only where `widenRadius` says
- * so. The two doors deliberately differ here:
- *
- *   - **Text search** widens once and reports it (§8 of docs/SEARCH.md).
- *     A typed query that lands on an empty page is a dead end, and the
- *     customer gave a distance as a preference, not a demand.
- *   - **A category card** keeps Phase B's contract exactly: a radius
- *     the viewer set is hard, and results outside it are absent.
- *     §5 settled that, and Phase B is closed — a closed rule does not
- *     get changed underneath as a side effect of adding filters.
- *
- * Whether those should converge is a product decision, not one to make
- * silently from inside a filter function.
+ * so: widened once when keeping it would leave almost nothing, and
+ * always reported (§8 of docs/SEARCH.md). Text search has done this
+ * since step 8; the category door joined it on 2026-09-28 — Alex's
+ * decision, after the two doors answering "near me" differently turned
+ * a category page into an empty one 40 km from the nearest salon. The
+ * default stays `false` so a caller must ask for the widening out loud.
  */
 export function applyFilters(
   candidates: RankCandidate[],

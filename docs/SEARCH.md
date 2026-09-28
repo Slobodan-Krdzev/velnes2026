@@ -323,7 +323,7 @@ Each step is shippable and testable alone.
 
    **Left deliberately inconsistent, for a product decision:** the two
    doors treat a radius differently. Text search widens once and says so
-   (§8); a category card keeps Phase B's contract, where a radius is
+   (§8); since 2026-09-28 a category card does the same (Alex: the two doors answering "near me" differently left a category page empty 40 km from the nearest salon) — before that it kept Phase B's contract, where a radius is
    hard and results outside it are simply absent. Phase B is closed, so
    its rule was not changed as a side effect of adding filters. Whether
    they should converge is Alex's call — `applyFilters` takes the

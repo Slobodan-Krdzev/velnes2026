@@ -157,6 +157,28 @@ function salonHref(s: ServiceVM) {
   return `/salon/${s.salon.slug}?service=${encodeURIComponent(s.id)}`;
 }
 
+/**
+ * While the door is answering: the shape of the answer, greyed, so the
+ * page does not sit blank (Alex, 2026-09-28). Three cards — the best
+ * match and two alternatives — in the layout's own proportions.
+ */
+function Skeleton({ phone = false }: { phone?: boolean }) {
+  return (
+    <div className={`skel${phone ? ' skel-m' : ''}`} role="status" aria-live="polite" aria-label={t('c.res.loading')}>
+      {[0, 1, 2].map((i) => (
+        <div key={i} className={`skel-card${i === 0 ? ' best' : ''}`}>
+          <div className="skel-ph" />
+          <div className="skel-bd">
+            <div className="skel-line w60" />
+            <div className="skel-line w40" />
+            <div className="skel-line w80" />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 /** What an empty result page says. A category the shelf no longer
  *  carries is not the same as one nobody has published in yet, and
  *  saying "nothing under Spa-Inclusive" about a slug that names no
@@ -186,8 +208,11 @@ function searchNote(
   how: string | null,
   widened: 'category' | 'radius' | null,
   title: string,
+  km: number | null,
 ): string | null {
-  if (widened === 'radius') return t('c.res.widenedRadius');
+  // Near me changed the answer: say how far the person asked for, so
+  // "showing what is further out" is a fact and not a shrug.
+  if (widened === 'radius') return km ? t('c.res.widenedRadiusKm', { km }) : t('c.res.widenedRadius');
   if (how === 'fuzzy') return t('c.res.fuzzy', { q: title });
   if (widened === 'category') return t('c.res.widenedCategory', { q: title });
   return null;
@@ -800,7 +825,7 @@ export function Results() {
       </button>
     ) : null;
 
-  const note = query ? searchNote(how, widened, title) : searchNote(null, widened, title);
+  const note = query ? searchNote(how, widened, title, filters.radiusKm) : searchNote(null, widened, title, filters.radiusKm);
   const unpriced = unpricedNote(hiddenUnpriced);
   // One pin per salon, not one per treatment: a salon offering four
   // services in this category is still one place on the map. Only
@@ -954,6 +979,8 @@ export function Results() {
                       </button>
                     ) : null}
                   </div>
+                ) : !loaded && !landing ? (
+                  <Skeleton />
                 ) : null}
                 {alts.length ? (
                   <>
@@ -1117,6 +1144,8 @@ export function Results() {
                     </button>
                   ) : null}
                 </div>
+              ) : !loaded && !landing ? (
+                <Skeleton phone />
               ) : null}
               {alts.length ? (
                 <>

@@ -1139,3 +1139,22 @@ a.pop-go:hover {
 .ss-go{min-width:132px}
 .ss-go:disabled{opacity:.5;box-shadow:none;cursor:default}
 @media (min-width:900px){.ss{display:none}}
+
+/* ── Loading results (Alex, 2026-09-28): the answer's shape, greyed and
+   breathing, until the door answers. Warm greys from the page's own
+   palette; no spinner, because a spinner says "wait" and a skeleton
+   says "here is where it goes". */
+.skel{display:grid;gap:12px;padding:6px 0}
+.skel-m{padding:6px 16px}
+.skel-card{display:grid;grid-template-columns:96px 1fr;gap:14px;background:#fff;border:1px solid var(--line-soft);border-radius:16px;padding:12px}
+.skel-card.best{grid-template-columns:1fr;border-color:var(--line)}
+.skel-card.best .skel-ph{height:150px;border-radius:12px}
+.skel-ph{height:84px;border-radius:12px;background:var(--warm)}
+.skel-bd{display:grid;gap:10px;align-content:center}
+.skel-line{height:12px;border-radius:6px;background:var(--warm)}
+.skel-line.w60{width:60%}.skel-line.w40{width:40%}.skel-line.w80{width:80%}
+.skel-ph,.skel-line{position:relative;overflow:hidden}
+.skel-ph::after,.skel-line::after{content:"";position:absolute;inset:0;transform:translateX(-100%);
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,.7),transparent);animation:skel-sweep 1.4s infinite}
+@keyframes skel-sweep{to{transform:translateX(100%)}}
+@media (prefers-reduced-motion:reduce){.skel-ph::after,.skel-line::after{animation:none}}

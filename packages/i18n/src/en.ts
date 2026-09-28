@@ -2541,6 +2541,8 @@ export const en = {
   'c.res.emptyUnknown': 'Nothing to browse under that name — try a category from the home page.',
   'c.res.emptyCategory': 'Nothing published under {{q}} yet — new salons join Velnes every week.',
   'c.res.widenedRadius': 'Not much within your distance, so we looked further out.',
+  'c.res.widenedRadiusKm': 'Nothing within {{km}} km of you — showing what is further out, nearest first.',
+  'c.res.loading': 'Finding what is available…',
   'c.res.emptyRadius': 'Nothing under {{q}} within {{km}} km of you — the nearest is further out.',
   'c.res.emptyCity': 'Nothing under {{q}} in {{city}} yet.',
   'c.res.showAllDistances': 'Show all distances',

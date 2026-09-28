@@ -1320,6 +1320,11 @@ export async function discoveryRoutes(app: FastifyInstance) {
         { radiusKm: req.body.radiusKm, priceBand: req.body.priceBand, categoryId: null, city: req.body.city },
         position,
         terciles,
+        // Widened once when it would leave almost nothing, and reported —
+        // the same rule as typed search since 2026-09-28 (Alex): the two
+        // doors answering "near me" differently was the surprise, not the
+        // distance.
+        true,
       );
 
       const soon = req.body.now ? await availableNowOf(cut.admitted, now) : null;

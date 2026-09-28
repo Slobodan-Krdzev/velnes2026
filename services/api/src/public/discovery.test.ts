@@ -604,23 +604,32 @@ describe('the consumer discovery surface', () => {
       expect([...a].sort()).toEqual([...b].sort());
     });
 
-    it('treats a radius as a hard filter, and its absence as a soft one', async () => {
+    it('a radius that keeps enough is hard; one that would leave almost nothing is widened once, and says so', async () => {
       const { category } = await firstCategoryWithServices();
-      const all = await app.inject({
-        method: 'POST',
-        url: `${P}/discovery/categories/${category.id}/services`,
-        payload: { lat: 40.6401, lng: 22.9444 },
-      });
-      const tight = await app.inject({
-        method: 'POST',
-        url: `${P}/discovery/categories/${category.id}/services`,
-        payload: { lat: 40.6401, lng: 22.9444, radiusKm: 1 },
-      });
-      const nAll = DiscoveryRankedServicesSchema.parse(all.json()).services.length;
-      const nTight = DiscoveryRankedServicesSchema.parse(tight.json()).services.length;
-      // Without a radius "near me" only sorts; with one it excludes.
-      expect(nAll).toBeGreaterThan(0);
-      expect(nTight).toBeLessThan(nAll);
+      const salons = await app.inject({ method: 'GET', url: `${P}/discovery/salons` });
+      const pin = (salons.json().salons as { lat: number | null; lng: number | null }[]).find((s) => s.lat != null)!;
+      const all = DiscoveryRankedServicesSchema.parse(
+        (await app.inject({ method: 'POST', url: `${P}/discovery/categories/${category.id}/services`, payload: { lat: 40.6401, lng: 22.9444 } })).json(),
+      );
+      // Standing at the salon: everything is within 1 km — the radius
+      // keeps enough, so it is hard, and nothing was widened.
+      const near = DiscoveryRankedServicesSchema.parse(
+        (await app.inject({ method: 'POST', url: `${P}/discovery/categories/${category.id}/services`, payload: { lat: pin.lat, lng: pin.lng, radiusKm: 1 } })).json(),
+      );
+      expect(all.services.length).toBeGreaterThan(0);
+      expect(near.services.length).toBe(all.services.length);
+      // "Enough" is WIDEN_BELOW (5): a seeded category with fewer rows
+      // than that is widened even from its own doorstep, honestly, and
+      // the unit tests in filters.test.ts pin the threshold itself.
+      if (all.services.length >= 5) expect(near.widened).toBeNull();
+      // Standing in Thessaloniki: 1 km would leave nothing, so the radius
+      // is dropped once — and the answer says so rather than passing the
+      // wide answer off as the narrow one (Alex, 2026-09-28).
+      const far = DiscoveryRankedServicesSchema.parse(
+        (await app.inject({ method: 'POST', url: `${P}/discovery/categories/${category.id}/services`, payload: { lat: 40.6401, lng: 22.9444, radiusKm: 1 } })).json(),
+      );
+      expect(far.widened).toBe('radius');
+      expect(far.services.map((s) => s.id).sort()).toEqual(all.services.map((s) => s.id).sort());
     });
 
     it('ignores a token it cannot read rather than refusing the request', async () => {
