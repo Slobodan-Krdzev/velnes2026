@@ -44,7 +44,11 @@ beforeEach(() => {
     }),
   );
 });
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  // A test that navigated leaves the next one at home again.
+  window.history.replaceState({}, '', '/');
+});
 
 describe('the consumer app', () => {
   it('renders the categories the API serves', async () => {
@@ -56,5 +60,20 @@ describe('the consumer app', () => {
   it('shows real salons in the recommendations', async () => {
     render(<App />);
     await waitFor(() => expect(screen.getAllByText('Zen Rooms').length).toBeGreaterThan(0));
+  });
+
+  it('the "Available now" chip asks the search screen for everything now, near me', async () => {
+    render(<App />);
+    await screen.findAllByText('Massage tomorrow');
+    // The chip is on both layouts (CSS picks one); the first will do.
+    screen.getAllByRole('button', { name: 'Available now' })[0]!.click();
+    await waitFor(() => expect(window.location.pathname).toBe('/search'));
+    const q = new URLSearchParams(window.location.search);
+    expect(q.get('q')).toBe('now');
+    // `near` is an intent the results page consumes at once — with no
+    // geolocation in this browser it can only drop it, and no radius
+    // is claimed that could not run.
+    await waitFor(() => expect(new URLSearchParams(window.location.search).get('near')).toBeNull());
+    expect(new URLSearchParams(window.location.search).get('km')).toBeNull();
   });
 });

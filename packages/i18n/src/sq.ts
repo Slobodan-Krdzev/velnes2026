@@ -2571,6 +2571,8 @@ export const sq: Record<TranslationKey, string> = {
   'c.home.chipFacial': 'Trajtim fytyre këtë fundjavë',
   'c.home.chipManicure': 'Manikyr',
   'c.home.chipCouple': 'Masazh për çifte',
+  'c.home.chipNow': 'E lirë tani',
+  'c.home.nowQuery': 'tani',
   'c.home.recommended': 'Të rekomanduara afër jush',
   'c.home.viewAll': 'Shiko të gjitha →',
   'c.home.trusted': 'Sallone të besuara',

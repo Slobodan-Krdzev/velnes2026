@@ -646,3 +646,19 @@ remember: configure a real SMTP transport and it is never registered,
 the fetch 404s, and step 6 asks the person for the code exactly as it
 does today. Auto-verification cannot follow the app into production
 because in production the door it depends on is not there.
+
+**"Available now" from the home page (2026-09-28).** The search card's
+first suggestion chip is now **Available now** (bolt, lit) — on the
+desktop card and the phone's — asking the door's whole-catalogue *now*
+question near the person: it opens `/search?q=<now-word>&near=1`,
+where the word is *now / сега / tani* in the viewer's language (so the
+box reads naturally and `now-intent.ts` strips it as usual) and
+`near=1` is an **intent, not a filter**. A position never rides in a
+URL (SEARCH.md §9), so the results page resolves the intent the way its
+own Near-me button would — a 10 km radius once there is a fix, the
+location question first if it was never asked, nothing at all if the
+person said no — and removes `near` from the URL either way, so a
+shared link never carries a wish it cannot grant. Results then read as
+before: what can start within the half hour first, each with its
+`availableAt`, the Near-me and Available-now chips lit, and the honest
+"nothing can start within 30 minutes" line when that is the answer.

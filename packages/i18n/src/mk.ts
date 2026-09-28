@@ -2571,6 +2571,8 @@ export const mk: Record<TranslationKey, string> = {
   'c.home.chipFacial': 'Третман за лице викендов',
   'c.home.chipManicure': 'Маникир',
   'c.home.chipCouple': 'Масажа за двајца',
+  'c.home.chipNow': 'Слободно сега',
+  'c.home.nowQuery': 'сега',
   'c.home.recommended': 'Препорачано во ваша близина',
   'c.home.viewAll': 'Види сè →',
   'c.home.trusted': 'Доверливи салони',

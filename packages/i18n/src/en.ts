@@ -2589,6 +2589,8 @@ export const en = {
   'c.home.chipFacial': 'Facial this weekend',
   'c.home.chipManicure': 'Manicure',
   'c.home.chipCouple': 'Couple massage',
+  'c.home.chipNow': 'Available now',
+  'c.home.nowQuery': 'now',
   'c.home.recommended': 'Recommended near you',
   'c.home.viewAll': 'View all →',
   'c.home.trusted': 'Trusted salons',

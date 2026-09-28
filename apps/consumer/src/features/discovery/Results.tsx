@@ -28,6 +28,7 @@ import {
   IcArr,
   IcClock,
   IcMark,
+  IcBolt,
   IcPin,
   IcSpark,
   IcVok,
@@ -39,10 +40,6 @@ import { useSearchBox } from './useSearchBox.js';
 /** What "near me" means, in kilometres. The distance chips can widen
  *  or narrow it afterwards; this is where the button starts. */
 const NEAR_KM = 10;
-
-const IcBolt = (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M13 3 4 14h7l-1 7 9-11h-7z" /></svg>
-);
 
 /** A salon the text matched by name without earning a direct opening. */
 type SalonHit = { id: string; slug: string; name: string; city: string | null };
@@ -539,6 +536,9 @@ export function Results() {
       if ('categoryId' in patch) put('cat', patch.categoryId ?? null);
       if ('radiusKm' in patch) put('km', patch.radiusKm ?? null);
       if ('now' in patch) put('now', patch.now ? 1 : null);
+      // `near` is an intent, never a filter (see below): any write of
+      // the real filters consumes it.
+      next.delete('near');
       setParams(next, { replace: true });
     },
     [params, setParams],
@@ -667,13 +667,10 @@ export function Results() {
    * would have needed a reload to notice. Alex, 2026-09-21.
    */
   const nearBlocked = geo.decision === 'refused' || geo.status === 'unsupported';
-  const toggleNear = useCallback(() => {
-    if (nearOn) {
-      setWantNear(false);
-      geo.disable();
-      setFilters({ radiusKm: null });
-      return;
-    }
+  /** The "yes" half of the button: a radius once there is a position
+   *  for it, the question first if it was never asked, nothing at all
+   *  when the person said no. */
+  const askNear = useCallback(() => {
     if (nearBlocked) return;
     setWantNear(true);
     if (geo.status === 'on') setFilters({ radiusKm: NEAR_KM });
@@ -681,7 +678,46 @@ export function Results() {
     // fix, since the decision is already yes.
     else if (geo.decision === null) geo.decide(true);
     else geo.locate();
-  }, [nearOn, nearBlocked, geo, setFilters]);
+  }, [nearBlocked, geo, setFilters]);
+  const toggleNear = useCallback(() => {
+    if (nearOn) {
+      setWantNear(false);
+      geo.disable();
+      setFilters({ radiusKm: null });
+      return;
+    }
+    askNear();
+  }, [nearOn, askNear, geo, setFilters]);
+
+  /**
+   * `?near=1` — "near me", asked from somewhere that has no position to
+   * give: the home page's **Available now** chip. An intent, not a
+   * filter: the viewer's position stays out of the URL (§9), so the
+   * page resolves it the way the button does — a radius once there is
+   * a fix, the question first if it was never asked, nothing if the
+   * person said no — and takes the word out of the URL either way, so
+   * a shared link never carries a wish it cannot grant.
+   */
+  const nearIntent = params.get('near') === '1';
+  useEffect(() => {
+    if (!nearIntent) return;
+    if (radius != null) {
+      // Already filtering near them: nothing to ask, only tidy the URL.
+      const next = new URLSearchParams(params);
+      next.delete('near');
+      setParams(next, { replace: true });
+      return;
+    }
+    if (geo.status === 'on') {
+      askNear(); // writes the radius, which drops `near` with it
+      return;
+    }
+    const next = new URLSearchParams(params);
+    next.delete('near');
+    setParams(next, { replace: true });
+    askNear();
+    // On the intent only: what it does next is the button's own logic.
+  }, [nearIntent]);
 
   useEffect(() => {
     if (!wantNear) return;
