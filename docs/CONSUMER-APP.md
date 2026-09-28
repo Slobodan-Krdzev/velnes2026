@@ -662,3 +662,15 @@ shared link never carries a wish it cannot grant. Results then read as
 before: what can start within the half hour first, each with its
 `availableAt`, the Near-me and Available-now chips lit, and the honest
 "nothing can start within 30 minutes" line when that is the answer.
+
+**Phone and tablet: no top bar, no hero; the search pill first
+(2026-09-28).** Below 900px the fixed top bar (the mark, the business
+link) is gone and the home page's hero with it. Every screen now starts
+with its own first row at the very top: the home and the results with
+the same sticky search pill (the mark beside it is the way home, the
+pill opens the results screen where a phone types), a salon with its
+back-and-name, the account with its title. `--m-top` — the one knob the
+sticky offsets hang on — is zero. The home's suggestion chips sit in a
+scrolling row under the pill, "Available now" first. The tab bar is
+unchanged. The business link lives on in the home page's closing band
+and footer.
