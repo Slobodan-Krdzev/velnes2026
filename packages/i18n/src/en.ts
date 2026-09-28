@@ -2607,6 +2607,7 @@ export const en = {
   'c.ss.wherePh': 'Search a town',
   'c.ss.suggested': 'Suggested',
   'c.ss.useTown': 'Use “{{town}}”',
+  'c.ss.noSalonsYet': 'No salons listed yet',
   'c.home.recommended': 'Recommended near you',
   'c.home.viewAll': 'View all →',
   'c.home.trusted': 'Trusted salons',

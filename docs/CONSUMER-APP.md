@@ -688,12 +688,16 @@ field with the shared suggestions (a category becomes the answer; a
 treatment or a salon is a destination and opens directly, as always;
 an empty field offers *Most chosen*); **Where?** *Nearby* — the results
 page's own location flow, the question first if never asked, then 2 /
-5 / 10 km — or a town: a field to type one, and under it the suggested
-towns, which are the ones salons are actually in, from the new
-`GET /public/discovery/towns` (admitted salons only, most first, so a
-suggestion is a promise there is something to book); typing narrows the
-suggestions, and a town nobody is in yet can still be used as typed
-(the results page then answers honestly). The town travels as the new
+5 / 10 km — or a town: quick-pick rows for the well-known places
+(`lib/towns.ts` — Skopje, Bitola, Kumanovo, Ohrid, Prilep, Tetovo,
+Veles, Štip, each saying how many salons are listed there, or that none
+are yet) and a field that autocompletes over a small gazetteer (the
+towns of North Macedonia and the larger ones of Albania and Kosovo, with
+Cyrillic and Albanian aliases, accent-insensitive) merged with the
+platform's own towns and their counts from the new
+`GET /public/discovery/towns` (admitted salons only); a town in neither
+list can still be used as typed, and a town nobody is in yet answers
+honestly on the results page. The town travels as the new
 `city` filter on both search doors (`businesses.city`, case-insensitive,
 hard admission like every filter); **When?** *Any
 time* or *Available now* (a bookable start no more than 30 minutes

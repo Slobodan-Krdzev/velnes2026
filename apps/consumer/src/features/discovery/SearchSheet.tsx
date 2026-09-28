@@ -6,6 +6,7 @@ import { fmtMKD, slugify } from '../../lib/api/mappers.js';
 import { t } from '../../lib/i18n-core.js';
 import { useMostChosen, useTowns } from '../../lib/api/queries.js';
 import { useUserLocation } from '../../lib/geo.js';
+import { FAMOUS_TOWNS, matchTowns, normTown } from '../../lib/towns.js';
 import { IcBolt, IcPin, IcSearch, IcSpark } from './cards.js';
 import { SugListM } from './cards.js';
 import { useSuggest, type SuggestItem } from './useSuggest.js';
@@ -185,10 +186,16 @@ function SearchSheet({ opts, onClose }: { opts: OpenOptions; onClose: () => void
     setSection('when');
   };
   const typedTown = whereText.trim();
-  const townMatches = typedTown
-    ? towns.filter((tw) => tw.name.toLowerCase().includes(typedTown.toLowerCase()))
-    : towns;
-  const typedIsKnown = towns.some((tw) => tw.name.toLowerCase() === typedTown.toLowerCase());
+  /** Autocomplete over the platform's towns and the gazetteer. */
+  const townMatches = matchTowns(typedTown, towns);
+  const typedIsKnown = townMatches.some((tw) => normTown(tw.name) === normTown(typedTown));
+  /** The well-known places as quick picks, with the platform's counts. */
+  const famous = FAMOUS_TOWNS.map((name) => ({
+    name,
+    salons: towns.find((tw) => normTown(tw.name) === normTown(name))?.salons ?? 0,
+  }));
+  const townSub = (n: number) =>
+    n === 0 ? t('c.ss.noSalonsYet') : n === 1 ? t('c.cards.salonOne', { n: 1 }) : t('c.cards.salonMany', { n });
   const pickNearby = () => {
     if (st.nearby) {
       patch({ nearby: false, radiusKm: null });
@@ -383,19 +390,18 @@ function SearchSheet({ opts, onClose }: { opts: OpenOptions; onClose: () => void
                 </span>
               </button>
             ) : null}
-            {townMatches.length ? <div className="ss-sub">{typedTown ? t('c.ss.towns') : t('c.ss.suggested')}</div> : null}
-            {townMatches.map((tw) => (
+            {(typedTown ? townMatches : famous).map((tw) => (
               <button
                 key={tw.name}
                 type="button"
-                className={`ss-opt${!st.nearby && st.city === tw.name ? ' on' : ''}`}
+                className={`ss-opt${!st.nearby && normTown(st.city ?? '') === normTown(tw.name) ? ' on' : ''}`}
                 onClick={() => pickTown(tw.name)}
-                aria-pressed={!st.nearby && st.city === tw.name}
+                aria-pressed={!st.nearby && normTown(st.city ?? '') === normTown(tw.name)}
               >
                 <span className="ss-opt-ic">{IcPin}</span>
                 <span>
                   <b>{tw.name}</b>
-                  <span className="sm muted">{tw.salons === 1 ? t('c.cards.salonOne', { n: 1 }) : t('c.cards.salonMany', { n: tw.salons })}</span>
+                  <span className="sm muted">{townSub(tw.salons)}</span>
                 </span>
               </button>
             ))}

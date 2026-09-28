@@ -2589,6 +2589,7 @@ export const sq: Record<TranslationKey, string> = {
   'c.ss.wherePh': 'Kërko një qytet',
   'c.ss.suggested': 'Të sugjeruara',
   'c.ss.useTown': 'Përdor “{{town}}”',
+  'c.ss.noSalonsYet': 'Ende pa sallone',
   'c.home.recommended': 'Të rekomanduara afër jush',
   'c.home.viewAll': 'Shiko të gjitha →',
   'c.home.trusted': 'Sallone të besuara',

@@ -2589,6 +2589,7 @@ export const mk: Record<TranslationKey, string> = {
   'c.ss.wherePh': 'Пребарај град',
   'c.ss.suggested': 'Предлози',
   'c.ss.useTown': 'Користи „{{town}}“',
+  'c.ss.noSalonsYet': 'Сè уште нема салони',
   'c.home.recommended': 'Препорачано во ваша близина',
   'c.home.viewAll': 'Види сè →',
   'c.home.trusted': 'Доверливи салони',
