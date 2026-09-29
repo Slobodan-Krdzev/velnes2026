@@ -16,11 +16,12 @@ import { IcPin } from './cards.js';
  * search state; closing returns to the results exactly as they were.
  *
  * Three snap points, as shares of the viewport: collapsed (the handle
- * and the count, the map nearly whole), default (a swipeable row of
- * compact cards — the opening state), expanded (the same cards as a
- * list that scrolls inside). The map is told the default sheet height
- * once, so framing and panning aim at what stays visible; dragging the
- * sheet never touches Leaflet.
+ * and the count, the map nearly whole), default (the opening state:
+ * the results as a list that scrolls inside the sheet), expanded (the
+ * same list, most of the screen). Vertical in every state — Alex,
+ * 2026-09-29. The map is told the default sheet height once, so
+ * framing and panning aim at what stays visible; dragging the sheet
+ * never touches Leaflet.
  */
 
 export interface MapResult {
@@ -96,7 +97,6 @@ export function MapResults({ results, onClose }: { results: MapResult[]; onClose
   const [liveH, setLiveH] = useState<number | null>(null); // while dragging
   const [selected, setSelected] = useState<string | null>(results[0]?.id ?? null);
   const [lookAt, setLookAt] = useState<{ lat: number; lng: number; key: number } | null>(null);
-  const railRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const drag = useRef<{ startY: number; startH: number } | null>(null);
   const snapH = Math.round(SHEET_SHARE[state] * vh);
@@ -124,18 +124,13 @@ export function MapResults({ results, onClose }: { results: MapResult[]; onClose
     };
   }, [onClose]);
 
-  /** Bring the selected card into view in whichever layout is up. */
+  /** Bring the selected card into view in the list. */
   const reveal = useCallback(
     (id: string) => {
       const i = results.findIndex((r) => r.id === id);
-      if (i < 0) return;
-      const rail = railRef.current;
-      if (rail) {
-        const card = rail.children[i] as HTMLElement | undefined;
-        if (card) rail.scrollTo({ left: card.offsetLeft - (rail.clientWidth - card.clientWidth) / 2, behavior: 'smooth' });
-      }
       const list = listRef.current;
-      if (list) (list.children[i] as HTMLElement | undefined)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      if (i < 0 || !list) return;
+      (list.children[i] as HTMLElement | undefined)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     },
     [results],
   );
@@ -151,28 +146,6 @@ export function MapResults({ results, onClose }: { results: MapResult[]; onClose
     },
     [state, reveal],
   );
-
-  // Swiping the rail selects the card that settled in the middle.
-  const onRailScroll = () => {
-    const rail = railRef.current;
-    if (!rail) return;
-    window.clearTimeout((rail as unknown as { _t?: number })._t);
-    (rail as unknown as { _t?: number })._t = window.setTimeout(() => {
-      const mid = rail.scrollLeft + rail.clientWidth / 2;
-      let best = 0;
-      let dist = Infinity;
-      Array.from(rail.children).forEach((c, i) => {
-        const el = c as HTMLElement;
-        const d = Math.abs(el.offsetLeft + el.clientWidth / 2 - mid);
-        if (d < dist) {
-          dist = d;
-          best = i;
-        }
-      });
-      const id = results[best]?.id;
-      if (id && id !== selected) setSelected(id);
-    }, 120);
-  };
 
   // Dragging the sheet by its handle or header; the map and the list
   // keep their own gestures.
@@ -194,7 +167,18 @@ export function MapResults({ results, onClose }: { results: MapResult[]; onClose
     setState(snapTo(h, vh, dragged));
   };
 
-  const pins = useMemo(() => results.map((r) => ({ id: r.id, lat: r.lat, lng: r.lng, label: r.name })), [results]);
+  const pins = useMemo(
+    () =>
+      results.map((r) => ({
+        id: r.id,
+        lat: r.lat,
+        lng: r.lng,
+        label: r.name,
+        price: r.price,
+        sub2: r.availableAt ? t('c.availNow', { t: r.availableAt }) : null,
+      })),
+    [results],
+  );
   const n = results.length;
   const count = geo.position
     ? n === 1 ? t('c.map.countNearOne') : t('c.map.countNear', { n })
@@ -219,14 +203,14 @@ export function MapResults({ results, onClose }: { results: MapResult[]; onClose
     }
   }, [geo.status, geo.position]);
 
-  const card = (r: MapResult, compact: boolean) => {
+  const card = (r: MapResult) => {
     const on = r.id === selected;
     const away =
       geo.position ? t('c.res.fromYou', { d: distanceLbl(distanceKm(geo.position, { lat: r.lat, lng: r.lng })) }) : null;
     return (
       <article
         key={r.id}
-        className={`mr-card${on ? ' on' : ''}${compact ? ' compact' : ''}`}
+        className={`mr-card${on ? ' on' : ''}`}
         aria-pressed={on}
         role="button"
         tabIndex={0}
@@ -308,13 +292,9 @@ export function MapResults({ results, onClose }: { results: MapResult[]; onClose
         </div>
         {n === 0 ? (
           <div className="mr-empty sm muted">{t('c.res.noPins')}</div>
-        ) : state === 'expanded' ? (
-          <div className="mr-list" ref={listRef}>
-            {results.map((r) => card(r, false))}
-          </div>
         ) : (
-          <div className="mr-rail" ref={railRef} onScroll={onRailScroll}>
-            {results.map((r) => card(r, true))}
+          <div className="mr-list" ref={listRef}>
+            {results.map(card)}
           </div>
         )}
       </div>

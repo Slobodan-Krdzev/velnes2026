@@ -44,9 +44,14 @@ const HERE = L.divIcon({
  * taking them later. The name rides on the selected pin only, and only
  * when it is short enough to read on a phone; the card carries the rest.
  */
-const NAME_PILL_MAX = 22;
-function velnesPin(label: string, selected: boolean): L.DivIcon {
-  const pill = selected && label.length <= NAME_PILL_MAX ? `<span class="vpin-lbl">${escapeHtml(label)}</span>` : '';
+function velnesPin(p: MapPin, selected: boolean): L.DivIcon {
+  // The selected pin says what the card says in a line: the name, and
+  // under it the price and a start when the door gave one. Nothing the
+  // platform does not know — no rating, since none exist yet.
+  const detail = [p.price, p.sub2].filter(Boolean).map((x) => escapeHtml(x!)).join(' · ');
+  const pill = selected
+    ? `<span class="vpin-lbl"><b>${escapeHtml(p.label)}</b>${detail ? `<small>${detail}</small>` : ''}</span>`
+    : '';
   return L.divIcon({
     className: '',
     html: `<span class="vpin${selected ? ' sel' : ''}" role="img"><span class="vpin-dot"></span>${pill}</span>`,
@@ -89,6 +94,8 @@ export interface MapPin {
    *  than no star. */
   badge?: string | null;
   price?: string | null;
+  /** A second line for the selected Velnes marker (a start time, say). */
+  sub2?: string | null;
   href?: string;
   onClick?: () => void;
 }
@@ -195,7 +202,7 @@ export function SalonMap({
       if (results) {
         // A Velnes marker: selection is a state, set from outside, and a
         // tap reports the pin — the card under the map says the rest.
-        const m = L.marker([p.lat, p.lng], { icon: velnesPin(p.label, false), keyboard: true, title: p.label }).addTo(map);
+        const m = L.marker([p.lat, p.lng], { icon: velnesPin(p, false), keyboard: true, title: p.label }).addTo(map);
         if (p.id) markersById.current.set(p.id, m);
         m.on('click', () => p.id && onSelect?.(p.id));
         return m;
@@ -299,7 +306,7 @@ export function SalonMap({
       const p = stable.find((x) => x.id === id);
       if (!p) continue;
       const sel = id === selectedId;
-      m.setIcon(velnesPin(p.label, sel));
+      m.setIcon(velnesPin(p, sel));
       m.setZIndexOffset(sel ? 1000 : 0);
     }
     const sel = selectedId ? markersById.current.get(selectedId) : null;

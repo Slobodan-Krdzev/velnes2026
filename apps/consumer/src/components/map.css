@@ -98,21 +98,34 @@
 .vpin-lbl {
   position: absolute;
   top: 50%;
-  left: calc(100% + 6px);
+  left: calc(100% + 8px);
   transform: translateY(-50%);
-  white-space: nowrap;
-  max-width: 160px;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  display: grid;
+  gap: 1px;
+  max-width: 190px;
   background: #fff;
   border: 1px solid var(--brand);
-  border-radius: 999px;
-  padding: 4px 10px;
+  border-radius: 14px;
+  padding: 6px 11px;
   font-family: inherit;
-  font-size: 12px;
-  font-weight: 700;
+  line-height: 1.25;
   color: var(--ink);
-  box-shadow: 0 6px 16px rgba(45, 26, 18, 0.16);
+  box-shadow: 0 8px 20px rgba(45, 26, 18, 0.18);
+}
+.vpin-lbl b {
+  font-size: 12.5px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.vpin-lbl small {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .leaflet-marker-icon:focus-visible .vpin-dot {
   outline: 2px solid var(--brand-hover);

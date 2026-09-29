@@ -791,12 +791,13 @@ phone no longer opens a Leaflet screen with a header: the map fills the
 screen behind a floating close and a locate-me control, and a
 **draggable results sheet** rides over its bottom (`MapResults.tsx`)
 with three snaps — collapsed (the handle and the count), default (the
-opening state: a swipeable row of compact cards), expanded (the same
-cards as a list that scrolls inside). The count ("3 places near you",
+opening state: the results as a list scrolling inside the sheet),
+expanded (the same list, most of the screen) — vertical in every state. The count ("3 places near you",
 or "3 places" when no position is known) lives in the sheet. Markers
 are **Velnes markers** (`SalonMap` in results mode): a compact coral
-dot with a white ring, and a larger, stronger one with a short name
-pill when selected — no default blue pins, no permanent tooltips, no
+dot with a white ring, and a larger, stronger one with a pill when
+selected carrying the name, the price and a start when the door gave
+one (no rating: none exist yet) — no default blue pins, no permanent tooltips, no
 popups, no zoom buttons on a phone. One `selectedId` (the salon's slug)
 drives marker and card alike: a marker tap selects, raises a collapsed
 sheet to its default and scrolls the card into view; swiping or tapping
