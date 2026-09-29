@@ -785,3 +785,28 @@ location), so the same keys drive filtering and the salon page. The
 desktop keeps its band chips; the two are the same door. Deferral: time
 windows beyond *now* wait for day-wide availability; the search sheet's
 "Choose date & time" and the panel's "when" will grow together.
+
+**The map, as another view of the answer (2026-09-29).** "Map" on a
+phone no longer opens a Leaflet screen with a header: the map fills the
+screen behind a floating close and a locate-me control, and a
+**draggable results sheet** rides over its bottom (`MapResults.tsx`)
+with three snaps — collapsed (the handle and the count), default (the
+opening state: a swipeable row of compact cards), expanded (the same
+cards as a list that scrolls inside). The count ("3 places near you",
+or "3 places" when no position is known) lives in the sheet. Markers
+are **Velnes markers** (`SalonMap` in results mode): a compact coral
+dot with a white ring, and a larger, stronger one with a short name
+pill when selected — no default blue pins, no permanent tooltips, no
+popups, no zoom buttons on a phone. One `selectedId` (the salon's slug)
+drives marker and card alike: a marker tap selects, raises a collapsed
+sheet to its default and scrolls the card into view; swiping or tapping
+a card selects its marker; the map pans a selected marker into the part
+of the map the sheet leaves visible, and only when it is outside it.
+Initial framing fits the results into that visible part with a zoom
+cap; one result is centred there, never zoomed in on. The person's own
+dot is the conventional blue (everywhere the map draws it), so it is
+never mistaken for a salon; attribution moves to the top right, out of
+the sheet's way. Opening and closing the map changes nothing about the
+search. Desktop keeps its side map. Deferrals: clustering (the markers
+are plain `divIcon`s a cluster group can take), "Search this area"
+(needs a bounds filter on the door), ratings (none exist).

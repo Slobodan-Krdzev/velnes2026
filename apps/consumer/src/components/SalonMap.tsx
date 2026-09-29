@@ -36,6 +36,25 @@ const HERE = L.divIcon({
   popupAnchor: [0, -28],
 });
 
+/**
+ * The Velnes marker for a results map (Alex, 2026-09-29): a compact
+ * coral dot with a white ring and a soft shadow, and a stronger,
+ * larger one with a short name pill when selected. Plain `divIcon`s in
+ * the brand token — nothing about them stops a cluster group from
+ * taking them later. The name rides on the selected pin only, and only
+ * when it is short enough to read on a phone; the card carries the rest.
+ */
+const NAME_PILL_MAX = 22;
+function velnesPin(label: string, selected: boolean): L.DivIcon {
+  const pill = selected && label.length <= NAME_PILL_MAX ? `<span class="vpin-lbl">${escapeHtml(label)}</span>` : '';
+  return L.divIcon({
+    className: '',
+    html: `<span class="vpin${selected ? ' sel' : ''}" role="img"><span class="vpin-dot"></span>${pill}</span>`,
+    iconSize: selected ? [30, 30] : [22, 22],
+    iconAnchor: selected ? [15, 15] : [11, 11],
+  });
+}
+
 /** The person's own position: a dot, not a pin — they are not a place
  *  you can book. */
 const YOU = L.divIcon({
@@ -47,6 +66,8 @@ const YOU = L.divIcon({
 });
 
 export interface MapPin {
+  /** What selecting this pin selects — a results map keys pins by it. */
+  id?: string;
   lat: number;
   lng: number;
   label: string;
@@ -82,6 +103,11 @@ export function SalonMap({
   you = null,
   center = null,
   emptyNote,
+  selectedId = null,
+  onSelect,
+  bottomInset = 0,
+  chrome = 'full',
+  lookAt = null,
 }: {
   pins: MapPin[];
   height: number | string;
@@ -98,7 +124,27 @@ export function SalonMap({
   center?: { lat: number; lng: number } | null;
   /** Shown over the map when there is nothing to pin. */
   emptyNote?: string | undefined;
+  /**
+   * Results mode (Alex, 2026-09-29): pins are Velnes markers keyed by
+   * `id`, one of them selected, and a tap selects rather than opening a
+   * popup — the sheet under the map carries the salon. No tooltips, no
+   * popups in this mode.
+   */
+  selectedId?: string | null;
+  onSelect?: ((id: string) => void) | undefined;
+  /** How much of the bottom of the box something else covers (the
+   *  results sheet), so framing and panning aim at what can be seen. */
+  bottomInset?: number;
+  /** 'none' hides Leaflet's own zoom buttons — a phone pinches. */
+  chrome?: 'full' | 'none';
+  /** A place to look at now (the locate-me control): a new `key` pans
+   *  there, into the visible part of the map. */
+  lookAt?: { lat: number; lng: number; key: number } | null;
 }) {
+  const results = Boolean(onSelect);
+  const markersById = useRef(new Map<string, L.Marker>());
+  const insetRef = useRef(bottomInset);
+  insetRef.current = bottomInset;
   const boxRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<L.Map | null>(null);
   const youRef = useRef<{ dot: L.Marker; ring: L.Circle } | null>(null);
@@ -123,8 +169,10 @@ export function SalonMap({
     let map: L.Map;
     try {
       map = L.map(box, {
-        attributionControl: true,
-        zoomControl: interactive,
+        // In results mode the attribution sits at the top, where the
+        // sheet cannot cover it (it stays: it is required).
+        attributionControl: !results,
+        zoomControl: interactive && chrome === 'full',
         // The map zooms to the wheel like every other map anybody has
         // used. Only where the map is interactive at all — a static
         // thumbnail that resized under the page scroll would be a trap.
@@ -137,11 +185,21 @@ export function SalonMap({
         maxZoom: 19,
         attribution: '© OpenStreetMap contributors',
       }).addTo(map);
+      if (results) L.control.attribution({ position: 'topright', prefix: false }).addTo(map);
     } catch {
       return;
     }
     const labelled: L.Marker[] = [];
+    markersById.current = new Map();
     const markers = pins.map((p) => {
+      if (results) {
+        // A Velnes marker: selection is a state, set from outside, and a
+        // tap reports the pin — the card under the map says the rest.
+        const m = L.marker([p.lat, p.lng], { icon: velnesPin(p.label, false), keyboard: true, title: p.label }).addTo(map);
+        if (p.id) markersById.current.set(p.id, m);
+        m.on('click', () => p.id && onSelect?.(p.id));
+        return m;
+      }
       const m = L.marker([p.lat, p.lng], { icon: p.here ? HERE : PIN }).addTo(map);
       if (labels)
         m.bindTooltip(
@@ -182,7 +240,22 @@ export function SalonMap({
     });
     // Framing, in order of what the person cares about: where they are
     // (with the results around them), then the results, then the city.
-    if (center) map.setView([center.lat, center.lng], markers.length ? zoom : 13);
+    const inset = insetRef.current;
+    if (results) {
+      // The results, framed in the part of the map the sheet leaves
+      // visible; a single result is centred there, never zoomed in on.
+      if (markers.length === 1) {
+        map.setView([pins[0]!.lat, pins[0]!.lng], Math.min(zoom, 15));
+        map.panBy([0, inset / 2], { animate: false });
+      } else if (markers.length)
+        map.fitBounds(L.featureGroup(markers).getBounds().pad(0.15), {
+          paddingTopLeft: [24, 72],
+          paddingBottomRight: [24, inset + 24],
+          maxZoom: 15,
+        });
+      else if (center) map.setView([center.lat, center.lng], 13);
+      else map.setView(SKOPJE, 12);
+    } else if (center) map.setView([center.lat, center.lng], markers.length ? zoom : 13);
     else if (markers.length === 1) map.setView([pins[0]!.lat, pins[0]!.lng], zoom);
     else if (markers.length)
       // Never zoom past street level just because two salons share a
@@ -213,14 +286,51 @@ export function SalonMap({
       youRef.current = null;
       centred.current = false;
     };
-  }, [stable, zoom, interactive, labels]);
+  }, [stable, zoom, interactive, labels, results, chrome]);
+
+  // Selection, in results mode: the icons swap in place — no marker is
+  // rebuilt — and the selected pin is brought into the visible part of
+  // the map only when it is outside it, so browsing never makes the map
+  // jump under the person.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !results) return;
+    for (const [id, m] of markersById.current) {
+      const p = stable.find((x) => x.id === id);
+      if (!p) continue;
+      const sel = id === selectedId;
+      m.setIcon(velnesPin(p.label, sel));
+      m.setZIndexOffset(sel ? 1000 : 0);
+    }
+    const sel = selectedId ? markersById.current.get(selectedId) : null;
+    if (!sel) return;
+    const size = map.getSize();
+    const visibleH = Math.max(80, size.y - insetRef.current);
+    const pt = map.latLngToContainerPoint(sel.getLatLng());
+    const margin = 36;
+    const inside = pt.x > margin && pt.x < size.x - margin && pt.y > margin + 40 && pt.y < visibleH - margin;
+    if (inside) return;
+    // Aim the marker at the centre of what can be seen.
+    const target = L.point(size.x / 2, visibleH / 2);
+    map.panBy(pt.subtract(target), { animate: true, duration: 0.35 });
+  }, [selectedId, results, stable, built]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !lookAt) return;
+    const size = map.getSize();
+    const target = L.point(size.x / 2, Math.max(80, size.y - insetRef.current) / 2);
+    const pt = map.latLngToContainerPoint(L.latLng(lookAt.lat, lookAt.lng));
+    map.panBy(pt.subtract(target), { animate: true, duration: 0.4 });
+  }, [lookAt?.key, lookAt, built]);
 
   // Follow the person as they move — but gently: re-centre when they
   // first arrive and whenever they walk off the edge, never while they
-  // are panning around a map they are reading.
+  // are panning around a map they are reading. Not in results mode: the
+  // results are what is framed there, and the dot is a companion.
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !center) {
+    if (!map || !center || results) {
       centred.current = false;
       return;
     }
@@ -231,7 +341,7 @@ export function SalonMap({
     } else if (!map.getBounds().pad(-0.15).contains(at)) {
       map.panTo(at);
     }
-  }, [center?.lat, center?.lng, center, zoom, built]);
+  }, [center?.lat, center?.lng, center, zoom, built, results]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -247,11 +357,13 @@ export function SalonMap({
       youRef.current.dot.setLatLng(at);
       youRef.current.ring.setLatLng(at).setRadius(you.accuracy ?? 40);
     } else {
+      // The person, not a salon: the conventional blue, so it can never
+      // be mistaken for a place to book among coral pins.
       const ring = L.circle(at, {
         radius: you.accuracy ?? 40,
-        color: '#FF8D67',
+        color: '#2F6FED',
         weight: 1,
-        fillColor: '#FF8D67',
+        fillColor: '#2F6FED',
         fillOpacity: 0.12,
       }).addTo(map);
       const dot = L.marker(at, { icon: YOU, zIndexOffset: 500 }).addTo(map);

@@ -37,6 +37,7 @@ import {
 import { useSearchBox } from './useSearchBox.js';
 import { useSearchSheet } from './SearchSheet.js';
 import { FiltersSheet } from './FiltersSheet.js';
+import { MapResults, type MapResult } from './MapResults.js';
 import { AmenityKeySchema } from '@velnes/contracts';
 
 /** What "near me" means, in kilometres. The distance chips can widen
@@ -876,6 +877,31 @@ export function Results() {
         onClick: () => nav(`/salon/${s.salon.slug}`),
       }));
   }, [rows, nav]);
+  /** The phone's map: one card per salon — its best row for this
+   *  question — keyed by the slug that is also its pin. */
+  const mapResults = useMemo<MapResult[]>(() => {
+    const seen = new Set<string>();
+    const out: MapResult[] = [];
+    for (const s of rows) {
+      if (s.salon.lat == null || s.salon.lng == null || seen.has(s.salon.slug)) continue;
+      seen.add(s.salon.slug);
+      out.push({
+        id: s.salon.slug,
+        lat: s.salon.lat,
+        lng: s.salon.lng,
+        name: s.salon.name,
+        city: s.salon.city,
+        photo: s.salon.photo,
+        hasPhoto: s.salon.hasPhoto,
+        bookable: s.salon.bookable,
+        treatment: s.name,
+        price: priceLbl(s),
+        availableAt: s.availableAt,
+        href: salonHref(s),
+      });
+    }
+    return out;
+  }, [rows]);
   return (
     <>
       <div className="d-env">
@@ -1216,28 +1242,7 @@ export function Results() {
               </span>
               <span className="i">{IcSpark} {t('c.res.noPerfectM')}</span>
             </div>
-            {mapOpen ? (
-              <div className="mapsheet open" style={{ display: 'flex', flexDirection: 'column' }}>
-                <div className="ms-head">
-                  <h2 className="serif">
-                    {pins.length} {pins.length === 1 ? 'place' : 'places'} near you
-                  </h2>
-                  <button className="iconb" onClick={() => setMapOpen(false)} aria-label={t('c.res.close')}>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 6l12 12M18 6 6 18" /></svg>
-                  </button>
-                </div>
-                <div style={{ flex: 1, minHeight: 0 }}>
-                  <SalonMap
-                    pins={pins}
-                    you={geo.position}
-                    center={geo.position}
-                    zoom={13}
-                    height="100%"
-                    radius={0}
-                  />
-                </div>
-              </div>
-            ) : null}
+            {mapOpen ? <MapResults results={mapResults} onClose={() => setMapOpen(false)} /> : null}
 
           </div>
         </section>

@@ -35,21 +35,23 @@
 }
 
 /* Where you are: a live dot, not a pin — a person is not a place you
-   can book. It pulses gently so a moving fix reads as current. */
+   can book — in the conventional blue, so it can never be mistaken for
+   a coral salon pin (Alex, 2026-09-29). It pulses gently so a moving
+   fix reads as current. */
 .you-dot {
   display: grid;
   place-items: center;
   width: 18px;
   height: 18px;
   border-radius: 50%;
-  background: rgba(255, 141, 103, 0.28);
+  background: rgba(47, 111, 237, 0.24);
 }
 .you-core {
   width: 10px;
   height: 10px;
   border-radius: 50%;
-  background: var(--brand);
-  border: 2px solid #fff9f7;
+  background: #2F6FED;
+  border: 2px solid #fff;
   box-shadow: 0 2px 6px rgba(45, 26, 18, 0.35);
 }
 @media (prefers-reduced-motion: no-preference) {
@@ -57,10 +59,72 @@
     animation: you-pulse 2.4s ease-out infinite;
   }
   @keyframes you-pulse {
-    0% { box-shadow: 0 0 0 0 rgba(255, 141, 103, 0.45); }
-    70% { box-shadow: 0 0 0 14px rgba(255, 141, 103, 0); }
-    100% { box-shadow: 0 0 0 0 rgba(255, 141, 103, 0); }
+    0% { box-shadow: 0 0 0 0 rgba(47, 111, 237, 0.45); }
+    70% { box-shadow: 0 0 0 14px rgba(47, 111, 237, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(47, 111, 237, 0); }
   }
+}
+
+/* ── The Velnes marker on a results map (Alex, 2026-09-29) ──────────
+   A compact coral dot with a white ring and a soft shadow; selected, a
+   larger one with a stronger ring and a short name pill. The shape says
+   "place", the state says "chosen" — never only the colour. */
+.vpin {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+}
+.vpin-dot {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--brand);
+  border: 2.5px solid #fff;
+  box-shadow: 0 3px 10px rgba(45, 26, 18, 0.32);
+  transition: width .15s, height .15s, box-shadow .15s;
+}
+.vpin.sel {
+  width: 30px;
+  height: 30px;
+}
+.vpin.sel .vpin-dot {
+  width: 26px;
+  height: 26px;
+  border-width: 3px;
+  box-shadow: 0 0 0 4px rgba(255, 141, 103, 0.28), 0 6px 16px rgba(45, 26, 18, 0.36);
+}
+.vpin-lbl {
+  position: absolute;
+  top: 50%;
+  left: calc(100% + 6px);
+  transform: translateY(-50%);
+  white-space: nowrap;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  background: #fff;
+  border: 1px solid var(--brand);
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink);
+  box-shadow: 0 6px 16px rgba(45, 26, 18, 0.16);
+}
+.leaflet-marker-icon:focus-visible .vpin-dot {
+  outline: 2px solid var(--brand-hover);
+  outline-offset: 2px;
+}
+/* Attribution in results mode: top right, small, out of the sheet's way. */
+.leaflet-top.leaflet-right .leaflet-control-attribution {
+  margin: calc(8px + env(safe-area-inset-top)) 8px 0 0;
+  border-radius: 999px;
+  background: rgba(255, 249, 247, 0.9);
+  font-size: 10px;
+  padding: 2px 8px;
 }
 
 /* Said over a real map, never instead of one. */
