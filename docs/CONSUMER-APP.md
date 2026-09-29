@@ -688,10 +688,12 @@ field with the shared suggestions (a category becomes the answer; a
 treatment or a salon is a destination and opens directly, as always;
 an empty field offers *Most chosen*); **Where?** *Nearby* — within 10 km, one answer, the results page's own
 location flow behind it (the question first if never asked; the
-results page's chips still narrow or widen it afterwards) — or a town: quick-pick rows for the towns that actually have salons
-(most first, the well-known order in `lib/towns.ts` breaking ties; a
-town with nothing to book is not a suggestion — Alex, 2026-09-29) and a
-field that autocompletes over a small gazetteer (the
+results page's chips still narrow or widen it afterwards) — or a town: at most five quick-pick rows for towns that actually have
+salons — within 100 km of the person when their position is known (the
+towns door now says where each town is: the centre of its salons'
+pins), most salons first, the well-known order in `lib/towns.ts`
+breaking ties; a town with nothing to book is not a suggestion (Alex,
+2026-09-29) — and a field that autocompletes over a small gazetteer (the
 towns of North Macedonia and the larger ones of Albania and Kosovo, with
 Cyrillic and Albanian aliases, accent-insensitive) merged with the
 platform's own towns and their counts from the new

@@ -6,7 +6,7 @@ import { fmtMKD, slugify } from '../../lib/api/mappers.js';
 import { t } from '../../lib/i18n-core.js';
 import { useCategories, useMostChosen, useSuggestions, useTowns } from '../../lib/api/queries.js';
 import { useSession } from '../../lib/api/session.js';
-import { useUserLocation } from '../../lib/geo.js';
+import { distanceKm, useUserLocation } from '../../lib/geo.js';
 import { FAMOUS_TOWNS, matchTowns, normTown } from '../../lib/towns.js';
 import { IcPin, IcSearch, IcSpark } from './cards.js';
 import { SUGGEST_ICONS, iconFor } from './suggestIcons.js';
@@ -94,6 +94,9 @@ export function useSearchSheet(): SheetApi {
 }
 
 const NEAR_KM = 10;
+/** Quick-pick towns: how many, and how far from the person. */
+const TOWN_PICKS = 5;
+const TOWN_REACH_KM = 100;
 
 export function SearchSheetProvider({ children }: { children: ReactNode }) {
   const [open, setOpen] = useState(false);
@@ -224,17 +227,28 @@ function SearchSheet({ opts, onClose }: { opts: OpenOptions; onClose: () => void
   /** Autocomplete over the platform's towns and the gazetteer. */
   const townMatches = matchTowns(typedTown, towns);
   const typedIsKnown = townMatches.some((tw) => normTown(tw.name) === normTown(typedTown));
-  /** Quick picks: only towns that have salons (Alex, 2026-09-29 — a town
-   *  with nothing to book is not a suggestion), most salons first, the
-   *  well-known order breaking ties. Any other town can still be typed. */
+  /**
+   * Quick picks (Alex, 2026-09-29): at most five towns, only ones that
+   * have salons — a town with nothing to book is not a suggestion —
+   * and, when the person's position is known, only those within 100 km
+   * of them (a town's place is the centre of its salons' pins). Most
+   * salons first, the well-known order breaking ties. If nothing is
+   * within reach the five with most salons stand in, since an empty row
+   * of towns says less than a far one. Any other town can be typed.
+   */
   const rank = (name: string) => {
     const i = FAMOUS_TOWNS.findIndex((f) => normTown(f) === normTown(name));
     return i < 0 ? FAMOUS_TOWNS.length : i;
   };
-  const famous = towns
+  const withSalons = towns
     .filter((tw) => tw.salons > 0)
     .slice()
     .sort((a, b) => b.salons - a.salons || rank(a.name) - rank(b.name) || a.name.localeCompare(b.name));
+  const pos = geo.position;
+  const within = pos
+    ? withSalons.filter((tw) => tw.lat != null && tw.lng != null && distanceKm(pos, { lat: tw.lat, lng: tw.lng }) <= TOWN_REACH_KM)
+    : withSalons;
+  const famous = (within.length ? within : withSalons).slice(0, TOWN_PICKS);
   const townSub = (n: number) =>
     n === 0 ? t('c.ss.noSalonsYet') : n === 1 ? t('c.cards.salonOne', { n: 1 }) : t('c.cards.salonMany', { n });
   /** Nearby needs a position: ask now if never asked, take a fresh fix

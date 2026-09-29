@@ -30,6 +30,9 @@ describe('towns, and the city filter', () => {
     const { towns } = DiscoveryTownsSchema.parse(res.json());
     expect(towns.length).toBeGreaterThan(0);
     for (const t of towns) expect(t.salons).toBeGreaterThan(0);
+    // The seeded salon has a pin, so its town knows where it is.
+    expect(towns[0]!.lat).not.toBeNull();
+    expect(towns[0]!.lng).not.toBeNull();
     expect([...towns].sort((a, b) => b.salons - a.salons || a.name.localeCompare(b.name))).toEqual(towns);
     town = towns[0]!.name;
   });

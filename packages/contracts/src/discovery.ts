@@ -295,7 +295,17 @@ export const DiscoveryViewerSchema = z.object({
  *  admitted (listed, open) salons count, so a town is a promise there is
  *  something to book there. Most salons first, then by name. */
 export const DiscoveryTownsSchema = z.object({
-  towns: z.array(z.object({ name: z.string(), salons: z.number().int() })),
+  towns: z.array(
+    z.object({
+      name: z.string(),
+      salons: z.number().int(),
+      /** Where the town is, as the centre of its salons' pins — so a
+       *  list can keep the towns within reach of the viewer. Null when
+       *  none of its salons has placed a pin. */
+      lat: z.number().nullable(),
+      lng: z.number().nullable(),
+    }),
+  ),
 });
 export type DiscoveryTowns = z.infer<typeof DiscoveryTownsSchema>;
 

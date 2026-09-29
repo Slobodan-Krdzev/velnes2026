@@ -1066,16 +1066,30 @@ export async function discoveryRoutes(app: FastifyInstance) {
     schema: { response: { 200: DiscoveryTownsSchema } },
     handler: async () => {
       const admitted = await admittedBusinessesCached();
-      const counts = new Map<string, { name: string; salons: number }>();
+      const counts = new Map<string, { name: string; salons: number; lat: number; lng: number; pins: number }>();
       for (const b of admitted) {
         const name = (b.city ?? '').trim();
         if (!name) continue;
         const k = name.toLowerCase();
-        const row = counts.get(k) ?? { name, salons: 0 };
+        const row = counts.get(k) ?? { name, salons: 0, lat: 0, lng: 0, pins: 0 };
         row.salons += 1;
+        // The town's place is the centre of its salons' pins.
+        const pin = await firstPin(b.id);
+        if (pin.lat != null && pin.lng != null) {
+          row.lat += pin.lat;
+          row.lng += pin.lng;
+          row.pins += 1;
+        }
         counts.set(k, row);
       }
-      const towns = [...counts.values()].sort((a, b) => b.salons - a.salons || a.name.localeCompare(b.name));
+      const towns = [...counts.values()]
+        .sort((a, b) => b.salons - a.salons || a.name.localeCompare(b.name))
+        .map((r) => ({
+          name: r.name,
+          salons: r.salons,
+          lat: r.pins ? Math.round((r.lat / r.pins) * 10000) / 10000 : null,
+          lng: r.pins ? Math.round((r.lng / r.pins) * 10000) / 10000 : null,
+        }));
       return { towns };
     },
   });
