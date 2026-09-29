@@ -1087,12 +1087,19 @@ export function Results() {
                     button above the tab bar. */}
                 {!landing ? (
                   <button
-                    className={`map-btn${nFilt ? ' on' : ''}`}
+                    className={`map-btn filt-btn${nFilt ? ' on' : ''}`}
                     aria-label={nFilt ? t('c.res.filtersApplied', { n: nFilt }) : t('c.res.filters')}
+                    title={t('c.res.filters')}
                     onClick={() => setFiltersOpen(true)}
                   >
-                    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M4 7h10M18 7h2M4 17h4M12 17h8" /><circle cx="15.5" cy="7" r="2" /><circle cx="9.5" cy="17" r="2" /></svg>
-                    {nFilt ? `${t('c.res.filters')} · ${nFilt}` : t('c.res.filters')}
+                    {/* The icon alone; how many filters are on rides in the
+                        same badge the profile tab wears for its notifications. */}
+                    <span className="vnav-ic">
+                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M4 7h10M18 7h2M4 17h4M12 17h8" /><circle cx="15.5" cy="7" r="2" /><circle cx="9.5" cy="17" r="2" /></svg>
+                      <span className="acc-bdg" hidden={nFilt === 0}>
+                        {nFilt}
+                      </span>
+                    </span>
                   </button>
                 ) : null}
               </div>

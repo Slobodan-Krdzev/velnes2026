@@ -1238,3 +1238,9 @@ a.pop-go:hover {
 .fs-amen-row.on .amen-ic{background:var(--brand);color:#fff}
 .map-btn.on{border-color:var(--brand);background:var(--warm)}
 @media (min-width:900px){.fs,.fs-scrim{display:none}}
+
+/* The Filters button: the icon alone, the count in the profile tab's own
+   badge (Alex, 2026-09-29). */
+.filt-btn{font-size:0}
+.filt-btn .vnav-ic{position:relative;display:inline-flex}
+.filt-btn .acc-bdg{top:-8px;right:-11px}
