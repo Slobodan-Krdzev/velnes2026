@@ -1202,11 +1202,15 @@ a.pop-go:hover {
    bottom sheet over the answer — price histogram with two handles, when,
    amenities — and the same foot the search sheet has. */
 .fs-scrim{position:fixed;inset:0;z-index:88;background:rgba(45,26,18,.32)}
-.fs{position:fixed;left:0;right:0;bottom:0;z-index:89;display:flex;flex-direction:column;max-height:88vh;background:#fff;
-  border-radius:22px 22px 0 0;box-shadow:0 -12px 40px rgba(45,26,18,.22)}
+/* 90% of the screen, always (Alex, 2026-09-29), and its own scroll: the
+   body scrolls and contains its overscroll, so reaching its end never
+   hands the gesture to the page behind. */
+.fs{position:fixed;left:0;right:0;bottom:0;z-index:89;display:flex;flex-direction:column;height:90vh;height:90dvh;background:#fff;
+  border-radius:22px 22px 0 0;box-shadow:0 -12px 40px rgba(45,26,18,.22);overscroll-behavior:contain;touch-action:pan-y}
+.fs-scrim{touch-action:none}
 .fs-top{display:flex;align-items:center;justify-content:space-between;padding:14px 16px 10px;border-bottom:1px solid var(--line-soft)}
 .fs-top b{font-size:16px;color:var(--ink)}
-.fs-body{flex:1;overflow-y:auto;padding:6px 16px 10px}
+.fs-body{flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;padding:6px 16px 10px}
 .fs-sec{padding:14px 0;border-bottom:1px solid var(--line-soft)}
 .fs-sec:last-child{border-bottom:0}
 .fs-sec h3{font-family:var(--fd);font-weight:400;font-size:20px;color:var(--ink);margin:0 0 2px}
