@@ -1,14 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import {
-  categoryVM,
-  fmtMKD,
-  type CategoryVM,
-  minutesLbl,
-  priceLbl,
-  serviceVM,
-  type ServiceVM,
-} from '../../lib/api/mappers.js';
+import { categoryVM, type CategoryVM, minutesLbl, priceLbl, serviceVM, type ServiceVM } from '../../lib/api/mappers.js';
 import {
   useCategories,
   useMostChosen,
@@ -16,7 +8,7 @@ import {
   useSearch,
   type SearchFilters,
 } from '../../lib/api/queries.js';
-import type { SearchFacets } from '@velnes/contracts';
+
 import { useSession } from '../../lib/api/session.js';
 import { distanceKm, distanceLbl, useUserLocation } from '../../lib/geo.js';
 import { GeoNotice } from '../../components/GeoNotice.js';
@@ -58,7 +50,7 @@ type SalonHit = { id: string; slug: string; name: string; city: string | null };
  * booked before is the §5 work, and it will land behind that one door
  * rather than in this component.
  */
-function useCategoryResults(
+export function useCategoryResults(
   categorySlug: string | undefined,
   query: string | null,
   filters: SearchFilters,
@@ -260,104 +252,11 @@ function SalonHits({ salons, title }: { salons: SalonHit[]; title: string }) {
   );
 }
 
-/**
- * The filter bar — step 8 of docs/SEARCH.md.
- *
- * Every control here is a *server-side admission*: choosing one asks
- * the door a narrower question and the door answers it. Nothing is
- * re-sorted or hidden on this side, because the order is the product
- * and a page that quietly re-filters it is showing an answer nobody can
- * explain afterwards.
- *
- * A control appears only when it can do something. Bands the door was
- * unable to compute honestly, and a category list with one entry in it,
- * are absent rather than inert — leaving a dead control on the page is
- * the same failure as a fake availability badge.
- *
- * Deliberately missing, and staying missing until the data behind them
- * is real: **Now** (needs live availability) and any rating filter
- * (needs reviews).
- */
-function FilterBar({
-  facets,
-  filters,
-  set,
-  canDistance,
-}: {
-  facets: SearchFacets;
-  filters: SearchFilters;
-  set: (patch: Partial<SearchFilters>) => void;
-  canDistance: boolean;
-}) {
-  const bands = facets.price;
-  const cats = facets.categories;
-  if (!bands && !cats.length && !canDistance) return null;
-  return (
-    <div className="filterbar">
-      {cats.length ? (
-        <div className="chips">
-          <Pick on={!filters.categoryId} set={() => set({ categoryId: null })}>
-            {t('c.res.all')}
-          </Pick>
-          {cats.map((c) => (
-            <Pick
-              key={c.id}
-              on={filters.categoryId === c.id}
-              set={() => set({ categoryId: c.id })}
-            >
-              {c.name} <span className="muted">{c.count}</span>
-            </Pick>
-          ))}
-        </div>
-      ) : null}
-      {bands ? (
-        <div className="chips">
-          <Pick on={!filters.priceBand} set={() => set({ priceBand: null })}>
-            {t('c.res.anyPrice')}
-          </Pick>
-          <Pick on={filters.priceBand === 'low'} set={() => set({ priceBand: 'low' })}>
-            {t('c.res.upTo', { p: fmtMKD(bands.lowMax) })}
-          </Pick>
-          <Pick on={filters.priceBand === 'mid'} set={() => set({ priceBand: 'mid' })}>
-            {fmtMKD(bands.lowMax)}&ndash;{fmtMKD(bands.midMax)}
-          </Pick>
-          <Pick on={filters.priceBand === 'high'} set={() => set({ priceBand: 'high' })}>
-            {t('c.res.over', { p: fmtMKD(bands.midMax) })}
-          </Pick>
-        </div>
-      ) : null}
-      {/* A distance only means something once somebody has said where
-          they are, so it appears with their location and not before. */}
-      {canDistance ? (
-        <div className="chips">
-          <Pick on={!filters.radiusKm} set={() => set({ radiusKm: null })}>
-            {t('c.res.anyDistance')}
-          </Pick>
-          {[2, 5, 10].map((km) => (
-            <Pick key={km} on={filters.radiusKm === km} set={() => set({ radiusKm: km })}>
-              {t('c.res.withinKm', { km })}
-            </Pick>
-          ))}
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-function Pick({
-  on,
-  set,
-  children,
-}: {
-  on: boolean;
-  set: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button className={`chip${on ? ' on' : ''}`} onClick={set} aria-pressed={on}>
-      {children}
-    </button>
-  );
+/** "Show N results": the same hook the page uses, asked with the
+ *  drawer's draft — a real number, or nothing while it is being counted. */
+function LiveCount({ category, query, draft }: { category: string | undefined; query: string | null; draft: SearchFilters }) {
+  const { rows, loaded } = useCategoryResults(category, query, draft);
+  return <>{loaded ? t('c.filt.showN', { n: rows.length }) : t('c.res.showResults')}</>;
 }
 
 /**
@@ -394,11 +293,11 @@ function whereLine(s: ServiceVM, away: string | null) {
   return `${s.salon.name}${away ?? s.salon.city ? ` · ${away ?? s.salon.city}` : ''}`;
 }
 
-function BestD({ s }: { s: ServiceVM }) {
+function BestD({ s, on = false, onSelect }: { s: ServiceVM; on?: boolean; onSelect?: (() => void) | undefined }) {
   const nav = useNavigate();
   const { av, pr, away } = useLiveLine(s);
   return (
-    <article className="best">
+    <article className={`best${on ? ' on' : ''}`} data-salon={s.salon.slug} onMouseEnter={onSelect} onClick={onSelect}>
       <span className="flag" style={{ zIndex: 2 }}>{t('c.res.bestMatch')}</span>
       <div className="grid">
         <div className="ph" style={{ backgroundImage: s.salon.photo }}></div>
@@ -429,11 +328,11 @@ function BestD({ s }: { s: ServiceVM }) {
   );
 }
 
-function AltD({ s }: { s: ServiceVM }) {
+function AltD({ s, on = false, onSelect }: { s: ServiceVM; on?: boolean; onSelect?: (() => void) | undefined }) {
   const nav = useNavigate();
   const { av, pr, away } = useLiveLine(s);
   return (
-    <article className="card alt">
+    <article className={`card alt${on ? ' on' : ''}`} data-salon={s.salon.slug} onMouseEnter={onSelect} onClick={onSelect}>
       <div className="ph" style={{ backgroundImage: s.salon.photo }}></div>
       <div>
         <h4>{s.name}</h4>
@@ -593,7 +492,7 @@ export function Results() {
   );
 
   const {
-    cat, cats, rows, best, alts, loaded, unknown, personalised, rankVersion, nowRequested, availableNow,
+    cat, cats, rows, best, alts, loaded, unknown, personalised, nowRequested, availableNow,
     directSalon, salons, widened, how, facets, hiddenUnpriced,
   } = useCategoryResults(category, query, filters);
 
@@ -689,9 +588,43 @@ export function Results() {
     if (radius != null && geo.decision === 'allowed' && geo.status === 'off') geo.locate();
     // Entry only, like the home page.
   }, []);
-  /** What the panel has applied, for its button. */
+  /**
+   * How many secondary refinements are on, for the Filters button. What,
+   * Where and When — the query, Near me, Available now — are the search
+   * itself and never count; the distance counts only once it differs
+   * from what Near me set (Alex, 2026-09-29).
+   */
   const nFilt =
-    (filters.priceMin != null || filters.priceMax != null ? 1 : 0) + (filters.now ? 1 : 0) + filters.amenities.length;
+    (filters.categoryId ? 1 : 0) +
+    (filters.priceBand || filters.priceMin != null || filters.priceMax != null ? 1 : 0) +
+    filters.amenities.length +
+    (filters.radiusKm != null && filters.radiusKm !== NEAR_KM ? 1 : 0);
+  /**
+   * The desktop's one selection, shared by the cards and the map's
+   * markers — the salon's slug, which is what a pin is. A hovered or
+   * clicked card selects; a tapped marker selects and scrolls its first
+   * card into view.
+   */
+  const [selectedSalon, setSelectedSalon] = useState<string | null>(null);
+  const selectFromMap = useCallback((slug: string) => {
+    setSelectedSalon(slug);
+    document.querySelector<HTMLElement>(`#d-reslist [data-salon="${CSS.escape(slug)}"]`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }, []);
+  /** Filters on desktop and phone alike: one panel, two presentations. */
+  const filtersPanel = filtersOpen ? (
+    <FiltersSheet
+      facets={facets}
+      filters={filters}
+      canDistance={geo.status === 'on'}
+      nearOn={geo.status === 'on' && filters.radiusKm != null}
+      onClose={() => setFiltersOpen(false)}
+      onApply={(patch) => {
+        setFilters(patch);
+        setFiltersOpen(false);
+      }}
+      count={(draft) => <LiveCount category={category} query={query} draft={draft} />}
+    />
+  ) : null;
   /** Lit means "filtering near you", not merely "location is on". */
   const nearOn = geo.status === 'on' && radius != null;
   /**
@@ -860,10 +793,12 @@ export function Results() {
         return true;
       })
       .map((s, i) => ({
+        id: s.salon.slug,
         lat: s.salon.lat!,
         lng: s.salon.lng!,
         label: s.salon.name,
         sub: s.salon.city,
+        sub2: s.availableAt ? t('c.availNow', { t: s.availableAt }) : null,
         here: i === 0,
         // The card the pin opens. Everything on it is something the
         // platform actually knows — the salon's own photograph, whether
@@ -904,6 +839,7 @@ export function Results() {
   }, [rows]);
   return (
     <>
+      {filtersPanel}
       <div className="d-env">
         <section data-screen="results">
           <div className="d-topbar">
@@ -968,37 +904,43 @@ export function Results() {
           </div>
           <div className={`d-wrap res-layout${landing ? ' solo' : ''}`}>
             <div>
-              {/* Claiming an order when nothing was ordered — a page
-                  showing only a salon we matched by name — is a small
-                  boast about work that did not happen. */}
-              {rows.length ? (
-              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '14px', marginBottom: '12px' }}>
-                <div>
-                  <div className="spark" style={{ display: 'inline-flex', gap: '8px', alignItems: 'center', fontWeight: '700', color: 'var(--ink)', fontSize: '16px' }}>
-                    {IcSpark}{t('c.res.thinks')}
-                  </div>
-                  <div className="sm muted" style={{ marginTop: '2px' }}>
-                    {personalised
-                      ? t('c.res.orderPersonal')
-                      : geo.status === 'on'
-                        ? t('c.res.orderNear')
-                        : t('c.res.orderPrice')}
-                    {import.meta.env.DEV && rankVersion ? (
-                      <span style={{ opacity: 0.6 }}> · {t('c.res.rankVersion', { v: rankVersion })}</span>
+              {/* The results header (Alex, 2026-09-29): what was found,
+                  whether the viewer's own account shaped the order, and
+                  the way into the refinements — nothing else between the
+                  search and the first result. */}
+              {landing ? <SearchLanding cats={browse} /> : null}
+              {!landing ? (
+                <div className="res-head">
+                  <div>
+                    <h2 className="res-count">
+                      {loaded
+                        ? geo.status === 'on'
+                          ? pins.length === 1 ? t('c.map.countNearOne') : t('c.map.countNear', { n: pins.length })
+                          : pins.length === 1 ? t('c.map.countOne') : t('c.map.count', { n: pins.length })
+                        : t('c.res.loading')}
+                    </h2>
+                    {personalised && rows.length ? (
+                      <span className="res-personal" title={t('c.res.personalizedInfo')}>
+                        {IcSpark}
+                        {t('c.res.personalized')}
+                        <span className="res-info" aria-label={t('c.res.personalizedInfo')} role="img">
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><circle cx="12" cy="12" r="8.5" /><path d="M12 11v5M12 8h.01" /></svg>
+                        </span>
+                      </span>
                     ) : null}
                   </div>
+                  <button
+                    type="button"
+                    className={`btn btn-g res-filt${nFilt ? ' on' : ''}`}
+                    onClick={() => setFiltersOpen(true)}
+                    aria-label={nFilt ? t('c.res.filtersApplied', { n: nFilt }) : t('c.res.filters')}
+                  >
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M4 7h10M18 7h2M4 17h4M12 17h8" /><circle cx="15.5" cy="7" r="2" /><circle cx="9.5" cy="17" r="2" /></svg>
+                    {t('c.res.filters')}
+                    {nFilt ? <span className="res-filt-n">{nFilt}</span> : null}
+                  </button>
                 </div>
-              </div>
               ) : null}
-              {landing ? <SearchLanding cats={browse} /> : null}
-              {landing ? null : (
-                <FilterBar
-                  facets={facets}
-                  filters={filters}
-                  set={setFilters}
-                  canDistance={geo.status === 'on'}
-                />
-              )}
               <div id="d-reslist" hidden={landing}>
                 {salons.length ? <SalonHits salons={salons} title={title} /> : null}
                 {note ? (
@@ -1010,7 +952,7 @@ export function Results() {
 
                 {/* "Nothing matched" would be a lie when the salon block
                     above is standing there having matched. */}
-                {best ? <BestD s={best} /> : loaded && !salons.length ? (
+                {best ? <BestD s={best} on={selectedSalon === best.salon.slug} onSelect={() => setSelectedSalon(best.salon.slug)} /> : loaded && !salons.length ? (
                   <div style={{ padding: '18px 4px' }}>
                     <div className="sm muted">{emptyLine(title, unknown, Boolean(query), { km: filters.radiusKm, city: filters.city })}</div>
                     {filters.radiusKm ? (
@@ -1031,7 +973,7 @@ export function Results() {
                     <h2 className="serif" style={{ fontSize: '19px', margin: '22px 0 2px' }}>{t('c.res.alts')}</h2>
                     <div className="sm muted" style={{ marginBottom: '12px' }}>{t('c.res.altsSub')}</div>
                     {alts.map((s) => (
-                      <AltD key={s.id} s={s} />
+                      <AltD key={s.id} s={s} on={selectedSalon === s.salon.slug} onSelect={() => setSelectedSalon(s.salon.slug)} />
                     ))}
                   </>
                 ) : null}
@@ -1063,6 +1005,9 @@ export function Results() {
                 zoom={13}
                 height="100%"
                 radius={0}
+                labels={false}
+                selectedId={selectedSalon}
+                onSelect={selectFromMap}
                 emptyNote={
                   pins.length
                     ? undefined
@@ -1130,17 +1075,6 @@ export function Results() {
                 ) : null}
               </div>
             </div>
-            {filtersOpen ? (
-              <FiltersSheet
-                facets={facets}
-                filters={filters}
-                onClose={() => setFiltersOpen(false)}
-                onApply={(patch) => {
-                  setFilters(patch);
-                  setFiltersOpen(false);
-                }}
-              />
-            ) : null}
             {!landing ? (
               <button className="m-mapfab" aria-label={t('c.res.mapView')} onClick={() => setMapOpen(true)}>
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M9 4 3 6.5v13L9 17l6 2.5 6-2.5v-13L15 6.5z" /><path d="M9 4v13M15 6.5v13" /></svg>

@@ -1,24 +1,31 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { AmenityKey, SearchFacets } from '@velnes/contracts';
 import { fmtMKD } from '../../lib/api/mappers.js';
 import type { SearchFilters } from '../../lib/api/queries.js';
 import { t } from '../../lib/i18n-core.js';
 import { AmenityIcon } from '../salon/SalonAmenities.js';
-import { SUGGEST_ICONS } from './suggestIcons.js';
 
 /**
- * The phone's filters panel (Alex, 2026-09-29): over the current
- * answer, three questions — a **price range** on a histogram of the
- * answer's own prices with two handles, **when** (any time, or a start
- * within 30 minutes), and the **amenities** present in the answer —
- * chosen here and applied together on "Show results". The doors do the
- * filtering, as they do every filter: the panel only writes the URL.
- * The search sheet is for asking a different question; this is for
- * narrowing the answer to this one.
+ * The filters — one panel, two presentations (Alex, 2026-09-29): a
+ * bottom sheet on a phone, a right-hand drawer on a desk, the same
+ * sections, state and semantics. Over the current answer, the
+ * **secondary refinements**: treatment category (one, as the door
+ * takes it), a **price range** on a histogram of the answer's own prices
+ * with two handles (the ends meaning any price), **distance** once a
+ * position is known, and the **amenities** present in the answer.
+ * Chosen here, applied together on the CTA, which says how many results
+ * that would be — a real count from the same hook the page uses.
+ *
+ * Not here: What, Where and When. The query, Near me and Available now
+ * are the search itself and live in the search context above the
+ * results; "Clear all" leaves them alone and only takes the refinements
+ * off — distance going back to what Near me set, when Near me is on.
  */
 
 const BUCKETS = 28;
+const NEAR_KM = 10;
+const AMENITIES_SHOWN = 6;
 
 /** Bars for the histogram: how many prices fall in each of `n` equal
  *  slices between the lowest and the highest. */
@@ -41,34 +48,42 @@ export function histogram(prices: readonly number[], n = BUCKETS): number[] {
 export function FiltersSheet({
   facets,
   filters,
+  canDistance,
+  nearOn,
   onApply,
   onClose,
+  count,
 }: {
   facets: SearchFacets;
   filters: SearchFilters;
+  /** A position is known, so a distance means something. */
+  canDistance: boolean;
+  /** Near me is on: "Clear all" returns the distance to its default. */
+  nearOn: boolean;
   onApply: (patch: Partial<SearchFilters>) => void;
   onClose: () => void;
+  /** The CTA's words for a draft — "Show 23 results" when known. */
+  count?: (draft: SearchFilters) => ReactNode;
 }) {
   useTranslation();
   const prices = facets.prices;
   const lo = prices[0] ?? 0;
   const hi = prices[prices.length - 1] ?? 0;
+  const [cat, setCat] = useState<string | null>(filters.categoryId);
   const [min, setMin] = useState<number>(filters.priceMin ?? lo);
   const [max, setMax] = useState<number>(filters.priceMax ?? hi);
-  const [now, setNow] = useState(filters.now);
+  const [radius, setRadius] = useState<number | null>(filters.radiusKm);
   const [amen, setAmen] = useState<AmenityKey[]>(filters.amenities);
+  const [allAmen, setAllAmen] = useState(false);
   const bars = useMemo(() => histogram(prices), [prices]);
   const peak = Math.max(1, ...bars);
 
-  // While the panel is up the page behind must not move: the window
-  // and the phone's own scrolling panels are locked, and the sheet's
-  // body contains its overscroll (CSS), so a finger on the sheet scrolls
-  // the sheet and nothing else.
+  // While the panel is up the page behind must not move; iOS ignores
+  // overflow:hidden on the body for touch scrolling, so the body is
+  // pinned where it is and put back afterwards.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
     window.addEventListener('keydown', onKey);
-    // iOS ignores overflow:hidden on the body for touch scrolling; pinning
-    // the body where it is, and putting it back, is what actually holds.
     const y = window.scrollY;
     const body = document.body;
     const prev = { position: body.style.position, top: body.style.top, width: body.style.width, overflow: body.style.overflow };
@@ -90,20 +105,30 @@ export function FiltersSheet({
   const clampedMin = Math.min(min, max);
   const clampedMax = Math.max(min, max);
   const toggle = (k: AmenityKey) => setAmen((a) => (a.includes(k) ? a.filter((x) => x !== k) : [...a, k]));
-  /** Clear all is an act, not a reset: every filter comes off the answer
-   *  at once and the panel closes (Alex, 2026-09-29). */
-  const clear = () => onApply({ priceMin: null, priceMax: null, now: false, amenities: [] });
-  const applied = filters.now || filters.amenities.length > 0 || filters.priceMin != null || filters.priceMax != null;
-  const anything = applied || now || amen.length > 0 || (canPrice && (clampedMin > lo || clampedMax < hi));
+  /** What the panel would apply, as the page's filters. */
+  const draft: SearchFilters = {
+    ...filters,
+    categoryId: cat,
+    priceBand: null,
+    // The range only travels when it narrows: handles at the ends mean "any price".
+    priceMin: canPrice && clampedMin > lo ? clampedMin : null,
+    priceMax: canPrice && clampedMax < hi ? clampedMax : null,
+    radiusKm: canDistance ? radius : filters.radiusKm,
+    amenities: amen,
+  };
+  /** Clear all is an act, not a reset: every refinement comes off the
+   *  answer at once and the panel closes — the search itself stays. */
+  const clear = () =>
+    onApply({ categoryId: null, priceBand: null, priceMin: null, priceMax: null, amenities: [], radiusKm: nearOn ? NEAR_KM : filters.radiusKm });
+  const appliedRefinements =
+    Boolean(filters.categoryId || filters.priceBand || filters.priceMin != null || filters.priceMax != null || filters.amenities.length) ||
+    (filters.radiusKm != null && filters.radiusKm !== NEAR_KM);
+  const draftRefinements =
+    Boolean(cat || amen.length || draft.priceMin != null || draft.priceMax != null) || (canDistance && radius != null && radius !== NEAR_KM);
   const apply = () =>
-    onApply({
-      // The range only travels when it narrows: handles at the ends mean "any price".
-      priceMin: canPrice && clampedMin > lo ? clampedMin : null,
-      priceMax: canPrice && clampedMax < hi ? clampedMax : null,
-      now,
-      amenities: amen,
-    });
+    onApply({ categoryId: draft.categoryId, priceBand: null, priceMin: draft.priceMin, priceMax: draft.priceMax, amenities: draft.amenities, radiusKm: draft.radiusKm });
   const pct = (v: number) => (hi > lo ? ((v - lo) / (hi - lo)) * 100 : 0);
+  const amenities = allAmen ? facets.amenities : facets.amenities.slice(0, AMENITIES_SHOWN);
 
   return (
     <>
@@ -116,6 +141,26 @@ export function FiltersSheet({
           </button>
         </div>
         <div className="fs-body">
+          {/* ── Treatments & categories — one, as the door takes it ── */}
+          {facets.categories.length > 1 ? (
+            <section className="fs-sec">
+              <h3>{t('c.filt.categories')}</h3>
+              <div className="fs-radios" role="radiogroup" aria-label={t('c.filt.categories')}>
+                <button type="button" role="radio" aria-checked={cat === null} className={`fs-radio${cat === null ? ' on' : ''}`} onClick={() => setCat(null)}>
+                  <span className="dot" />
+                  <span className="grow">{t('c.res.all')}</span>
+                </button>
+                {facets.categories.map((c) => (
+                  <button key={c.id} type="button" role="radio" aria-checked={cat === c.id} className={`fs-radio${cat === c.id ? ' on' : ''}`} onClick={() => setCat(c.id)}>
+                    <span className="dot" />
+                    <span className="grow">{c.name}</span>
+                    <span className="sm muted">{c.count}</span>
+                  </button>
+                ))}
+              </div>
+            </section>
+          ) : null}
+
           {/* ── Price range ─────────────────────────────────────── */}
           <section className="fs-sec">
             <h3>{t('c.filt.price')}</h3>
@@ -133,24 +178,8 @@ export function FiltersSheet({
                 <div className="fs-range">
                   <div className="fs-track" />
                   <div className="fs-fill" style={{ left: `${pct(clampedMin)}%`, right: `${100 - pct(clampedMax)}%` }} />
-                  <input
-                    type="range"
-                    min={lo}
-                    max={hi}
-                    step={10}
-                    value={clampedMin}
-                    aria-label={t('c.filt.min')}
-                    onChange={(e) => setMin(Math.min(Number(e.target.value), clampedMax))}
-                  />
-                  <input
-                    type="range"
-                    min={lo}
-                    max={hi}
-                    step={10}
-                    value={clampedMax}
-                    aria-label={t('c.filt.max')}
-                    onChange={(e) => setMax(Math.max(Number(e.target.value), clampedMin))}
-                  />
+                  <input type="range" min={lo} max={hi} step={10} value={clampedMin} aria-label={t('c.filt.min')} onChange={(e) => setMin(Math.min(Number(e.target.value), clampedMax))} />
+                  <input type="range" min={lo} max={hi} step={10} value={clampedMax} aria-label={t('c.filt.max')} onChange={(e) => setMax(Math.max(Number(e.target.value), clampedMin))} />
                 </div>
                 <div className="fs-minmax">
                   <span>
@@ -168,48 +197,52 @@ export function FiltersSheet({
             )}
           </section>
 
-          {/* ── When ─────────────────────────────────────────────── */}
-          <section className="fs-sec">
-            <h3>{t('c.filt.when')}</h3>
-            <div className="ss-chips" style={{ margin: 0 }}>
-              <button type="button" className={`chip${!now ? ' on' : ''}`} onClick={() => setNow(false)} aria-pressed={!now}>
-                {t('c.ss.anyTime')}
-              </button>
-              <button type="button" className={`chip${now ? ' on' : ''}`} onClick={() => setNow(true)} aria-pressed={now} title={t('c.nowTitle')}>
-                {SUGGEST_ICONS.bolt}
-                {t('c.now')}
-              </button>
-            </div>
-          </section>
+          {/* ── Distance — a refinement of Near me, once there is a position ── */}
+          {canDistance ? (
+            <section className="fs-sec">
+              <h3>{t('c.filt.distance')}</h3>
+              <div className="fs-radios" role="radiogroup" aria-label={t('c.filt.distance')}>
+                <button type="button" role="radio" aria-checked={radius === null} className={`fs-radio${radius === null ? ' on' : ''}`} onClick={() => setRadius(null)}>
+                  <span className="dot" />
+                  <span className="grow">{t('c.res.anyDistance')}</span>
+                </button>
+                {[2, 5, 10].map((km) => (
+                  <button key={km} type="button" role="radio" aria-checked={radius === km} className={`fs-radio${radius === km ? ' on' : ''}`} onClick={() => setRadius(km)}>
+                    <span className="dot" />
+                    <span className="grow">{t('c.res.withinKm', { km })}</span>
+                  </button>
+                ))}
+              </div>
+            </section>
+          ) : null}
 
           {/* ── Amenities — only those the answer actually has ────── */}
           {facets.amenities.length ? (
             <section className="fs-sec">
               <h3>{t('c.filt.amenities')}</h3>
               <div className="fs-amen">
-                {facets.amenities.map((a) => (
-                  <button
-                    key={a.key}
-                    type="button"
-                    className={`fs-amen-row${amen.includes(a.key) ? ' on' : ''}`}
-                    onClick={() => toggle(a.key)}
-                    aria-pressed={amen.includes(a.key)}
-                  >
+                {amenities.map((a) => (
+                  <button key={a.key} type="button" className={`fs-amen-row${amen.includes(a.key) ? ' on' : ''}`} onClick={() => toggle(a.key)} aria-pressed={amen.includes(a.key)}>
                     <AmenityIcon k={a.key} />
                     <span className="grow">{t(`amenity.${a.key}`)}</span>
                     <span className="sm muted">{a.count}</span>
                   </button>
                 ))}
               </div>
+              {facets.amenities.length > AMENITIES_SHOWN && !allAmen ? (
+                <button type="button" className="ss-link" style={{ padding: '8px 0' }} onClick={() => setAllAmen(true)}>
+                  {t('c.sal.showAllAmenities', { n: facets.amenities.length })}
+                </button>
+              ) : null}
             </section>
           ) : null}
         </div>
         <div className="ss-foot">
-          <button type="button" className="ss-link" onClick={clear} disabled={!anything}>
+          <button type="button" className="ss-link" onClick={clear} disabled={!appliedRefinements && !draftRefinements}>
             {t('c.ss.clearAll')}
           </button>
           <button type="button" className="btn btn-p ss-go" onClick={apply}>
-            {t('c.res.showResults')}
+            {count ? count(draft) : t('c.res.showResults')}
           </button>
         </div>
       </div>

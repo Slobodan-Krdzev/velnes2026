@@ -811,3 +811,31 @@ the sheet's way. Opening and closing the map changes nothing about the
 search. Desktop keeps its side map. Deferrals: clustering (the markers
 are plain `divIcon`s a cluster group can take), "Search this area"
 (needs a bounds filter on the door), ratings (none exist).
+
+**Desktop results: search, then results and the map, filters on demand
+(2026-09-29).** The rows of chips between the search bar and the first
+result — every category with its count, three price bands, three
+distances — are gone from the desktop page. What remains above the
+split is the search context (the query, Near me, Available now — What,
+Where, When, never counted as filters) and a **results head**: the
+count ("23 places near you"), a quiet "✦ Personalized for you ⓘ" only
+when the viewer's own account shaped the order (the info explains it
+and points to My Velnes; no "ranking vN" anywhere a customer looks), and
+a **Filters** button with the number of refinements on. That button
+opens the same panel the phone has (`FiltersSheet.tsx`), presented as a
+right-hand drawer on a desk and a bottom sheet on a phone: treatment
+category (one, as the door takes it — a radio list with counts), the
+price range on the answer's histogram (the bands are retired from the
+UI; the doors keep them), distance once a position is known (a
+refinement of Near me), and the amenities in the answer (six, then
+all). "Available now" is not in the panel any more, on either device:
+it is When, in the search context, one truth. "Clear all" takes the
+refinements off and returns the distance to what Near me set, leaving
+the search itself alone; the CTA says "Show N results" from the same
+hook the page uses. The desktop map stays sticky beside the results and
+now runs the results mode built for the phone — Velnes markers, no
+tooltips, one `selectedId`: hovering or clicking a card selects its
+marker, a marker tap selects and scrolls the card into view. Sort is
+not shown: the ranker has one order and the doors take no sort; a
+truthful Sort later means a `sort` on both doors (distance with a
+position, price low to high, soonest in now-mode).
