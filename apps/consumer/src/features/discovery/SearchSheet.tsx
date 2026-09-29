@@ -224,11 +224,17 @@ function SearchSheet({ opts, onClose }: { opts: OpenOptions; onClose: () => void
   /** Autocomplete over the platform's towns and the gazetteer. */
   const townMatches = matchTowns(typedTown, towns);
   const typedIsKnown = townMatches.some((tw) => normTown(tw.name) === normTown(typedTown));
-  /** The well-known places as quick picks, with the platform's counts. */
-  const famous = FAMOUS_TOWNS.map((name) => ({
-    name,
-    salons: towns.find((tw) => normTown(tw.name) === normTown(name))?.salons ?? 0,
-  })).sort((a, b) => b.salons - a.salons); // towns with something to book first; the list's order breaks ties
+  /** Quick picks: only towns that have salons (Alex, 2026-09-29 — a town
+   *  with nothing to book is not a suggestion), most salons first, the
+   *  well-known order breaking ties. Any other town can still be typed. */
+  const rank = (name: string) => {
+    const i = FAMOUS_TOWNS.findIndex((f) => normTown(f) === normTown(name));
+    return i < 0 ? FAMOUS_TOWNS.length : i;
+  };
+  const famous = towns
+    .filter((tw) => tw.salons > 0)
+    .slice()
+    .sort((a, b) => b.salons - a.salons || rank(a.name) - rank(b.name) || a.name.localeCompare(b.name));
   const townSub = (n: number) =>
     n === 0 ? t('c.ss.noSalonsYet') : n === 1 ? t('c.cards.salonOne', { n: 1 }) : t('c.cards.salonMany', { n });
   /** Nearby needs a position: ask now if never asked, take a fresh fix
@@ -244,7 +250,9 @@ function SearchSheet({ opts, onClose }: { opts: OpenOptions; onClose: () => void
       patch({ nearby: false, radiusKm: null });
       return;
     }
-    patch({ nearby: true, city: null, radiusKm: st.radiusKm ?? NEAR_KM });
+    // Nearby means within 10 km (Alex, 2026-09-29): one answer, no chips
+    // — the results page still narrows or widens it afterwards.
+    patch({ nearby: true, city: null, radiusKm: NEAR_KM });
     askForPosition();
   };
 
@@ -290,7 +298,7 @@ function SearchSheet({ opts, onClose }: { opts: OpenOptions; onClose: () => void
     } else if (it.nearby && !nearBlocked) {
       next.nearby = true;
       next.city = null;
-      next.radiusKm = it.radiusKm ?? NEAR_KM;
+      next.radiusKm = NEAR_KM;
       askForPosition();
     }
     if (it.now) next.now = true;
@@ -334,8 +342,7 @@ function SearchSheet({ opts, onClose }: { opts: OpenOptions; onClose: () => void
       // resolves `near=1` — a radius once there is a fix, nothing if the
       // person said no — and the chosen distance comes along for it.
       p.set('near', '1');
-      if (st.radiusKm && st.radiusKm !== NEAR_KM) p.set('km', String(st.radiusKm));
-      else if (st.radiusKm) p.set('km', String(NEAR_KM));
+      p.set('km', String(NEAR_KM));
     }
     if (st.priceBand && facets?.price) p.set('price', st.priceBand);
     onClose();
@@ -432,15 +439,6 @@ function SearchSheet({ opts, onClose }: { opts: OpenOptions; onClose: () => void
                 <span className="sm muted">{nearBlocked ? t('c.geo.enableHint') : t('c.ss.nearbySub')}</span>
               </span>
             </button>
-            {st.nearby ? (
-              <div className="ss-chips">
-                {[2, 5, 10].map((km) => (
-                  <button key={km} type="button" className={`chip${st.radiusKm === km ? ' on' : ''}`} onClick={() => patch({ radiusKm: km })} aria-pressed={st.radiusKm === km}>
-                    {t('c.res.withinKm', { km })}
-                  </button>
-                ))}
-              </div>
-            ) : null}
             {/* A town, typed or picked. The suggestions are the towns
                 salons are actually in, most first — a name here is a
                 promise there is something to book — and anything typed
