@@ -77,6 +77,25 @@ describe('the consumer app', () => {
     await waitFor(() => expect(screen.getAllByText('Zen Rooms').length).toBeGreaterThan(0));
   });
 
+  it('the phone home reads search, chips, recommended, then the treatments under "Explore treatments"', async () => {
+    render(<App />);
+    await waitFor(() => expect(screen.getAllByText('Zen Rooms').length).toBeGreaterThan(0));
+    const phone = document.querySelector('.m-env')!;
+    const before = (a: Element, b: Element) => Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+    const chips = phone.querySelector('.m-chiprow')!;
+    const reco = phone.querySelector('.m-reco')!;
+    const explore = [...phone.querySelectorAll('h2')].find((h) => h.textContent === 'Explore treatments')!;
+    const rail = phone.querySelector('.catrail')!;
+    // Alex, 2026-09-29: nothing between the chips and Recommended — the
+    // treatment rail moved down under its own heading.
+    expect(before(chips, reco)).toBe(true);
+    expect(before(reco, explore)).toBe(true);
+    expect(before(explore, rail)).toBe(true);
+    expect(phone.querySelector('.m-chiprow + .catrail')).toBeNull();
+    // No section heading for a section with nothing in it.
+    expect([...phone.querySelectorAll('h2')].some((h) => h.textContent === 'Newest to Velnes')).toBe(false);
+  });
+
   it('the "Available now" chip asks the search screen for everything now, near me', async () => {
     render(<App />);
     await screen.findAllByText('Massage tomorrow');

@@ -1326,3 +1326,66 @@ a.pop-go:hover {
 /* About, folded to five lines until "Read more" (Alex, 2026-09-29). */
 .about-p.fold{display:-webkit-box;-webkit-line-clamp:5;-webkit-box-orient:vertical;overflow:hidden}
 .about-more{display:inline-block;margin-top:8px;padding:0;border:0;background:none;font:inherit;font-weight:700;color:var(--brand-hover);cursor:pointer;text-decoration:underline;text-underline-offset:3px}
+
+/* ── The phone home, re-ordered (Alex, 2026-09-29) ───────────────
+   Search is the hero and nothing competes with it: the chips sit
+   close under the pill, a little lighter than before; every section
+   after them opens with the same larger gap, so the page has one
+   rhythm — search, small gap, chips, larger gap, heading, cards. */
+@media (max-width: 899.98px) {
+  .m-home .m-chiprow {
+    padding: 8px 16px 2px;
+  }
+  .m-home .m-chiprow .qchip {
+    padding: 7px 12px;
+    font-size: 12.5px;
+    min-height: 36px;
+  }
+  .m-home .home-sec {
+    padding-top: 26px;
+  }
+  .m-home .home-sec.first {
+    padding-top: 16px;
+  }
+  /* The treatment rail under its heading: the same gutters as a row. */
+  .m-home .home-sec + .catrail .catrail-track {
+    padding-top: 0;
+  }
+}
+/* Tablet: the same hierarchy with room to breathe — wider gutters, two
+   "available now" cards to a row, wider salon and treatment cards. */
+@media (min-width: 700px) and (max-width: 899.98px) {
+  .m-home .m-topbar,
+  .m-home .m-chiprow,
+  .m-home .m-sec,
+  .m-home .m-reco,
+  .m-home .m-avail,
+  .m-home .catrail-track {
+    padding-left: 24px;
+    padding-right: 24px;
+  }
+  .m-home .m-sec .h h2 {
+    font-size: 22px;
+  }
+  .m-home .home-sec {
+    padding-top: 32px;
+  }
+  .m-home .m-reco .rc2 {
+    flex-basis: 268px;
+  }
+  .m-home .m-avail {
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+  .m-env .m-home .catrail-track > .catcard {
+    flex-basis: 200px;
+    width: 200px;
+  }
+  .m-home .m-trust,
+  .m-home .m-band,
+  .m-home .m-why,
+  .m-home .m-proban {
+    margin-left: 24px;
+    margin-right: 24px;
+  }
+}

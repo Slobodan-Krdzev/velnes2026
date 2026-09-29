@@ -425,6 +425,29 @@ a salon with none falls back to the prototype's decorative image, which
 is the one place the app still shows a picture that is not the salon's
 own.
 
+## The phone home, re-ordered (2026-09-29)
+
+Search is the phone home's hero and nothing competes with it in the
+first screen (Alex, 2026-09-29). The order is now: the sticky search
+pill (the What/Where/When sheet, unchanged) → one compact row of
+ready-made search intents (the chips; only "Available now" is coral) →
+**Recommended** (the recommended door, its existing fallback to every
+salon for a viewer with no history) → **Available now near you**
+(unchanged: starts within 30 minutes, nearest first; hidden when empty)
+→ **Explore treatments** (the same looping treatment rail, moved down
+under its own heading) → **Newest to Velnes** (hidden when none) → the
+trust grid and everything after, untouched. One spacing rhythm: a small
+gap under the pill, a larger one before every heading. Between 700 and
+899px (tablet) the same tree gets wider gutters, two "available now"
+cards to a row and wider cards. The desktop tree is unchanged, and no
+door is asked twice — every hook was already hoisted to the top of
+`Home`. The recommendation reason "Does X, like you book" now reads
+"Because you book X" in all three languages. The state before this
+change is tagged `home-mobile-before-2026-09-29` for a one-command
+revert. Not done here: the chips are still the six fixed labels rather
+than the suggestions door the sheet uses, and "available now" has no
+per-salon diversification yet — both remain deferrals.
+
 ## A result is a treatment at a place
 
 Since 2026-09-29 (Alex: "Sloboz Cuts has two locations — show both"), a
