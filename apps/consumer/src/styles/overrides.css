@@ -1024,8 +1024,15 @@ a.pop-go:hover {
   .m-page{min-height:0}
   /* Context bars stick at the top of the screen. */
   .m-dethead,.m-topbar,.acc-top,.m-head{top:var(--m-top)}
-  /* The salon's Book-now bar rides above the tab bar. */
-  .m-bookbar{bottom:calc(var(--m-tab) + env(safe-area-inset-bottom))}
+  /* The salon's Book-now bar rides above the tab bar — and the tab bar
+     is exactly `--m-tab` tall, so the two meet with no page showing
+     between them (the bar used to be content-sized, ~57px, under a
+     64px lift — Alex, 2026-09-29). */
+  .tabbar{height:calc(var(--m-tab) + env(safe-area-inset-bottom));box-sizing:border-box;align-items:center}
+  /* One pixel lower than the tab bar's top edge: the Book-now bar (z 70)
+     covers the tab bar's own top border (z 60), which otherwise showed
+     as a hairline at the seam. */
+  .m-bookbar{bottom:calc(var(--m-tab) + env(safe-area-inset-bottom) - 1px)}
   .m-page.has-bar{padding-bottom:180px}
   /* Full-screen sheets and modals cover the chrome as before. */
   .m-sheet,.mapsheet,.gps-modal{top:0;bottom:0}
