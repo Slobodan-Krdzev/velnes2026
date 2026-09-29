@@ -9,13 +9,14 @@ import type {
   DiscoverySalonsSchema,
   DiscoveryCategoryServicesSchema,
   DiscoveryRankedServicesSchema,
+  DiscoverySuggestionsSchema,
   DiscoveryTownsSchema,
   MostChosenSchema,
   SearchResultsSchema,
   PriceBand,
   PublicServicesResponseSchema,
 } from '@velnes/contracts';
-import { pub, pubPost } from './client.js';
+import { pub, pubGet, pubPost } from './client.js';
 
 type Categories = z.infer<typeof DiscoveryCategoriesSchema>;
 type Salons = z.infer<typeof DiscoverySalonsSchema>;
@@ -45,6 +46,36 @@ export interface SearchFilters {
 }
 export const NO_FILTERS: SearchFilters = { priceBand: null, categoryId: null, radiusKm: null, now: false, city: null };
 type Towns = z.infer<typeof DiscoveryTownsSchema>;
+type Suggestions = z.infer<typeof DiscoverySuggestionsSchema>;
+
+/**
+ * Discovery suggestions for the search sheet's empty field — search
+ * intents from the door, shaped by the viewer's own account when they
+ * are signed in and allow it, by the town or position given, or by the
+ * platform's inventory. Whether there is a token belongs in the key;
+ * its value does not.
+ */
+export function useSuggestions(
+  position: { lat: number; lng: number } | null,
+  city: string | null,
+  token: string | null,
+) {
+  const at = position
+    ? { lat: Math.round(position.lat * 1000) / 1000, lng: Math.round(position.lng * 1000) / 1000 }
+    : null;
+  const qs = new URLSearchParams();
+  if (at) {
+    qs.set('lat', String(at.lat));
+    qs.set('lng', String(at.lng));
+  }
+  if (city) qs.set('city', city);
+  const q = qs.toString();
+  return useQuery({
+    queryKey: ['suggestions', at?.lat ?? null, at?.lng ?? null, city, Boolean(token)],
+    queryFn: () => pubGet<Suggestions>(`/discovery/suggestions${q ? `?${q}` : ''}`, token),
+    staleTime: 60_000,
+  });
+}
 
 /** The towns admitted salons are in — the sheet's "Where" list. */
 export function useTowns() {

@@ -725,3 +725,31 @@ button to show all distances or search everywhere, instead of the old
 "nothing published yet", which was false. And while a door is answering
 the results area shows a greyed skeleton of the answer — a best-match
 card and two alternatives, breathing — rather than a blank.
+
+**What? is discovery, not a database (2026-09-29).** Before anybody
+types, the sheet's What? offers **search intents** from a new door,
+`GET /public/discovery/suggestions?lat&lng&city` (optional client
+token): each suggestion carries a kind, an honest `reason`, the
+category / salon / town it is about, and the What / Where / When
+payload it stands for (`DiscoverySuggestionSchema`). Deterministic v1:
+a signed-in viewer with personalisation on gets their favourite salons
+("Visit Mira Fizio again · One of your favourites"), salons they have
+completed visits at, and categories they have booked ("Book your
+Massage again"); everyone gets "Available now", then the categories on
+offer in the town chosen in Where ("Massage in Skopje · 5 salons
+there"), or around their position ("Haircuts near you · 3 salons within
+10 km"), or the platform's most-booked, or — with no bookings yet —
+what is on offer with its count. Wording never outruns evidence: no
+position and no town means no "near you"; a refused location drops
+Nearby from an intent. The client renders words from the kind through
+i18n, so the door knows no language; icons are one brand colour in one
+container, the shape carrying the meaning (`suggestIcons.tsx`, a
+category's from its name). Picking one fills every dimension it names,
+moves to the next unanswered question, and runs nothing until Search;
+a salon suggestion is a destination and opens at once. Typing is the
+other mode and unchanged. The When model names a third answer, "Choose
+date & time", but does not render it until the door has a day-wide
+availability mode. The sheet's body is the only scroll, and the
+opening card settles in over 220 ms. Deferral: ranking beyond these
+rules (time of day, availability of the suggested intent) — the door's
+shape is what a smarter ranker would fill.

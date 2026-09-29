@@ -32,7 +32,15 @@ beforeEach(() => {
   vi.stubGlobal(
     'fetch',
     vi.fn(async (url: string) => {
-      const body = url.includes('/discovery/suggest')
+      const body = url.includes('/discovery/suggestions')
+        ? {
+            how: 'default',
+            suggestions: [
+              { id: 'now-all', kind: 'now_all', reason: 'now', intent: { category: null, salon: null, city: null, nearby: false, radiusKm: null, now: true }, salons: null },
+              { id: 'near-1', kind: 'category_now', reason: 'nearby', intent: { category: { id: '11111111-1111-4111-8111-111111111111', name: 'Massage' }, salon: null, city: null, nearby: true, radiusKm: 10, now: true }, salons: null },
+            ],
+          }
+        : url.includes('/discovery/suggest')
         ? { categories: [{ id: '11111111-1111-4111-8111-111111111111', name: 'Massage', salonCount: 1 }], services: [], salons: [] }
         : url.includes('/discovery/towns')
           ? { towns: [{ name: 'Skopje', salons: 1 }] }
@@ -90,9 +98,8 @@ describe('the consumer app', () => {
     // The tab bar renders before the routes, so its Search is the first.
     fireEvent.click(screen.getAllByRole('button', { name: 'Search' })[0]!);
     const dlg = await screen.findByRole('dialog', { name: 'Search' });
-    // An empty field offers the shelf — every category on offer — even
-    // with no bookings to make a "most chosen".
-    expect(await within(dlg).findByText('Haircuts')).toBeTruthy();
+    // An empty field is discovery: the door's suggestions, as intents.
+    expect(await within(dlg).findByText('Massage now')).toBeTruthy();
     // What: typing brings the suggestions; a category becomes the answer
     // and the sheet moves on to Where — nothing has navigated yet.
     fireEvent.change(within(dlg).getByRole('textbox'), { target: { value: 'mass' } });
@@ -116,5 +123,23 @@ describe('the consumer app', () => {
     expect(q.get('city')).toBe('Skopje');
     expect(q.get('near')).toBeNull();
     expect(screen.queryByRole('dialog', { name: 'Search' })).toBeNull();
+  });
+
+  it('a suggestion is a search intent: one tap fills What and When, and Search applies them together', async () => {
+    render(<App />);
+    await screen.findAllByText('Massage tomorrow');
+    fireEvent.click(screen.getAllByRole('button', { name: 'Search' })[0]!);
+    const dlg = await screen.findByRole('dialog', { name: 'Search' });
+    fireEvent.click(await within(dlg).findByText('Massage now'));
+    // What and When are answered; Where is not — this browser has no
+    // geolocation, so the sheet never claims to know where the person is.
+    expect(within(dlg).getByText('Massage')).toBeTruthy();
+    expect(within(dlg).getAllByText('Available now').length).toBeGreaterThan(0);
+    expect(window.location.pathname).toBe('/');
+    fireEvent.click(within(dlg).getByRole('button', { name: 'Search' }));
+    await waitFor(() => expect(window.location.pathname).toBe('/s/massage'));
+    const q = new URLSearchParams(window.location.search);
+    expect(q.get('now')).toBe('1');
+    expect(q.get('near')).toBeNull();
   });
 });

@@ -299,6 +299,60 @@ export const DiscoveryTownsSchema = z.object({
 });
 export type DiscoveryTowns = z.infer<typeof DiscoveryTownsSchema>;
 
+/**
+ * Discovery suggestions — what the phone's search sheet offers before
+ * anybody types (Alex, 2026-09-29). Each one is a **search intent**, not
+ * an entity: a kind, an honest reason, the thing it refers to, and the
+ * filter payload it stands for — which maps one-to-one onto the sheet's
+ * What / Where / When. The client renders the words from the kind, so a
+ * suggestion localises without the server knowing a language.
+ *
+ * `reason` is the evidence, and the wording must not outrun it:
+ * `favourite`/`visited`/`history` come only from the viewer's own
+ * account (and only with personalisation on); `town`/`nearby` from the
+ * town or position the request carried; `popular` from ninety days of
+ * bookings; `inventory` merely from what is on offer.
+ */
+export const SuggestionKindSchema = z.enum([
+  'salon_again', // a salon the viewer favourited or visited — a destination
+  'category_again', // a category the viewer has booked before
+  'category_now', // a category, available now, near the viewer
+  'category_town', // a category on offer in the chosen town
+  'category_near', // a category on offer around the viewer's position
+  'category_popular', // a category the platform books most
+  'category_offer', // a category on offer, with no more evidence than that
+  'now_all', // anything that can start within the half hour
+]);
+export const SuggestionReasonSchema = z.enum(['favourite', 'visited', 'history', 'town', 'nearby', 'popular', 'inventory', 'now']);
+export const SearchIntentSchema = z.object({
+  /** A category's name — the sheet slugs it the way the shelf does. */
+  category: z.object({ id: z.uuid(), name: z.string() }).nullable(),
+  /** A salon: the intent is a destination, not a filter. */
+  salon: z.object({ slug: z.string(), name: z.string() }).nullable(),
+  city: z.string().nullable(),
+  nearby: z.boolean(),
+  radiusKm: z.number().positive().nullable(),
+  now: z.boolean(),
+});
+export const DiscoverySuggestionSchema = z.object({
+  id: z.string(),
+  kind: SuggestionKindSchema,
+  reason: SuggestionReasonSchema,
+  intent: SearchIntentSchema,
+  /** How many salons back this suggestion where that is known (a town's
+   *  or a radius's inventory) — null when it is not the point. */
+  salons: z.number().int().nullable(),
+});
+export const DiscoverySuggestionsSchema = z.object({
+  /** `history`: the viewer's own account shaped these; `context`: their
+   *  town or position did; `default`: neither was available. */
+  how: z.enum(['history', 'context', 'default']),
+  suggestions: z.array(DiscoverySuggestionSchema),
+});
+export type DiscoverySuggestion = z.infer<typeof DiscoverySuggestionSchema>;
+export type DiscoverySuggestions = z.infer<typeof DiscoverySuggestionsSchema>;
+export type SearchIntent = z.infer<typeof SearchIntentSchema>;
+
 /** The ranked form of a category's services. Same rows as the
  *  unpersonalised door, ordered by the ranker. */
 export const DiscoveryRankedServicesSchema = z.object({

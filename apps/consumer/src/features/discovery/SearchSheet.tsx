@@ -1,13 +1,15 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import type { PriceBand, SearchFacets } from '@velnes/contracts';
+import type { DiscoverySuggestion, PriceBand, SearchFacets } from '@velnes/contracts';
 import { fmtMKD, slugify } from '../../lib/api/mappers.js';
 import { t } from '../../lib/i18n-core.js';
-import { useCategories, useMostChosen, useTowns } from '../../lib/api/queries.js';
+import { useCategories, useMostChosen, useSuggestions, useTowns } from '../../lib/api/queries.js';
+import { useSession } from '../../lib/api/session.js';
 import { useUserLocation } from '../../lib/geo.js';
 import { FAMOUS_TOWNS, matchTowns, normTown } from '../../lib/towns.js';
-import { IcBolt, IcPin, IcSearch, IcSpark } from './cards.js';
+import { IcPin, IcSearch, IcSpark } from './cards.js';
+import { SUGGEST_ICONS, iconFor } from './suggestIcons.js';
 import { SugListM } from './cards.js';
 import { useSuggest, type SuggestItem } from './useSuggest.js';
 
@@ -34,6 +36,14 @@ import { useSuggest, type SuggestItem } from './useSuggest.js';
  * Opened from the home pill, the results pill and the Search tab; it
  * lives once, above the routes, and reads the URL it opens over so a
  * results page's filters come back as its answers.
+ *
+ * **What? before typing is discovery, not a database** (Alex,
+ * 2026-09-29): the door's suggestions — search *intents*, each carrying
+ * the What / Where / When it stands for and the honest reason it is
+ * offered — shaped by the viewer's own account when they allow it, by
+ * the town or position known, or by what is on offer. Picking one fills
+ * every dimension it names and moves to the next unanswered question;
+ * typing is the other mode, and is the shared suggestions as before.
  */
 
 export type WhatPick = { kind: 'text'; text: string } | { kind: 'category'; slug: string; name: string } | null;
@@ -49,6 +59,21 @@ interface SheetState {
 const EMPTY: SheetState = { what: null, nearby: false, radiusKm: null, city: null, now: false, priceBand: null };
 
 type Section = 'what' | 'where' | 'when' | 'price';
+
+/**
+ * When? — the model has three answers; the sheet renders two. "Any
+ * time" and "Available now" (a bookable start no more than 30 minutes
+ * away, soonest first) are what the search door can answer today.
+ * `date` — "Choose date & time" — is named here so the row slots in
+ * beside them once the door has a day-wide availability mode (its own
+ * phase); it is not rendered until then, because a control that cannot
+ * do what it says is worse than none.
+ */
+export type WhenKind = 'any' | 'now' | 'date';
+const WHEN_OPTIONS: { kind: WhenKind; icon: keyof typeof SUGGEST_ICONS; title: string; sub: string | null }[] = [
+  { kind: 'any', icon: 'calendar', title: 'c.ss.anyTime', sub: null },
+  { kind: 'now', icon: 'bolt', title: 'c.now', sub: 'c.nowTitle' },
+];
 
 interface OpenOptions {
   /** The price bands of the answer the sheet opens over, when any. */
@@ -114,6 +139,7 @@ function SearchSheet({ opts, onClose }: { opts: OpenOptions; onClose: () => void
   const { pathname } = useLocation();
   const [params] = useSearchParams();
   const geo = useUserLocation();
+  const { token } = useSession();
   const towns = useTowns().data?.towns ?? [];
   const mostChosen = useMostChosen().data?.categories ?? [];
   const onOffer = useCategories().data?.categories ?? [];
@@ -202,19 +228,74 @@ function SearchSheet({ opts, onClose }: { opts: OpenOptions; onClose: () => void
   const famous = FAMOUS_TOWNS.map((name) => ({
     name,
     salons: towns.find((tw) => normTown(tw.name) === normTown(name))?.salons ?? 0,
-  }));
+  })).sort((a, b) => b.salons - a.salons); // towns with something to book first; the list's order breaks ties
   const townSub = (n: number) =>
     n === 0 ? t('c.ss.noSalonsYet') : n === 1 ? t('c.cards.salonOne', { n: 1 }) : t('c.cards.salonMany', { n });
+  /** Nearby needs a position: ask now if never asked, take a fresh fix
+   *  if allowed, so it is in hand by the time Search is pressed. */
+  const askForPosition = () => {
+    if (geo.status !== 'on') {
+      if (geo.decision === null) geo.decide(true);
+      else if (geo.decision === 'allowed') geo.locate();
+    }
+  };
   const pickNearby = () => {
     if (st.nearby) {
       patch({ nearby: false, radiusKm: null });
       return;
     }
     patch({ nearby: true, city: null, radiusKm: st.radiusKm ?? NEAR_KM });
-    if (geo.status !== 'on') {
-      if (geo.decision === null) geo.decide(true);
-      else if (geo.decision === 'allowed') geo.locate();
+    askForPosition();
+  };
+
+  /**
+   * Discovery: the door's suggestions for the empty field, shaped by the
+   * viewer (token), the town chosen here so far, and the position when
+   * there is one — so answering Where first changes what What offers.
+   */
+  const sugg = useSuggestions(geo.position, st.nearby ? null : st.city, token);
+
+  /**
+   * After a suggestion the sheet walks on in order — Where next, then
+   * When — even when the suggestion already answered them: its answer
+   * is lit in the opened card, so the person confirms or changes it on
+   * the way rather than discovering it later in a collapsed row. Only a
+   * suggestion that said nothing about What stays on What.
+   */
+  const nextSection = (next: SheetState): Section => (!next.what && !next.now ? 'what' : 'where');
+
+  /**
+   * A suggestion is a search intent: apply every dimension it names,
+   * leave the rest as they were, and move on — nothing runs until
+   * Search. A salon is a destination and opens at once, as it always
+   * has. Nearby is dropped when the person refused location: the sheet
+   * never claims to know where they are.
+   */
+  const applyIntent = (sg: DiscoverySuggestion) => {
+    const it = sg.intent;
+    if (it.salon) {
+      onClose();
+      nav(`/salon/${it.salon.slug}`);
+      return;
     }
+    const next: SheetState = { ...st };
+    if (it.category) {
+      next.what = { kind: 'category', slug: slugify(it.category.name), name: it.category.name };
+      setText('');
+    }
+    if (it.city) {
+      next.city = it.city;
+      next.nearby = false;
+      next.radiusKm = null;
+    } else if (it.nearby && !nearBlocked) {
+      next.nearby = true;
+      next.city = null;
+      next.radiusKm = it.radiusKm ?? NEAR_KM;
+      askForPosition();
+    }
+    if (it.now) next.now = true;
+    setSt(next);
+    setSection(nextSection(next));
   };
 
   const whatText = text.trim();
@@ -318,22 +399,13 @@ function SearchSheet({ opts, onClose }: { opts: OpenOptions; onClose: () => void
             </div>
             <div className="ss-list">
               {suggest.short ? (
-                browse.length ? (
-                  <>
-                    <div className="ss-sub">
-                      {IcSpark}
-                      {mostChosen.length ? t('c.cards.mostChosen') : t('c.res.browse')}
-                    </div>
-                    {browse.slice(0, 8).map((c) => (
-                      <button key={c.id} type="button" className="ss-opt" onClick={() => pickCategory(slugify(c.name), c.name)}>
-                        <span className="ss-opt-ic">{IcSearch}</span>
-                        <span>
-                          <b>{c.name}</b>
-                        </span>
-                      </button>
-                    ))}
-                  </>
-                ) : null
+                <Discovery
+                  data={sugg.data ?? null}
+                  loading={sugg.isLoading}
+                  fallback={sugg.isError ? browse : []}
+                  onPick={applyIntent}
+                  onPickCategory={pickCategory}
+                />
               ) : (
                 <SugListM q={text} active={-1} onChoose={choose} onOpenCategory={(slug) => pickCategory(slug, catNameFor(slug) ?? slug)} />
               )}
@@ -423,19 +495,18 @@ function SearchSheet({ opts, onClose }: { opts: OpenOptions; onClose: () => void
         {section === 'when' ? (
           <section className="ss-card open">
             <h2 className="ss-h">{t('c.ss.when')}</h2>
-            <button type="button" className={`ss-opt${!st.now ? ' on' : ''}`} onClick={() => patch({ now: false })} aria-pressed={!st.now}>
-              <span className="ss-opt-ic">{IcSearch}</span>
-              <span>
-                <b>{t('c.ss.anyTime')}</b>
-              </span>
-            </button>
-            <button type="button" className={`ss-opt${st.now ? ' on' : ''}`} onClick={() => patch({ now: true })} aria-pressed={st.now}>
-              <span className="ss-opt-ic">{IcBolt}</span>
-              <span>
-                <b>{t('c.now')}</b>
-                <span className="sm muted">{t('c.nowTitle')}</span>
-              </span>
-            </button>
+            {WHEN_OPTIONS.map((o) => {
+              const on = o.kind === 'now' ? st.now : !st.now;
+              return (
+                <button key={o.kind} type="button" className={`ss-opt${on ? ' on' : ''}`} onClick={() => patch({ now: o.kind === 'now' })} aria-pressed={on}>
+                  <span className="ss-opt-ic">{SUGGEST_ICONS[o.icon]}</span>
+                  <span>
+                    <b>{t(o.title)}</b>
+                    {o.sub ? <span className="sm muted">{t(o.sub)}</span> : null}
+                  </span>
+                </button>
+              );
+            })}
           </section>
         ) : (
           row('when', t('c.ss.when'), whenLabel, t('c.ss.anyTime'))
@@ -485,6 +556,102 @@ function SearchSheet({ opts, onClose }: { opts: OpenOptions; onClose: () => void
           {t('c.res.search')}
         </button>
       </div>
+    </div>
+  );
+}
+
+/** The words a suggestion wears, from its kind — so it localises here. */
+function wordsFor(sg: DiscoverySuggestion): { title: string; sub: string | null } {
+  const cat = sg.intent.category?.name ?? '';
+  const n = sg.salons ?? 0;
+  switch (sg.kind) {
+    case 'salon_again':
+      return { title: t('c.sugg.salonAgain', { salon: sg.intent.salon?.name ?? '' }), sub: t(sg.reason === 'favourite' ? 'c.sugg.favouriteSub' : 'c.sugg.visitedSub') };
+    case 'category_again':
+      return { title: t('c.sugg.categoryAgain', { cat }), sub: t('c.sugg.historySub') };
+    case 'category_now':
+      return { title: t('c.sugg.categoryNow', { cat }), sub: t('c.sugg.nowNearSub') };
+    case 'category_town':
+      return { title: t('c.sugg.categoryTown', { cat, town: sg.intent.city ?? '' }), sub: n === 1 ? t('c.sugg.townOne') : t('c.sugg.townMany', { n }) };
+    case 'category_near':
+      return { title: t('c.sugg.categoryNear', { cat }), sub: n === 1 ? t('c.sugg.nearOne', { km: sg.intent.radiusKm ?? 10 }) : t('c.sugg.nearMany', { n, km: sg.intent.radiusKm ?? 10 }) };
+    case 'category_popular':
+      return { title: cat, sub: t('c.sugg.popularSub') };
+    case 'category_offer':
+      return { title: cat, sub: n === 1 ? t('c.sugg.offerOne') : t('c.sugg.offerMany', { n }) };
+    case 'now_all':
+      return { title: t('c.now'), sub: t(sg.intent.nearby ? 'c.sugg.nowAllNearSub' : 'c.sugg.nowAllSub') };
+  }
+}
+
+/**
+ * The empty field's list: the door's suggestions as rows — icon for the
+ * meaning, title dominant, a subtitle only where it carries something.
+ * While the door answers, three quiet placeholders; if it failed, the
+ * shelf of categories, which is honest and never wrong.
+ */
+function Discovery({
+  data,
+  loading,
+  fallback,
+  onPick,
+  onPickCategory,
+}: {
+  data: { how: 'history' | 'context' | 'default'; suggestions: DiscoverySuggestion[] } | null;
+  loading: boolean;
+  fallback: { id: string; name: string }[];
+  onPick: (s: DiscoverySuggestion) => void;
+  onPickCategory: (slug: string, name: string) => void;
+}) {
+  if (loading && !data)
+    return (
+      <div className="ss-list" aria-busy="true">
+        {[0, 1, 2].map((i) => (
+          <div key={i} className="ss-opt ss-opt-skel" aria-hidden="true">
+            <span className="ss-opt-ic" />
+            <span className="ss-opt-tx" style={{ flex: 1 }}>
+              <span className="skel-line w60" />
+              <span className="skel-line w40" />
+            </span>
+          </div>
+        ))}
+      </div>
+    );
+  const rows = data?.suggestions ?? [];
+  if (!rows.length) {
+    if (!fallback.length) return null;
+    return (
+      <div className="ss-list">
+        <div className="ss-sub">{t('c.res.browse')}</div>
+        {fallback.slice(0, 8).map((c) => (
+          <button key={c.id} type="button" className="ss-opt" onClick={() => onPickCategory(slugify(c.name), c.name)}>
+            <span className="ss-opt-ic">{SUGGEST_ICONS.sparkle}</span>
+            <span className="ss-opt-tx">
+              <b>{c.name}</b>
+            </span>
+          </button>
+        ))}
+      </div>
+    );
+  }
+  return (
+    <div className="ss-list">
+      <div className="ss-sub">
+        {IcSpark}
+        {t(data?.how === 'history' ? 'c.sugg.forYou' : 'c.sugg.ideas')}
+      </div>
+      {rows.map((sg) => {
+        const w = wordsFor(sg);
+        return (
+          <button key={sg.id} type="button" className="ss-opt" onClick={() => onPick(sg)}>
+            <span className="ss-opt-ic">{SUGGEST_ICONS[iconFor(sg)]}</span>
+            <span className="ss-opt-tx">
+              <b>{w.title}</b>
+              {w.sub ? <span className="sm muted">{w.sub}</span> : null}
+            </span>
+          </button>
+        );
+      })}
     </div>
   );
 }

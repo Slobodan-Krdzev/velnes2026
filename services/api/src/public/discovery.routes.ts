@@ -13,7 +13,9 @@ import {
   SearchSuggestionsSchema,
   SearchSuggestRequestSchema,
   DiscoverySalonsSchema,
+  DiscoverySuggestionsSchema,
   DiscoveryTownsSchema,
+  type DiscoverySuggestion,
   DiscoveryRecommendedSchema,
   DiscoveryNewestSchema,
   NEWEST_SALON_DAYS,
@@ -907,6 +909,152 @@ export async function discoveryRoutes(app: FastifyInstance) {
         if (salons.length === 8) break;
       }
       return { days: NEWEST_SALON_DAYS, salons };
+    },
+  });
+
+  /**
+   * Discovery suggestions — the search sheet's "What?" before anybody
+   * types (Alex, 2026-09-29). Search intents, deterministic, and never
+   * ahead of their evidence:
+   *
+   *  - A signed-in viewer with personalisation on: their favourite
+   *    salons, the salons they have completed visits at, the categories
+   *    they have booked — each saying which of those it is.
+   *  - Everyone: "Available now"; then the categories on offer in the
+   *    town the request named, or around the position it carried, or
+   *    the platform's most-booked, or — with no bookings yet — simply
+   *    what is on offer, with the count that backs it.
+   *
+   * A token that cannot be read means no history, not an error. No
+   * position and no town means no "near you" wording: the intent then
+   * carries neither. Capped at eight; categories never repeat.
+   */
+  r.route({
+    method: 'GET',
+    url: '/discovery/suggestions',
+    schema: {
+      querystring: z.object({
+        lat: z.coerce.number().min(-90).max(90).optional(),
+        lng: z.coerce.number().min(-180).max(180).optional(),
+        city: z.string().trim().min(1).max(80).optional(),
+      }),
+      response: { 200: DiscoverySuggestionsSchema },
+    },
+    handler: async (req) => {
+      const now = new Date();
+      const position = req.query.lat != null && req.query.lng != null ? { lat: req.query.lat, lng: req.query.lng } : null;
+      const city = req.query.city ?? null;
+      const NEAR_KM = 10;
+      const LIMIT = 8;
+
+      // Every admitted salon with the categories it really serves, its
+      // pin and its town — the same reading the recommendation door does.
+      const listed = await listedBusinesses();
+      const salons: { id: string; slug: string; name: string; city: string | null; cats: { id: string; name: string }[]; km: number | null }[] = [];
+      for (const b of listed) {
+        if (!(await isOpen(b.id))) continue;
+        const cats = await withTenant(b.id, (trx) =>
+          trx
+            .selectFrom('services as s')
+            .innerJoin('serviceCategories as c', 'c.id', 's.categoryId')
+            .select(['c.id', 'c.name'])
+            .distinct()
+            .where('s.status', '=', 'active')
+            .where('s.online', '=', true)
+            .execute(),
+        );
+        const pin = await firstPin(b.id);
+        salons.push({
+          id: b.id,
+          slug: b.slug,
+          name: b.name,
+          city: b.city,
+          cats,
+          km: position && pin.lat != null && pin.lng != null ? haversineKm(position, { lat: pin.lat, lng: pin.lng }) : null,
+        });
+      }
+      const catById = new Map<string, { id: string; name: string }>();
+      for (const s of salons) for (const c of s.cats) catById.set(c.id, c);
+      /** Categories with the number of salons offering them, most first. */
+      const countCats = (pool: typeof salons) => {
+        const n = new Map<string, number>();
+        for (const s of pool) for (const c of s.cats) n.set(c.id, (n.get(c.id) ?? 0) + 1);
+        return [...n.entries()].sort((a, b) => b[1] - a[1] || catById.get(a[0])!.name.localeCompare(catById.get(b[0])!.name));
+      };
+
+      const out: DiscoverySuggestion[] = [];
+      const usedCats = new Set<string>();
+      const intent = (p: Partial<DiscoverySuggestion['intent']> = {}): DiscoverySuggestion['intent'] => ({
+        category: null, salon: null, city: null, nearby: false, radiusKm: null, now: false, ...p,
+      });
+      const push = (s: DiscoverySuggestion) => {
+        if (out.length >= LIMIT) return;
+        if (s.intent.category) {
+          if (usedCats.has(s.intent.category.id)) return;
+          usedCats.add(s.intent.category.id);
+        }
+        out.push(s);
+      };
+      /** Where a category intent points, from what the request knew. */
+      const whereOf = () => (city ? { city } : position ? { nearby: true, radiusKm: NEAR_KM } : {});
+
+      // ── The viewer's own account, when they let it speak.
+      let hasHistory = false;
+      const claims = await clientClaimsOf(req);
+      if (claims) {
+        const me = await withClient(claims.sub, (trx) =>
+          trx.selectFrom('clientUsers').select('personalisedResults').where('id', '=', claims.sub).executeTakeFirst(),
+        );
+        if (me?.personalisedResults) {
+          const history = await viewerHistory(claims.sub, now);
+          const bySalon = new Map(salons.map((s) => [s.id, s]));
+          const favs = history.favouriteBusinessIds.map((id) => bySalon.get(id)).filter((s): s is NonNullable<typeof s> => !!s);
+          for (const s of favs.slice(0, 2))
+            push({ id: `fav-${s.id}`, kind: 'salon_again', reason: 'favourite', intent: intent({ salon: { slug: s.slug, name: s.name } }), salons: null });
+          const visited = Object.entries(history.businesses)
+            .sort((a, b) => b[1].localeCompare(a[1]))
+            .map(([id]) => bySalon.get(id))
+            .filter((s): s is NonNullable<typeof s> => !!s && !history.favouriteBusinessIds.includes(s.id));
+          for (const s of visited.slice(0, 2))
+            push({ id: `visited-${s.id}`, kind: 'salon_again', reason: 'visited', intent: intent({ salon: { slug: s.slug, name: s.name } }), salons: null });
+          const booked = Object.entries(history.categories)
+            .sort((a, b) => b[1].localeCompare(a[1]))
+            .map(([id]) => catById.get(id))
+            .filter((c): c is NonNullable<typeof c> => !!c);
+          for (const c of booked.slice(0, 2))
+            push({ id: `again-${c.id}`, kind: 'category_again', reason: 'history', intent: intent({ category: c, ...whereOf() }), salons: null });
+          hasHistory = out.length > 0;
+        }
+      }
+
+      // ── Everyone: what can start within the half hour, wherever they are.
+      push({ id: 'now-all', kind: 'now_all', reason: 'now', intent: intent({ now: true, ...(position ? { nearby: true, radiusKm: NEAR_KM } : {}) }), salons: null });
+
+      // ── Context: the town named, or the position carried.
+      let how: 'history' | 'context' | 'default' = hasHistory ? 'history' : 'default';
+      if (city) {
+        const here = salons.filter((s) => (s.city ?? '').trim().toLowerCase() === city.trim().toLowerCase());
+        for (const [id, n] of countCats(here).slice(0, 3))
+          push({ id: `town-${id}`, kind: 'category_town', reason: 'town', intent: intent({ category: catById.get(id)!, city }), salons: n });
+        if (here.length && how === 'default') how = 'context';
+      } else if (position) {
+        const around = salons.filter((s) => s.km != null && s.km <= NEAR_KM);
+        for (const [id, n] of countCats(around).slice(0, 3))
+          push({ id: `near-${id}`, kind: 'category_near', reason: 'nearby', intent: intent({ category: catById.get(id)!, nearby: true, radiusKm: NEAR_KM }), salons: n });
+        if (around.length && how === 'default') how = 'context';
+      }
+
+      // ── The platform's own knowledge: most booked, else what is on offer.
+      if (out.length < LIMIT) {
+        const popular = (await mostChosenCached()).map((id) => catById.get(id)).filter((c): c is NonNullable<typeof c> => !!c);
+        for (const c of popular.slice(0, 3))
+          push({ id: `popular-${c.id}`, kind: 'category_popular', reason: 'popular', intent: intent({ category: c, ...whereOf() }), salons: null });
+      }
+      if (out.length < LIMIT)
+        for (const [id, n] of countCats(salons))
+          push({ id: `offer-${id}`, kind: 'category_offer', reason: 'inventory', intent: intent({ category: catById.get(id)!, ...whereOf() }), salons: n });
+
+      return { how, suggestions: out.slice(0, LIMIT) };
     },
   });
 

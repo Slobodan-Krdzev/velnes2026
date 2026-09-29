@@ -27,6 +27,18 @@ export async function pub<T>(path: string): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+/** A public GET that carries the viewer's token when there is one — for
+ *  doors that answer differently to a signed-in viewer but never require
+ *  one (recommended, suggestions). */
+export async function pubGet<T>(path: string, token: string | null): Promise<T> {
+  const res = await fetch(`${P}${path}`, { headers: token ? { authorization: `Bearer ${token}` } : {} });
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as ErrBody;
+    throw new ApiError(res.status, body.error ?? 'ERROR', body.message ?? res.statusText, body.params ?? {});
+  }
+  return res.json() as Promise<T>;
+}
+
 /**
  * A public POST that carries the client's token when there is one.
  *
