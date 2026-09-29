@@ -37,12 +37,12 @@ describe('the filters panel', () => {
     expect(onApply).toHaveBeenCalledWith({ priceMin: null, priceMax: 1500, now: true, amenities: ['wifi'] });
   });
 
-  it('handles at the ends mean any price; Clear all resets the panel', () => {
+  it('Clear all takes every filter off the answer at once — no Show results needed', () => {
     const onApply = vi.fn();
-    render(<FiltersSheet facets={facets} filters={{ ...NO_FILTERS, amenities: ['sauna'], now: true }} onApply={onApply} onClose={() => undefined} />);
+    render(<FiltersSheet facets={facets} filters={{ ...NO_FILTERS, amenities: ['sauna'], now: true, priceMax: 1500 }} onApply={onApply} onClose={() => undefined} />);
     const dlg = screen.getByRole('dialog', { name: 'Filters' });
     fireEvent.click(within(dlg).getByRole('button', { name: 'Clear all' }));
-    fireEvent.click(within(dlg).getByRole('button', { name: 'Show results' }));
+    expect(onApply).toHaveBeenCalledTimes(1);
     expect(onApply).toHaveBeenCalledWith({ priceMin: null, priceMax: null, now: false, amenities: [] });
   });
 

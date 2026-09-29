@@ -90,13 +90,11 @@ export function FiltersSheet({
   const clampedMin = Math.min(min, max);
   const clampedMax = Math.max(min, max);
   const toggle = (k: AmenityKey) => setAmen((a) => (a.includes(k) ? a.filter((x) => x !== k) : [...a, k]));
-  const clear = () => {
-    setMin(lo);
-    setMax(hi);
-    setNow(false);
-    setAmen([]);
-  };
-  const anything = now || amen.length > 0 || (canPrice && (clampedMin > lo || clampedMax < hi));
+  /** Clear all is an act, not a reset: every filter comes off the answer
+   *  at once and the panel closes (Alex, 2026-09-29). */
+  const clear = () => onApply({ priceMin: null, priceMax: null, now: false, amenities: [] });
+  const applied = filters.now || filters.amenities.length > 0 || filters.priceMin != null || filters.priceMax != null;
+  const anything = applied || now || amen.length > 0 || (canPrice && (clampedMin > lo || clampedMax < hi));
   const apply = () =>
     onApply({
       // The range only travels when it narrows: handles at the ends mean "any price".
