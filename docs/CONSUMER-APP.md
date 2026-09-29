@@ -763,7 +763,11 @@ location's own set in the vocabulary's order, never a salon-wide one —
 each with its one-colour icon on the warm tile; "Show all N amenities"
 opens the full list grouped (Facilities, Spa & wellness, Customer
 experience) in the page's sheet. A location with none shows no card at
-all. The page shows its first location (or the one an offer link
+all; the list is a two-column grid. The Location card also prints the
+location's **opening hours** (`locations[].hours` on the salon door —
+the week the salon set, Monday first, today marked, a closed day saying
+so; booking itself still asks the availability door, which also knows
+exceptions and holidays). The page shows its first location (or the one an offer link
 named), an existing limitation: when it can switch locations, the
 amenities switch with it. Result cards are untouched.
 

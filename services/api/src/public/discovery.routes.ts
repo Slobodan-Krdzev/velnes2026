@@ -1,4 +1,5 @@
 import {
+  type WeekHours,
   sortAmenities,
   type AmenityKey,
   consumerKey,
@@ -1589,7 +1590,7 @@ export async function discoveryRoutes(app: FastifyInstance) {
         const locations = (
           await trx
             .selectFrom('locations')
-            .select(['id', 'name', 'city', 'address', 'lat', 'lng'])
+            .select(['id', 'name', 'city', 'address', 'lat', 'lng', 'hours'])
             .where('lifecycle', '=', 'ACTIVE')
             .orderBy('createdAt')
             .execute()
@@ -1600,6 +1601,7 @@ export async function discoveryRoutes(app: FastifyInstance) {
           address: l.address,
           lat: l.lat,
           lng: l.lng,
+          hours: (l.hours ?? null) as WeekHours | null,
           // This location's facilities — the page shows the ones of the
           // location it is showing, never a salon-wide set.
           amenities: amenities.get(l.id) ?? [],

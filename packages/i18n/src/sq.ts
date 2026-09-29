@@ -2646,6 +2646,8 @@ export const sq: Record<TranslationKey, string> = {
   'lset.amenitiesHint': 'Çfarë mund të presin klientët kur vizitojnë këtë lokacion.',
   'c.sal.amenities': 'Ambientet dhe lehtësitë',
   'c.sal.showAllAmenities': 'Shfaq të gjitha {{n}}',
+  'c.sal.hours': 'Orari i punës',
+  'c.sal.closedDay': 'Mbyllur',
   'c.filt.price': 'Diapazoni i çmimit',
   'c.filt.priceSub': 'Për trajtim, në MKD — çmimi më i ulët.',
   'c.filt.min': 'Minimumi',

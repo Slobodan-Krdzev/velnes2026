@@ -12,6 +12,7 @@ import { FavHeart } from '../discovery/cards.js';
 import { useWheelScroll } from '../../lib/useWheelScroll.js';
 import { SalonMap } from '../../components/SalonMap.js';
 import { SalonAmenities } from './SalonAmenities.js';
+import { LocationHours } from './LocationHours.js';
 import { IcArr, IcClock, IcPin, IcSpark, IcVok } from '../discovery/cards.js';
 import { useBooking } from '../booking/store.js';
 import { distanceKm, distanceLbl, useUserLocation } from '../../lib/geo.js';
@@ -846,6 +847,7 @@ export function Salon() {
           {t('c.sal.directions')}
         </a>
       </div>
+      <LocationHours hours={p.location?.hours ?? null} />
     </div>
   );
   /**

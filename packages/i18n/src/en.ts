@@ -2664,6 +2664,8 @@ export const en = {
   'lset.amenitiesHint': 'What customers can expect when they visit this location.',
   'c.sal.amenities': 'Amenities',
   'c.sal.showAllAmenities': 'Show all {{n}} amenities',
+  'c.sal.hours': 'Opening hours',
+  'c.sal.closedDay': 'Closed',
   'c.filt.price': 'Price range',
   'c.filt.priceSub': 'Per treatment, in MKD — the cheapest way in.',
   'c.filt.min': 'Minimum',

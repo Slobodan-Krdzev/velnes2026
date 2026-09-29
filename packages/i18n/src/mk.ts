@@ -2646,6 +2646,8 @@ export const mk: Record<TranslationKey, string> = {
   'lset.amenitiesHint': 'Што можат клиентите да очекуваат кога ќе ја посетат оваа локација.',
   'c.sal.amenities': 'Услови и погодности',
   'c.sal.showAllAmenities': 'Прикажи ги сите {{n}}',
+  'c.sal.hours': 'Работно време',
+  'c.sal.closedDay': 'Затворено',
   'c.filt.price': 'Ценовен опсег',
   'c.filt.priceSub': 'По третман, во MKD — најниската цена.',
   'c.filt.min': 'Минимум',

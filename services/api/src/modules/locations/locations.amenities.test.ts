@@ -60,6 +60,9 @@ describe('location amenities', () => {
     const l = d.locations.find((x) => x.id === demo.locAerodrom)!;
     expect(l.amenities).toEqual(['wifi', 'free_parking', 'sauna']);
     for (const o of d.locations.filter((x) => x.id !== demo.locAerodrom)) expect(o.amenities).toEqual([]);
+    // The week rides with the location too — Monday is "0".
+    expect(l.hours).not.toBeNull();
+    expect(Object.keys(l.hours!)).toContain('0');
   });
 
   it('refuses a key outside the vocabulary, and removes by sending the set without it', async () => {

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { AmenityKeySchema, AmenityListSchema } from './amenities.js';
+import { WeekHoursSchema } from './locations.js';
 import { MoneySchema } from './catalog.js';
 
 /** The consumer discovery surface (apps/consumer): read-only, key-free
@@ -150,6 +151,10 @@ export const DiscoverySalonDetailSchema = z.object({
       /** This location's facilities, in the vocabulary's order — the
        *  page shows the ones of the location it is showing. */
       amenities: AmenityListSchema,
+      /** This location's week — weekday "0" (Mon) … "6" (Sun) → periods,
+       *  null for a closed day — or null when none is set. The salon
+       *  page prints it; booking reads the real availability door. */
+      hours: WeekHoursSchema.nullable().default(null),
     }),
   ),
 });
