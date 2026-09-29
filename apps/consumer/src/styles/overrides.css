@@ -1274,6 +1274,9 @@ a.pop-go:hover {
 .mr-line{display:flex;justify-content:space-between;gap:8px;font-size:13px;margin-top:2px}
 .mr-line .treat{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .mr-line b{color:var(--ink);flex:0 0 auto}
+/* The way in, bottom right, in the brand (Alex, 2026-09-29). */
+.mr-foot{display:flex;align-items:flex-end;justify-content:space-between;gap:8px;margin-top:6px}
+.mr-go{min-height:34px;padding:5px 14px;font-size:13px;border-radius:10px;margin-left:auto}
 /* Collapsed: the grip and the count only; the cards wait below the fold. */
 .mr-sheet.collapsed .mr-list{visibility:hidden}
 @media (min-width:900px){.mr{display:none}}

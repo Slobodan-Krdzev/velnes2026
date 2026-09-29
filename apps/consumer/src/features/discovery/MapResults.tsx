@@ -232,18 +232,19 @@ export function MapResults({ results, onClose }: { results: MapResult[]; onClose
             <span className="treat">{r.treatment}</span>
             {r.price ? <b>{r.price}</b> : null}
           </div>
-          {r.availableAt ? <div className="avail" style={{ fontSize: 12 }}>{t('c.availNow', { t: r.availableAt })}</div> : null}
-          <button
-            type="button"
-            className="btn btn-g"
-            style={{ minHeight: 34, padding: '4px 12px', fontSize: 13, marginTop: 6 }}
-            onClick={(e) => {
-              e.stopPropagation();
-              nav(r.href);
-            }}
-          >
-            {t('c.res.viewBook')}
-          </button>
+          <div className="mr-foot">
+            {r.availableAt ? <span className="avail" style={{ fontSize: 12 }}>{t('c.availNow', { t: r.availableAt })}</span> : <span />}
+            <button
+              type="button"
+              className="btn btn-p mr-go"
+              onClick={(e) => {
+                e.stopPropagation();
+                nav(r.href);
+              }}
+            >
+              {t('c.res.viewBook')}
+            </button>
+          </div>
         </div>
       </article>
     );

@@ -102,6 +102,10 @@
   transform: translateY(-50%);
   display: grid;
   gap: 1px;
+  /* Sized by its words, not by the 30px marker it hangs from: an
+     absolutely positioned box otherwise shrinks to its container and
+     the text is clipped to nothing. */
+  width: max-content;
   max-width: 190px;
   background: #fff;
   border: 1px solid var(--brand);
