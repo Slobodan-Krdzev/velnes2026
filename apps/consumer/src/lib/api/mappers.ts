@@ -121,6 +121,36 @@ export interface ServiceVM {
     bookable: boolean;
     showPrices: boolean;
   };
+  /** The place this result is at. A salon with two locations answers
+   *  twice — the same treatment at each — and this is what tells the
+   *  two rows apart: the key, the pin, and the link's `?location=`. */
+  location: {
+    id: string;
+    name: string;
+    city: string;
+    address: string;
+  };
+}
+
+/** A result's identity on the page: the treatment *at the place*. */
+export function rowKey(s: ServiceVM): string {
+  return `${s.id}@${s.location.id}`;
+}
+
+/**
+ * Where a result is, in words: the salon, then its location when the
+ * location adds something the salon's name does not already say, then
+ * the distance (or the city when there is none). "Velnes Fizio Centar ·
+ * Aerodrom · 2.1 km"; a one-location salon whose location is named
+ * after its city just says "Salon · Skopje".
+ */
+export function placeLine(s: ServiceVM, away: string | null): string {
+  const parts: string[] = [s.salon.name];
+  const loc = s.location.name.trim();
+  if (loc && !s.salon.name.toLowerCase().includes(loc.toLowerCase())) parts.push(loc);
+  const last = away ?? s.location.city ?? s.salon.city;
+  if (last && parts[parts.length - 1]!.toLowerCase() !== last.toLowerCase()) parts.push(last);
+  return parts.join(' · ');
 }
 
 export function serviceVM(s: DiscoveryServiceCard): ServiceVM {
@@ -142,6 +172,12 @@ export function serviceVM(s: DiscoveryServiceCard): ServiceVM {
       lng: s.salon.lng,
       bookable: s.salon.bookable,
       showPrices: s.salon.showPrices,
+    },
+    location: {
+      id: s.location.id,
+      name: s.location.name,
+      city: s.location.city ?? s.salon.city ?? '',
+      address: s.location.address ?? '',
     },
   };
 }

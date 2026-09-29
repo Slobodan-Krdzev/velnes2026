@@ -463,6 +463,16 @@ rule exists to prevent, and the slot is waiting for the reviews
 subsystem rather than being filled with a number. Everything else on the
 card is real.
 
+**Per location, since 2026-09-29.** A candidate carries `locationId`
+and is keyed `${id}@${locationId}` through gathering, admission, the
+ranker (which also breaks ties on it) and the final card lookup — the
+bug that had collapsed a two-location salon into one card was exactly a
+`Map` keyed by service id at that last step. Facets count places:
+`amenities[].count` is the number of cards at locations that have the
+amenity, and a filter admits the location that has it, not its sibling.
+The direct-salon answer is no longer empty: it is the named salon's own
+treatments at every location, ranked like any answer.
+
 ---
 
 ## 14. Deliberately not in this phase

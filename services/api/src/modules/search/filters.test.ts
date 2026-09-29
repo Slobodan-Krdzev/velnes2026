@@ -16,6 +16,7 @@ function cand(p: number | null, extra: Partial<RankCandidate> = {}): RankCandida
   n += 1;
   return {
     id: `s${n}`,
+    locationId: 'loc-1',
     name: `Service ${n}`,
     categoryId: 'cat-a',
     durationMin: 60,

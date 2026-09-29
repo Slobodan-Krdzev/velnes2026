@@ -32,6 +32,9 @@ export interface RankSalon {
 
 export interface RankCandidate {
   id: string;
+  /** Which of the salon's locations this result is at — with `id`, the
+   *  candidate's identity: the same treatment at two places is two. */
+  locationId: string;
   name: string;
   categoryId: string;
   durationMin: number;
@@ -284,7 +287,10 @@ export function rank(
       b.score - a.score ||
       a.candidate.name.localeCompare(b.candidate.name) ||
       a.candidate.salon.name.localeCompare(b.candidate.salon.name) ||
-      a.candidate.id.localeCompare(b.candidate.id),
+      a.candidate.id.localeCompare(b.candidate.id) ||
+      // The same treatment at two of a salon's locations: a stable order
+      // between them too, or the list shuffles between renders.
+      a.candidate.locationId.localeCompare(b.candidate.locationId),
   );
 
   const out = diversify(scored, cfg, now);

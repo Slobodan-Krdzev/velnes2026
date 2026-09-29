@@ -20,6 +20,7 @@ const ESTABLISHED = '2024-01-01T00:00:00Z';
 function candidate(over: Partial<RankCandidate> & { id: string }): RankCandidate {
   return {
     name: over.name ?? `Service ${over.id}`,
+    locationId: 'loc-1',
     categoryId: 'cat-massage',
     durationMin: 60,
     price: 2000,

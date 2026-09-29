@@ -25,7 +25,8 @@ import { IcPin } from './cards.js';
  */
 
 export interface MapResult {
-  /** The salon's slug — the pin's identity and the card's. */
+  /** The location's id — the pin's identity and the card's. A salon
+   *  with two locations is two of these. */
   id: string;
   lat: number;
   lng: number;

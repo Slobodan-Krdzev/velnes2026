@@ -8,7 +8,8 @@ import { fmtMKD, minutesLbl } from '../../lib/api/mappers.js';
 import { useSalonDetail, useSalonServices, useVisitSlots } from '../../lib/api/queries.js';
 import { useMyOffers } from '../../lib/api/session.js';
 import { SalonGallery } from '../../components/SalonGallery.js';
-import { FavHeart } from '../discovery/cards.js';
+import { FavHeart, SugPanelD } from '../discovery/cards.js';
+import { useSearchBox } from '../discovery/useSearchBox.js';
 import { useWheelScroll } from '../../lib/useWheelScroll.js';
 import { SalonMap } from '../../components/SalonMap.js';
 import { SalonAmenities } from './SalonAmenities.js';
@@ -770,6 +771,22 @@ export function Salon() {
   const p = useSalonPage();
   const { setDraft } = useBooking();
   const d = p.detail;
+  /**
+   * The desktop top bar's search pill is the same search box the home
+   * and results pages carry — one of it, not a picture of one (Alex,
+   * 2026-09-29: it did nothing here). It opens showing this salon's
+   * name, as it always did; typing over it searches, a suggestion
+   * goes where it points, Enter asks the results page.
+   */
+  const box = useSearchBox();
+  const seeded = useRef<string | null>(null);
+  const setBoxQ = box.setQ;
+  useEffect(() => {
+    const name = d?.name ?? null;
+    if (name == null || seeded.current === name) return;
+    seeded.current = name;
+    setBoxQ(name);
+  }, [d?.name, setBoxQ]);
   if (!d) return null;
   const photo = d.gallery[0]?.img ? `url("${d.gallery[0].img}")` : 'var(--ih)';
   const photo2 = d.gallery[1]?.img ? `url("${d.gallery[1].img}")` : 'var(--if)';
@@ -906,12 +923,31 @@ export function Salon() {
         <section data-screen="salon">
           <div className="d-topbar">
             <div className="d-wrap in">
-              <div className="pillsearch">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="M20 20l-4.2-4.2" /></svg>
-                <input value={d.name} readOnly />
-                <button style={{ border: '0', background: 'none', color: 'var(--muted)' }} onClick={() => nav('/')} aria-label={t('c.res.clear')}>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 6l12 12M18 6 6 18" /></svg>
-                </button>
+              {box.open ? <div className="sug-scrim" aria-hidden="true" /> : null}
+              <div className={`pillsearch-wrap${box.open ? ' open' : ''}`} ref={box.boxRef}>
+                <div className="pillsearch">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="M20 20l-4.2-4.2" /></svg>
+                  <input
+                    data-res="q"
+                    placeholder={t('c.res.searchPh')}
+                    aria-label={t('c.res.search')}
+                    aria-controls="d-sugg"
+                    {...box.inputProps}
+                    // The salon's name is what the box opens with; a
+                    // click selects it whole so typing replaces it
+                    // rather than appending to it.
+                    onFocus={(e) => {
+                      box.inputProps.onFocus();
+                      e.currentTarget.select();
+                    }}
+                  />
+                  <button style={{ border: '0', background: 'none', color: 'var(--muted)' }} onClick={() => nav('/')} aria-label={t('c.res.clear')}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 6l12 12M18 6 6 18" /></svg>
+                  </button>
+                </div>
+                {box.open ? (
+                  <SugPanelD q={box.q} active={box.keys.active} onChoose={box.choose} onOpenCategory={box.openCat} />
+                ) : null}
               </div>
             </div>
           </div>

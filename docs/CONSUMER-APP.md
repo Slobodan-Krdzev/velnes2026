@@ -425,6 +425,28 @@ a salon with none falls back to the prototype's decorative image, which
 is the one place the app still shows a picture that is not the salon's
 own.
 
+## A result is a treatment at a place
+
+Since 2026-09-29 (Alex: "Sloboz Cuts has two locations — show both"), a
+search result is a **treatment at a location**, not a treatment at a
+salon. Both discovery doors (`/public/discovery/search` and
+`/categories/:id/services`) answer one card per ACTIVE location where
+the treatment is really on offer — active and online at that location,
+priced as that location prices it, and with somebody there who does it
+(`empsFor`, the same rule the salon page's services door and the
+booking flow apply, so a card never leads to a place nobody can book).
+Each card carries `location: { id, name, city, address, lat, lng }`;
+its pin is the location's, its amenities are the location's, and its
+identity everywhere — ranker, filters, keys, map pins, the selected
+card — is `${serviceId}@${locationId}`. The results page links a card
+to `/salon/:slug?service=…&location=…`, so a two-location salon opens at
+the place the result was for. A salon named outright (`how: 'salon'`)
+now answers with that salon's own treatments at each of its locations
+and the page **stays** when there is more than one place to show; with
+one location it still goes straight to the salon page as before. The
+desktop salon page's search pill, which used to be a read-only picture
+of the box, is the shared `useSearchBox` since the same day.
+
 ## Maps
 
 Real OpenStreetMap through Leaflet — the same setup the registration

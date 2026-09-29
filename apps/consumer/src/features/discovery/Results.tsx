@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { categoryVM, type CategoryVM, minutesLbl, priceLbl, serviceVM, type ServiceVM } from '../../lib/api/mappers.js';
+import { categoryVM, type CategoryVM, minutesLbl, placeLine, priceLbl, rowKey, serviceVM, type ServiceVM } from '../../lib/api/mappers.js';
 import {
   useCategories,
   useMostChosen,
@@ -149,7 +149,9 @@ function useLiveLine(s: ServiceVM) {
 /** Where a result card sends you: the salon page, with the treatment
  *  already named so the salon page can open on it. */
 function salonHref(s: ServiceVM) {
-  return `/salon/${s.salon.slug}?service=${encodeURIComponent(s.id)}`;
+  // The place too: a two-location salon opens at the location this
+  // result was for, not at its first.
+  return `/salon/${s.salon.slug}?service=${encodeURIComponent(s.id)}&location=${encodeURIComponent(s.location.id)}`;
 }
 
 /**
@@ -290,14 +292,21 @@ function SearchLanding({ cats }: { cats: CategoryVM[] }) {
 
 /** The line under a result's title: which salon, and how far. */
 function whereLine(s: ServiceVM, away: string | null) {
-  return `${s.salon.name}${away ?? s.salon.city ? ` · ${away ?? s.salon.city}` : ''}`;
+  return placeLine(s, away);
+}
+/** Under a pin's salon name: the location when it says something the
+ *  salon's name does not, else the city. */
+function placeSub(s: ServiceVM): string {
+  const loc = s.location.name.trim();
+  if (loc && !s.salon.name.toLowerCase().includes(loc.toLowerCase())) return `${loc} · ${s.location.city}`;
+  return s.location.city;
 }
 
 function BestD({ s, on = false, onSelect }: { s: ServiceVM; on?: boolean; onSelect?: (() => void) | undefined }) {
   const nav = useNavigate();
   const { av, pr, away } = useLiveLine(s);
   return (
-    <article className={`best${on ? ' on' : ''}`} data-salon={s.salon.slug} onMouseEnter={onSelect} onClick={onSelect}>
+    <article className={`best${on ? ' on' : ''}`} data-salon={s.location.id} onMouseEnter={onSelect} onClick={onSelect}>
       <span className="flag" style={{ zIndex: 2 }}>{t('c.res.bestMatch')}</span>
       <div className="grid">
         <div className="ph" style={{ backgroundImage: s.salon.photo }}></div>
@@ -332,7 +341,7 @@ function AltD({ s, on = false, onSelect }: { s: ServiceVM; on?: boolean; onSelec
   const nav = useNavigate();
   const { av, pr, away } = useLiveLine(s);
   return (
-    <article className={`card alt${on ? ' on' : ''}`} data-salon={s.salon.slug} onMouseEnter={onSelect} onClick={onSelect}>
+    <article className={`card alt${on ? ' on' : ''}`} data-salon={s.location.id} onMouseEnter={onSelect} onClick={onSelect}>
       <div className="ph" style={{ backgroundImage: s.salon.photo }}></div>
       <div>
         <h4>{s.name}</h4>
@@ -519,9 +528,16 @@ export function Results() {
    * entry so the back button returns to where the search was typed
    * rather than to a results page nobody saw.
    */
+  /**
+   * …unless the salon has more than one location (Alex, 2026-09-29): then
+   * the name is two places on the map and in the list, and the page stays
+   * to show both. The door already answered with that salon's own
+   * treatments at each of them.
+   */
+  const placesNamed = useMemo(() => new Set(rows.map((s) => s.location.id)).size, [rows]);
   useEffect(() => {
-    if (directSalon?.slug) nav(`/salon/${directSalon.slug}`, { replace: true });
-  }, [directSalon, nav]);
+    if (directSalon?.slug && loaded && placesNamed <= 1) nav(`/salon/${directSalon.slug}`, { replace: true });
+  }, [directSalon, loaded, placesNamed, nav]);
   const title = query ?? cat?.name ?? category ?? '';
 
   /**
@@ -601,14 +617,15 @@ export function Results() {
     (filters.radiusKm != null && filters.radiusKm !== NEAR_KM ? 1 : 0);
   /**
    * The desktop's one selection, shared by the cards and the map's
-   * markers — the salon's slug, which is what a pin is. A hovered or
+   * markers — the location's id, which is what a pin is (a salon with
+   * two locations is two pins, and each lights its own cards). A hovered or
    * clicked card selects; a tapped marker selects and scrolls its first
    * card into view.
    */
   const [selectedSalon, setSelectedSalon] = useState<string | null>(null);
-  const selectFromMap = useCallback((slug: string) => {
-    setSelectedSalon(slug);
-    document.querySelector<HTMLElement>(`#d-reslist [data-salon="${CSS.escape(slug)}"]`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  const selectFromMap = useCallback((locationId: string) => {
+    setSelectedSalon(locationId);
+    document.querySelector<HTMLElement>(`#d-reslist [data-salon="${CSS.escape(locationId)}"]`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   }, []);
   /** Filters on desktop and phone alike: one panel, two presentations. */
   const filtersPanel = filtersOpen ? (
@@ -788,16 +805,17 @@ export function Results() {
     return rows
       .filter((s) => {
         if (s.salon.lat == null || s.salon.lng == null) return false;
-        if (seen.has(s.salon.slug)) return false;
-        seen.add(s.salon.slug);
+        // One pin per place, not per salon: two locations are two pins.
+        if (seen.has(s.location.id)) return false;
+        seen.add(s.location.id);
         return true;
       })
       .map((s, i) => ({
-        id: s.salon.slug,
+        id: s.location.id,
         lat: s.salon.lat!,
         lng: s.salon.lng!,
         label: s.salon.name,
-        sub: s.salon.city,
+        sub: placeSub(s),
         sub2: s.availableAt ? t('c.availNow', { t: s.availableAt }) : null,
         here: i === 0,
         // The card the pin opens. Everything on it is something the
@@ -808,24 +826,24 @@ export function Results() {
         photo: s.salon.hasPhoto ? s.salon.photo : null,
         badge: s.salon.bookable ? t('c.res.instant') : null,
         price: priceLbl(s),
-        href: `/salon/${s.salon.slug}`,
-        onClick: () => nav(`/salon/${s.salon.slug}`),
+        href: `/salon/${s.salon.slug}?location=${encodeURIComponent(s.location.id)}`,
+        onClick: () => nav(`/salon/${s.salon.slug}?location=${encodeURIComponent(s.location.id)}`),
       }));
   }, [rows, nav]);
-  /** The phone's map: one card per salon — its best row for this
-   *  question — keyed by the slug that is also its pin. */
+  /** The phone's map: one card per place — its best row for this
+   *  question — keyed by the location id that is also its pin. */
   const mapResults = useMemo<MapResult[]>(() => {
     const seen = new Set<string>();
     const out: MapResult[] = [];
     for (const s of rows) {
-      if (s.salon.lat == null || s.salon.lng == null || seen.has(s.salon.slug)) continue;
-      seen.add(s.salon.slug);
+      if (s.salon.lat == null || s.salon.lng == null || seen.has(s.location.id)) continue;
+      seen.add(s.location.id);
       out.push({
-        id: s.salon.slug,
+        id: s.location.id,
         lat: s.salon.lat,
         lng: s.salon.lng,
         name: s.salon.name,
-        city: s.salon.city,
+        city: placeSub(s),
         photo: s.salon.photo,
         hasPhoto: s.salon.hasPhoto,
         bookable: s.salon.bookable,
@@ -952,7 +970,7 @@ export function Results() {
 
                 {/* "Nothing matched" would be a lie when the salon block
                     above is standing there having matched. */}
-                {best ? <BestD s={best} on={selectedSalon === best.salon.slug} onSelect={() => setSelectedSalon(best.salon.slug)} /> : loaded && !salons.length ? (
+                {best ? <BestD s={best} on={selectedSalon === best.location.id} onSelect={() => setSelectedSalon(best.location.id)} /> : loaded && !salons.length ? (
                   <div style={{ padding: '18px 4px' }}>
                     <div className="sm muted">{emptyLine(title, unknown, Boolean(query), { km: filters.radiusKm, city: filters.city })}</div>
                     {filters.radiusKm ? (
@@ -973,7 +991,7 @@ export function Results() {
                     <h2 className="serif" style={{ fontSize: '19px', margin: '22px 0 2px' }}>{t('c.res.alts')}</h2>
                     <div className="sm muted" style={{ marginBottom: '12px' }}>{t('c.res.altsSub')}</div>
                     {alts.map((s) => (
-                      <AltD key={s.id} s={s} on={selectedSalon === s.salon.slug} onSelect={() => setSelectedSalon(s.salon.slug)} />
+                      <AltD key={rowKey(s)} s={s} on={selectedSalon === s.location.id} onSelect={() => setSelectedSalon(s.location.id)} />
                     ))}
                   </>
                 ) : null}
@@ -1165,7 +1183,7 @@ export function Results() {
                     <div className="sm muted">{t('c.res.altsSub')}</div>
                   </div>
                   {alts.map((s) => (
-                    <AltM key={s.id} s={s} />
+                    <AltM key={rowKey(s)} s={s} />
                   ))}
                 </>
               ) : null}

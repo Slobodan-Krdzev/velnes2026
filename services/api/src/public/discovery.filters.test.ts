@@ -35,9 +35,17 @@ describe('price range and amenity filters', () => {
     expect(r.services.length).toBeGreaterThan(0);
     expect(r.facets.prices.length).toBe(r.services.filter((s) => s.price != null).length);
     expect([...r.facets.prices].sort((a, b) => a - b)).toEqual(r.facets.prices);
-    // The seeded salon's location says wifi and parking; nothing else is offered.
-    expect(r.facets.amenities.map((a) => a.key)).toEqual(['wifi', 'free_parking']);
-    for (const s of r.services) expect(s.salon.amenities).toEqual(['wifi', 'free_parking']);
+    // Amenities belong to a location, and so does a result: the cards at
+    // Aerodrom say wifi and parking, the cards at Centar say nothing, and
+    // the facet counts the Aerodrom ones. Nothing else is offered.
+    const atAerodrom = r.services.filter((s) => s.location.id === demo.locAerodrom);
+    expect(atAerodrom.length).toBeGreaterThan(0);
+    for (const s of r.services)
+      expect(s.salon.amenities).toEqual(s.location.id === demo.locAerodrom ? ['wifi', 'free_parking'] : []);
+    expect(r.facets.amenities).toEqual([
+      { key: 'wifi', count: atAerodrom.length },
+      { key: 'free_parking', count: atAerodrom.length },
+    ]);
   });
 
   it('a price range admits only what it says, and says how many unpriced fell out', async () => {
@@ -57,14 +65,20 @@ describe('price range and amenity filters', () => {
   it('amenities are all-of, on both doors, and an unknown key is refused', async () => {
     const wifi = SearchResultsSchema.parse((await app.inject({ method: 'POST', url: `${P}/discovery/search`, payload: { q: 'massage', amenities: ['wifi'] } })).json());
     expect(wifi.services.length).toBeGreaterThan(0);
+    // Only the location that has it — its sibling without wifi is out.
+    for (const s of wifi.services) expect(s.location.id).toBe(demo.locAerodrom);
     const sauna = SearchResultsSchema.parse((await app.inject({ method: 'POST', url: `${P}/discovery/search`, payload: { q: 'massage', amenities: ['wifi', 'sauna'] } })).json());
     expect(sauna.services).toEqual([]);
     const bad = await app.inject({ method: 'POST', url: `${P}/discovery/search`, payload: { q: 'massage', amenities: ['jacuzzi'] } });
     expect(bad.statusCode).toBe(400);
+    // The category door, entered at a category Aerodrom really offers —
+    // a treatment is on offer at a location only when somebody there
+    // does it, so not every category has an Aerodrom card.
     const cats = await app.inject({ method: 'GET', url: `${P}/discovery/categories` });
-    const id = (cats.json().categories as { id: string }[])[0]!.id;
+    const id = (cats.json().categories as { id: string; name: string }[]).find((c) => c.name === wifi.services[0]!.category)!.id;
     const byCat = DiscoveryRankedServicesSchema.parse((await app.inject({ method: 'POST', url: `${P}/discovery/categories/${id}/services`, payload: { amenities: ['free_parking'] } })).json());
     expect(byCat.services.length).toBeGreaterThan(0);
+    for (const s of byCat.services) expect(s.location.id).toBe(demo.locAerodrom);
     expect(byCat.facets.amenities.map((a) => a.key)).toEqual(['wifi', 'free_parking']);
     const catNone = DiscoveryRankedServicesSchema.parse((await app.inject({ method: 'POST', url: `${P}/discovery/categories/${id}/services`, payload: { amenities: ['sauna'] } })).json());
     expect(catNone.services).toEqual([]);

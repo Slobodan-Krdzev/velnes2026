@@ -642,8 +642,9 @@ function nowNearBits(n: NowNear) {
     today,
     price,
     at,
-    href: `/salon/${n.s.salon.slug}?service=${encodeURIComponent(n.s.id)}`,
-    slotHref: at ? `/salon/${n.s.salon.slug}?service=${encodeURIComponent(n.s.id)}&date=${today}&time=${at}` : null,
+    // The start it can make is at *this* location: the link opens there.
+    href: `/salon/${n.s.salon.slug}?service=${encodeURIComponent(n.s.id)}&location=${encodeURIComponent(n.s.location.id)}`,
+    slotHref: at ? `/salon/${n.s.salon.slug}?service=${encodeURIComponent(n.s.id)}&location=${encodeURIComponent(n.s.location.id)}&date=${today}&time=${at}` : null,
     away: n.km == null ? null : t('c.res.fromYou', { d: distanceLbl(n.km) }),
   };
 }

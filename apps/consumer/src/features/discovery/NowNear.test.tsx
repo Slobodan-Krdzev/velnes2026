@@ -24,6 +24,7 @@ const one: NowNear = {
       bookable: true,
       showPrices: true,
     },
+    location: { id: '22222222-2222-4222-8222-222222222222', name: 'Centar', city: 'Skopje', address: 'Makedonija 12', lat: 41.99, lng: 21.43 },
     availableAt: '14:30',
   } as NowNear['s'],
 };

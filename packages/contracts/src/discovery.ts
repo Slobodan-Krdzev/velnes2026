@@ -191,9 +191,24 @@ export const DiscoveryServiceCardSchema = z.object({
     /** False when the salon publishes no prices, so the card can say so
      *  instead of showing a hole where a number should be. */
     showPrices: z.boolean(),
-    /** The facilities at the location this card stands for — the pin's
-     *  location — so a filter on amenities is a filter on keys. */
+    /** The facilities at the location this card stands for, so a filter
+     *  on amenities is a filter on keys. */
     amenities: AmenityListSchema.default([]),
+  }),
+  /**
+   * The place (Alex, 2026-09-29): a result is a treatment at ONE of the
+   * salon's ACTIVE locations, so a salon with two locations is two
+   * results where it offers the treatment at both — each with its own
+   * pin, town, facilities and availability. `salon.lat/lng` are this
+   * location's pin.
+   */
+  location: z.object({
+    id: z.uuid(),
+    name: z.string(),
+    city: z.string().nullable(),
+    address: z.string().nullable(),
+    lat: z.number().nullable(),
+    lng: z.number().nullable(),
   }),
   /**
    * When this treatment can start within the next half hour — "HH:MM"

@@ -661,7 +661,7 @@ describe('the consumer discovery surface', () => {
       for (const [slug, n] of counts)
         expect(n, `${slug} in the first ${WINDOW}`).toBeLessThanOrEqual(CAP);
       // Capped, not dropped: everything still comes back.
-      const all = new Set(body.services.map((s) => s.id));
+      const all = new Set(body.services.map((s) => `${s.id}@${s.location.id}`));
       expect(all.size).toBe(body.services.length);
     });
 

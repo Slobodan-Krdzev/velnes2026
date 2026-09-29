@@ -46,14 +46,18 @@ describe('a submitted search', () => {
   });
 
   describe('naming a salon outright', () => {
-    it('goes there instead of answering with a page', async () => {
+    it('names it, and answers with its treatments at every one of its locations', async () => {
       const r = await q('Velnes Fizio Centar');
       expect(r.how).toBe('salon');
       expect(r.directSalon?.slug).toBe('velnes-fizio');
-      // Nothing is ranked, because there is nothing to rank: this is an
-      // address, not a search.
-      expect(r.services).toEqual([]);
       expect(r.ambiguous).toBe(false);
+      // Alex, 2026-09-29: a salon with two locations is two places on the
+      // map and in the list — the page shows both rather than pretending
+      // the name was an address. Only that salon's treatments, though.
+      expect(r.services.length).toBeGreaterThan(0);
+      for (const s of r.services) expect(s.salon.slug).toBe('velnes-fizio');
+      const places = new Set(r.services.map((s) => s.location.name));
+      expect([...places].sort()).toEqual(['Aerodrom', 'Centar']);
     });
 
     it('ignores case and spacing, because typing is not an exam', async () => {
@@ -222,7 +226,9 @@ describe('a submitted search', () => {
       const parts = await Promise.all(
         (['low', 'mid', 'high'] as const).map((b) => search({ q: 'fizio', priceBand: b })),
       );
-      const seen = parts.flatMap((p) => p.services.map((s) => s.id));
+      // A result is a treatment at a place: the same service at two of
+      // a salon's locations is two results, each in exactly one band.
+      const seen = parts.flatMap((p) => p.services.map((s) => `${s.id}@${s.location.id}`));
       // Every priced treatment in exactly one band, none in two.
       expect(new Set(seen).size).toBe(seen.length);
       const priced = all.services.filter((s) => (s.priceFrom ?? s.price) != null);

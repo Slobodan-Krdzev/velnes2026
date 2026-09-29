@@ -30,7 +30,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { sql } from 'kysely';
 import { z } from 'zod';
-import { svcVariants } from '../modules/catalog/catalog.service.js';
+import { svcAt, svcVariants } from '../modules/catalog/catalog.service.js';
 import { ClientClaimsSchema } from '@velnes/contracts';
 import { rank, type RankCandidate } from '../modules/search/rank.js';
 import {
@@ -47,7 +47,7 @@ import {
 } from '../modules/search/interpret.js';
 import { priceOf, applyFilters, priceTercilesOf } from '../modules/search/filters.js';
 import { NOW_WINDOW_MIN, readNow } from '../modules/search/now-intent.js';
-import { firstStartWithin } from '../modules/booking/booking.service.js';
+import { empsFor, firstStartWithin } from '../modules/booking/booking.service.js';
 import { db, withClient, withTenant } from '../db/index.js';
 
 const ErrorSchema = z.object({ error: z.string(), message: z.string() });
@@ -281,34 +281,26 @@ async function availableNowOf(
   }
   for (const [bizId, list] of byBiz) {
     const todo = list.filter((c) => {
-      const hit = nowCache.get(`${bizId}:${c.id}`);
+      const hit = nowCache.get(`${bizId}:${candKey(c)}`);
       if (hit && now.getTime() - hit.at < NOW_TTL_MS) {
-        out.set(c.id, hit.value);
+        out.set(candKey(c), hit.value);
         return false;
       }
       return true;
     });
     if (!todo.length) continue;
     await withTenant(bizId, async (trx) => {
-      const locs = await trx
-        .selectFrom('locations')
-        .select('id')
-        .where('lifecycle', '=', 'ACTIVE')
-        .orderBy('name')
-        .execute();
+      // The candidate is a treatment AT a location: that location's own
+      // first start, never a sibling's.
       for (const c of todo) {
-        let at: string | null = null;
-        for (const l of locs) {
-          at = await firstStartWithin(trx, {
-            locationId: l.id,
-            serviceId: c.id,
-            windowMin: NOW_WINDOW_MIN,
-            now,
-          });
-          if (at) break;
-        }
-        out.set(c.id, at);
-        nowCache.set(`${bizId}:${c.id}`, { at: now.getTime(), value: at });
+        const at = await firstStartWithin(trx, {
+          locationId: c.locationId,
+          serviceId: c.id,
+          windowMin: NOW_WINDOW_MIN,
+          now,
+        });
+        out.set(candKey(c), at);
+        nowCache.set(`${bizId}:${candKey(c)}`, { at: now.getTime(), value: at });
       }
     });
   }
@@ -329,8 +321,8 @@ async function allCandidates(): Promise<{
   for (const id of onOffer) {
     const got = await gatherCategory(id);
     if (!got) continue;
-    const fresh = got.services.filter((svc) => !seen.has(svc.id));
-    for (const svc of fresh) seen.set(svc.id, svc);
+    const fresh = got.services.filter((svc) => !seen.has(cardKey(svc)));
+    for (const svc of fresh) seen.set(cardKey(svc), svc);
     if (!fresh.length) continue;
     byCategory.push(...candidatesOf(got.category.id, fresh, got.meta));
     facetCategories.push({ id: got.category.id, name: got.category.name, count: fresh.length });
@@ -380,8 +372,8 @@ export async function textCandidates(q: string): Promise<TextCandidates> {
   for (const id of read.categoryIds) {
     const got = await gatherCategory(id);
     if (!got) continue;
-    const fresh = got.services.filter((svc) => !seen.has(svc.id));
-    for (const svc of fresh) seen.set(svc.id, svc);
+    const fresh = got.services.filter((svc) => !seen.has(cardKey(svc)));
+    for (const svc of fresh) seen.set(cardKey(svc), svc);
     if (!fresh.length) continue;
     byCategory.push(...candidatesOf(got.category.id, fresh, got.meta));
     facetCategories.push({ id: got.category.id, name: got.category.name, count: fresh.length });
@@ -574,13 +566,20 @@ export async function gatherCategory(categoryId: string): Promise<
   const meta = new Map<string, CandidateMeta>();
   for (const b of listed) {
     const photo = cardPhoto(b.gallery);
-    const pin = await firstPin(b.id);
-    // The card stands for the pin's location, so its facilities are that
-    // location's — a filter on amenities is a filter on these keys.
-    const amenities = pin.locationId
-      ? ((await withTenant(b.id, (trx) => amenitiesByLocation(trx))).get(pin.locationId) ?? [])
-      : [];
-    const rows = await withTenant(b.id, async (trx) => {
+    const show = b.marketplace.showPrices;
+    // Every ACTIVE location, and for each the treatments really offered
+    // there (Alex, 2026-09-29): active and online at that location, with
+    // somebody there who does it — the same rule the salon page's
+    // services door applies — and priced as that location prices it.
+    const cards = await withTenant(b.id, async (trx) => {
+      const places = await trx
+        .selectFrom('locations')
+        .select(['id', 'name', 'city', 'address', 'lat', 'lng'])
+        .where('lifecycle', '=', 'ACTIVE')
+        .orderBy('name')
+        .execute();
+      if (!places.length) return [];
+      const amenities = await amenitiesByLocation(trx);
       const found = await trx
         .selectFrom('services as s')
         .select(['s.id', 's.name', 's.durationMin', 's.price', 's.sort'])
@@ -591,43 +590,48 @@ export async function gatherCategory(categoryId: string): Promise<
         .orderBy('s.sort')
         .orderBy('s.name')
         .execute();
-      // A variant's price can undercut the master's, and the card says
-      // "from" when it does. No location here, so this is the salon-wide
-      // price before any per-location override.
-      return Promise.all(
-        found.map(async (s) => {
-          const vs = (await svcVariants(trx, s.id, null)).filter((v) => v.active);
-          return { ...s, priceFrom: vs.length ? Math.min(...vs.map((v) => v.price)) : null };
-        }),
-      );
+      const out: DiscoveryServiceCard[] = [];
+      for (const place of places) {
+        for (const sv of found) {
+          const cfg = await svcAt(trx, sv.id, place.id);
+          if (!cfg.active || !cfg.online) continue;
+          if (!(await empsFor(trx, place.id, sv.id)).length) continue;
+          // A variant's price can undercut the master's, and the card
+          // says "from" when it does — as this location prices it.
+          const vs = (await svcVariants(trx, sv.id, place.id)).filter((v) => v.active);
+          const priceFrom = vs.length ? Math.min(...vs.map((v) => v.price)) : null;
+          out.push({
+            id: sv.id,
+            name: sv.name,
+            category: category.name,
+            durationMin: sv.durationMin,
+            price: show ? sv.price : null,
+            priceFrom: show ? priceFrom : null,
+            salon: {
+              slug: b.slug,
+              name: b.name,
+              city: b.city,
+              photo,
+              lat: place.lat,
+              lng: place.lng,
+              // Admission already guaranteed this; kept on the card because
+              // the app still says it, and a field that silently became
+              // constant is a field someone will later misread.
+              bookable: true,
+              showPrices: show,
+              amenities: amenities.get(place.id) ?? [],
+            },
+            location: { id: place.id, name: place.name, city: place.city, address: place.address, lat: place.lat, lng: place.lng },
+            // Learned only when a request asks for *now*; see the doors.
+            availableAt: null,
+          });
+        }
+      }
+      return out;
     });
-    const show = b.marketplace.showPrices;
-    for (const s of rows) {
-      services.push({
-        id: s.id,
-        name: s.name,
-        category: category.name,
-        durationMin: s.durationMin,
-        price: show ? s.price : null,
-        priceFrom: show ? s.priceFrom : null,
-        salon: {
-          slug: b.slug,
-          name: b.name,
-          city: b.city,
-          photo,
-          lat: pin.lat,
-          lng: pin.lng,
-          // Admission already guaranteed this; kept on the card because
-          // the app still says it, and a field that silently became
-          // constant is a field someone will later misread.
-          bookable: true,
-          showPrices: show,
-          amenities,
-        },
-        // Learned only when a request asks for *now*; see the doors.
-        availableAt: null,
-      });
-      meta.set(s.id, {
+    for (const c of cards) {
+      services.push(c);
+      meta.set(cardKey(c), {
         businessId: b.id,
         createdAt: (createdAt.get(b.id) ?? new Date()).toISOString(),
       });
@@ -635,6 +639,11 @@ export async function gatherCategory(categoryId: string): Promise<
   }
   return { category, services, meta };
 }
+
+/** A result's identity: the treatment at the place. The same service at
+ *  two locations is two results, and is keyed as two. */
+export const candKey = (c: { id: string; locationId: string }) => `${c.id}@${c.locationId}`;
+const cardKey = (c: DiscoveryServiceCard) => `${c.id}@${c.location.id}`;
 
 /** The price and amenity facets of an unfiltered answer — the histogram
  *  and the amenity chips the phone's filters panel draws from. */
@@ -662,9 +671,10 @@ export function candidatesOf(
   meta: Map<string, CandidateMeta>,
 ): RankCandidate[] {
   return services.map((s) => {
-    const m = meta.get(s.id)!;
+    const m = meta.get(cardKey(s))!;
     return {
       id: s.id,
+      locationId: s.location.id,
       name: s.name,
       categoryId,
       durationMin: s.durationMin,
@@ -1319,19 +1329,30 @@ export async function discoveryRoutes(app: FastifyInstance) {
         : await textCandidates(q);
 
       const cfg = await activeSearchConfig();
-      // A salon named outright: the client navigates and never sees a
-      // results page. Nothing is ranked, because there is nothing to
-      // rank — this is not a search, it is an address.
-      if (read.directSalon)
-        return { ...empty, directSalon: read.directSalon, how: 'salon' as const, rankVersion: cfg.version };
+      // A salon named outright (Alex, 2026-09-29): its own treatments, at
+      // every one of its locations, ranked like any answer — a salon with
+      // two locations is two places on the map and in the list. The
+      // client still opens the salon page directly when it has one.
+      let own = { services, byCategory, facetCategories };
+      if (read.directSalon) {
+        const all = await allCandidates();
+        const mine = new Set(all.byCategory.filter((c) => c.salon.businessId === read.directSalon!.id).map(candKey));
+        own = {
+          services: all.services.filter((c) => mine.has(cardKey(c))),
+          byCategory: all.byCategory.filter((c) => mine.has(candKey(c))),
+          facetCategories: [],
+        };
+      }
+      const { services: svcs, byCategory: cands, facetCategories: facetCats } = own;
 
-      if (!services.length) {
+      if (!svcs.length) {
         await noteMiss(q, 0, read.how);
         return {
           ...empty,
           salons: nearMisses,
-          how: read.how,
+          how: read.directSalon ? ('salon' as const) : read.how,
           ambiguous: read.ambiguous,
+          directSalon: read.directSalon,
           rankVersion: cfg.version,
         };
       }
@@ -1359,7 +1380,7 @@ export async function discoveryRoutes(app: FastifyInstance) {
         }
       }
 
-      const candidates = withTextRelevance(byCategory, matches);
+      const candidates = withTextRelevance(cands, matches);
 
       // Facets describe the answer before anybody narrowed it, so
       // choosing a band does not move the boundaries underneath the
@@ -1367,7 +1388,7 @@ export async function discoveryRoutes(app: FastifyInstance) {
       const terciles = priceTercilesOf(candidates);
       const facets = {
         // Nothing to narrow when the query only ever meant one thing.
-        categories: facetCategories.length > 1 ? facetCategories : [],
+        categories: facetCats.length > 1 ? facetCats : [],
         price: terciles,
         ...priceAndAmenityFacets(candidates),
       };
@@ -1403,7 +1424,7 @@ export async function discoveryRoutes(app: FastifyInstance) {
       // start, and that becomes its availability — and the order.
       const soon = wantNow ? await availableNowOf(cut.admitted, now) : null;
       const admitted = soon
-        ? cut.admitted.map((c) => ({ ...c, availableAt: soon.get(c.id) ?? null }))
+        ? cut.admitted.map((c) => ({ ...c, availableAt: soon.get(candKey(c)) ?? null }))
         : cut.admitted;
       const ranked = rank(admitted, { position, history }, cfg.payload, { now });
       // A page with almost nothing on it is a miss the customer feels,
@@ -1416,17 +1437,19 @@ export async function discoveryRoutes(app: FastifyInstance) {
         req.body.priceMin != null || req.body.priceMax != null || req.body.amenities.length,
       );
       if (!narrowed && !nowOnly) await noteMiss(q, ranked.length, read.how);
-      const byId = new Map(services.map((s) => [s.id, s]));
+      // Keyed by treatment *and* place: the same service at two locations
+      // is two cards, and the ranker handed back two candidates.
+      const byKey = new Map(svcs.map((s) => [cardKey(s), s]));
       return {
-        directSalon: null,
+        directSalon: read.directSalon,
         services: ranked.map((x) => ({
-          ...byId.get(x.candidate.id)!,
+          ...byKey.get(candKey(x.candidate))!,
           availableAt: x.candidate.availableAt ?? null,
         })),
         salons: nearMisses,
         rankVersion: cfg.version,
         personalised,
-        how: read.how,
+        how: read.directSalon ? ('salon' as const) : read.how,
         ambiguous: read.ambiguous,
         widened,
         facets,
@@ -1530,14 +1553,14 @@ export async function discoveryRoutes(app: FastifyInstance) {
 
       const soon = req.body.now ? await availableNowOf(cut.admitted, now) : null;
       const admitted = soon
-        ? cut.admitted.map((c) => ({ ...c, availableAt: soon.get(c.id) ?? null }))
+        ? cut.admitted.map((c) => ({ ...c, availableAt: soon.get(candKey(c)) ?? null }))
         : cut.admitted;
       const ranked = rank(admitted, { position, history }, cfg.payload, { now });
-      const byId = new Map(services.map((s) => [s.id, s]));
+      const byKey = new Map(services.map((s) => [cardKey(s), s]));
       return {
         category,
         services: ranked.map((r) => ({
-          ...byId.get(r.candidate.id)!,
+          ...byKey.get(candKey(r.candidate))!,
           availableAt: r.candidate.availableAt ?? null,
         })),
         rankVersion: cfg.version,
