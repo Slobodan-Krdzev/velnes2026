@@ -44,7 +44,7 @@ const HERE = L.divIcon({
  * taking them later. The name rides on the selected pin only, and only
  * when it is short enough to read on a phone; the card carries the rest.
  */
-function velnesPin(p: MapPin, selected: boolean): L.DivIcon {
+function velnesPin(p: MapPin, selected: boolean, flip = false): L.DivIcon {
   // The selected pin says what the card says in a line: the name, and
   // under it the price and a start when the door gave one. Nothing the
   // platform does not know — no rating, since none exist yet.
@@ -54,7 +54,7 @@ function velnesPin(p: MapPin, selected: boolean): L.DivIcon {
     : '';
   return L.divIcon({
     className: '',
-    html: `<span class="vpin${selected ? ' sel' : ''}" role="img"><span class="vpin-dot"></span>${pill}</span>`,
+    html: `<span class="vpin${selected ? ' sel' : ''}${flip ? ' flip' : ''}" role="img"><span class="vpin-dot"></span>${pill}</span>`,
     iconSize: selected ? [30, 30] : [22, 22],
     iconAnchor: selected ? [15, 15] : [11, 11],
   });
@@ -305,21 +305,41 @@ export function SalonMap({
     for (const [id, m] of markersById.current) {
       const p = stable.find((x) => x.id === id);
       if (!p) continue;
-      const sel = id === selectedId;
-      m.setIcon(velnesPin(p, sel));
-      m.setZIndexOffset(sel ? 1000 : 0);
+      if (id !== selectedId) {
+        m.setIcon(velnesPin(p, false));
+        m.setZIndexOffset(0);
+      }
     }
     const sel = selectedId ? markersById.current.get(selectedId) : null;
-    if (!sel) return;
+    const selPin = stable.find((x) => x.id === selectedId);
+    if (!sel || !selPin) return;
+    // The pill must be wholly on screen (Alex, 2026-09-29): it hangs to
+    // the right of the pin, flips to the left when the right has no
+    // room, and when neither side has room the map pans so the pin sits
+    // left of the visible centre with the pill beside it.
+    const PILL = 210;
     const size = map.getSize();
     const visibleH = Math.max(80, size.y - insetRef.current);
     const pt = map.latLngToContainerPoint(sel.getLatLng());
     const margin = 36;
     const inside = pt.x > margin && pt.x < size.x - margin && pt.y > margin + 40 && pt.y < visibleH - margin;
-    if (inside) return;
-    // Aim the marker at the centre of what can be seen.
-    const target = L.point(size.x / 2, visibleH / 2);
-    map.panBy(pt.subtract(target), { animate: true, duration: 0.35 });
+    const roomRight = pt.x + PILL < size.x;
+    const roomLeft = pt.x - PILL > 0;
+    let flip = false;
+    let pan = !inside;
+    if (!pan) {
+      if (roomRight) flip = false;
+      else if (roomLeft) flip = true;
+      else pan = true;
+    }
+    if (pan) {
+      // Left of centre, so the pill to its right fits on a narrow phone.
+      const target = L.point(Math.max(margin, size.x / 2 - 70), visibleH / 2);
+      map.panBy(pt.subtract(target), { animate: true, duration: 0.35 });
+      flip = false;
+    }
+    sel.setIcon(velnesPin(selPin, true, flip));
+    sel.setZIndexOffset(1000);
   }, [selectedId, results, stable, built]);
 
   useEffect(() => {
