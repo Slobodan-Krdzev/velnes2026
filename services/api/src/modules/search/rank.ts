@@ -26,6 +26,8 @@ export interface RankSalon {
   createdAt: string;
   /** The salon's town (`businesses.city`); the city filter reads it. */
   city?: string | null;
+  /** The facilities at the card's location; the amenity filter reads them. */
+  amenities?: readonly string[];
 }
 
 export interface RankCandidate {

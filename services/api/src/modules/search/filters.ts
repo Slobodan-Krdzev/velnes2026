@@ -32,6 +32,12 @@ export interface Filters {
   /** A town, matched against the salon's city case-insensitively. An
    *  explicit choice like the others: never widened. */
   city?: string | null;
+  /** A price range, inclusive, in whole denars, on `priceOf`. Like a
+   *  band: an unpriced treatment falls out and is counted. */
+  priceMin?: number | null;
+  priceMax?: number | null;
+  /** Amenities the salon's location must all have. */
+  amenities?: readonly string[];
 }
 
 /**
@@ -146,6 +152,19 @@ export function applyFilters(
     const band = filters.priceBand;
     hiddenUnpriced = out.filter((c) => priceOf(c) == null).length;
     out = out.filter((c) => inBand(priceOf(c), band, terciles));
+  }
+  if (filters.priceMin != null || filters.priceMax != null) {
+    const lo = filters.priceMin ?? 0;
+    const hi = filters.priceMax ?? Number.POSITIVE_INFINITY;
+    hiddenUnpriced += out.filter((c) => priceOf(c) == null).length;
+    out = out.filter((c) => {
+      const p = priceOf(c);
+      return p != null && p >= lo && p <= hi;
+    });
+  }
+  if (filters.amenities?.length) {
+    const want = filters.amenities;
+    out = out.filter((c) => want.every((k) => (c.salon.amenities ?? []).includes(k)));
   }
 
   if (position && filters.radiusKm) {

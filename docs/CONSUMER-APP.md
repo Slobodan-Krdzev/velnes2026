@@ -765,5 +765,23 @@ opens the full list grouped (Facilities, Spa & wellness, Customer
 experience) in the page's sheet. A location with none shows no card at
 all. The page shows its first location (or the one an offer link
 named), an existing limitation: when it can switch locations, the
-amenities switch with it. Result cards are untouched. Amenity filters
-are a later task; the keys are already what search would filter on.
+amenities switch with it. Result cards are untouched.
+
+**The phone's filters panel (2026-09-29).** "Filters" beside the pill
+no longer reopens the search sheet: it opens a bottom sheet over the
+current answer with three questions, chosen there and applied together
+on *Show results* — a **price range** on a histogram of the answer's own
+prices (`facets.prices`, ascending, from both doors) with two handles,
+the ends meaning "any price"; **when** (any time, or a start within 30
+minutes); and the **amenities** present in the answer
+(`facets.amenities`, key and count), all-of. The doors do the filtering
+as they do every filter — `priceMin` / `priceMax` (inclusive, on the
+cheapest way in; an unpriced treatment falls out and is counted) and
+`amenities` (keys; unknown refused) on both `POST /discovery/search`
+and the category door, which now also answers with `facets` — and the
+panel only writes the URL (`pmin`, `pmax`, `am`). Each result card
+carries its location's amenity keys (`salon.amenities`, the pin's
+location), so the same keys drive filtering and the salon page. The
+desktop keeps its band chips; the two are the same door. Deferral: time
+windows beyond *now* wait for day-wide availability; the search sheet's
+"Choose date & time" and the panel's "when" will grow together.

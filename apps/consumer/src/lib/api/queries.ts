@@ -13,6 +13,7 @@ import type {
   DiscoveryTownsSchema,
   MostChosenSchema,
   SearchResultsSchema,
+  AmenityKey,
   PriceBand,
   PublicServicesResponseSchema,
 } from '@velnes/contracts';
@@ -43,8 +44,16 @@ export interface SearchFilters {
   now: boolean;
   /** A town the salon is in — the sheet's "Where" when not "Nearby". */
   city: string | null;
+  /** A price range in whole denars, inclusive — the filters panel's
+   *  histogram handles; either end open when null. */
+  priceMin: number | null;
+  priceMax: number | null;
+  /** Amenities the salon's location must all have — keys. */
+  amenities: AmenityKey[];
 }
-export const NO_FILTERS: SearchFilters = { priceBand: null, categoryId: null, radiusKm: null, now: false, city: null };
+export const NO_FILTERS: SearchFilters = {
+  priceBand: null, categoryId: null, radiusKm: null, now: false, city: null, priceMin: null, priceMax: null, amenities: [],
+};
 type Towns = z.infer<typeof DiscoveryTownsSchema>;
 type Suggestions = z.infer<typeof DiscoverySuggestionsSchema>;
 
@@ -190,6 +199,9 @@ export function useRankedCategoryServices(
       filters.radiusKm,
       filters.now,
       filters.city,
+      filters.priceMin,
+      filters.priceMax,
+      filters.amenities.join(','),
     ],
     queryFn: () =>
       pubPost<RankedServices>(
@@ -201,6 +213,9 @@ export function useRankedCategoryServices(
           priceBand: filters.priceBand,
           now: filters.now,
           city: filters.city,
+          priceMin: filters.priceMin,
+          priceMax: filters.priceMax,
+          amenities: filters.amenities,
         },
         token,
       ),
@@ -300,6 +315,9 @@ export function useSearch(
       filters.radiusKm,
       filters.now,
       filters.city,
+      filters.priceMin,
+      filters.priceMax,
+      filters.amenities.join(','),
     ],
     queryFn: () =>
       pubPost<SearchResults>(
@@ -315,6 +333,9 @@ export function useSearch(
           categoryId: filters.categoryId,
           now: filters.now,
           city: filters.city,
+          priceMin: filters.priceMin,
+          priceMax: filters.priceMax,
+          amenities: filters.amenities,
         },
         token,
       ),

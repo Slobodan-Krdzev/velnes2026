@@ -8,7 +8,7 @@ import { t } from '../../lib/i18n-core.js';
 const SHOWN = 6;
 
 /** One amenity's icon: the shared path, drawn the way this app draws icons. */
-function AmenityIcon({ k }: { k: AmenityKey }) {
+export function AmenityIcon({ k }: { k: AmenityKey }) {
   return (
     <span className="amen-ic" aria-hidden="true">
       <svg

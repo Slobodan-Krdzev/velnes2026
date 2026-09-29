@@ -161,3 +161,25 @@ describe('admission', () => {
     expect(widened).toBeNull();
   });
 });
+
+describe('a price range, and amenities (2026-09-29)', () => {
+  it('a range is inclusive on the cheapest way in; unpriced treatments fall out and are counted', () => {
+    const rows = [cand(500), cand(1000, { priceFrom: 700 }), cand(1500), cand(null)];
+    const { admitted, hiddenUnpriced } = applyFilters(rows, { ...none, priceMin: 700, priceMax: 1000 }, null, null);
+    expect(admitted.map((c) => priceOf(c))).toEqual([700]);
+    expect(hiddenUnpriced).toBe(1);
+    // Open at either end.
+    expect(applyFilters(rows, { ...none, priceMax: 600 }, null, null).admitted.map(priceOf)).toEqual([500]);
+    expect(applyFilters(rows, { ...none, priceMin: 1500 }, null, null).admitted.map(priceOf)).toEqual([1500]);
+  });
+  it('amenities are all-of, on the card’s location keys, and never widened', () => {
+    const a = cand(900, { salon: { ...cand(1).salon, amenities: ['wifi', 'sauna'] } });
+    const b = cand(900, { salon: { ...cand(1).salon, amenities: ['wifi'] } });
+    const c = cand(900);
+    expect(applyFilters([a, b, c], { ...none, amenities: ['wifi'] }, null, null).admitted.map((x) => x.id)).toEqual([a.id, b.id]);
+    expect(applyFilters([a, b, c], { ...none, amenities: ['wifi', 'sauna'] }, null, null).admitted.map((x) => x.id)).toEqual([a.id]);
+    const out = applyFilters([a, b, c], { ...none, amenities: ['hot_tub'] }, null, null);
+    expect(out.admitted).toEqual([]);
+    expect(out.widened).toBeNull();
+  });
+});

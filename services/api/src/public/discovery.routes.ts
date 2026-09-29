@@ -1,4 +1,6 @@
 import {
+  sortAmenities,
+  type AmenityKey,
   consumerKey,
   SocialLinksSchema,
   BusinessSettingsSchema,
@@ -42,7 +44,7 @@ import {
   type Interpretation,
   type SearchMatch,
 } from '../modules/search/interpret.js';
-import { applyFilters, priceTercilesOf } from '../modules/search/filters.js';
+import { priceOf, applyFilters, priceTercilesOf } from '../modules/search/filters.js';
 import { NOW_WINDOW_MIN, readNow } from '../modules/search/now-intent.js';
 import { firstStartWithin } from '../modules/booking/booking.service.js';
 import { db, withClient, withTenant } from '../db/index.js';
@@ -188,17 +190,17 @@ function haversineKm(a: { lat: number; lng: number }, b: { lat: number; lng: num
 /** Where a salon sits on the map: the pin its owner dropped, preferring
  *  a live location's but falling back to any of them — a salon that is
  *  listed but not yet bookable still has a place in the world. */
-async function firstPin(tenantId: string): Promise<{ lat: number | null; lng: number | null }> {
+async function firstPin(tenantId: string): Promise<{ lat: number | null; lng: number | null; locationId: string | null }> {
   const rows = await withTenant(tenantId, (trx) =>
     trx
       .selectFrom('locations')
-      .select(['lat', 'lng', 'lifecycle'])
+      .select(['id', 'lat', 'lng', 'lifecycle'])
       .orderBy('name')
       .execute(),
   );
   const pinned = rows.filter((l) => l.lat != null && l.lng != null);
-  const best = pinned.find((l) => l.lifecycle === 'ACTIVE') ?? pinned[0];
-  return { lat: best?.lat ?? null, lng: best?.lng ?? null };
+  const best = pinned.find((l) => l.lifecycle === 'ACTIVE') ?? pinned[0] ?? rows.find((l) => l.lifecycle === 'ACTIVE') ?? rows[0];
+  return { lat: best?.lat ?? null, lng: best?.lng ?? null, locationId: best?.id ?? null };
 }
 
 /** Is the salon open to the outside world — does it have an ACTIVE
@@ -239,7 +241,7 @@ async function categoryIdsOnOffer(admitted: ListedBusiness[]): Promise<Set<strin
 }
 
 /** What the filters can offer when there is no answer to describe. */
-const NO_FACETS: SearchFacets = { categories: [], price: null };
+const NO_FACETS: SearchFacets = { categories: [], price: null, prices: [], amenities: [] };
 
 /** Everything typed text becomes, on the way to being ranked. */
 export interface TextCandidates {
@@ -572,6 +574,11 @@ export async function gatherCategory(categoryId: string): Promise<
   for (const b of listed) {
     const photo = cardPhoto(b.gallery);
     const pin = await firstPin(b.id);
+    // The card stands for the pin's location, so its facilities are that
+    // location's — a filter on amenities is a filter on these keys.
+    const amenities = pin.locationId
+      ? ((await withTenant(b.id, (trx) => amenitiesByLocation(trx))).get(pin.locationId) ?? [])
+      : [];
     const rows = await withTenant(b.id, async (trx) => {
       const found = await trx
         .selectFrom('services as s')
@@ -614,6 +621,7 @@ export async function gatherCategory(categoryId: string): Promise<
           // constant is a field someone will later misread.
           bookable: true,
           showPrices: show,
+          amenities,
         },
         // Learned only when a request asks for *now*; see the doors.
         availableAt: null,
@@ -625,6 +633,19 @@ export async function gatherCategory(categoryId: string): Promise<
     }
   }
   return { category, services, meta };
+}
+
+/** The price and amenity facets of an unfiltered answer — the histogram
+ *  and the amenity chips the phone's filters panel draws from. */
+function priceAndAmenityFacets(candidates: RankCandidate[]) {
+  const prices = candidates
+    .map(priceOf)
+    .filter((p): p is number => p != null)
+    .sort((a, b) => a - b);
+  const counts = new Map<string, number>();
+  for (const c of candidates) for (const k of c.salon.amenities ?? []) counts.set(k, (counts.get(k) ?? 0) + 1);
+  const amenities = sortAmenities([...counts.keys()] as AmenityKey[]).map((key) => ({ key, count: counts.get(key)! }));
+  return { prices, amenities };
 }
 
 /**
@@ -657,6 +678,7 @@ export function candidatesOf(
         lng: s.salon.lng,
         bookable: s.salon.bookable,
         createdAt: m.createdAt,
+        amenities: s.salon.amenities,
       },
     };
   });
@@ -1346,6 +1368,7 @@ export async function discoveryRoutes(app: FastifyInstance) {
         // Nothing to narrow when the query only ever meant one thing.
         categories: facetCategories.length > 1 ? facetCategories : [],
         price: terciles,
+        ...priceAndAmenityFacets(candidates),
       };
 
       const cut = applyFilters(
@@ -1355,6 +1378,9 @@ export async function discoveryRoutes(app: FastifyInstance) {
           priceBand: req.body.priceBand,
           categoryId: req.body.categoryId,
           city: req.body.city,
+          priceMin: req.body.priceMin,
+          priceMax: req.body.priceMax,
+          amenities: req.body.amenities,
         },
         position,
         terciles,
@@ -1384,7 +1410,10 @@ export async function discoveryRoutes(app: FastifyInstance) {
       // they did not narrow it themselves: an empty answer to "under
       // 700 MKD within 2 km" is a filter doing its job, not a gap in
       // what the platform sells. "now" on its own names no gap either.
-      const narrowed = Boolean(req.body.priceBand || req.body.categoryId || req.body.radiusKm || req.body.city);
+      const narrowed = Boolean(
+        req.body.priceBand || req.body.categoryId || req.body.radiusKm || req.body.city ||
+        req.body.priceMin != null || req.body.priceMax != null || req.body.amenities.length,
+      );
       if (!narrowed && !nowOnly) await noteMiss(q, ranked.length, read.how);
       const byId = new Map(services.map((s) => [s.id, s]));
       return {
@@ -1480,7 +1509,15 @@ export async function discoveryRoutes(app: FastifyInstance) {
       const terciles = priceTercilesOf(candidates);
       const cut = applyFilters(
         candidates,
-        { radiusKm: req.body.radiusKm, priceBand: req.body.priceBand, categoryId: null, city: req.body.city },
+        {
+          radiusKm: req.body.radiusKm,
+          priceBand: req.body.priceBand,
+          categoryId: null,
+          city: req.body.city,
+          priceMin: req.body.priceMin,
+          priceMax: req.body.priceMax,
+          amenities: req.body.amenities,
+        },
         position,
         terciles,
         // Widened once when it would leave almost nothing, and reported —
@@ -1504,7 +1541,7 @@ export async function discoveryRoutes(app: FastifyInstance) {
         })),
         rankVersion: cfg.version,
         personalised,
-        facets: { categories: [], price: terciles },
+        facets: { categories: [], price: terciles, ...priceAndAmenityFacets(candidates) },
         widened: cut.widened,
         hiddenUnpriced: cut.hiddenUnpriced,
         nowRequested: req.body.now,

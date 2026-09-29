@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { AmenityListSchema } from './amenities.js';
+import { AmenityKeySchema, AmenityListSchema } from './amenities.js';
 import { MoneySchema } from './catalog.js';
 
 /** The consumer discovery surface (apps/consumer): read-only, key-free
@@ -186,6 +186,9 @@ export const DiscoveryServiceCardSchema = z.object({
     /** False when the salon publishes no prices, so the card can say so
      *  instead of showing a hole where a number should be. */
     showPrices: z.boolean(),
+    /** The facilities at the location this card stands for — the pin's
+     *  location — so a filter on amenities is a filter on keys. */
+    amenities: AmenityListSchema.default([]),
   }),
   /**
    * When this treatment can start within the next half hour — "HH:MM"
@@ -248,6 +251,13 @@ export const SearchFacetsSchema = z.object({
   /** Tercile boundaries in whole denars. Null when too few treatments
    *  publish a price to divide them honestly. */
   price: z.object({ lowMax: z.number().int(), midMax: z.number().int() }).nullable(),
+  /** Every published price in the unfiltered answer, ascending, whole
+   *  denars — the histogram behind the price-range control (Alex,
+   *  2026-09-29). Empty when nothing is priced. */
+  prices: z.array(z.number().int()).default([]),
+  /** The amenities present across the unfiltered answer, with how many
+   *  treatments each backs — only what can be narrowed is offered. */
+  amenities: z.array(z.object({ key: AmenityKeySchema, count: z.number().int() })).default([]),
 });
 export type SearchFacets = z.infer<typeof SearchFacetsSchema>;
 
@@ -293,6 +303,13 @@ export const DiscoveryViewerSchema = z.object({
    *  The "Where" of the phone's search sheet when it is not "Nearby" —
    *  hard admission like every filter, never widened. */
   city: z.string().trim().min(1).max(80).nullable().default(null),
+  /** A price range in whole denars, inclusive, on the treatment's
+   *  cheapest way in — hard admission; an unpriced treatment falls out
+   *  and is counted in `hiddenUnpriced`, like a band. */
+  priceMin: z.number().int().min(0).nullable().default(null),
+  priceMax: z.number().int().min(0).nullable().default(null),
+  /** Amenities the salon's location must all have — keys, never labels. */
+  amenities: AmenityListSchema.default([]),
 });
 
 /** The towns salons are actually in — the phone's "Where" list. Only
@@ -464,6 +481,10 @@ export const SearchRequestSchema = z.object({
   now: z.boolean().default(false),
   /** See `DiscoveryViewerSchema.city`. */
   city: z.string().trim().min(1).max(80).nullable().default(null),
+  /** See `DiscoveryViewerSchema.priceMin` / `priceMax` / `amenities`. */
+  priceMin: z.number().int().min(0).nullable().default(null),
+  priceMax: z.number().int().min(0).nullable().default(null),
+  amenities: AmenityListSchema.default([]),
 });
 
 /**

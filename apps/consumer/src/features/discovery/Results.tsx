@@ -36,6 +36,8 @@ import {
 } from './cards.js';
 import { useSearchBox } from './useSearchBox.js';
 import { useSearchSheet } from './SearchSheet.js';
+import { FiltersSheet } from './FiltersSheet.js';
+import { AmenityKeySchema } from '@velnes/contracts';
 
 /** What "near me" means, in kilometres. The distance chips can widen
  *  or narrow it afterwards; this is where the button starts. */
@@ -113,7 +115,7 @@ function useCategoryResults(
     salons: query ? (byText.data?.salons ?? []) : [],
     /** What could be narrowed, described before anything was — so a
      *  choice can always be undone without reloading a different page. */
-    facets: answered?.facets ?? { categories: [], price: null },
+    facets: answered?.facets ?? { categories: [], price: null, prices: [], amenities: [] },
     /** Treatments a price band removed for publishing no price at all.
      *  Said out loud: a salon that hides its prices disappearing from a
      *  price filter looks like a missing salon. */
@@ -535,6 +537,9 @@ export function Results() {
    * sheet before it, are gone — one form, applied on Search.
    */
   const sheet = useSearchSheet();
+  /** The phone's filters panel — price range, when, amenities — over the
+   *  current answer; applied together on "Show results" (Alex, 2026-09-29). */
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [params, setParams] = useSearchParams();
   const query = params.get('q');
 
@@ -554,6 +559,13 @@ export function Results() {
       radiusKm: Number.isFinite(km) && km > 0 ? km : null,
       now: params.get('now') === '1',
       city: params.get('city'),
+      priceMin: Number.isFinite(Number(params.get('pmin'))) && params.get('pmin') ? Math.max(0, Math.round(Number(params.get('pmin')))) : null,
+      priceMax: Number.isFinite(Number(params.get('pmax'))) && params.get('pmax') ? Math.max(0, Math.round(Number(params.get('pmax')))) : null,
+      // Keys only — anything else in the URL is not an amenity.
+      amenities: (params.get('am') ?? '')
+        .split(',')
+        .map((k) => AmenityKeySchema.safeParse(k))
+        .flatMap((r) => (r.success ? [r.data] : [])),
     };
   }, [params]);
   const setFilters = useCallback(
@@ -568,6 +580,9 @@ export function Results() {
       if ('radiusKm' in patch) put('km', patch.radiusKm ?? null);
       if ('now' in patch) put('now', patch.now ? 1 : null);
       if ('city' in patch) put('city', patch.city ?? null);
+      if ('priceMin' in patch) put('pmin', patch.priceMin ?? null);
+      if ('priceMax' in patch) put('pmax', patch.priceMax ?? null);
+      if ('amenities' in patch) put('am', patch.amenities?.length ? patch.amenities.join(',') : null);
       // `near` is an intent, never a filter (see below): any write of
       // the real filters consumes it.
       next.delete('near');
@@ -673,6 +688,9 @@ export function Results() {
     if (radius != null && geo.decision === 'allowed' && geo.status === 'off') geo.locate();
     // Entry only, like the home page.
   }, []);
+  /** What the panel has applied, for its button. */
+  const nFilt =
+    (filters.priceMin != null || filters.priceMax != null ? 1 : 0) + (filters.now ? 1 : 0) + filters.amenities.length;
   /** Lit means "filtering near you", not merely "location is on". */
   const nearOn = geo.status === 'on' && radius != null;
   /**
@@ -1068,13 +1086,28 @@ export function Results() {
                     on Where (Alex, 2026-09-29). The map moved to a floating
                     button above the tab bar. */}
                 {!landing ? (
-                  <button className="map-btn" aria-label={t('c.res.filters')} onClick={() => sheet.open({ facets, section: 'where' })}>
+                  <button
+                    className={`map-btn${nFilt ? ' on' : ''}`}
+                    aria-label={nFilt ? t('c.res.filtersApplied', { n: nFilt }) : t('c.res.filters')}
+                    onClick={() => setFiltersOpen(true)}
+                  >
                     <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M4 7h10M18 7h2M4 17h4M12 17h8" /><circle cx="15.5" cy="7" r="2" /><circle cx="9.5" cy="17" r="2" /></svg>
-                    {t('c.res.filters')}
+                    {nFilt ? `${t('c.res.filters')} · ${nFilt}` : t('c.res.filters')}
                   </button>
                 ) : null}
               </div>
             </div>
+            {filtersOpen ? (
+              <FiltersSheet
+                facets={facets}
+                filters={filters}
+                onClose={() => setFiltersOpen(false)}
+                onApply={(patch) => {
+                  setFilters(patch);
+                  setFiltersOpen(false);
+                }}
+              />
+            ) : null}
             {!landing ? (
               <button className="m-mapfab" aria-label={t('c.res.mapView')} onClick={() => setMapOpen(true)}>
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M9 4 3 6.5v13L9 17l6 2.5 6-2.5v-13L15 6.5z" /><path d="M9 4v13M15 6.5v13" /></svg>
