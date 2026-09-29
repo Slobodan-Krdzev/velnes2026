@@ -757,13 +757,12 @@ rules (time of day, availability of the suggested intent) — the door's
 shape is what a smarter ranker would fill.
 
 **Amenities on the salon page (2026-09-29).** Under the Location card,
-a card with up to six of the facilities at the location the page is
+a card with the facilities at the location the page is
 showing — `DiscoverySalonDetailSchema.locations[].amenities`, the
 location's own set in the vocabulary's order, never a salon-wide one —
-each with its one-colour icon on the warm tile; "Show all N amenities"
-opens the full list grouped (Facilities, Spa & wellness, Customer
-experience) in the page's sheet. A location with none shows no card at
-all; the list is a two-column grid. The Location card also prints the
+each with its one-colour icon on the warm tile — all of them, in a
+two-column grid, nothing to expand (Alex, 2026-09-29). A location with
+none shows no card at all. The Location card also prints the
 location's **opening hours** (`locations[].hours` on the salon door —
 the week the salon set, Monday first, today marked, a closed day saying
 so; booking itself still asks the availability door, which also knows
