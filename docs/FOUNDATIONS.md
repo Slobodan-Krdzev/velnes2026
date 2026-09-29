@@ -63,7 +63,7 @@ RLS-exempt connection (`SEED_DATABASE_URL`).
 **Fixture salons (2026-09-28).** `pnpm --filter @velnes/api fixtures add
 --batch <name> [--count 12]` adds a batch of complete test salons and
 `fixtures remove --batch <name>` takes them away again without a trace;
-`fixtures list` says what is there. They are made through the front
+`fixtures list` says what is there; `fixtures amenities --batch <name>` gives a batch made before amenities existed its realistic sets (2026-09-29), idempotently. They are made through the front
 door — a registration draft filed and approved exactly as HQ approves,
 so business, roles, owner, verified entity, ACTIVE location with a map
 pin, services online, products and gallery come from the same code a

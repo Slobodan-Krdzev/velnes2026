@@ -4,13 +4,14 @@
  *   fixtures add    --batch demo-2026-09 [--count 12]
  *   fixtures remove --batch demo-2026-09
  *   fixtures list
+ *   fixtures amenities --batch demo-2026-09   (give an older batch its amenities)
  *
  * Needs the API connection (API_DATABASE_URL — the doors run under it)
  * and the owner connection (DATABASE_URL — tagging and removal cross
  * tenants, which RLS forbids the API role). On the VPS:
  *   node --env-file=/srv/velnes/api/.env /srv/velnes/api/fixtures.js add --batch demo --count 12
  */
-import { addFixtureBatch, FIXTURE_PASSWORD, listFixtureBatches, removeFixtureBatch } from './fixtures.js';
+import { addFixtureBatch, backfillFixtureAmenities, FIXTURE_PASSWORD, listFixtureBatches, removeFixtureBatch } from './fixtures.js';
 
 const [cmd, ...rest] = process.argv.slice(2);
 const arg = (name: string) => {
@@ -40,12 +41,17 @@ try {
     if (!batch) throw new Error('--batch <name> is required');
     const r = await removeFixtureBatch(batch, adminUrl);
     console.log(r.removed ? `Removed ${r.removed} salons of batch "${batch}" (${r.tables} tables swept).` : `No batch "${batch}".`);
+  } else if (cmd === 'amenities') {
+    const batch = arg('batch');
+    if (!batch) throw new Error('--batch <name> is required');
+    const r = await backfillFixtureAmenities(batch, adminUrl);
+    console.log(r.salons ? `Gave ${r.salons} salons of batch "${batch}" their amenities (${r.rows} rows).` : `No batch "${batch}".`);
   } else if (cmd === 'list') {
     const rows = await listFixtureBatches(adminUrl);
     if (!rows.length) console.log('No fixture batches.');
     for (const r of rows) console.log(`${r.batch.padEnd(24)} ${String(r.salons).padStart(3)} salons   since ${new Date(r.since).toISOString().slice(0, 10)}`);
   } else {
-    console.log('usage: fixtures add --batch <name> [--count N] | remove --batch <name> | list');
+    console.log('usage: fixtures add --batch <name> [--count N] | remove --batch <name> | amenities --batch <name> | list');
     process.exit(2);
   }
   const { closeDb } = await import('./index.js');

@@ -3,7 +3,7 @@ import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { closeDb } from './index.js';
 import { demo } from './seed-demo.js';
-import { addFixtureBatch, FIXTURE_PASSWORD, listFixtureBatches, removeFixtureBatch, type FixtureSalon } from './fixtures.js';
+import { addFixtureBatch, backfillFixtureAmenities, FIXTURE_PASSWORD, listFixtureBatches, removeFixtureBatch, type FixtureSalon } from './fixtures.js';
 import { resetAdmittedCache } from '../public/discovery.routes.js';
 import { buildServer } from '../server.js';
 
@@ -109,6 +109,16 @@ describe('fixture salons', () => {
     const page = await app.inject({ method: 'GET', url: `${API_PREFIX}/public/discovery/salons/${s.slug}` });
     expect(page.statusCode).toBe(200);
     expect(page.json().name).toBe(s.name);
+  });
+
+  it('an older batch can be given its amenities after the fact — the same sets, idempotently', async () => {
+    const before = (await admin.query(`SELECT count(*)::int AS n FROM location_amenities WHERE tenant_id = ANY($1)`, [made.map((s) => s.businessId)])).rows[0].n;
+    await admin.query(`DELETE FROM location_amenities WHERE tenant_id = ANY($1)`, [made.map((s) => s.businessId)]);
+    const r = await backfillFixtureAmenities(BATCH, ADMIN_URL);
+    expect(r.salons).toBe(2);
+    const after = (await admin.query(`SELECT count(*)::int AS n FROM location_amenities WHERE tenant_id = ANY($1)`, [made.map((s) => s.businessId)])).rows[0].n;
+    expect(after).toBe(before);
+    expect((await backfillFixtureAmenities(BATCH, ADMIN_URL)).rows).toBe(r.rows);
   });
 
   it('refuses to add a batch that already exists', async () => {

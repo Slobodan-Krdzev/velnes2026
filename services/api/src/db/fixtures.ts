@@ -406,6 +406,41 @@ export async function addFixtureBatch(opts: AddOptions): Promise<FixtureSalon[]>
   }
 }
 
+/**
+ * Give an existing batch its amenities (Alex, 2026-09-29): batches made
+ * before amenities existed have locations with none. Each salon's kind
+ * is read back from its name — the suffix the batch gave it — and its
+ * locations get that kind's set, replaced whole. Idempotent. Real
+ * salons are never touched: only rows tagged with the batch.
+ */
+export async function backfillFixtureAmenities(batch: string, adminUrl: string): Promise<{ salons: number; rows: number }> {
+  const admin = new pg.Client({ connectionString: adminUrl });
+  await admin.connect();
+  try {
+    const salons = (await admin.query(`SELECT id, name FROM businesses WHERE fixture_batch = $1`, [batch])).rows as { id: string; name: string }[];
+    let rows = 0;
+    await admin.query('BEGIN');
+    for (const s of salons) {
+      const kind = KINDS.find((k) => s.name.endsWith(` ${SUFFIX[k.type] ?? k.type}`));
+      if (!kind) continue;
+      const locs = (await admin.query(`SELECT id FROM locations WHERE tenant_id = $1`, [s.id])).rows as { id: string }[];
+      await admin.query(`DELETE FROM location_amenities WHERE tenant_id = $1`, [s.id]);
+      for (const l of locs)
+        for (const key of kind.amenities) {
+          await admin.query(`INSERT INTO location_amenities (tenant_id, location_id, key) VALUES ($1, $2, $3)`, [s.id, l.id, key]);
+          rows += 1;
+        }
+    }
+    await admin.query('COMMIT');
+    return { salons: salons.length, rows };
+  } catch (e) {
+    await admin.query('ROLLBACK').catch(() => undefined);
+    throw e;
+  } finally {
+    await admin.end();
+  }
+}
+
 /** The batches present, with their salon counts. */
 export async function listFixtureBatches(adminUrl: string): Promise<{ batch: string; salons: number; since: Date }[]> {
   const admin = new pg.Client({ connectionString: adminUrl });
