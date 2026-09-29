@@ -471,7 +471,11 @@ bug that had collapsed a two-location salon into one card was exactly a
 `amenities[].count` is the number of cards at locations that have the
 amenity, and a filter admits the location that has it, not its sibling.
 The direct-salon answer is no longer empty: it is the named salon's own
-treatments at every location, ranked like any answer.
+treatments at every location, ranked like any answer. The typeahead
+(`/discovery/suggest`) says the same thing earlier: a salon with more
+than one ACTIVE location is one row per location, each carrying
+`location: { id, name, address }` and opening the salon page there; a
+one-location salon stays one row with `location: null`.
 
 ---
 

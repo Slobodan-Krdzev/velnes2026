@@ -62,10 +62,16 @@ describe('suggestions', () => {
     expect(r.services[0]?.salonSlug).toBe('velnes-fizio');
   });
 
-  it('completes a salon from a fragment', async () => {
+  it('completes a salon from a fragment — one row per location when it has several', async () => {
     const r = await suggest('Velnes');
     expect(r.salons.map((s) => s.name)).toContain('Velnes Fizio Centar');
     expect(r.salons[0]?.slug).toBe('velnes-fizio');
+    // The seeded salon has Centar and Aerodrom (Alex, 2026-09-29: a
+    // salon with two locations shows both, here too), each row naming
+    // its place so the page can open there.
+    const mine = r.salons.filter((s) => s.slug === 'velnes-fizio');
+    expect(mine.map((s) => s.location?.name).sort()).toEqual(['Aerodrom', 'Centar']);
+    for (const s of mine) expect(s.city).toBe('Skopje');
   });
 
   it('reads an intent through a synonym, in either script', async () => {

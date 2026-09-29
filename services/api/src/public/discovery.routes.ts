@@ -14,6 +14,7 @@ import {
   SearchResultsSchema,
   type SearchFacets,
   SearchSuggestionsSchema,
+  type SearchSuggestions,
   SearchSuggestRequestSchema,
   DiscoverySalonsSchema,
   DiscoverySuggestionsSchema,
@@ -640,6 +641,18 @@ export async function gatherCategory(categoryId: string): Promise<
   return { category, services, meta };
 }
 
+/** A salon's ACTIVE locations, as the public may know them. */
+async function activeLocationsOf(businessId: string) {
+  return withTenant(businessId, (trx) =>
+    trx
+      .selectFrom('locations')
+      .select(['id', 'name', 'city', 'address'])
+      .where('lifecycle', '=', 'ACTIVE')
+      .orderBy('name')
+      .execute(),
+  );
+}
+
 /** A result's identity: the treatment at the place. The same service at
  *  two locations is two results, and is keyed as two. */
 export const candKey = (c: { id: string; locationId: string }) => `${c.id}@${c.locationId}`;
@@ -1243,13 +1256,26 @@ export async function discoveryRoutes(app: FastifyInstance) {
         admitted.map((b) => b.id),
       );
 
+      // A salon with two locations is two rows, each naming its place
+      // and opening the salon page there (Alex, 2026-09-29); a salon with
+      // one is the one row it always was.
+      const salons: SearchSuggestions['salons'] = [];
+      for (const m of topMatches(matches, 'salon', 5)) {
+        const b = bySlug.get(m.salonSlug ?? '');
+        const places = b ? await activeLocationsOf(b.id) : [];
+        if (places.length > 1)
+          for (const l of places)
+            salons.push({
+              id: m.id,
+              slug: m.salonSlug ?? '',
+              name: m.display,
+              city: l.city ?? b?.city ?? null,
+              location: { id: l.id, name: l.name, address: l.address },
+            });
+        else salons.push({ id: m.id, slug: m.salonSlug ?? '', name: m.display, city: b?.city ?? null, location: null });
+      }
       return {
-        salons: topMatches(matches, 'salon', 5).map((m) => ({
-          id: m.id,
-          slug: m.salonSlug ?? '',
-          name: m.display,
-          city: bySlug.get(m.salonSlug ?? '')?.city ?? null,
-        })),
+        salons,
         services: topMatches(matches, 'service', 6).map((m) => ({
           id: m.id,
           name: m.display,

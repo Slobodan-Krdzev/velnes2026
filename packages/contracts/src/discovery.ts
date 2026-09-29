@@ -447,8 +447,17 @@ export const DiscoveryRankedServicesSchema = z.object({
  * not a mode.
  */
 export const SearchSuggestionsSchema = z.object({
+  /** A salon with more than one ACTIVE location is one row per location
+   *  (Alex, 2026-09-29), each naming its place; a one-location salon is
+   *  one row with `location: null`. `id` is the salon's either way. */
   salons: z.array(
-    z.object({ id: z.uuid(), slug: z.string(), name: z.string(), city: z.string().nullable() }),
+    z.object({
+      id: z.uuid(),
+      slug: z.string(),
+      name: z.string(),
+      city: z.string().nullable(),
+      location: z.object({ id: z.uuid(), name: z.string(), address: z.string().nullable() }).nullable(),
+    }),
   ),
   services: z.array(
     z.object({

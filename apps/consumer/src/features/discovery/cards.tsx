@@ -8,7 +8,7 @@ import {
   useSalonServices,
 } from '../../lib/api/queries.js';
 import { fmtMKD, slugify, type CategoryVM, type SalonVM } from '../../lib/api/mappers.js';
-import { useSuggest, type SuggestItem } from './useSuggest.js';
+import { useSuggest, type SuggestItem, salonSugKey, salonSugLabel } from './useSuggest.js';
 import {
   rememberPendingFavourite,
   useFavourites,
@@ -347,6 +347,13 @@ function MostChosenPanel({ onOpen }: { onOpen: (slug: string) => void }) {
   );
 }
 
+/** Under a salon row: its address and city when the row is one of
+ *  several locations, else the city. */
+function salonSugPlace(sa: { city: string | null; location: { address: string | null } | null }): string {
+  if (sa.location) return [sa.location.address, sa.city].filter(Boolean).join(', ') || t('c.cards.bookDirect');
+  return sa.city ?? t('c.cards.bookDirect');
+}
+
 export function SugPanelD({
   q,
   active,
@@ -441,15 +448,15 @@ export function SugPanelD({
         </div>
       ) : null}
       {data.salons.map((sa) => {
-        const item = items.find((x) => x.key === `salon-${sa.id}`)!;
+        const item = items.find((x) => x.key === salonSugKey(sa))!;
         return (
-          <button key={sa.id} type="button" role="option" aria-selected={false} {...row(item)}>
+          <button key={salonSugKey(sa)} type="button" role="option" aria-selected={false} {...row(item)}>
             <span className="ph" style={{ backgroundImage: 'var(--im)' }}></span>
             <span>
-              <b>{sa.name}</b>
+              <b>{salonSugLabel(sa)}</b>
               <span className="sm muted" style={{ display: 'inline-flex', gap: '6px', alignItems: 'center', marginTop: '4px' }}>
                 <span className="vok">{IcVok}</span>
-                {sa.city ?? t('c.cards.bookDirect')}
+                {salonSugPlace(sa)}
               </span>
             </span>
             <span className="btn btn-g" style={{ minHeight: '42px' }}>
@@ -601,14 +608,14 @@ export function SugListM({
         </div>
       ) : null}
       {data.salons.map((sa) => {
-        const item = items.find((x) => x.key === `salon-${sa.id}`)!;
+        const item = items.find((x) => x.key === salonSugKey(sa))!;
         return (
-          <button key={sa.id} type="button" role="option" aria-selected={false} {...row(item)}>
+          <button key={salonSugKey(sa)} type="button" role="option" aria-selected={false} {...row(item)}>
             <span className="ph" style={{ backgroundImage: 'var(--im)' }}></span>
             <span>
-              <b>{sa.name}</b>
+              <b>{salonSugLabel(sa)}</b>
               <span className="sm muted" style={{ display: 'block', marginTop: '4px' }}>
-                {sa.city ?? t('c.cards.bookDirect')}
+                {salonSugPlace(sa)}
               </span>
             </span>
           </button>

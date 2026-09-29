@@ -26,6 +26,20 @@ export const MIN_QUERY = 2;
 
 const EMPTY: SearchSuggestions = { salons: [], services: [], categories: [], q: '' };
 
+/** One row per place: a two-location salon is two rows with one id. */
+export function salonSugKey(s: SearchSuggestions['salons'][number]): string {
+  return s.location ? `salon-${s.id}-${s.location.id}` : `salon-${s.id}`;
+}
+
+/** The row's title: the salon, then its location when that adds a
+ *  word the salon's name does not already say — "Slobos Cutz · Debar
+ *  Maalo", but not "Slobos Cutz · Slobos Cutz". */
+export function salonSugLabel(s: SearchSuggestions['salons'][number]): string {
+  const loc = s.location?.name.trim();
+  if (!loc || s.name.toLowerCase().includes(loc.toLowerCase())) return s.name;
+  return `${s.name} · ${loc}`;
+}
+
 /** One row of the dropdown, flattened, so the keyboard can walk the list
  *  without caring which section a row came from. */
 export interface SuggestItem {
@@ -95,10 +109,12 @@ export function useSuggest(q: string) {
         label: s.name,
       })),
       ...data.salons.map((s) => ({
-        key: `salon-${s.id}`,
+        key: salonSugKey(s),
         kind: 'salon' as const,
-        href: `/salon/${s.slug}`,
-        label: s.name,
+        // A row that names one of the salon's locations opens the page
+        // at that location.
+        href: s.location ? `/salon/${s.slug}?location=${encodeURIComponent(s.location.id)}` : `/salon/${s.slug}`,
+        label: salonSugLabel(s),
       })),
     ],
     [data],
