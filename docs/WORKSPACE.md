@@ -401,3 +401,27 @@ right) has **Employee app** for every role: the same panel, worded to
 the signed-in person, minting their own link — the door lets anyone
 mint their own and asks `users.manage` only for someone else's. Details
 and the doors live in `docs/EMPLOYEE-APP.md`.
+
+
+## Amenities (2026-09-29)
+
+The facilities a customer can expect at a **location** — Wi-Fi, parking,
+accessibility, air conditioning, private treatment rooms, sauna, steam
+room, hot tub, pool, relaxation area, coffee, child- and pet-friendly,
+and the rest of a fixed 23-key vocabulary in three groups (Facilities,
+Spa & wellness, Customer experience) — are edited in Settings ›
+Locations › the location panel, under the map pin, and saved with the
+rest of the card. The vocabulary lives in `@velnes/contracts`
+(`amenities.ts`: keys, groups, display order, the zod enum every door
+validates with), never in a table and never as boolean columns; a
+location's selection is rows in `location_amenities` (`tenant_id,
+location_id, key`, RLS like `locations`), replaced whole by the
+existing `PATCH /locations/:id` (`amenities: AmenityKey[]`; an unknown
+key is refused). `GET /locations` carries each location's keys in the
+vocabulary's order. Deliberately not amenities, because Velnes models
+them elsewhere: payments (the location's `payments` document), gift
+cards, the product shop, hours, languages, policies, services and staff.
+Icons are one shared path map (`@velnes/ui`'s `AMENITY_ICONS`), a
+different shape per amenity, always the brand colour. Fixture salons
+carry realistic sets for their kind. Search will filter on the keys
+later; nothing here is built for that yet beyond the keys being stable.

@@ -80,6 +80,10 @@ describe('fixture salons', () => {
       expect(svc.rows[0].n).toBeGreaterThanOrEqual(6);
       const gal = await admin.query(`SELECT jsonb_array_length(gallery) AS n FROM businesses WHERE id=$1`, [s.businessId]);
       expect(gal.rows[0].n).toBe(3);
+      // Realistic facilities for its kind — some, never all.
+      const am = await admin.query(`SELECT count(*)::int AS n FROM location_amenities WHERE tenant_id=$1`, [s.businessId]);
+      expect(am.rows[0].n).toBeGreaterThan(2);
+      expect(am.rows[0].n).toBeLessThan(23);
       // The doors queued their mails; none left the building.
       const mail = await admin.query(
         `SELECT count(*)::int AS n FROM mail_outbox WHERE (tenant_id=$1 OR ref_id IN (SELECT id::text FROM registrations WHERE business_id=$1)) AND status <> 'mock_sent'`,

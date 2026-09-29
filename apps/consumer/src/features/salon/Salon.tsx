@@ -11,6 +11,7 @@ import { SalonGallery } from '../../components/SalonGallery.js';
 import { FavHeart } from '../discovery/cards.js';
 import { useWheelScroll } from '../../lib/useWheelScroll.js';
 import { SalonMap } from '../../components/SalonMap.js';
+import { SalonAmenities } from './SalonAmenities.js';
 import { IcArr, IcClock, IcPin, IcSpark, IcVok } from '../discovery/cards.js';
 import { useBooking } from '../booking/store.js';
 import { distanceKm, distanceLbl, useUserLocation } from '../../lib/geo.js';
@@ -933,6 +934,7 @@ export function Salon() {
               {aboutCard}
               {d.team.length ? teamCard('d') : null}
               {locationCard('d')}
+              <SalonAmenities keys={p.location?.amenities ?? []} idPrefix="d" />
             </div>
             {d.bookable ? <BookCard p={p} desktop /> : null}
           </div>
@@ -1043,6 +1045,7 @@ export function Salon() {
             {d.bookable ? <BookCard p={p} desktop={false} /> : notBookableCard}
             {aboutCard}
             {locationCard('m')}
+            <SalonAmenities keys={p.location?.amenities ?? []} idPrefix="m" />
             {d.team.length ? teamCard('m') : null}
             <div style={{ height: '8px' }}></div>
             {d.bookable ? (

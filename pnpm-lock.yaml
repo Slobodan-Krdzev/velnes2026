@@ -99,6 +99,9 @@ importers:
       '@velnes/i18n':
         specifier: workspace:^
         version: link:../../packages/i18n
+      '@velnes/ui':
+        specifier: workspace:^
+        version: link:../../packages/ui
       i18next:
         specifier: ^25.10.10
         version: 25.10.10(typescript@5.9.3)
@@ -385,6 +388,10 @@ importers:
         version: link:../config
 
   packages/ui:
+    dependencies:
+      '@velnes/contracts':
+        specifier: workspace:^
+        version: link:../contracts
     devDependencies:
       '@velnes/config':
         specifier: workspace:^

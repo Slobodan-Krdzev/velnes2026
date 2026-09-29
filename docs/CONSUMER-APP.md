@@ -755,3 +755,15 @@ availability mode. The sheet's body is the only scroll, and the
 opening card settles in over 220 ms. Deferral: ranking beyond these
 rules (time of day, availability of the suggested intent) — the door's
 shape is what a smarter ranker would fill.
+
+**Amenities on the salon page (2026-09-29).** Under the Location card,
+a card with up to six of the facilities at the location the page is
+showing — `DiscoverySalonDetailSchema.locations[].amenities`, the
+location's own set in the vocabulary's order, never a salon-wide one —
+each with its one-colour icon on the warm tile; "Show all N amenities"
+opens the full list grouped (Facilities, Spa & wellness, Customer
+experience) in the page's sheet. A location with none shows no card at
+all. The page shows its first location (or the one an offer link
+named), an existing limitation: when it can switch locations, the
+amenities switch with it. Result cards are untouched. Amenity filters
+are a later task; the keys are already what search would filter on.

@@ -8,7 +8,11 @@
       "types": "./src/index.tsx",
       "default": "./src/index.tsx"
     },
-    "./tokens.css": "./src/tokens.css"
+    "./tokens.css": "./src/tokens.css",
+    "./amenity-icons": {
+      "types": "./src/amenityIcons.ts",
+      "default": "./src/amenityIcons.ts"
+    }
   },
   "scripts": {
     "typecheck": "tsc --noEmit"
@@ -19,5 +23,8 @@
   "devDependencies": {
     "@velnes/config": "workspace:^",
     "react": "^19.0.0"
+  },
+  "dependencies": {
+    "@velnes/contracts": "workspace:^"
   }
 }

@@ -216,6 +216,34 @@ describe('settings', () => {
     );
   });
 
+  it('the location panel lists amenities in groups, and saves the chosen set through the PATCH door', async () => {
+    const calls: { method: string; path: string; body?: unknown }[] = [];
+    mockApi(calls);
+    await openSettings();
+    const row = (await screen.findByText(/Macedonia Street 21/)).closest('.rowcard') as HTMLElement;
+    await userEvent.click(within(row).getByRole('button', { name: 'Settings' }));
+    const panel = await screen.findByRole('dialog');
+    // Grouped, never a flat wall of boxes; a location nobody configured starts empty.
+    expect(panel.textContent).toContain('Facilities');
+    expect(panel.textContent).toContain('Spa & wellness');
+    expect(panel.textContent).toContain('Customer experience');
+    const wifi = within(panel).getByRole('checkbox', { name: 'Free Wi-Fi' });
+    expect((wifi as HTMLInputElement).checked).toBe(false);
+    await userEvent.click(wifi);
+    await userEvent.click(within(panel).getByRole('checkbox', { name: 'Sauna' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+    await waitFor(() =>
+      expect(
+        calls.some(
+          (c) =>
+            c.method === 'PATCH' &&
+            c.path.includes(`/locations/${LOC1}`) &&
+            JSON.stringify((c.body as { amenities: string[] }).amenities.slice().sort()) === JSON.stringify(['sauna', 'wifi']),
+        ),
+      ).toBe(true),
+    );
+  });
+
   it('Suspend in the panel goes through the transitions door', async () => {
     const calls: { method: string; path: string; body?: unknown }[] = [];
     mockApi(calls);

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { AmenityListSchema } from './amenities.js';
 
 /** The lifecycle — states and legal edges exactly as the prototype's
  *  LOC_EDGES. One field, one transition door, one liveness predicate. */
@@ -56,6 +57,9 @@ export const LocationSchema = z.object({
   // the map obeys the pin.
   lat: z.number().nullable().default(null),
   lng: z.number().nullable().default(null),
+  /** The facilities at this place, in the vocabulary's order. Empty is
+   *  the normal state of a location nobody has configured yet. */
+  amenities: AmenityListSchema.default([]),
 });
 export type Location = z.infer<typeof LocationSchema>;
 

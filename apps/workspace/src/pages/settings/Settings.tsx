@@ -1,5 +1,8 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
+  AMENITIES,
+  AMENITY_GROUPS,
+  type AmenityKey,
   AuditListResponseSchema,
   CopySetupResponseSchema,
   CustomerListResponseSchema,
@@ -16,7 +19,7 @@ import {
   type Role,
   type WeekHours,
 } from '@velnes/contracts';
-import { I, Icon, PhoneInput } from '@velnes/ui';
+import { AMENITY_ICONS, I, Icon, PhoneInput } from '@velnes/ui';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Navigate, useLocation, useNavigate } from 'react-router-dom';
@@ -530,6 +533,11 @@ function LocationEditPanel({
   // is what we print, the pin is where every map puts this salon.
   const [lat, setLat] = useState<number | null>(l.lat);
   const [lng, setLng] = useState<number | null>(l.lng);
+  // The facilities at this place — a set from the contracts' vocabulary,
+  // saved whole with the rest of the card (Alex, 2026-09-29).
+  const [amenities, setAmenities] = useState<AmenityKey[]>(l.amenities);
+  const toggleAmenity = (key: AmenityKey) =>
+    setAmenities((a) => (a.includes(key) ? a.filter((k) => k !== key) : [...a, key]));
   const [error, setError] = useState<string | null>(null);
 
   const save = async () => {
@@ -548,6 +556,7 @@ function LocationEditPanel({
         hours,
         lat,
         lng,
+        amenities,
       });
       onSaved();
     } catch (e) {
@@ -620,6 +629,31 @@ function LocationEditPanel({
               }}
             />
             <div className="note">{t('lset.pinNote')}</div>
+            <div className="span2">
+              <div className="section-label">{t('lset.amenities')}</div>
+              <p className="hint" style={{ margin: '0 0 8px' }}>{t('lset.amenitiesHint')}</p>
+              {AMENITY_GROUPS.map((group) => (
+                <div key={group} style={{ marginBottom: 10 }}>
+                  <div className="s" style={{ fontWeight: 700, color: 'var(--ink)', margin: '6px 0 4px' }}>
+                    {t(`amenityGroup.${group}`)}
+                  </div>
+                  {AMENITIES.filter((a) => a.group === group).map((a) => (
+                    <label key={a.key} className="rowcard" style={{ padding: '8px 12px', cursor: 'pointer' }}>
+                      <Icon d={AMENITY_ICONS[a.key]} size={18} w={2} />
+                      <span className="grow" style={{ color: 'var(--ink)', fontWeight: 600 }}>
+                        {t(`amenity.${a.key}`)}
+                      </span>
+                      <input
+                        type="checkbox"
+                        checked={amenities.includes(a.key)}
+                        onChange={() => toggleAmenity(a.key)}
+                        aria-label={t(`amenity.${a.key}`)}
+                      />
+                    </label>
+                  ))}
+                </div>
+              ))}
+            </div>
             <label className="field">
               <span>{t('lset.tz')}</span>
               <select

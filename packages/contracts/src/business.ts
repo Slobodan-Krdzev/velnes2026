@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { AmenityListSchema } from './amenities.js';
 import { WeekHoursSchema } from './locations.js';
 
 /**
@@ -190,6 +191,9 @@ export const LocationPatchSchema = z.object({
   // null clears it back to "no pin".
   lat: z.number().min(-90).max(90).nullable().optional(),
   lng: z.number().min(-180).max(180).nullable().optional(),
+  /** The whole set, replaced: send the list without a key to remove it.
+   *  An unknown key is refused by the vocabulary, never stored. */
+  amenities: AmenityListSchema.optional(),
 });
 
 /** Copy setup between EXISTING locations — the prototype's

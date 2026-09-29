@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { AmenityListSchema } from './amenities.js';
 import { MoneySchema } from './catalog.js';
 
 /** The consumer discovery surface (apps/consumer): read-only, key-free
@@ -146,6 +147,9 @@ export const DiscoverySalonDetailSchema = z.object({
       // The map obeys the pin; the address text above is what we print.
       lat: z.number().nullable(),
       lng: z.number().nullable(),
+      /** This location's facilities, in the vocabulary's order — the
+       *  page shows the ones of the location it is showing. */
+      amenities: AmenityListSchema,
     }),
   ),
 });

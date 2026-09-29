@@ -1,4 +1,5 @@
 import {
+  sortAmenities,
   CopySetupRequestSchema,
   CopySetupResponseSchema,
   LegalEntityListSchema,
@@ -18,6 +19,7 @@ import { withTenant } from '../../db/index.js';
 import { logAudit } from '../audit/audit.service.js';
 import { can, permsFor } from '../auth/authz.service.js';
 import {
+  amenitiesByLocation,
   copySetupInto,
   createLocation,
   listLocations,
@@ -116,9 +118,9 @@ export function locationsRoutes(app: FastifyInstance) {
         if (!before)
           return reply.code(404).send({ error: 'NOT_FOUND', message: 'Unknown location' });
         const b = req.body;
-        await trx
-          .updateTable('locations')
-          .set({
+        // Only the columns named; an edit that touches amenities alone
+        // has nothing to set here, and an empty SET is a syntax error.
+        const set = {
             ...(b.hours !== undefined ? { hours: JSON.stringify(b.hours) } : {}),
             ...(b.cancelHours !== undefined ? { cancelHours: b.cancelHours } : {}),
             ...(b.invPrefix !== undefined ? { invPrefix: b.invPrefix } : {}),
@@ -131,9 +133,20 @@ export function locationsRoutes(app: FastifyInstance) {
             ...(b.online !== undefined ? { online: b.online } : {}),
             ...(b.lat !== undefined ? { lat: b.lat } : {}),
             ...(b.lng !== undefined ? { lng: b.lng } : {}),
-          })
-          .where('id', '=', req.params.id)
-          .execute();
+        };
+        if (Object.keys(set).length)
+          await trx.updateTable('locations').set(set).where('id', '=', req.params.id).execute();
+        // Amenities: the whole set, replaced. The vocabulary already
+        // refused any unknown key at the door.
+        if (b.amenities !== undefined) {
+          await trx.deleteFrom('locationAmenities').where('locationId', '=', req.params.id).execute();
+          const keys = sortAmenities(b.amenities);
+          if (keys.length)
+            await trx
+              .insertInto('locationAmenities')
+              .values(keys.map((key) => ({ tenantId: req.claims.ten, locationId: req.params.id, key })))
+              .execute();
+        }
         const actor = await trx
           .selectFrom('employees')
           .select('name')
@@ -187,6 +200,7 @@ export function locationsRoutes(app: FastifyInstance) {
           hours: (row.hours ?? null) as Location['hours'],
           lat: row.lat,
           lng: row.lng,
+          amenities: (await amenitiesByLocation(trx)).get(row.id) ?? [],
         };
       }),
   });

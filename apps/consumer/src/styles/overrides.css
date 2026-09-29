@@ -1186,3 +1186,14 @@ a.pop-go:hover {
   background:var(--ink);color:var(--bg);font-weight:700;font-size:13.5px;box-shadow:0 10px 26px rgba(45,26,18,.28)}
 .m-mapfab:active{background:#3a1f16}
 @media (min-width:900px){.m-mapfab{display:none}}
+
+/* ── Amenities on the salon page (Alex, 2026-09-29): rows of one-colour
+   icons on the warm tile, the vocabulary's order; the full grouped
+   list in the page's sheet. */
+.amen-list{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+.amen-row{display:flex;align-items:center;gap:12px;font-size:14px;color:var(--text);padding:4px 0}
+.amen-ic{display:grid;place-items:center;width:38px;height:38px;border-radius:11px;background:var(--warm);color:var(--brand);flex:0 0 auto}
+.amen-sheet .list{padding:16px}
+.amen-group{margin-bottom:18px}
+.amen-group .h{font-size:12px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);margin:0 0 8px}
+@media (min-width:900px){.amen-sheet{inset:auto;position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);width:min(520px,92vw);max-height:80vh;border-radius:20px;box-shadow:0 24px 60px rgba(45,26,18,.28);display:flex}}

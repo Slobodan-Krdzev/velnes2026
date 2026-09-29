@@ -578,6 +578,12 @@ export interface LegalEntityLocations {
   tenantId: string;
 }
 
+export interface LocationAmenities {
+  key: string;
+  locationId: string;
+  tenantId: string;
+}
+
 export interface LocationCatalogProducts {
   active: Generated<boolean>;
   locationId: string;
@@ -1210,6 +1216,7 @@ export interface DB {
   lastMinuteOffers: LastMinuteOffers;
   legalEntities: LegalEntities;
   legalEntityLocations: LegalEntityLocations;
+  locationAmenities: LocationAmenities;
   locationCatalogProducts: LocationCatalogProducts;
   locationCatalogServices: LocationCatalogServices;
   locationCatalogVariants: LocationCatalogVariants;

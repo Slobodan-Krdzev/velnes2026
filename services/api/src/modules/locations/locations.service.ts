@@ -7,7 +7,7 @@ import type {
   LocationLifecycle,
   ReadinessResponse,
 } from '@velnes/contracts';
-import { LOC_EDGES } from '@velnes/contracts';
+import { LOC_EDGES, sortAmenities, type AmenityKey } from '@velnes/contracts';
 import { randomUUID } from 'node:crypto';
 import { sql } from 'kysely';
 import { localIso } from '../scheduling/scheduling.service.js';
@@ -27,8 +27,18 @@ export class LocationError extends Error {
 
 type LocationRow = Selectable<Locations>;
 
-function toContract(l: LocationRow): Location {
+/** Every location's amenity keys, in one read, in the vocabulary's order. */
+export async function amenitiesByLocation(trx: Trx): Promise<Map<string, AmenityKey[]>> {
+  const rows = await trx.selectFrom('locationAmenities').select(['locationId', 'key']).execute();
+  const out = new Map<string, AmenityKey[]>();
+  for (const r of rows) out.set(r.locationId, [...(out.get(r.locationId) ?? []), r.key as AmenityKey]);
+  for (const [id, keys] of out) out.set(id, sortAmenities(keys));
+  return out;
+}
+
+function toContract(l: LocationRow, amenities: AmenityKey[] = []): Location {
   return {
+    amenities,
     id: l.id,
     name: l.name,
     city: l.city,
@@ -372,12 +382,13 @@ export async function createLocation(
 
   if (req.submit) return locTransition(trx, claims, id, 'SUBMITTED');
   const row = await trx.selectFrom('locations').selectAll().where('id', '=', id).executeTakeFirstOrThrow();
-  return toContract(row);
+  return toContract(row, (await amenitiesByLocation(trx)).get(row.id) ?? []);
 }
 
 export async function listLocations(trx: Trx): Promise<Location[]> {
   const rows = await trx.selectFrom('locations').selectAll().orderBy('name').execute();
-  return rows.map(toContract);
+  const amenities = await amenitiesByLocation(trx);
+  return rows.map((r) => toContract(r, amenities.get(r.id) ?? []));
 }
 
 /** The liveness predicate: every customer surface asks this, nothing
@@ -580,5 +591,5 @@ export async function locTransition(
     reason,
   });
 
-  return toContract(updated);
+  return toContract(updated, (await amenitiesByLocation(trx)).get(updated.id) ?? []);
 }

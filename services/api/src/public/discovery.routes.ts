@@ -21,6 +21,7 @@ import {
   NEWEST_SALON_DAYS,
   DiscoveryViewerSchema,
 } from '@velnes/contracts';
+import { amenitiesByLocation } from '../modules/locations/locations.service.js';
 import type { DiscoveryServiceCard } from '@velnes/contracts';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
@@ -1547,6 +1548,7 @@ export async function discoveryRoutes(app: FastifyInstance) {
           .execute();
         // Every ACTIVE location is bookable here — the consumer app
         // needs no widget, only the salon's own key.
+        const amenities = await amenitiesByLocation(trx);
         const locations = (
           await trx
             .selectFrom('locations')
@@ -1561,6 +1563,9 @@ export async function discoveryRoutes(app: FastifyInstance) {
           address: l.address,
           lat: l.lat,
           lng: l.lng,
+          // This location's facilities — the page shows the ones of the
+          // location it is showing, never a salon-wide set.
+          amenities: amenities.get(l.id) ?? [],
         }));
         // What we print: the business card's address, else the first
         // location's — a salon always has one somewhere.

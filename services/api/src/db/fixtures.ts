@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { BusinessSettingsSchema, type RegistrationDraft } from '@velnes/contracts';
+import { BusinessSettingsSchema, type AmenityKey, type RegistrationDraft } from '@velnes/contracts';
 import argon2 from 'argon2';
 import { sql } from 'kysely';
 import pg from 'pg';
@@ -42,6 +42,8 @@ type Kind = {
   description: string;
   services: Svc[];
   products: Prod[];
+  /** What this kind of place realistically offers — never everything. */
+  amenities: AmenityKey[];
 };
 
 /** Six kinds of salon; each fixture takes one and its catalogue. Prices
@@ -49,6 +51,7 @@ type Kind = {
 const KINDS: Kind[] = [
   {
     type: 'Physiotherapy',
+    amenities: ['wifi', 'free_parking', 'wheelchair_accessible', 'air_conditioning', 'waiting_area', 'private_treatment_rooms', 'changing_room'],
     pitch: 'Physiotherapy that gets you moving again',
     description:
       'A physiotherapy practice for sports injuries, back and neck pain and post-operative rehabilitation. Every visit starts with an assessment and ends with a plan you can follow at home.',
@@ -70,6 +73,7 @@ const KINDS: Kind[] = [
   },
   {
     type: 'Massage',
+    amenities: ['wifi', 'waiting_area', 'private_treatment_rooms', 'air_conditioning', 'coffee_tea'],
     pitch: 'Deep, honest massage — no rush, no upsell',
     description:
       'A small massage studio with three quiet rooms. Relaxation, deep tissue and couples massage, with warm oils and a therapist who listens first.',
@@ -89,6 +93,7 @@ const KINDS: Kind[] = [
   },
   {
     type: 'Haircuts',
+    amenities: ['wifi', 'air_conditioning', 'waiting_area', 'coffee_tea', 'child_friendly'],
     pitch: 'Sharp cuts, colour that lasts',
     description:
       'A neighbourhood hair salon for cuts, colour and blow-dries. Walk-ins when we can, bookings when you want to be sure.',
@@ -110,6 +115,7 @@ const KINDS: Kind[] = [
   },
   {
     type: 'Skin care',
+    amenities: ['wifi', 'air_conditioning', 'waiting_area', 'private_treatment_rooms', 'refreshments'],
     pitch: 'Facials built around your skin, not a menu',
     description:
       'A skin studio for facials, peels and brow work. We start with a skin analysis and choose the treatment from there.',
@@ -129,6 +135,7 @@ const KINDS: Kind[] = [
   },
   {
     type: 'Nails',
+    amenities: ['wifi', 'air_conditioning', 'waiting_area', 'coffee_tea'],
     pitch: 'Gel, acrylic and a proper pedicure',
     description:
       'A nail bar with six stations, sterilised tools and colours you will actually want. Manicure, pedicure, gel and nail art.',
@@ -147,6 +154,7 @@ const KINDS: Kind[] = [
   },
   {
     type: 'Spa-Inclusive',
+    amenities: ['free_parking', 'wifi', 'changing_room', 'shower', 'lockers', 'sauna', 'steam_room', 'hot_tub', 'swimming_pool', 'relaxation_area', 'couples_treatment_room', 'private_treatment_rooms'],
     pitch: 'Sauna, pool and a day that is yours',
     description:
       'A day spa with a sauna, a heated pool and treatment rooms. Half-day and full-day rituals, massages and body treatments.',
@@ -367,6 +375,12 @@ export async function addFixtureBatch(opts: AddOptions): Promise<FixtureSalon[]>
                 await trx.insertInto('employeeSkills').values({ tenantId: businessId, employeeId: staffId, serviceId: svc.id }).execute();
             staffNames.push(`${first} ${last}`);
           }
+          // The place's facilities, as this kind of salon would have them.
+          if (kind.amenities.length)
+            await trx
+              .insertInto('locationAmenities')
+              .values(kind.amenities.map((key) => ({ tenantId: businessId, locationId: loc.id, key })))
+              .execute();
           // The consumer card's pitch and the salon page's description —
           // merged into settings the way the Settings door merges them.
           const b = await trx.selectFrom('businesses').select('settings').where('id', '=', businessId).executeTakeFirstOrThrow();
