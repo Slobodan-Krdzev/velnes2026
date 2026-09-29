@@ -57,7 +57,7 @@ export function SalonAmenities({ keys, idPrefix }: { keys: readonly AmenityKey[]
         ))}
       </ul>
       {sorted.length > SHOWN ? (
-        <button type="button" className="readall" style={{ margin: '10px 0 0' }} onClick={() => setOpen(true)}>
+        <button type="button" className="amen-more" onClick={() => setOpen(true)}>
           {t('c.sal.showAllAmenities', { n: sorted.length })}
         </button>
       ) : null}
