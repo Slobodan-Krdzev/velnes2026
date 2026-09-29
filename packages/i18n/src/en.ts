@@ -2666,6 +2666,8 @@ export const en = {
   'c.sal.showAllAmenities': 'Show all {{n}} amenities',
   'c.sal.hours': 'Opening hours',
   'c.sal.closedDay': 'Closed',
+  'c.sal.readMore': 'Read more',
+  'c.sal.readLess': 'Read less',
   'c.filt.price': 'Price range',
   'c.filt.priceSub': 'Per treatment, in MKD — the cheapest way in.',
   'c.filt.min': 'Minimum',

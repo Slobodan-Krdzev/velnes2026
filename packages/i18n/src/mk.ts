@@ -2648,6 +2648,8 @@ export const mk: Record<TranslationKey, string> = {
   'c.sal.showAllAmenities': 'Прикажи ги сите {{n}}',
   'c.sal.hours': 'Работно време',
   'c.sal.closedDay': 'Затворено',
+  'c.sal.readMore': 'Прочитај повеќе',
+  'c.sal.readLess': 'Прочитај помалку',
   'c.filt.price': 'Ценовен опсег',
   'c.filt.priceSub': 'По третман, во MKD — најниската цена.',
   'c.filt.min': 'Минимум',

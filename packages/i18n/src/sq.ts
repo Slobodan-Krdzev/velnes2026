@@ -2648,6 +2648,8 @@ export const sq: Record<TranslationKey, string> = {
   'c.sal.showAllAmenities': 'Shfaq të gjitha {{n}}',
   'c.sal.hours': 'Orari i punës',
   'c.sal.closedDay': 'Mbyllur',
+  'c.sal.readMore': 'Lexo më shumë',
+  'c.sal.readLess': 'Lexo më pak',
   'c.filt.price': 'Diapazoni i çmimit',
   'c.filt.priceSub': 'Për trajtim, në MKD — çmimi më i ulët.',
   'c.filt.min': 'Minimumi',

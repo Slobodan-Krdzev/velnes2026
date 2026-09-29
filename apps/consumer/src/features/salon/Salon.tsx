@@ -895,9 +895,7 @@ export function Salon() {
     <div className="scard">
       <h2>{t('c.sal.about', { salon: d.name })}</h2>
       <div className="about2">
-        <div>
-          <p style={{ margin: '0', fontSize: '14px' }}>{about}</p>
-        </div>
+        <AboutText text={about} />
         <div className="ph2" style={{ backgroundImage: photo2 }}></div>
       </div>
     </div>
@@ -1116,5 +1114,27 @@ function SocialRow({ socials }: { socials: { website: string | null; instagram: 
         </a>
       ))}
     </span>
+  );
+}
+
+/** About: five lines, then "Read more" (Alex, 2026-09-29) — a long
+ *  description folds; a short one just stands. Roughly five lines of the
+ *  card's column is the threshold, not a measurement, so it is the same
+ *  on every render and in the tests. */
+const ABOUT_FOLD_CHARS = 320;
+export function AboutText({ text }: { text: string }) {
+  const [more, setMore] = useState(false);
+  const long = text.length > ABOUT_FOLD_CHARS;
+  return (
+    <div>
+      <p className={`about-p${long && !more ? ' fold' : ''}`} style={{ margin: 0, fontSize: '14px' }}>
+        {text}
+      </p>
+      {long ? (
+        <button type="button" className="about-more" onClick={() => setMore((m) => !m)} aria-expanded={more}>
+          {more ? t('c.sal.readLess') : t('c.sal.readMore')}
+        </button>
+      ) : null}
+    </div>
   );
 }
