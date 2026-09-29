@@ -1328,13 +1328,33 @@ a.pop-go:hover {
 .about-more{display:inline-block;margin-top:8px;padding:0;border:0;background:none;font:inherit;font-weight:700;color:var(--brand-hover);cursor:pointer;text-decoration:underline;text-underline-offset:3px}
 
 /* ── The phone home, re-ordered (Alex, 2026-09-29) ───────────────
-   Search is the hero and nothing competes with it: the chips sit
-   close under the pill, a little lighter than before; every section
-   after them opens with the same larger gap, so the page has one
-   rhythm — search, small gap, chips, larger gap, heading, cards. */
+   Search is the hero and nothing competes with it. The rhythm is one
+   set of named distances, scoped to the home (the prototype has no
+   spacing tokens — its gutters are literal 16px — so these are the
+   home's own, and the tablet block below is the only other place
+   they are set):
+     --home-top       top safe area → search pill
+     --home-chip-gap  search pill → the chip row (they belong together)
+     --home-hero-gap  chip row → the first section heading
+     --home-h-gap     a section heading (or its subtitle) → its cards
+     --home-sec-gap   the end of a section's cards → the next heading */
 @media (max-width: 899.98px) {
+  .m-home {
+    --home-top: 16px;
+    --home-chip-gap: 8px;
+    --home-hero-gap: 48px;
+    --home-h-gap: 24px;
+    --home-sec-gap: 56px;
+  }
+  /* The pill is a hero, not a toolbar control: room above it, and no
+     rule under it. It still sticks, on the page's own background. */
+  .m-home .m-topbar {
+    padding-top: var(--home-top);
+    padding-bottom: 8px;
+    border-bottom-color: transparent;
+  }
   .m-home .m-chiprow {
-    padding: 8px 16px 2px;
+    padding: var(--home-chip-gap) 16px 0;
   }
   .m-home .m-chiprow .qchip {
     padding: 7px 12px;
@@ -1342,19 +1362,49 @@ a.pop-go:hover {
     min-height: 36px;
   }
   .m-home .home-sec {
-    padding-top: 26px;
+    padding-top: var(--home-sec-gap);
+    padding-bottom: var(--home-h-gap);
   }
   .m-home .home-sec.first {
-    padding-top: 16px;
+    padding-top: var(--home-hero-gap);
   }
-  /* The treatment rail under its heading: the same gutters as a row. */
-  .m-home .home-sec + .catrail .catrail-track {
+  .m-home .home-sec .h {
+    margin-bottom: 0;
+  }
+  /* A heading with a subtitle: the subtitle sits under the heading, and
+     the section's gap to its cards comes after the subtitle. */
+  .m-home .home-sec.has-sub {
+    padding-bottom: 0;
+  }
+  .m-home .home-sub {
+    margin: 6px 16px var(--home-h-gap);
+  }
+  /* Rows end flush, so the gap to the next heading is one number. */
+  .m-home .m-reco,
+  .m-home .m-avail {
+    padding-bottom: 0;
+  }
+  .m-env .m-home .catrail-track {
     padding-top: 0;
+    padding-bottom: 0;
+  }
+  /* After the last section, the trust grid is a different kind of
+     block and gets a section's distance too. */
+  .m-home .m-trust {
+    margin-top: var(--home-sec-gap);
   }
 }
-/* Tablet: the same hierarchy with room to breathe — wider gutters, two
-   "available now" cards to a row, wider salon and treatment cards. */
+/* Tablet: the same hierarchy with room to breathe — the distances a
+   step larger, wider gutters, two "available now" cards to a row, wider
+   salon and treatment cards. */
 @media (min-width: 700px) and (max-width: 899.98px) {
+  .m-home {
+    --home-top: 20px;
+    --home-chip-gap: 10px;
+    --home-hero-gap: 56px;
+    --home-h-gap: 28px;
+    --home-sec-gap: 64px;
+  }
   .m-home .m-topbar,
   .m-home .m-chiprow,
   .m-home .m-sec,
@@ -1364,11 +1414,12 @@ a.pop-go:hover {
     padding-left: 24px;
     padding-right: 24px;
   }
+  .m-home .home-sub {
+    margin-left: 24px;
+    margin-right: 24px;
+  }
   .m-home .m-sec .h h2 {
     font-size: 22px;
-  }
-  .m-home .home-sec {
-    padding-top: 32px;
   }
   .m-home .m-reco .rc2 {
     flex-basis: 268px;

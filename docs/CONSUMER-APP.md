@@ -436,8 +436,13 @@ salon for a viewer with no history) → **Available now near you**
 (unchanged: starts within 30 minutes, nearest first; hidden when empty)
 → **Explore treatments** (the same looping treatment rail, moved down
 under its own heading) → **Newest to Velnes** (hidden when none) → the
-trust grid and everything after, untouched. One spacing rhythm: a small
-gap under the pill, a larger one before every heading. Between 700 and
+trust grid and everything after, untouched. One spacing rhythm, as five
+named distances scoped to `.m-home` in `overrides.css` (the prototype
+has no spacing tokens, so these are the home's own): top → pill 16px,
+pill → chips 8px (they are one block), chips → first heading 48px,
+heading (or its subtitle) → cards 24px, cards → next heading 56px; on
+tablet 20 / 10 / 56 / 28 / 64. The pill loses its underline rule on the
+home so it reads as a hero, not a toolbar; it still sticks. Between 700 and
 899px (tablet) the same tree gets wider gutters, two "available now"
 cards to a row and wider cards. The desktop tree is unchanged, and no
 door is asked twice — every hook was already hoisted to the top of
