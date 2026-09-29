@@ -1064,12 +1064,23 @@ export function Results() {
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 6l12 12M18 6 6 18" /></svg>
                   </button>
                 </div>
-                <button className="map-btn" aria-label={t('c.res.mapView')} onClick={() => setMapOpen(true)}>
-                  <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M9 4 3 6.5v13L9 17l6 2.5 6-2.5v-13L15 6.5z" /><path d="M9 4v13M15 6.5v13" /></svg>
-                  {t('c.res.map')}
-                </button>
+                {/* Once there is an answer, its filters: the sheet, opened
+                    on Where (Alex, 2026-09-29). The map moved to a floating
+                    button above the tab bar. */}
+                {!landing ? (
+                  <button className="map-btn" aria-label={t('c.res.filters')} onClick={() => sheet.open({ facets, section: 'where' })}>
+                    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M4 7h10M18 7h2M4 17h4M12 17h8" /><circle cx="15.5" cy="7" r="2" /><circle cx="9.5" cy="17" r="2" /></svg>
+                    {t('c.res.filters')}
+                  </button>
+                ) : null}
               </div>
             </div>
+            {!landing ? (
+              <button className="m-mapfab" aria-label={t('c.res.mapView')} onClick={() => setMapOpen(true)}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M9 4 3 6.5v13L9 17l6 2.5 6-2.5v-13L15 6.5z" /><path d="M9 4v13M15 6.5v13" /></svg>
+                {t('c.res.map')}
+              </button>
+            ) : null}
             <div className="m-chiprow">
               <button
                 className={`chip${nearOn ? ' on' : ''}`}

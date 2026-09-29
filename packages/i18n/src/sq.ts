@@ -2523,7 +2523,7 @@ export const sq: Record<TranslationKey, string> = {
   'c.res.emptyUnknown': 'Nuk ka asgjë për të shfletuar nën atë emër — provoni një kategori nga faqja kryesore.',
   'c.res.emptyCategory': 'Ende asgjë e publikuar nën {{q}} — sallone të reja i bashkohen Velnes çdo javë.',
   'c.res.widenedRadius': 'Nuk kishte shumë brenda distancës suaj, kështu që kërkuam më larg.',
-  'c.res.widenedRadiusKm': 'Asgjë brenda {{km}} km nga ju — po shfaqim çfarë ka më larg, më e afërta e para.',
+  'c.res.widenedRadiusKm': 'Jo shumë brenda {{km}} km nga ju — po shfaqim edhe çfarë ka më larg, më e afërta e para.',
   'c.res.loading': 'Po kërkojmë çfarë ka…',
   'c.res.emptyRadius': 'Asgjë nën {{q}} brenda {{km}} km nga ju — më e afërta është më larg.',
   'c.res.emptyCity': 'Ende asgjë e publikuar nën {{q}} në {{city}} — sallone të reja i bashkohen Velnes çdo javë.',

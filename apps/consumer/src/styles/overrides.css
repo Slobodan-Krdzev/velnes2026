@@ -1177,3 +1177,12 @@ a.pop-go:hover {
   background:linear-gradient(90deg,transparent,rgba(255,255,255,.7),transparent);animation:skel-sweep 1.4s infinite}
 @keyframes skel-sweep{to{transform:translateX(100%)}}
 @media (prefers-reduced-motion:reduce){.skel-ph::after,.skel-line::after{animation:none}}
+
+/* ── The phone's map, as a floating button (Alex, 2026-09-29): bottom
+   right, just above the tab bar, in the ink so it reads over any card.
+   The sheet and the map sheet stack above it. */
+.m-mapfab{position:fixed;right:16px;bottom:calc(var(--m-tab) + env(safe-area-inset-bottom) + 14px);z-index:55;
+  display:inline-flex;align-items:center;gap:7px;border:0;border-radius:999px;padding:11px 16px;
+  background:var(--ink);color:var(--bg);font-weight:700;font-size:13.5px;box-shadow:0 10px 26px rgba(45,26,18,.28)}
+.m-mapfab:active{background:#3a1f16}
+@media (min-width:900px){.m-mapfab{display:none}}
