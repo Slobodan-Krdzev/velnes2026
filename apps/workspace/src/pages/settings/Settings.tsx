@@ -22,7 +22,7 @@ import {
 import { AMENITY_ICONS, I, Icon, PhoneInput } from '@velnes/ui';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Navigate, useLocation, useNavigate } from 'react-router-dom';
+import { Navigate, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { z } from 'zod';
 import { api, get, patch, post } from '@velnes/client';
 import { useEmployees, useLocationCatalog, useLocations } from '../../api/queries.js';
@@ -114,7 +114,20 @@ export function SettingsPage() {
   // Exit-preview lands here asking for a section — the prototype's
   // state.settingsTab='team' — but only one the caller may see.
   const routeState = useLocation().state as { tab?: SectionId; profile?: string } | null;
-  const asked = routeState?.tab;
+  // A URL can name the section too (`?tab=locations`) — the navigation
+  // search's way in, and one that survives a reload. The other seeds
+  // (`edit`, `focus`, `loc`, `sub`, `open`) go to the section they
+  // concern.
+  const [params] = useSearchParams();
+  const askedByUrl = params.get('tab') as SectionId | null;
+  const asked = askedByUrl ?? routeState?.tab;
+  const seed = {
+    edit: params.get('edit'),
+    focus: params.get('focus'),
+    loc: params.get('loc'),
+    sub: params.get('sub'),
+    open: params.get('open'),
+  };
   // The account menu's Settings link asks to open the signed-in user's own
   // member panel (their dedicated edit screen).
   const askedProfile = routeState?.profile;
@@ -165,11 +178,13 @@ export function SettingsPage() {
           {tab === 'general' ? (
             <GeneralSection openEmployees={() => setTab('employees')} />
           ) : null}
-          {tab === 'company' ? <CompanySection /> : null}
-          {tab === 'locations' ? <LocationsSection /> : null}
+          {tab === 'company' ? <CompanySection focus={seed.focus} /> : null}
+          {tab === 'locations' ? <LocationsSection openEdit={seed.edit} focus={seed.focus} openAdd={seed.open === 'add'} /> : null}
           {tab === 'team' ? (
             <TeamSection
               openProfileId={askedProfile}
+              openInvite={seed.open === 'invite'}
+              openApp={seed.open === 'app'}
               openAudit={() => {
                 setAuditFromTeam(true);
                 setTab('audit');
@@ -179,7 +194,7 @@ export function SettingsPage() {
           {tab === 'roles' ? <RolesSection /> : null}
           {tab === 'employees' ? <EmployeesSection /> : null}
           {tab === 'ranking' ? <RankingSection /> : null}
-          {tab === 'calendar' ? <HoursSection /> : null}
+          {tab === 'calendar' ? <HoursSection initialLoc={seed.loc} initialSub={seed.sub === 'exceptions' ? 'exceptions' : null} /> : null}
           {tab === 'booking' ? <BookingSection /> : null}
           {tab === 'marketplace' ? <MarketplaceSection /> : null}
           {tab === 'customers' ? <CustomersSettingsSection /> : null}
@@ -202,7 +217,17 @@ export function SettingsPage() {
   );
 }
 
-function LocationsSection() {
+function LocationsSection({
+  openEdit = null,
+  focus = null,
+  openAdd = false,
+}: {
+  /** Open this location's panel on arrival (the navigation search's
+   *  one-location deep link), and scroll to the block named by `focus`. */
+  openEdit?: string | null;
+  focus?: string | null;
+  openAdd?: boolean;
+}) {
   const { t } = useTranslation();
   const toast = useToast();
   const qc = useQueryClient();
@@ -217,10 +242,21 @@ function LocationsSection() {
   });
   const catalog = useLocationCatalog(locations.data?.locations[0]?.id ?? null);
   const [error, setError] = useState<string | null>(null);
-  const [adding, setAdding] = useState(false);
+  const [adding, setAdding] = useState(openAdd);
   const [editing, setEditing] = useState<Location | null>(null);
   const [copyFrom, setCopyFrom] = useState<Location | null>(null);
   const isOwner = me?.access === 'owner';
+  // Arrived asking for one location's panel: open it once the list is
+  // here, then bring the asked-for block into view.
+  const seeded = useRef(false);
+  useEffect(() => {
+    if (seeded.current || !openEdit) return;
+    const loc = locations.data?.locations.find((l) => l.id === openEdit);
+    if (!loc) return;
+    seeded.current = true;
+    setEditing(loc);
+  }, [openEdit, locations.data]);
+  useFocusBlock(focus, Boolean(editing) || !openEdit);
 
   const transition = async (id: string, to: string) => {
     setError(null);
@@ -630,7 +666,7 @@ function LocationEditPanel({
             />
             <div className="note">{t('lset.pinNote')}</div>
             <div className="span2">
-              <div className="section-label">{t('lset.amenities')}</div>
+              <div className="section-label" id="focus-amenities">{t('lset.amenities')}</div>
               <p className="hint" style={{ margin: '0 0 8px' }}>{t('lset.amenitiesHint')}</p>
               {AMENITY_GROUPS.map((group) => (
                 <div key={group} style={{ marginBottom: 10 }}>
@@ -689,7 +725,7 @@ function LocationEditPanel({
               />
               <span className="hint">{t('lset.invoiceHint')}</span>
             </label>
-            <label className="field">
+            <label className="field" id="focus-cancel">
               <span>{t('lset.cancelUntil')}</span>
               <input
                 className="input"
@@ -929,7 +965,7 @@ const inits = (n: string) =>
 
 /** The prototype's setTeam(): the Users table, the invite lade and
  *  the per-user locations panel — every act through the real doors. */
-function TeamSection({ openAudit, openProfileId }: { openAudit: () => void; openProfileId?: string | undefined }) {
+function TeamSection({ openAudit, openProfileId, openInvite = false, openApp = false }: { openAudit: () => void; openProfileId?: string | undefined; openInvite?: boolean; openApp?: boolean }) {
   const { t } = useTranslation();
   const toast = useToast();
   const qc = useQueryClient();
@@ -945,9 +981,19 @@ function TeamSection({ openAudit, openProfileId }: { openAudit: () => void; open
     queryKey: ['audit'],
     queryFn: () => get(AuditListResponseSchema, '/audit?limit=100'),
   });
-  const [inviting, setInviting] = useState(false);
+  const [inviting, setInviting] = useState(openInvite);
   const [locsFor, setLocsFor] = useState<string | null>(null);
   const [linkFor, setLinkFor] = useState<Employee | null>(null);
+  // "Employee app sign-in" from the navigation search: my own link.
+  const { me: self } = useSession();
+  const appSeeded = useRef(false);
+  useEffect(() => {
+    if (appSeeded.current || !openApp) return;
+    const mine = employees.data?.employees.find((e) => e.id === self?.id);
+    if (!mine) return;
+    appSeeded.current = true;
+    setLinkFor(mine);
+  }, [openApp, employees.data, self?.id]);
   const [editing, setEditing] = useState<Employee | null>(null);
   // The account menu's Settings link opens the signed-in user's own panel.
   const openedProfile = useRef(false);
@@ -1855,4 +1901,20 @@ function AuditSection({ onBack }: { onBack?: (() => void) | undefined }) {
       </table>
     </div>
   );
+}
+
+/**
+ * Scroll the block a deep link named (`?focus=gallery`) into view, once
+ * it exists — the navigation search's last step. `ready` is whatever
+ * the block waits for (a panel opening, data arriving).
+ */
+export function useFocusBlock(focus: string | null | undefined, ready: boolean) {
+  const done = useRef(false);
+  useEffect(() => {
+    if (done.current || !focus || !ready) return;
+    const el = document.getElementById(`focus-${focus}`);
+    if (!el) return;
+    done.current = true;
+    el.scrollIntoView?.({ block: 'center', behavior: 'smooth' });
+  }, [focus, ready]);
 }

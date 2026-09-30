@@ -17,11 +17,12 @@
   },
   "dependencies": {
     "@velnes/contracts": "workspace:^",
+    "@velnes/i18n": "workspace:^",
+    "@velnes/navsearch": "workspace:^",
     "@velnes/ui": "workspace:^",
+    "i18next": "^25.10.10",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "@velnes/i18n": "workspace:^",
-    "i18next": "^25.10.10",
     "react-i18next": "^17.0.12",
     "zod": "^4.4.3"
   }

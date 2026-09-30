@@ -15,6 +15,7 @@ import {
 import { I, Icon, NumInput } from '@velnes/ui';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useLocation, useSearchParams } from 'react-router-dom';
 import { z } from 'zod';
 import { api, ApiError, get, patch, post, useSession } from '@velnes/client';
 import { Toggle } from '../settings/bits.js';
@@ -55,7 +56,14 @@ const hhmm = (m: number) =>
 
 export function MarketingPage() {
   const { t } = useTranslation();
-  const [tab, setTab] = useState<(typeof TABS)[number][0]>('offers');
+  // `?tab=` from the navigation search, or the flightdeck's route state
+  // (which this page used to ignore) — either names the tab to open.
+  const [params] = useSearchParams();
+  const routeTab = (useLocation().state as { tab?: string } | null)?.tab;
+  const askedTab = params.get('tab') ?? routeTab;
+  const [tab, setTab] = useState<(typeof TABS)[number][0]>(
+    askedTab && TABS.some(([id]) => id === askedTab) ? (askedTab as (typeof TABS)[number][0]) : 'offers',
+  );
   return (
     <>
       <div className="toolbar">

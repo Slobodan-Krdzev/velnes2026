@@ -33,7 +33,7 @@ modify anything under `reference/`.
 ## Layout
 `apps/{workspace,employee,booking,supplier,hq,consumer}` · `services/api`
 (Fastify; widget surface is a separate narrow plugin scope) ·
-`packages/{contracts,ui,config,i18n,client}` · `db/migrations` ·
+`packages/{contracts,ui,config,i18n,client,navsearch}` · `db/migrations` ·
 `reference/prototype` · `reference/client-prototype` (consumer app's
 read-only design spec) · `docs/`
 
@@ -51,7 +51,7 @@ loyalty/premium and geo search stay deferred, not faked (see
 `docs/CONSUMER-APP.md`). Per-phase docs live in `docs/`
 (FOUNDATIONS, CATALOG, SCHEDULING, TILL, I18N, WORKSPACE, EMPLOYEE-APP,
 BOOKING-PAGE, REGISTRATIONS-HQ, CUSTOMERS-MARKETING, SUPPLIERS,
-CONSUMER-APP) — each ends with its honest deferrals, which together
+CONSUMER-APP, NAVIGATION-SEARCH) — each ends with its honest deferrals, which together
 form the backlog.
 Search/discovery is **built** (2026-09-21): one universal search bar,
 `search_documents` as the cross-tenant matching projection,

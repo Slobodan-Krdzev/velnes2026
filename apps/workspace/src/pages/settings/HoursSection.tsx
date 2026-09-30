@@ -42,12 +42,19 @@ const useHolidays = (locId: string | null) =>
     enabled: !!locId,
   });
 
-export function HoursSection() {
+export function HoursSection({
+  initialLoc = null,
+  initialSub = null,
+}: {
+  /** A deep link's location and sub-tab (`?loc=…&sub=exceptions`). */
+  initialLoc?: string | null;
+  initialSub?: 'regular' | 'exceptions' | null;
+} = {}) {
   const { t } = useTranslation();
   const locations = useLocations();
   const all = locations.data?.locations ?? [];
-  const [locId, setLocId] = useState<string | null>(null);
-  const [tab, setTab] = useState<'regular' | 'exceptions'>('regular');
+  const [locId, setLocId] = useState<string | null>(initialLoc);
+  const [tab, setTab] = useState<'regular' | 'exceptions'>(initialSub ?? 'regular');
 
   const lid = locId ?? all[0]?.id ?? null;
   const loc = all.find((l) => l.id === lid) ?? null;

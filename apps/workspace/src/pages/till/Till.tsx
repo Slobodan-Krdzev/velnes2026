@@ -3,7 +3,7 @@ import { SaleResponseSchema, ValidateCodeResponseSchema, type SaleLine } from '@
 import { I, Icon } from '@velnes/ui';
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { post } from '@velnes/client';
 import { useAppointments, useLocationCatalog, useLocations } from '../../api/queries.js';
 import { money } from '../../lib/money.js';
@@ -92,7 +92,10 @@ export function TillPage() {
   const today = localIso(new Date());
   const appts = useAppointments(here, today, today);
 
-  const [posType, setPosType] = useState('appointments');
+  // `?type=giftcards` from the navigation search names the tab to open.
+  const [params] = useSearchParams();
+  const urlType = params.get('type');
+  const [posType, setPosType] = useState(urlType && POS_TYPES.some(([id]) => id === urlType) ? urlType : 'appointments');
   const [posCategory, setPosCategory] = useState('all');
   const [basket, setBasket] = useState<BasketLine[]>([]);
   const [extras, setExtras] = useState<Extras>(noExtras);

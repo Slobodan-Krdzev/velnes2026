@@ -23,7 +23,9 @@ import {
 } from '@velnes/contracts';
 import type { Lang } from '@velnes/i18n';
 import { I, Icon, VelnesMark, siblingAppUrl } from '@velnes/ui';
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { NavSearch, useNavSearchHotkey, type NavTarget } from '@velnes/navsearch';
+import { HQ_INDEX, type HqCtx } from './navsearch.js';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { z } from 'zod';
@@ -44,6 +46,7 @@ import {
 
 type HqUser = z.infer<typeof HqMeResponseSchema>;
 type Tab = 'customers' | 'categories' | 'suppliers' | 'tickets' | 'team' | 'search' | 'audit';
+const TABS: Tab[] = ['customers', 'categories', 'suppliers', 'tickets', 'team', 'search', 'audit'];
 const DecisionResp = z.object({ id: z.uuid(), lifecycle: z.string() });
 const RegDecisionResp = z.object({ id: z.uuid(), status: RegistrationStatusSchema });
 
@@ -57,7 +60,27 @@ export function Hq({
   signOut: () => void;
 }) {
   const { t, i18n } = useTranslation();
-  const [tab, setTab] = useState<Tab>('customers');
+  // The tab can arrive in the URL (`?tab=tickets`) — the navigation
+  // search writes it there, so a chosen destination survives a reload.
+  const [tab, setTab] = useState<Tab>(() => {
+    const asked = new URLSearchParams(window.location.search).get('tab');
+    return TABS.includes(asked as Tab) ? (asked as Tab) : 'customers';
+  });
+  const [searchOpen, setSearchOpen] = useState(false);
+  const searchBtn = useRef<HTMLButtonElement>(null);
+  const openSearch = useCallback(() => setSearchOpen(true), []);
+  useNavSearchHotkey(openSearch);
+  const searchCtx = useMemo<HqCtx>(() => ({ role: user.role }), [user.role]);
+  const goTo = useCallback((target: NavTarget) => {
+    if (target.tab) {
+      setTab(target.tab as Tab);
+      window.history.replaceState(null, '', `?tab=${target.tab}`);
+    }
+    if (target.sub) {
+      const id = target.sub;
+      requestAnimationFrame(() => document.getElementById(id)?.scrollIntoView?.({ block: 'start', behavior: 'smooth' }));
+    }
+  }, []);
   const [focusTicket, setFocusTicket] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [envMenu, setEnvMenu] = useState(false);
@@ -176,6 +199,18 @@ export function Hq({
           </div>
           <div className="topbar-mid" id="topbar-mid" />
           <div className="topbar-right">
+            <button
+              ref={searchBtn}
+              className="iconbtn"
+              aria-label={t('common.search')}
+              aria-haspopup="dialog"
+              aria-expanded={searchOpen}
+              aria-keyshortcuts="Meta+K Control+K"
+              onClick={openSearch}
+            >
+              <Icon d={I.search} size={24} w={2} />
+            </button>
+            <NavSearch<HqCtx> open={searchOpen} onClose={() => setSearchOpen(false)} index={HQ_INDEX} ctx={searchCtx} onGo={goTo} returnFocusTo={searchBtn} />
             <div className="pop" ref={notifRef}>
               <button
                 className="iconbtn"
@@ -669,7 +704,7 @@ function SearchLab({ say, canWrite }: { say: (m: string) => void; canWrite: bool
       {/* Step 10, surfaced. Not a lever — a list of gaps: what people
           asked for and did not find. */}
       <div className="card" style={{ padding: '16px', marginTop: '14px' }}>
-        <h3 style={{ marginTop: 0 }}>Not found</h3>
+        <h3 id="hq-misses" style={{ marginTop: 0 }}>Not found</h3>
         <p className="sub" style={{ marginTop: 0 }}>
           Searches that came back empty or nearly empty, last 30 days. Aggregate
           counts only — no identity was recorded. &ldquo;Not understood&rdquo; is a
@@ -929,7 +964,7 @@ function Categories({ say }: { say: (m: string) => void }) {
   const pane = (kind: 'services' | 'products') => (
     <div className="card">
       <div className="card-header">
-        <h2>{kind === 'services' ? t('hq.svcCategories') : t('hq.prodCategories')}</h2>
+        <h2 id={kind === 'services' ? 'hq-svc-categories' : 'hq-prod-categories'}>{kind === 'services' ? t('hq.svcCategories') : t('hq.prodCategories')}</h2>
       </div>
       <table>
         <tbody>
@@ -1010,7 +1045,7 @@ function Categories({ say }: { say: (m: string) => void }) {
         <div className="card">
           <div className="card-header">
             <h2>
-              {t('hq.categoryRequests')} <span className="badge warning">{pending.length}</span>
+              <span id="hq-category-requests">{t('hq.categoryRequests')}</span> <span className="badge warning">{pending.length}</span>
             </h2>
             <span className="muted" style={{ fontWeight: 500 }}>
               {t('hq.categoryRequestsSub')}
@@ -1327,7 +1362,7 @@ function Customers({ say, me }: { say: (m: string) => void; me: HqUser }) {
     <>
       <div className="toolbar">
         <div className="toolbar-context">
-          <span className="k">{t('hq.businesses')}</span>
+          <span className="k" id="hq-businesses">{t('hq.businesses')}</span>
           <span className="v">{t('hq.accounts', { n: rows.length })}</span>
         </div>
         <div className="toolbar-actions">
@@ -1344,7 +1379,7 @@ function Customers({ say, me }: { say: (m: string) => void; me: HqUser }) {
       {nlq.length ? (
         <div className="card" style={{ marginBottom: 16 }}>
           <div className="card-header">
-            <h2>{t('hq.newLocations')}</h2>
+            <h2 id="hq-new-locations">{t('hq.newLocations')}</h2>
             <span className="badge warning">{t('hq.awaiting', { n: nlq.length })}</span>
           </div>
           <table>
@@ -1388,7 +1423,7 @@ function Customers({ say, me }: { say: (m: string) => void; me: HqUser }) {
       {pend.length ? (
         <div className="card" style={{ marginBottom: 16 }}>
           <div className="card-header">
-            <h2>{t('hq.newRegistrations')}</h2>
+            <h2 id="hq-registrations">{t('hq.newRegistrations')}</h2>
             <span className="badge warning">{t('hq.awaiting', { n: pend.length })}</span>
           </div>
           <table>
@@ -2685,7 +2720,7 @@ function Team({ say, me }: { say: (m: string) => void; me: HqUser }) {
 
       <div className="card">
         <div className="card-header">
-          <h2>{t('hq.hqRoles')}</h2>
+          <h2 id="hq-roles">{t('hq.hqRoles')}</h2>
           <span className="muted" style={{ fontWeight: 500 }}>
             {t('hq.hqRolesSub')}
           </span>
@@ -2773,7 +2808,7 @@ function Team({ say, me }: { say: (m: string) => void; me: HqUser }) {
 
       <div className="card">
         <div className="card-header">
-          <h2>{t('hq.people')}</h2>
+          <h2 id="hq-people">{t('hq.people')}</h2>
         </div>
         <table>
           <thead>
@@ -2820,7 +2855,7 @@ function Team({ say, me }: { say: (m: string) => void; me: HqUser }) {
 
       <div className="card">
         <div className="card-header">
-          <h2>{t('hq.outbox')}</h2>
+          <h2 id="hq-outbox">{t('hq.outbox')}</h2>
           <span className="muted" style={{ fontWeight: 500 }}>
             {t('hq.outboxSub')}
           </span>

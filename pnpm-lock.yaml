@@ -197,6 +197,9 @@ importers:
       '@velnes/i18n':
         specifier: workspace:^
         version: link:../../packages/i18n
+      '@velnes/navsearch':
+        specifier: workspace:^
+        version: link:../../packages/navsearch
       '@velnes/ui':
         specifier: workspace:^
         version: link:../../packages/ui
@@ -237,6 +240,9 @@ importers:
       '@velnes/i18n':
         specifier: workspace:^
         version: link:../../packages/i18n
+      '@velnes/navsearch':
+        specifier: workspace:^
+        version: link:../../packages/navsearch
       '@velnes/ui':
         specifier: workspace:^
         version: link:../../packages/ui
@@ -283,6 +289,9 @@ importers:
       '@velnes/i18n':
         specifier: workspace:^
         version: link:../../packages/i18n
+      '@velnes/navsearch':
+        specifier: workspace:^
+        version: link:../../packages/navsearch
       '@velnes/ui':
         specifier: workspace:^
         version: link:../../packages/ui
@@ -386,6 +395,31 @@ importers:
       '@velnes/config':
         specifier: workspace:^
         version: link:../config
+
+  packages/navsearch:
+    dependencies:
+      '@velnes/i18n':
+        specifier: workspace:^
+        version: link:../i18n
+      '@velnes/ui':
+        specifier: workspace:^
+        version: link:../ui
+    devDependencies:
+      '@velnes/config':
+        specifier: workspace:^
+        version: link:../config
+      i18next:
+        specifier: ^25.10.10
+        version: 25.10.10(typescript@5.9.3)
+      react:
+        specifier: ^19.0.0
+        version: 19.2.8
+      react-dom:
+        specifier: ^19.0.0
+        version: 19.2.8(react@19.2.8)
+      react-i18next:
+        specifier: ^17.0.12
+        version: 17.0.12(i18next@25.10.10(typescript@5.9.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(typescript@5.9.3)
 
   packages/ui:
     dependencies:

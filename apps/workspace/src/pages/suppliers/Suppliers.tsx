@@ -11,6 +11,7 @@ import {
 import { I, Icon, NumInput } from '@velnes/ui';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useSearchParams } from 'react-router-dom';
 import { z } from 'zod';
 import { ApiError, get, post, useSession } from '@velnes/client';
 import { useLocations } from '../../api/queries.js';
@@ -54,7 +55,10 @@ const statusKey: Record<string, string> = {
 
 export function SuppliersPage() {
   const { t } = useTranslation();
-  const [tab, setTab] = useState<Tab>('suppliers');
+  // `?tab=orders` from the navigation search names the tab to open.
+  const [params] = useSearchParams();
+  const urlTab = params.get('tab') as Tab | null;
+  const [tab, setTab] = useState<Tab>(urlTab && TABS.some(([id]) => id === urlTab) ? urlTab : 'suppliers');
   const [drafting, setDrafting] = useState<string | null>(null); // supplier id
   const [receiving, setReceiving] = useState<PurchaseOrder | null>(null);
 

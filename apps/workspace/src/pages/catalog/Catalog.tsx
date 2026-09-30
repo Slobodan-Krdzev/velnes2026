@@ -13,7 +13,7 @@ import { useLocationCatalog, useLocations } from '../../api/queries.js';
 import { money } from '../../lib/money.js';
 import { useToast } from '../../lib/toast.js';
 import { useSession } from '@velnes/client';
-import { useLocation as useRouterLocation } from 'react-router-dom';
+import { useLocation as useRouterLocation, useSearchParams } from 'react-router-dom';
 import { useScope } from '../../shell/Shell.js';
 import { ComboPanel } from './ComboPanel.js';
 import { ProductPanel } from './ProductPanel.js';
@@ -54,7 +54,10 @@ export function CatalogPage() {
   const locations = useLocations();
   // A notice click lands straight on the tab it speaks of.
   const askedTab = (useRouterLocation().state as { tab?: string } | null)?.tab;
-  const [tab, setTab] = useState(askedTab ?? 'services');
+  // A URL can name the tab too (`?tab=products`) — the navigation search's way in.
+  const [params] = useSearchParams();
+  const urlTab = params.get('tab');
+  const [tab, setTab] = useState(urlTab && CAT_TABS.some(([id]) => id === urlTab) ? urlTab : (askedTab ?? 'services'));
   const [panel, setPanel] = useState<
     | { kind: 'service'; id: string | null }
     | { kind: 'product'; id: string | null }

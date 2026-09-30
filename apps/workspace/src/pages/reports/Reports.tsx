@@ -3,6 +3,7 @@ import { ReportSchema, type Report } from '@velnes/contracts';
 import { I, Icon } from '@velnes/ui';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useSearchParams } from 'react-router-dom';
 import { get } from '@velnes/client';
 import { DateField } from '../../lib/DateField.js';
 import { money } from '../../lib/money.js';
@@ -15,6 +16,7 @@ import { useOutsideClose } from '../../lib/pop.js';
 
 type Period = 'week' | 'month' | 'quarter' | 'year';
 type Tab = 'locations' | 'sources' | 'services' | 'products' | 'employees' | 'vat';
+const REPORT_TABS: Tab[] = ['locations', 'sources', 'services', 'products', 'employees', 'vat'];
 
 const localIso = (d: Date) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -64,7 +66,10 @@ export function ReportsPage() {
   const { t } = useTranslation();
   const [period, setPeriod] = useState<Period | 'custom'>('week');
   const [custom, setCustom] = useState<[string, string]>(rangeFor('week'));
-  const [tab, setTab] = useState<Tab>('services');
+  // `?tab=vat` from the navigation search names the tab to open.
+  const [params] = useSearchParams();
+  const urlTab = params.get('tab') as Tab | null;
+  const [tab, setTab] = useState<Tab>(urlTab && REPORT_TABS.includes(urlTab) ? urlTab : 'services');
   const [filtersOpen, setFiltersOpen] = useState(false);
   const filtersRef = useOutsideClose(filtersOpen, () => setFiltersOpen(false));
   const [from, to] = period === 'custom' ? custom : rangeFor(period);
