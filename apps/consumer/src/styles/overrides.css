@@ -1642,3 +1642,9 @@ a.pop-go:hover {
 
 .loy-row > span:first-child{flex:1;text-align:left}
 .loy-row .loy-what{text-align:left;color:var(--ink)}
+
+/* The points a visit will earn, in the booking summary (both trees). */
+.loy-earn{display:flex;align-items:center;gap:8px;margin:8px 0 10px;padding:8px 12px;border-radius:12px;background:var(--warm);color:var(--brand-hover);font-weight:700;font-size:13px}
+.loy-earn-ic{display:inline-grid;place-items:center;color:var(--brand)}
+.loy-earn-ic svg{width:16px;height:16px}
+.loy-earn.m{margin:0 0 8px}

@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import type { LoyaltyAccount, LoyaltyEntry } from '@velnes/contracts';
+import { servicePoints, type LoyaltyAccount, type LoyaltyEntry } from '@velnes/contracts';
 import { t } from '../../lib/i18n-core.js';
 import { i18n } from '../../lib/i18n-core.js';
 import { useSession } from '../../lib/api/session.js';
@@ -27,6 +27,25 @@ export function useMyLoyalty() {
     enabled: signedIn,
     staleTime: 15_000,
   });
+}
+
+/**
+ * What a visit being put together will earn — the same rule the
+ * ledger uses (`servicePoints`, one place), shown as a preview in the
+ * booking summary (Alex, 2026-09-30). Products are sold at the till,
+ * so the preview is the services' points; a guest is told what
+ * signing in would earn, since a guest has no wallet.
+ */
+export function LoyaltyEarn({ serviceCount, className = '' }: { serviceCount: number; className?: string }) {
+  const { signedIn } = useSession();
+  if (serviceCount < 1) return null;
+  const n = fmtPoints(servicePoints(serviceCount));
+  return (
+    <div className={`loy-earn${className ? ` ${className}` : ''}`} data-testid="loyalty-earn">
+      <span className="loy-earn-ic" aria-hidden="true">{IcFlower}</span>
+      <span>{signedIn ? t('c.loy.earnWith', { n }) : t('c.loy.earnSignIn', { n })}</span>
+    </div>
+  );
 }
 
 /** "1,450" in the viewer's language — whole points, never decimals. */

@@ -18,6 +18,7 @@ import { RatingChip } from '../../components/Stars.js';
 import { LocationHours } from './LocationHours.js';
 import { IcArr, IcClock, IcPin, IcSpark, IcVok } from '../discovery/cards.js';
 import { useBooking } from '../booking/store.js';
+import { LoyaltyEarn } from '../account/Loyalty.js';
 import { distanceKm, distanceLbl, useUserLocation } from '../../lib/geo.js';
 
 type PublicService = z.infer<typeof PublicServiceSchema>;
@@ -1031,6 +1032,7 @@ export function Salon() {
                     <span>{t('c.sal.total')}</span>
                     <b>{showPrice}</b>
                   </div>
+                  <LoyaltyEarn serviceCount={p.lines.length} />
                   <button className="btn btn-p" style={{ width: '100%' }} disabled={!p.lines.length || !p.time || p.missing.length > 0} onClick={book}>
                     {t('c.sal.bookNow')}
                   </button>
@@ -1121,6 +1123,7 @@ export function Salon() {
                     <b data-sum="price">{showPrice}</b>
                   </span>
                 </div>
+                <LoyaltyEarn serviceCount={p.lines.length} className="m" />
                 <button className="btn btn-p" disabled={!p.lines.length || !p.time || p.missing.length > 0} onClick={book}>
                   {t('c.sal.bookNow')} {IcArr}
                 </button>

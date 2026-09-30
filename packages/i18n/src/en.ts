@@ -3692,6 +3692,8 @@ export const en = {
   "loy.earnedTitle": "You earned {{n}} Velnes points",
   "loy.earnedBody": "Your appointment at {{salon}} earned you {{n}} loyalty points.",
   "c.loy.title": "Velnes Loyalty",
+  "c.loy.earnWith": "+{{n}} Velnes points with this visit",
+  "c.loy.earnSignIn": "Sign in to earn {{n}} Velnes points with this visit",
   "c.loy.points": "points",
   "c.loy.pointsN": "{{n}} points",
   "c.loy.balance": "Your balance",

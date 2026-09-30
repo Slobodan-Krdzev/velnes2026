@@ -3674,6 +3674,8 @@ export const mk: Record<TranslationKey, string> = {
   "loy.earnedTitle": "Освоивте {{n}} Velnes поени",
   "loy.earnedBody": "Вашиот термин во {{salon}} ви донесе {{n}} поени за лојалност.",
   "c.loy.title": "Velnes лојалност",
+  "c.loy.earnWith": "+{{n}} Velnes поени со оваа посета",
+  "c.loy.earnSignIn": "Најавете се за да освоите {{n}} Velnes поени со оваа посета",
   "c.loy.points": "поени",
   "c.loy.pointsN": "{{n}} поени",
   "c.loy.balance": "Вашето салдо",

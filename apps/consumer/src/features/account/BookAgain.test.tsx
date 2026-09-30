@@ -93,5 +93,8 @@ describe('book again', () => {
     await waitFor(() => expect(document.body.textContent).toContain('60 min ·'));
     await waitFor(() => expect(document.querySelector('[data-sum="pro"]')?.textContent).toBe('Maria Petrovska'));
     expect(document.body.textContent).toContain('2.700');
+    // The booking summary says what the visit will earn — the rule's
+    // own number for one service, from the one place it lives.
+    expect((await screen.findAllByTestId('loyalty-earn'))[0]!.textContent).toBe('+100 Velnes points with this visit');
   });
 });

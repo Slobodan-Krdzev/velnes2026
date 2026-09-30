@@ -3674,6 +3674,8 @@ export const sq: Record<TranslationKey, string> = {
   "loy.earnedTitle": "Fituat {{n}} pikë Velnes",
   "loy.earnedBody": "Termini juaj te {{salon}} ju solli {{n}} pikë besnikërie.",
   "c.loy.title": "Besnikëria Velnes",
+  "c.loy.earnWith": "+{{n}} pikë Velnes me këtë vizitë",
+  "c.loy.earnSignIn": "Hyni për të fituar {{n}} pikë Velnes me këtë vizitë",
   "c.loy.points": "pikë",
   "c.loy.pointsN": "{{n}} pikë",
   "c.loy.balance": "Bilanci juaj",
