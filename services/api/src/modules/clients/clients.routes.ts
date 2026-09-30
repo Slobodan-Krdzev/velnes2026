@@ -132,6 +132,7 @@ async function myAppointments(clientUserId: string) {
         'locationId',
         'serviceId',
         'variantId',
+        'modifierOptionIds',
         'employeeId',
         'date',
         'startMin',
@@ -209,6 +210,8 @@ async function myAppointments(clientUserId: string) {
         serviceId: a.serviceId,
         employeeId: a.employeeId,
         locationId: a.locationId,
+        variantId: a.variantId,
+        modifierOptionIds: a.modifierOptionIds ?? [],
       });
     }
   }

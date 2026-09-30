@@ -131,6 +131,12 @@ export const ClientAppointmentSchema = z.object({
   serviceId: z.uuid().nullable().default(null),
   employeeId: z.uuid().nullable().default(null),
   locationId: z.uuid().nullable().default(null),
+  /** "Book again" (Alex, 2026-09-30) carries the visit as it was —
+   *  the variant and the options too — so the salon page opens with
+   *  the same treatment and professional chosen, and only the day and
+   *  time left to pick. */
+  variantId: z.uuid().nullable().default(null),
+  modifierOptionIds: z.array(z.uuid()).default([]),
 });
 export const ClientAppointmentsSchema = z.object({
   appointments: z.array(ClientAppointmentSchema),

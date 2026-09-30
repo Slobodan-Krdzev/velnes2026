@@ -61,6 +61,33 @@ const titles = (): Record<string, string> => ({
   notifs: t('c.acc.notifs'),
 });
 
+
+/**
+ * "Book again" (Alex, 2026-09-30): the salon page, opened on the visit
+ * as it was — its location, treatment, variant, options and
+ * professional — so only the day and time are left to choose. Nothing
+ * is locked: the cart there can still be added to, emptied or changed.
+ * Only what the visit really had rides along; a visit with "any
+ * professional" opens with any.
+ */
+export function bookAgainHref(a: {
+  salonSlug: string | null;
+  serviceId?: string | null;
+  locationId?: string | null;
+  employeeId?: string | null;
+  variantId?: string | null;
+  modifierOptionIds?: string[];
+}): string {
+  const p = new URLSearchParams();
+  if (a.serviceId) p.set('service', a.serviceId);
+  if (a.locationId) p.set('location', a.locationId);
+  if (a.employeeId) p.set('employee', a.employeeId);
+  if (a.variantId) p.set('variant', a.variantId);
+  if (a.modifierOptionIds?.length) p.set('mods', a.modifierOptionIds.join(','));
+  const qs = p.toString();
+  return `/salon/${a.salonSlug ?? ''}${qs ? `?${qs}` : ''}`;
+}
+
 function initials(p: { first: string; last: string; email: string }) {
   return ((p.first[0] ?? p.email[0] ?? 'V') + (p.last[0] ?? '')).toUpperCase();
 }
@@ -543,7 +570,7 @@ export function MyVelnes({ section = 'over' }: { section?: SecId }) {
                           </button>
                         ) : null}
                         {current.salonSlug ? (
-                          <button className={`btn ${current.canReview && !(reviewOpen || wantReview) ? 'btn-g' : 'btn-p'}`} onClick={() => nav(`/salon/${current.salonSlug}`)}>
+                          <button className={`btn ${current.canReview && !(reviewOpen || wantReview) ? 'btn-g' : 'btn-p'}`} onClick={() => nav(bookAgainHref(current))}>
                             {t('c.acc.bookAgain')}
                           </button>
                         ) : null}
@@ -598,7 +625,7 @@ export function MyVelnes({ section = 'over' }: { section?: SecId }) {
                           <button
                             className="btn btn-p"
                             style={{ width: '100%' }}
-                            onClick={() => nav(`/salon/${current.salonSlug}`)}
+                            onClick={() => nav(bookAgainHref(current))}
                           >{t('c.acc.bookAgain')}</button>
                         ) : null}
                         <button

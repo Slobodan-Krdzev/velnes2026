@@ -222,13 +222,24 @@ function useSalonPage() {
   const [prodOpen, setProdOpen] = useState(false);
   const [cartMin, setCartMin] = useState(false);
   // A slot tapped on the home screen arrives as a link: start the visit
-  // with that treatment already in the cart.
+  // with that treatment already in the cart. "Book again" (Alex,
+  // 2026-09-30) arrives the same way with more of the visit — the
+  // variant, the options and the professional — each taken only when
+  // the catalog here still has it, so a link never chooses what the
+  // salon no longer offers. The cart stays a cart: anything can be
+  // added, removed or changed after.
   useEffect(() => {
     const qsSvc = params.get('service');
     if (!services.length || cart.length || !qsSvc) return;
     const match = services.find((s) => s.id === qsSvc);
     if (!match) return;
-    setCart([{ serviceId: match.id, variantId: null, mods: [] }]);
+    const qv = params.get('variant');
+    const variantId = qv && match.variants.some((v) => v.id === qv) ? qv : null;
+    const known = new Set(match.modifiers.flatMap((g) => g.options.map((o) => o.id)));
+    const mods = (params.get('mods') ?? '').split(',').filter((id) => known.has(id));
+    setCart([{ serviceId: match.id, variantId, mods }]);
+    const qe = params.get('employee');
+    if (qe && match.employees.some((e) => e.id === qe)) setEmpId(qe);
     const qd = params.get('date');
     const qt = params.get('time');
     if (qd && days.some((d) => d.iso === qd)) setDate(qd);

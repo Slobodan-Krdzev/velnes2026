@@ -957,3 +957,13 @@ time and Available now. The words go to the door in English, which its
 synonyms know in every language. Deferred, not faked: a chosen date (the
 doors take words so links stay true), a two-seat booking, and any
 "for two" price.
+
+**Book again (2026-09-30, Alex).** From a visit's card in My Velnes,
+"Book again" opens the salon page on the visit as it was: the location,
+the treatment with its variant and options, and the professional — so
+only the day and time are left to pick. The link is the salon page's
+own arrival parameters (`service`, `location`, `employee`, `variant`,
+`mods`), each honoured only when the catalog there still has it, and
+the client appointments door now carries `variantId` and
+`modifierOptionIds` for it. Nothing is locked: the cart can be added
+to, emptied or changed, and "any professional" is one tap away.
