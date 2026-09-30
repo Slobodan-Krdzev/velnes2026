@@ -61,6 +61,11 @@ export interface RankCandidate {
    * so it cannot disagree with what was supplied.
    */
   availableAt?: string | null;
+  /** The first free start on the day asked for (or within the party
+   *  horizon) — admission has already happened by the time the ranker
+   *  sees it, so every candidate carrying the key has a value. Not a
+   *  scoring input: a day is a filter, not a preference. */
+  availableOn?: { date: string; at: string } | null;
 }
 
 /**

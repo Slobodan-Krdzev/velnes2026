@@ -108,6 +108,9 @@ export interface ServiceVM {
   /** "HH:MM" when the door was asked for *now* and this can start within
    *  the next half hour; null otherwise. Never computed here. */
   availableAt: string | null;
+  /** The first free start on the day asked for, when a day (or a party)
+   *  was asked: the salon's date and "HH:MM". Never computed here. */
+  availableOn: { date: string; at: string } | null;
   salon: {
     slug: string;
     name: string;
@@ -166,6 +169,7 @@ export function serviceVM(s: DiscoveryServiceCard): ServiceVM {
     price: s.price,
     priceFrom: s.priceFrom,
     availableAt: s.availableAt ?? null,
+    availableOn: s.availableOn ?? null,
     salon: {
       slug: s.salon.slug,
       name: s.salon.name,
@@ -196,4 +200,14 @@ export function priceLbl(s: ServiceVM): string | null {
     return i18n.t('c.from', { p: fmtMKD(s.priceFrom) });
   if (s.price != null) return fmtMKD(s.price);
   return null;
+}
+
+/** A calendar day as a person reads it — "Sat 4 Oct" — in their own
+ *  language. For the door's `availableOn`, which is a date, not a clock. */
+export function dayLbl(iso: string, lang = i18n.language): string {
+  try {
+    return new Intl.DateTimeFormat(lang, { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' }).format(new Date(`${iso}T00:00:00Z`));
+  } catch {
+    return iso;
+  }
 }

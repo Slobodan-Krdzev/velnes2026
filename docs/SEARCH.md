@@ -239,6 +239,9 @@ the order is the product.
 | Category | Narrows a text query that spans several |
 | **Now** (2026-09-21) | Not admission — an order and a word. Each result learns `availableAt`: the soonest 30-min grid start within the next half hour that `bookingCheck` calls free, in the salon's own clock (`locations.tz`). What can start now leads, soonest first; the rest follow in their earned order. When nothing can, the door says so (`availableNow: 0`) and the page tells the customer before showing what follows. Asked by the **Available now** chip beside Near me (and, since 2026-09-28, by the home page's first suggestion chip, which also asks for *near me* via a `near=1` intent the results page resolves), or by the word in the query; on a phone, by the search sheet's **When?** (2026-09-28, the sheet also adds a `city` filter — a town from `GET /public/discovery/towns` — to both doors, hard admission like the rest) — *now / right now / asap*, *сега / веднаш / одма* (also Latin-typed), *tani / tash / menjëherë* — which `now-intent.ts` strips before lookup. "now" on its own means anything, now, across every category on offer |
 
+| **When** — a day (2026-09-30) | Hard admission, unlike *now*: `when` is `today`, `tomorrow` or `weekend` — words, not dates, so a shared link stays true next week — resolved in each **location's** clock (`locations.tz`; the weekend is the coming Saturday and Sunday, or what is left of it). Each admitted card carries `availableOn: {date, at}`, the first free 30-min grid start on that day from the same `bookingCheck` walk the booking page's slots come from, stopped at the first free one (`firstStartOn`) and remembered twenty seconds. A card that says "tomorrow" and has no tomorrow is the claim this surface must never make, so a treatment with no start that day is absent. Asked by the home page's **Massage tomorrow** and **Facial this weekend** chips and by the phone sheet's **When?** (Any time · Available now · Today · Tomorrow · This weekend — now and a day are exclusive); shown lit on the results page as a chip that takes it off. `now` still says nothing about tomorrow |
+| **For two** (2026-09-30) | `party` (1–4; the UI asks for 2): hard admission on the calendar — a start counts only when that many bookable professionals are free for it at once **and** the location has a room for each (`bookingCheck` judges one booking at a time, so the slot walk counts the rooms itself, prep and reset included). With `when`, on that day; alone, the first day within `PARTY_HORIZON_DAYS` (7) that has one, today onward. Fewer bookable hands, or rooms, than seats ends the question before any calendar is read. Asked by the **Couple massage** chip; the results page says "each person is booked separately", because a seat is still one booking — a two-seat booking is its own product and is not built |
+
 Removed rather than faked: any rating filter (needs reviews, which do
 not exist). Leaving an inert control is the same failure as a fake
 popularity label. **Now** was on that list until real availability
@@ -396,6 +399,17 @@ Each step is shippable and testable alone.
     Consumer responses still carry no explanations: weights and
     component scores stay inside HQ, and a test asserts the public
     response contains neither.
+
+12. ~~The home page's chips as whole searches.~~ — **done 2026-09-30**
+    (Alex): "Available now" is anything that can start within the half
+    hour (no longer also *near me*); "Massage tomorrow" and "Facial
+    this weekend" carry `when`; "Haircut near me" carries the `near=1`
+    intent; "Manicure" the word; "Couple massage" `party=2`. The two
+    new filters are on both doors and in the §10 table; the phone
+    sheet's When? gained the days. `DiscoveryServiceCardSchema.availableOn`
+    is the day's first start. Tests: `when.test.ts` (the days a word
+    means), `slots-party.test.ts` (seats, hands and rooms),
+    `discovery.when.test.ts` (both doors, against the wall clock).
 
 Steps 1–3 are invisible to customers. Steps 4–5 are useful before any
 ranking changes.

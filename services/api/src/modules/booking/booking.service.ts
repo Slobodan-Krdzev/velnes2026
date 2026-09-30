@@ -292,23 +292,36 @@ export async function bookingCheck(trx: Trx, req: CheckReq): Promise<Refusal | n
     return refuse('SLOT_HELD', {}, 'Somebody is paying for that time right now');
   // The room is taken exactly as long as the employee.
   const rooms = loc.rooms || 2;
-  const roomRows = await trx
-    .selectFrom('appointments')
-    .select(['id', 'startMin', 'durationMin', 'prepMin', 'resetMin'])
-    .where('locationId', '=', req.locationId)
-    .where('date', '=', new Date(req.date))
-    .where('kind', '=', 'appointment')
-    .where('status', '!=', 'cancelled')
-    .execute();
-  const busyRooms = roomRows.filter(
-    (a) =>
-      a.id !== req.ignoreId &&
-      a.startMin - a.prepMin < endM &&
-      startM < a.startMin + a.durationMin + a.resetMin,
-  ).length;
+  const busyRooms = await busyRoomsAt(trx, req.locationId, req.date, startM, endM, req.ignoreId);
   if (busyRooms >= rooms)
     return refuse('ROOMS_FULL', { rooms, loc: loc.name }, `All ${rooms} rooms at ${loc.name} are taken then`);
   return null;
+}
+
+/** How many rooms are taken across [startM, endM) — prep and reset
+ *  included, since a room is busy exactly as long as its employee. */
+async function busyRoomsAt(
+  trx: Trx,
+  locationId: string,
+  date: string,
+  startM: number,
+  endM: number,
+  ignoreId?: string | undefined,
+): Promise<number> {
+  const roomRows = await trx
+    .selectFrom('appointments')
+    .select(['id', 'startMin', 'durationMin', 'prepMin', 'resetMin'])
+    .where('locationId', '=', locationId)
+    .where('date', '=', new Date(date))
+    .where('kind', '=', 'appointment')
+    .where('status', '!=', 'cancelled')
+    .execute();
+  return roomRows.filter(
+    (a) =>
+      a.id !== ignoreId &&
+      a.startMin - a.prepMin < endM &&
+      startM < a.startMin + a.durationMin + a.resetMin,
+  ).length;
 }
 
 /**
@@ -341,7 +354,7 @@ async function pastCutoff(trx: Trx, locationId: string, date: string, now?: Date
  */
 export async function firstStartWithin(
   trx: Trx,
-  q: { locationId: string; serviceId: string; windowMin: number; now?: Date | undefined },
+  q: { locationId: string; serviceId: string; windowMin: number; now?: Date | undefined; party?: number | undefined },
 ): Promise<string | null> {
   const loc = await trx
     .selectFrom('locations')
@@ -350,13 +363,37 @@ export async function firstStartWithin(
     .executeTakeFirst();
   if (!loc) return null;
   const today = nowAt(loc.tz, q.now).date;
+  return firstStartOn(trx, { locationId: q.locationId, serviceId: q.serviceId, date: today, now: q.now, windowMin: q.windowMin, party: q.party });
+}
+
+/**
+ * The first free start on a day — "HH:MM" in the salon's clock, or
+ * null. The search door asks this for every result when a customer
+ * names a day ("massage tomorrow", "facial this weekend"), and with a
+ * `party` when they ask for two: the same walk the booking page's
+ * slots come from, stopped at the first free one, so a day's answer
+ * costs one slot's worth of calendar questions when the day is open.
+ */
+export async function firstStartOn(
+  trx: Trx,
+  q: {
+    locationId: string;
+    serviceId: string;
+    date: string;
+    now?: Date | undefined;
+    windowMin?: number | undefined;
+    party?: number | undefined;
+  },
+): Promise<string | null> {
   const slots = await availableSlots(trx, {
     locationId: q.locationId,
     serviceId: q.serviceId,
     employeeId: 'any',
-    date: today,
+    date: q.date,
     now: q.now,
     windowMin: q.windowMin,
+    party: q.party,
+    firstOnly: true,
   });
   return slots.find((s) => s.free)?.t ?? null;
 }
@@ -376,6 +413,16 @@ export async function availableSlots(
     /** Only starts within this many minutes of now — "available now"
      *  asks for the next half hour, not the whole day. */
     windowMin?: number | undefined;
+    /**
+     * "For two" (Alex, 2026-09-30): a start is free only when this many
+     * professionals are free for it at once — and the location has a
+     * room for each of them, which `bookingCheck` cannot see because it
+     * judges one booking at a time. `emp` on such a slot is the first
+     * of them; each seat is still its own booking. Only with "any".
+     */
+    party?: number | undefined;
+    /** Stop at the first free start — the search door's question. */
+    firstOnly?: boolean | undefined;
   },
 ) {
   if (!(await locLive(trx, q.locationId))) return []; // non-live locations do not exist here
@@ -383,10 +430,18 @@ export async function availableSlots(
   const until = q.windowMin != null ? cut + q.windowMin : Number.POSITIVE_INFINITY;
   const cfg = await svcAt(trx, q.serviceId, q.locationId).catch(() => null);
   if (!cfg?.active) return [];
+  const party = Math.max(1, q.employeeId === 'any' ? (q.party ?? 1) : 1);
   const pool =
     q.employeeId === 'any'
       ? (await empsFor(trx, q.locationId, q.serviceId)).map((e) => e.id)
       : [q.employeeId];
+  // Fewer hands than seats: no start on any day can seat the party.
+  if (pool.length < party) return [];
+  const rooms =
+    party > 1
+      ? ((await trx.selectFrom('locations').select('rooms').where('id', '=', q.locationId).executeTakeFirst())?.rooms || 2)
+      : Number.POSITIVE_INFINITY;
+  if (rooms < party) return [];
   const lineFor = async (empId: string | null) =>
     svcLine(trx, {
       serviceId: q.serviceId,
@@ -410,7 +465,7 @@ export async function availableSlots(
     if (m <= cut) continue;
     if (m > until) break;
     if (m - clipPrep(quotedLine.prepMin, m, sch) < DAY_START) continue;
-    let who: string | null = null;
+    const free: string[] = [];
     for (const id of pool) {
       const dur = q.employeeId === 'any' ? await durFor(id) : quoted;
       // Whoever takes longer than what is offered does not fit the slot.
@@ -425,11 +480,25 @@ export async function availableSlots(
         key: q.key,
       });
       if (!refusal) {
-        who = id;
-        break;
+        free.push(id);
+        if (free.length >= party) break;
       }
     }
-    out.push({ t: hhmm(m), emp: who, free: !!who });
+    let seated = free.length >= party;
+    // Two people need two rooms at once; each check above only proved
+    // there was one left for its own booking.
+    if (seated && party > 1) {
+      const busy = await busyRoomsAt(
+        trx,
+        q.locationId,
+        q.date,
+        m - clipPrep(quotedLine.prepMin, m, sch),
+        m + quoted + quotedLine.resetMin,
+      );
+      seated = busy + party <= rooms;
+    }
+    out.push({ t: hhmm(m), emp: seated ? free[0]! : null, free: seated });
+    if (seated && q.firstOnly) break;
   }
   return out;
 }

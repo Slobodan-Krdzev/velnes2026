@@ -17,6 +17,7 @@ import type {
   PriceBand,
   PublicServicesResponseSchema,
   PublicReviewsPageSchema,
+  When,
 } from '@velnes/contracts';
 import { pub, pubGet, pubPost } from './client.js';
 
@@ -52,9 +53,14 @@ export interface SearchFilters {
   priceMax: number | null;
   /** Amenities the salon's location must all have — keys. */
   amenities: AmenityKey[];
+  /** A day with a free start — today, tomorrow, this weekend — hard
+   *  admission on the doors; each card then carries `availableOn`. */
+  when: When | null;
+  /** "For two": only where this many can be seen at the same time. */
+  party: number;
 }
 export const NO_FILTERS: SearchFilters = {
-  priceBand: null, categoryId: null, radiusKm: null, now: false, city: null, priceMin: null, priceMax: null, amenities: [],
+  priceBand: null, categoryId: null, radiusKm: null, now: false, city: null, priceMin: null, priceMax: null, amenities: [], when: null, party: 1,
 };
 type Towns = z.infer<typeof DiscoveryTownsSchema>;
 type Suggestions = z.infer<typeof DiscoverySuggestionsSchema>;
@@ -214,6 +220,8 @@ export function useRankedCategoryServices(
       filters.priceMin,
       filters.priceMax,
       filters.amenities.join(','),
+      filters.when,
+      filters.party,
     ],
     queryFn: () =>
       pubPost<RankedServices>(
@@ -228,6 +236,8 @@ export function useRankedCategoryServices(
           priceMin: filters.priceMin,
           priceMax: filters.priceMax,
           amenities: filters.amenities,
+          when: filters.when,
+          party: filters.party,
         },
         token,
       ),
@@ -330,6 +340,8 @@ export function useSearch(
       filters.priceMin,
       filters.priceMax,
       filters.amenities.join(','),
+      filters.when,
+      filters.party,
     ],
     queryFn: () =>
       pubPost<SearchResults>(
@@ -348,6 +360,8 @@ export function useSearch(
           priceMin: filters.priceMin,
           priceMax: filters.priceMax,
           amenities: filters.amenities,
+          when: filters.when,
+          party: filters.party,
         },
         token,
       ),

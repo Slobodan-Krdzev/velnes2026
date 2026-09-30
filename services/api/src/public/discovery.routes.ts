@@ -23,12 +23,13 @@ import {
   DiscoveryRecommendedSchema,
   DiscoveryNewestSchema,
   NEWEST_SALON_DAYS,
+  PARTY_HORIZON_DAYS,
   DiscoveryViewerSchema,
   PublicReviewsPageSchema,
   PublicReviewsQuerySchema,
 } from '@velnes/contracts';
 import { amenitiesByLocation } from '../modules/locations/locations.service.js';
-import type { DiscoveryServiceCard } from '@velnes/contracts';
+import type { DiscoveryServiceCard, When } from '@velnes/contracts';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { sql } from 'kysely';
@@ -50,7 +51,9 @@ import {
 } from '../modules/search/interpret.js';
 import { priceOf, applyFilters, priceTercilesOf } from '../modules/search/filters.js';
 import { NOW_WINDOW_MIN, readNow } from '../modules/search/now-intent.js';
-import { empsFor, firstStartWithin } from '../modules/booking/booking.service.js';
+import { daysFor } from '../modules/search/when.js';
+import { nowAt } from '../modules/scheduling/scheduling.service.js';
+import { empsFor, firstStartOn, firstStartWithin } from '../modules/booking/booking.service.js';
 import { db, withClient, withTenant } from '../db/index.js';
 import { employeeRatings, publicReviews, ratingsForBusinesses, reviewSummary } from '../modules/reviews/reviews.service.js';
 
@@ -275,6 +278,7 @@ const nowCache = new Map<string, { at: number; value: string | null }>();
 async function availableNowOf(
   candidates: RankCandidate[],
   now: Date,
+  party = 1,
 ): Promise<Map<string, string | null>> {
   const out = new Map<string, string | null>();
   const byBiz = new Map<string, RankCandidate[]>();
@@ -285,7 +289,7 @@ async function availableNowOf(
   }
   for (const [bizId, list] of byBiz) {
     const todo = list.filter((c) => {
-      const hit = nowCache.get(`${bizId}:${candKey(c)}`);
+      const hit = nowCache.get(`${bizId}:${candKey(c)}:${party}`);
       if (hit && now.getTime() - hit.at < NOW_TTL_MS) {
         out.set(candKey(c), hit.value);
         return false;
@@ -302,13 +306,90 @@ async function availableNowOf(
           serviceId: c.id,
           windowMin: NOW_WINDOW_MIN,
           now,
+          party,
         });
         out.set(candKey(c), at);
-        nowCache.set(`${bizId}:${candKey(c)}`, { at: now.getTime(), value: at });
+        nowCache.set(`${bizId}:${candKey(c)}:${party}`, { at: now.getTime(), value: at });
       }
     });
   }
   return out;
+}
+
+/**
+ * "When", and "for two" (Alex, 2026-09-30) — the day each candidate
+ * can first be booked on, if it can.
+ *
+ * Asked only when the customer named a day (`when`) or a party. The
+ * days are the word's own — today, tomorrow, the coming weekend — in
+ * the *location's* clock, so "tomorrow" is the salon's tomorrow; a
+ * party with no day looks `PARTY_HORIZON_DAYS` ahead. Each day is one
+ * calendar question stopped at the first free start (`firstStartOn`,
+ * with the party), in the day's order, so the answer is the earliest.
+ * Null means no start on any of those days: the doors treat that as
+ * admission, since a day is a filter — a card that says "tomorrow" and
+ * has no tomorrow is the claim this surface must never make.
+ * Remembered twenty seconds per treatment, place, word and party, like
+ * *now*.
+ */
+type Day = { date: string; at: string };
+const dayCache = new Map<string, { at: number; value: Day | null }>();
+async function availableOnOf(
+  candidates: RankCandidate[],
+  when: When | null,
+  party: number,
+  now: Date,
+): Promise<Map<string, Day | null>> {
+  const out = new Map<string, Day | null>();
+  const byBiz = new Map<string, RankCandidate[]>();
+  for (const c of candidates) {
+    const list = byBiz.get(c.salon.businessId) ?? [];
+    list.push(c);
+    byBiz.set(c.salon.businessId, list);
+  }
+  const key = (bizId: string, c: RankCandidate) => `${bizId}:${candKey(c)}:${when ?? 'any'}:${party}`;
+  for (const [bizId, list] of byBiz) {
+    const todo = list.filter((c) => {
+      const hit = dayCache.get(key(bizId, c));
+      if (hit && now.getTime() - hit.at < NOW_TTL_MS) {
+        out.set(candKey(c), hit.value);
+        return false;
+      }
+      return true;
+    });
+    if (!todo.length) continue;
+    await withTenant(bizId, async (trx) => {
+      const tzOf = new Map<string, string>();
+      for (const c of todo) {
+        if (!tzOf.has(c.locationId)) {
+          const loc = await trx.selectFrom('locations').select('tz').where('id', '=', c.locationId).executeTakeFirst();
+          tzOf.set(c.locationId, loc?.tz ?? 'Europe/Skopje');
+        }
+        const today = nowAt(tzOf.get(c.locationId)!, now).date;
+        let value: Day | null = null;
+        for (const date of daysFor(when, today, PARTY_HORIZON_DAYS)) {
+          const at = await firstStartOn(trx, { locationId: c.locationId, serviceId: c.id, date, now, party });
+          if (at) {
+            value = { date, at };
+            break;
+          }
+        }
+        out.set(candKey(c), value);
+        dayCache.set(key(bizId, c), { at: now.getTime(), value });
+      }
+    });
+  }
+  return out;
+}
+
+/** Admission on a day or a party: only what has a start, each carrying it. */
+async function admitOnDay(candidates: RankCandidate[], when: When | null, party: number, now: Date): Promise<RankCandidate[]> {
+  if (!when && party <= 1) return candidates;
+  const days = await availableOnOf(candidates, when, party, now);
+  return candidates.flatMap((c) => {
+    const d = days.get(candKey(c)) ?? null;
+    return d ? [{ ...c, availableOn: d }] : [];
+  });
 }
 
 /** Every category with something on offer, as candidates — what "now"
@@ -633,6 +714,7 @@ export async function gatherCategory(categoryId: string): Promise<
             location: { id: place.id, name: place.name, city: place.city, address: place.address, lat: place.lat, lng: place.lng },
             // Learned only when a request asks for *now*; see the doors.
             availableAt: null,
+            availableOn: null,
           });
         }
       }
@@ -1460,12 +1542,15 @@ export async function discoveryRoutes(app: FastifyInstance) {
       )
         widened = 'category';
 
+      // A day, or a party: admission through the calendar, each survivor
+      // carrying the start that admitted it.
+      const onDay = await admitOnDay(cut.admitted, req.body.when, req.body.party, now);
       // Asked for now: every admitted candidate learns when it could
       // start, and that becomes its availability — and the order.
-      const soon = wantNow ? await availableNowOf(cut.admitted, now) : null;
+      const soon = wantNow ? await availableNowOf(onDay, now, req.body.party) : null;
       const admitted = soon
-        ? cut.admitted.map((c) => ({ ...c, availableAt: soon.get(candKey(c)) ?? null }))
-        : cut.admitted;
+        ? onDay.map((c) => ({ ...c, availableAt: soon.get(candKey(c)) ?? null }))
+        : onDay;
       const ranked = rank(admitted, { position, history }, cfg.payload, { now });
       // A page with almost nothing on it is a miss the customer feels,
       // even though the query technically worked. Only recorded when
@@ -1474,7 +1559,8 @@ export async function discoveryRoutes(app: FastifyInstance) {
       // what the platform sells. "now" on its own names no gap either.
       const narrowed = Boolean(
         req.body.priceBand || req.body.categoryId || req.body.radiusKm || req.body.city ||
-        req.body.priceMin != null || req.body.priceMax != null || req.body.amenities.length,
+        req.body.priceMin != null || req.body.priceMax != null || req.body.amenities.length ||
+        req.body.when || req.body.party > 1,
       );
       if (!narrowed && !nowOnly) await noteMiss(q, ranked.length, read.how);
       // Keyed by treatment *and* place: the same service at two locations
@@ -1485,6 +1571,7 @@ export async function discoveryRoutes(app: FastifyInstance) {
         services: ranked.map((x) => ({
           ...byKey.get(candKey(x.candidate))!,
           availableAt: x.candidate.availableAt ?? null,
+          availableOn: x.candidate.availableOn ?? null,
         })),
         salons: nearMisses,
         rankVersion: cfg.version,
@@ -1591,10 +1678,11 @@ export async function discoveryRoutes(app: FastifyInstance) {
         true,
       );
 
-      const soon = req.body.now ? await availableNowOf(cut.admitted, now) : null;
+      const onDay = await admitOnDay(cut.admitted, req.body.when, req.body.party, now);
+      const soon = req.body.now ? await availableNowOf(onDay, now, req.body.party) : null;
       const admitted = soon
-        ? cut.admitted.map((c) => ({ ...c, availableAt: soon.get(candKey(c)) ?? null }))
-        : cut.admitted;
+        ? onDay.map((c) => ({ ...c, availableAt: soon.get(candKey(c)) ?? null }))
+        : onDay;
       const ranked = rank(admitted, { position, history }, cfg.payload, { now });
       const byKey = new Map(services.map((s) => [cardKey(s), s]));
       return {
@@ -1602,6 +1690,7 @@ export async function discoveryRoutes(app: FastifyInstance) {
         services: ranked.map((r) => ({
           ...byKey.get(candKey(r.candidate))!,
           availableAt: r.candidate.availableAt ?? null,
+          availableOn: r.candidate.availableOn ?? null,
         })),
         rankVersion: cfg.version,
         personalised,

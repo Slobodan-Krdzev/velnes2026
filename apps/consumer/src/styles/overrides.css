@@ -1606,3 +1606,11 @@ a.pop-go:hover {
 /* The past visit's actions, in its own card (Alex, 2026-09-30). */
 .acc-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}
 .acc-actions .btn{flex:1 1 160px}
+
+/* The results page's chip row on a phone scrolls sideways like the
+   home's; a third chip (a day, "For two" — Alex, 2026-09-30) must slide
+   in, not squeeze "Near me" onto two lines. */
+.m-chiprow .chip {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}

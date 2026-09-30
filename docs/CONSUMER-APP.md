@@ -938,3 +938,22 @@ marker, a marker tap selects and scrolls the card into view. Sort is
 not shown: the ranker has one order and the doors take no sort; a
 truthful Sort later means a `sort` on both doors (distance with a
 position, price low to high, soonest in now-mode).
+
+**The six search chips (2026-09-30, Alex).** Each chip under the search
+box is a whole search, not a word dropped into the field: *Available
+now* → `/search?q=now` (anything that can start within the half hour;
+no longer also near me), *Massage tomorrow* → `q=Massage&when=tomorrow`,
+*Haircut near me* → `q=Haircut&near=1` (the Near-me intent the results
+page resolves — a position never rides in a URL), *Facial this weekend*
+→ `q=Facial&when=weekend`, *Manicure* → `q=Manicure`, *Couple massage*
+→ `q=Massage&party=2`. `when` and `party` are the doors' own filters
+(SEARCH.md §10): a day is hard admission and every card then says its
+first free start that day ("Free Sat 4 Oct at 10:00"); "for two" keeps
+only treatments where two professionals and two rooms are free at once,
+and the page says each person is booked separately. Both show as lit
+chips beside Near me and Available now, and come off with a tap; the
+phone sheet's When? offers Today / Tomorrow / This weekend beside Any
+time and Available now. The words go to the door in English, which its
+synonyms know in every language. Deferred, not faked: a chosen date (the
+doors take words so links stay true), a two-seat booking, and any
+"for two" price.
