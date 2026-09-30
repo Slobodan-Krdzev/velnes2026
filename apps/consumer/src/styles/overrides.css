@@ -1464,3 +1464,10 @@ a.pop-go:hover {
     padding-bottom: calc(20px + 156px);
   }
 }
+
+/* A saved favourite is a full heart, not a coloured outline (Alex,
+   2026-09-30). Every heart is a `.fav` (card, treatment row, team
+   card), so one rule; hover keeps the outline — only a saved one fills. */
+.fav.on svg {
+  fill: currentColor;
+}
