@@ -79,7 +79,7 @@ export function ReviewForm({ a, onDone }: { a: Appt; onDone: () => void }) {
       <p className="sm muted">{t('c.rv.sub')}</p>
       {DIMS.map((d) => (
         <div className="rv-q" key={d}>
-          <div>
+          <div className="rv-qt">
             <b>{t(`c.rv.${d}`)}</b>
             <span className="sm muted">{hint(d)}</span>
           </div>

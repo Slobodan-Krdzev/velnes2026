@@ -1572,7 +1572,8 @@ a.pop-go:hover {
 .rv-form .rv-ctx{margin-bottom:8px}
 .rv-form .rv-ctx b{color:var(--ink)}
 .rv-q{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 0;border-top:1px solid var(--line-soft)}
-.rv-q > div{display:grid;gap:2px;min-width:0}
+.rv-q .rv-qt{display:grid;gap:2px;min-width:0}
+.rv-q .stars-in{display:inline-flex;flex-direction:row;flex:0 0 auto}
 .rv-q b{color:var(--ink);font-size:15px}
 .rv-body{display:grid;gap:6px;margin-top:8px}
 .rv-body > span{font-weight:700;color:var(--ink);font-size:14px}
