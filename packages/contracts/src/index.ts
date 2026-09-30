@@ -30,3 +30,4 @@ export * from './business-categories.js';
 export * from './discovery.js';
 export * from './clients.js';
 export * from './search.js';
+export * from './reviews.js';

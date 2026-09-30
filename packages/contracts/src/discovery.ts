@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { PublicReviewSummarySchema, RatingSummarySchema } from './reviews.js';
 import { AmenityKeySchema, AmenityListSchema } from './amenities.js';
 import { WeekHoursSchema } from './locations.js';
 import { MoneySchema } from './catalog.js';
@@ -44,6 +45,9 @@ export const DiscoverySalonCardSchema = z.object({
   lng: z.number().nullable(),
   /** A live widget exists, so the booking doors will answer for it. */
   bookable: z.boolean(),
+  /** Verified reviews: the salon's score and count, or null when there
+   *  are none or the salon hides them — never a 0.0. */
+  rating: RatingSummarySchema.nullable().default(null),
 });
 export const DiscoverySalonsSchema = z.object({
   salons: z.array(DiscoverySalonCardSchema),
@@ -88,6 +92,8 @@ export const DiscoveryTeamMemberSchema = z.object({
   name: z.string(),
   role: z.string(),
   avatar: z.string().nullable(),
+  /** This professional's own verified ratings, or null when none. */
+  rating: RatingSummarySchema.nullable().default(null),
 });
 export const DiscoveryProductSchema = z.object({
   id: z.uuid(),
@@ -139,6 +145,9 @@ export const DiscoverySalonDetailSchema = z.object({
   products: z.array(DiscoveryProductSchema),
   bookable: z.boolean(),
   publishableKey: z.string().nullable(),
+  /** The salon's verified-review summary, or null when there are none
+   *  or the salon hides reviews (its marketplace setting). */
+  reviews: PublicReviewSummarySchema.nullable().default(null),
   locations: z.array(
     z.object({
       id: z.uuid(),
@@ -194,6 +203,7 @@ export const DiscoveryServiceCardSchema = z.object({
     /** The facilities at the location this card stands for, so a filter
      *  on amenities is a filter on keys. */
     amenities: AmenityListSchema.default([]),
+    rating: RatingSummarySchema.nullable().default(null),
   }),
   /**
    * The place (Alex, 2026-09-29): a result is a treatment at ONE of the

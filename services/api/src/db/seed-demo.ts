@@ -201,7 +201,8 @@ export async function seedDemo(adminUrl: string) {
   const q = (text: string, values?: unknown[]) => client.query(text, values);
   try {
     await q('BEGIN');
-    await q(`TRUNCATE audit_log, refresh_tokens, user_credentials, payment_accounts,
+    await q(`TRUNCATE reviews, review_reminders, client_notifications, client_favourites, client_payment_methods, client_customer_links, client_users,
+      audit_log, refresh_tokens, user_credentials, payment_accounts,
       legal_entity_locations, legal_entities, employee_locations,
       integration_events, widgets, registrations, hq_users,
       customer_activity, personal_offers, last_minute_offers, member_recs, premium_offers,
@@ -878,6 +879,41 @@ export async function seedDemo(adminUrl: string) {
            service_id, employee_id, customer_id, price, source, idempotency_key)
          VALUES ($1,$2,$3,600,$4,'appointment','no_show',$5,$6,$7,$8,$9,'widget',$10)`,
         [demo.business, demo.locCentar, dISO(back), dur, custName, sid, demo.empMaria, cid, price, `hist-ns-${i}`],
+      );
+    }
+
+    // Verified reviews (2026-09-30): one demo consumer, Katerina, who
+    // booked her past visits through the app, and four reviews on them —
+    // so the salon page, the cards and the workspace have real numbers.
+    const clientHash = await argon2.hash(DEMO_PASSWORD);
+    const kat = await q(
+      `INSERT INTO client_users (email, password_hash, first, last, phone, lang, email_verified_at)
+       VALUES ('katerina@velnes.mk', $1, 'Katerina', 'Ilievska', '+389 70 333 444', 'mk', now()) RETURNING id`,
+      [clientHash],
+    );
+    const katId = kat.rows[0].id as string;
+    await q(`INSERT INTO client_customer_links (client_user_id, tenant_id, customer_id) VALUES ($1, $2, $3)`, [katId, demo.business, demo.c1]);
+    const past = await q(
+      `SELECT id, location_id, service_id, employee_id, date FROM appointments
+        WHERE tenant_id = $1 AND customer_id = $2 AND status = 'confirmed' AND date < CURRENT_DATE
+        ORDER BY date DESC LIMIT 6`,
+      [demo.business, demo.c1],
+    );
+    await q(`UPDATE appointments SET client_user_id = $1 WHERE id = ANY($2)`, [katId, past.rows.map((r: { id: string }) => r.id)]);
+    const reviewWords: (string | null)[] = [
+      'Одлична масажа и многу чист салон. Топла препорака.',
+      null,
+      'Great session — started a few minutes late, otherwise perfect.',
+      'Профессионален пристап, се чувствував во сигурни раце.',
+    ];
+    const reviewStars = [[5, 4, 5, 5], [4, 4, 5, 4], [5, 3, 5, 5], [5, 5, 5, 5]];
+    for (const [i, a] of (past.rows as { id: string; location_id: string; service_id: string | null; employee_id: string | null; date: Date }[]).slice(0, 4).entries()) {
+      const [sv, ti, cl, pr] = reviewStars[i]!;
+      await q(
+        `INSERT INTO reviews (tenant_id, location_id, appointment_id, client_user_id, customer_id, service_id, employee_id,
+           service_rating, timing_rating, cleanliness_rating, professional_rating, body, appointment_date, created_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$13::date + interval '1 day')`,
+        [demo.business, a.location_id, a.id, katId, demo.c1, a.service_id, a.employee_id, sv, ti, cl, pr, reviewWords[i], a.date],
       );
     }
 

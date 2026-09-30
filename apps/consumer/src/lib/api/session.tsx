@@ -217,6 +217,27 @@ export function useMySalons() {
  *  a second list of favourites living in the browser. */
 const PENDING_KEY = 'velnes.client.pendingFavourite';
 
+/** Where to go once signed in — a review link opened while signed out
+ *  (2026-09-30). This tab only, taken once; only app paths, never a URL. */
+const RETURN_KEY = 'velnes.client.returnTo';
+export function rememberReturnTo(path: string) {
+  if (!path.startsWith('/') || path.startsWith('//')) return;
+  try {
+    sessionStorage.setItem(RETURN_KEY, path);
+  } catch {
+    /* no storage — the link is simply not followed */
+  }
+}
+export function takeReturnTo(): string | null {
+  try {
+    const p = sessionStorage.getItem(RETURN_KEY);
+    if (p) sessionStorage.removeItem(RETURN_KEY);
+    return p && p.startsWith('/') && !p.startsWith('//') ? p : null;
+  } catch {
+    return null;
+  }
+}
+
 export interface PendingFavourite {
   kind: FavouriteKind;
   id: string;

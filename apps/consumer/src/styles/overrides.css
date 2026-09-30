@@ -1549,3 +1549,55 @@ a.pop-go:hover {
 /* The footer without its newsletter column: four link columns beside the brand. */
 .d-foot .foot-g{grid-template-columns:1.4fr repeat(4,1fr)}
 @media (max-width:1100px){.d-foot .foot-g{grid-template-columns:1fr 1fr 1fr;row-gap:22px}.d-foot .fb{grid-column:1 / -1}}
+
+/* ── Verified reviews (Alex, 2026-09-30) ──────────────────────────
+   Stars in coral, as the prototype's .rating already decided; the
+   form and the salon page's Reviews card in the app's own cards. */
+.stars{display:inline-flex;gap:1px;vertical-align:middle}
+.star{position:relative;display:inline-block;width:var(--star,16px);height:var(--star,16px)}
+.star svg{position:absolute;inset:0;width:100%;height:100%}
+.star .off svg{fill:#E9E1DC}
+.star .on{position:absolute;inset:0;overflow:hidden;width:var(--fill,0%)}
+.star .on svg{fill:var(--brand);width:var(--star,16px)}
+.rating .s svg{width:13px;height:13px;fill:var(--brand);vertical-align:-2px}
+.trow .ti .rating{margin-top:2px;font-size:12px}
+.stars-in{display:inline-flex;gap:4px}
+.star-btn{position:relative;display:inline-grid;place-items:center;width:40px;height:40px;border-radius:10px;cursor:pointer;color:#E9E1DC;transition:color .1s,background .1s}
+.star-btn svg{width:28px;height:28px;fill:currentColor}
+.star-btn.on{color:var(--brand)}
+.star-btn:hover{background:var(--warm)}
+.star-btn input{position:absolute;inset:0;opacity:0;width:100%;height:100%;margin:0;cursor:pointer}
+.star-btn:has(input:focus-visible){outline:2px solid var(--brand-hover);outline-offset:2px}
+.rv-form h3{font-size:22px;margin:0 0 6px}
+.rv-form .rv-ctx{margin-bottom:8px}
+.rv-form .rv-ctx b{color:var(--ink)}
+.rv-q{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 0;border-top:1px solid var(--line-soft)}
+.rv-q > div{display:grid;gap:2px;min-width:0}
+.rv-q b{color:var(--ink);font-size:15px}
+.rv-body{display:grid;gap:6px;margin-top:8px}
+.rv-body > span{font-weight:700;color:var(--ink);font-size:14px}
+.rv-body textarea{min-height:96px;resize:vertical}
+.rv-count{text-align:right}
+.rv-form .btn{margin-top:12px}
+.rv-done{text-align:center}
+.rv-done b{display:block;font-size:17px;color:var(--ink);margin-bottom:4px}
+.rv-given .rv-text{margin:10px 0 8px;font-size:15px;line-height:1.5;color:var(--ink)}
+.rv-mini{display:inline-flex;align-items:center}
+.rv-empty b{display:block;color:var(--ink);font-size:15px}
+.rv-head{display:grid;grid-template-columns:auto 1fr;gap:18px;align-items:center;margin-bottom:12px}
+.rv-score{display:grid;gap:4px;justify-items:start}
+.rv-score b{font-size:34px;line-height:1;color:var(--ink);font-family:var(--fd);font-weight:400}
+.rv-dist{display:grid;gap:4px;max-width:260px;width:100%}
+.rv-bar{display:grid;grid-template-columns:14px 1fr 26px;align-items:center;gap:8px;font-size:12px;color:var(--ink)}
+.rv-bar i{display:block;height:7px;border-radius:4px;background:var(--warm);overflow:hidden}
+.rv-bar i b{display:block;height:100%;background:var(--brand)}
+.rv-dims{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px}
+.rv-dims > div{display:grid;gap:2px;background:var(--warm);border-radius:12px;padding:10px 12px}
+.rv-dims b{font-size:17px;color:var(--ink)}
+.rv-list{display:grid;gap:10px}
+.rv-item{border-top:1px solid var(--line-soft);padding-top:12px}
+.rv-item-h{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.rv-item-h b{color:var(--ink)}
+.rv-item p{margin:8px 0 6px;font-size:14.5px;line-height:1.55;color:var(--text)}
+.rv-item-f .vok,.rv-given .vok{color:var(--ok);font-weight:800}
+@media (max-width:480px){.rv-head{grid-template-columns:1fr}.rv-dims{grid-template-columns:1fr 1fr 1fr;gap:6px}.rv-dims b{font-size:15px}}

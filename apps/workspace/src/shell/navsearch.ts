@@ -187,6 +187,15 @@ export const WORKSPACE_NAV: NavEntry<WsCtx>[] = [
     go: { path: '/reports' },
   },
   {
+    id: 'ws.reviews', title: 'nav.reviews', crumbs: [], icon: I.sparkle, quick: true, visible: perm('reviews.view'),
+    aliases: {
+      en: ['reviews', 'ratings', 'customer reviews', 'feedback', 'stars', 'what customers said', 'reputation', 'professional ratings'],
+      mk: ['рецензии', 'оценки', 'рејтинг', 'коментари', 'мислења', 'ѕвезди', 'што кажаа клиентите', 'оценки на вработени'],
+      sq: ['recensionet', 'vlerësimet', 'komentet', 'yjet', 'çfarë thanë klientët', 'reputacioni', 'vlerësimet e profesionistëve'],
+    },
+    go: { path: '/reviews' },
+  },
+  {
     id: 'ws.support', title: 'nav.support', crumbs: [], icon: I.info,
     aliases: {
       en: ['support', 'help', 'contact velnes', 'ticket', 'report a problem', 'bug', 'question'],

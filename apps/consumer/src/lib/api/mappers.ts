@@ -57,6 +57,8 @@ export interface SalonVM {
   /** The salon's own map pin; null until it drops one. */
   lat: number | null;
   lng: number | null;
+  /** Verified reviews: score and count, or null (none, or hidden by the salon). */
+  rating: { avg: number; count: number } | null;
   /** Why it is recommended — only on the home page's recommended row. */
   reason?:
     | { kind: 'booked' }
@@ -70,6 +72,7 @@ export interface SalonVM {
 
 export function salonVM(s: DiscoverySalonCard & { reason?: SalonVM['reason'] }): SalonVM {
   return {
+    rating: s.rating ?? null,
     ...(s.reason !== undefined ? { reason: s.reason } : {}),
     id: s.id,
     slug: s.slug,
@@ -120,6 +123,7 @@ export interface ServiceVM {
     lng: number | null;
     bookable: boolean;
     showPrices: boolean;
+    rating: { avg: number; count: number } | null;
   };
   /** The place this result is at. A salon with two locations answers
    *  twice — the same treatment at each — and this is what tells the
@@ -172,6 +176,7 @@ export function serviceVM(s: DiscoveryServiceCard): ServiceVM {
       lng: s.salon.lng,
       bookable: s.salon.bookable,
       showPrices: s.salon.showPrices,
+      rating: s.salon.rating ?? null,
     },
     location: {
       id: s.location.id,

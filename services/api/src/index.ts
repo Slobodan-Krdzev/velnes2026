@@ -1,9 +1,12 @@
 import { startMailLoop } from './modules/mail/mail.sender.js';
+import { startReviewReminderLoop } from './modules/reviews/reviews.service.js';
 import { buildServer } from './server.js';
 
 const app = await buildServer();
 // Mail: deliver what is queued, retry what the provider refused.
 startMailLoop();
+// Reviews: the one "how was your visit?" a day after a completed visit.
+startReviewReminderLoop();
 
 const port = Number(process.env.PORT ?? 3001);
 // Production sits behind a reverse proxy on the same box: bind to

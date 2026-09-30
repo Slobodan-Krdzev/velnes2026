@@ -13,6 +13,8 @@ import { useSearchBox } from '../discovery/useSearchBox.js';
 import { useWheelScroll } from '../../lib/useWheelScroll.js';
 import { SalonMap } from '../../components/SalonMap.js';
 import { SalonAmenities } from './SalonAmenities.js';
+import { SalonReviews } from './SalonReviews.js';
+import { RatingChip } from '../../components/Stars.js';
 import { LocationHours } from './LocationHours.js';
 import { IcArr, IcClock, IcPin, IcSpark, IcVok } from '../discovery/cards.js';
 import { useBooking } from '../booking/store.js';
@@ -814,6 +816,7 @@ export function Salon() {
           <span className="ti">
             <b>{t.name}</b>
             <span>{t.role}</span>
+            <RatingChip rating={t.rating} />
           </span>
           {IcChevR}
         </button>
@@ -968,6 +971,7 @@ export function Salon() {
               </div>
               {d.bookable ? null : notBookableCard}
               {aboutCard}
+              <SalonReviews d={d} idPrefix="d" />
               {d.team.length ? teamCard('d') : null}
               {locationCard('d')}
               <SalonAmenities keys={p.location?.amenities ?? []} idPrefix="d" />
@@ -1080,6 +1084,7 @@ export function Salon() {
             </div>
             {d.bookable ? <BookCard p={p} desktop={false} /> : notBookableCard}
             {aboutCard}
+            <SalonReviews d={d} idPrefix="m" />
             {locationCard('m')}
             <SalonAmenities keys={p.location?.amenities ?? []} idPrefix="m" />
             {d.team.length ? teamCard('m') : null}

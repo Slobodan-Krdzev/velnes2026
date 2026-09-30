@@ -36,6 +36,7 @@ const NAV: { to: string; key: string; icon: string; size: number; perm: PermKey 
   { to: '/customers', key: 'nav.customers', icon: I.users, size: 30, perm: 'customers.view_assigned' },
   { to: '/marketing', key: 'nav.marketing', icon: I.mail, size: 30, perm: 'marketing.personal_offers' },
   { to: '/reports', key: 'nav.reports', icon: I.reports, size: 30, perm: 'reports.view_own' },
+  { to: '/reviews', key: 'nav.reviews', icon: I.sparkle, size: 28, perm: 'reviews.view' },
 ];
 const FOOT: typeof NAV = [
   { to: '/support', key: 'nav.support', icon: I.info, size: 26, perm: null },
@@ -301,6 +302,8 @@ export function Shell() {
                             navigate('/catalog', { state: { tab: 'categories' } });
                           else if (n.kind.startsWith('booking') && n.refId)
                             navigate('/calendar', { state: { appointment: n.refId } });
+                          else if (n.kind === 'review')
+                            navigate(n.refId ? `/reviews?review=${n.refId}` : '/reviews');
                         }}
                       >
                         <span className="grow" style={{ textAlign: 'left' }}>

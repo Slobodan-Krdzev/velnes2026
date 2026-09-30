@@ -33,6 +33,7 @@ import { rankingRoutes } from './modules/ranking/ranking.routes.js';
 import { businessCategoriesRoutes } from './modules/business-categories/business-categories.routes.js';
 import { registrationsRoutes } from './modules/registrations/registrations.routes.js';
 import { assistantRoutes } from './modules/assistant/assistant.routes.js';
+import { reviewsRoutes } from './modules/reviews/reviews.routes.js';
 import { authPlugin } from './plugins/auth.js';
 import { clientRoutes } from './modules/clients/clients.routes.js';
 import { publicRoutes } from './public/public.routes.js';
@@ -86,6 +87,7 @@ export async function buildServer() {
       rankingRoutes(api);
       businessCategoriesRoutes(api);
       assistantRoutes(api);
+      reviewsRoutes(api);
     },
     { prefix: API_PREFIX },
   );

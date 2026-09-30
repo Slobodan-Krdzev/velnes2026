@@ -24,6 +24,8 @@ import {
   PayResultSchema,
   ClientCardsSchema,
   type ClientOffer,
+  ReviewSubmitSchema,
+  ClientReviewSchema,
 } from '@velnes/contracts';
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
@@ -37,6 +39,7 @@ import { payAppointment, quotePayment } from '../payments/payments.service.js';
 import { randomBytes } from 'node:crypto';
 import { visitPayload } from '../../public/public.routes.js';
 import { personalOffersFor } from '../customers/customers.service.js';
+import { ReviewError, isCompleted, reviewsOfAppointments, submitReview } from '../reviews/reviews.service.js';
 import {
   addFavourite,
   listFavourites,
@@ -137,6 +140,7 @@ async function myAppointments(clientUserId: string) {
         'status',
         'paid',
         'title',
+        'kind',
       ])
       .where('clientUserId', '=', clientUserId)
       .orderBy('date', 'desc')
@@ -144,6 +148,9 @@ async function myAppointments(clientUserId: string) {
       .execute(),
   );
   if (!rows.length) return [];
+  // The reviews these visits carry (the client's own), and "now" once.
+  const reviews = await reviewsOfAppointments(clientUserId, rows.map((a) => a.id));
+  const now = new Date();
   const tenants = [...new Set(rows.map((a) => a.tenantId))];
   const salons = new Map<string, { name: string; slug: string | null }>();
   await Promise.all(
@@ -160,7 +167,7 @@ async function myAppointments(clientUserId: string) {
     const mine = rows.filter((a) => a.tenantId === t);
     const labels = await withTenant(t, async (trx) => {
       const [locs, svcs, vars, emps] = await Promise.all([
-        trx.selectFrom('locations').select(['id', 'name', 'address', 'lat', 'lng', 'cancelHours']).execute(),
+        trx.selectFrom('locations').select(['id', 'name', 'address', 'lat', 'lng', 'cancelHours', 'tz']).execute(),
         trx.selectFrom('services').select(['id', 'name']).execute(),
         trx.selectFrom('serviceVariants').select(['id', 'label']).execute(),
         trx.selectFrom('employees').select(['id', 'name']).execute(),
@@ -194,6 +201,14 @@ async function myAppointments(clientUserId: string) {
         status: a.status,
         paid: a.paid === 'paid',
         cancelHours: loc?.cancelHours ?? 24,
+        // Reviews: completed by the platform's definition, in the
+        // salon's clock; reviewable once, by whoever booked it.
+        completed: isCompleted(a, loc?.tz ?? 'Europe/Skopje', now),
+        canReview: isCompleted(a, loc?.tz ?? 'Europe/Skopje', now) && !reviews.has(a.id),
+        review: reviews.get(a.id) ?? null,
+        serviceId: a.serviceId,
+        employeeId: a.employeeId,
+        locationId: a.locationId,
       });
     }
   }
@@ -586,6 +601,36 @@ export async function clientRoutes(app: FastifyInstance) {
         refId: a.id,
       });
       return { ok: true as const };
+    },
+  });
+
+  // ---- reviews -----------------------------------------------------
+
+  /**
+   * One review for one completed appointment of mine (Alex,
+   * 2026-09-30). The appointment is the authority: salon, location,
+   * service, professional and date all come from it, never from the
+   * body. Everything the app already knew is checked again here.
+   */
+  r.route({
+    method: 'POST',
+    url: '/me/appointments/:id/review',
+    preHandler: [app.authenticateClient],
+    schema: {
+      params: z.object({ id: z.uuid() }),
+      body: ReviewSubmitSchema,
+      response: { 200: ClientReviewSchema, 404: ErrorSchema, 409: ErrorSchema },
+    },
+    handler: async (req, reply) => {
+      try {
+        return await submitReview(req.clientClaims.sub, req.params.id, req.body);
+      } catch (e) {
+        if (e instanceof ReviewError) {
+          const status = e.code === 'NOT_FOUND' ? 404 : 409;
+          return reply.code(status).send({ error: e.code, message: e.message });
+        }
+        throw e;
+      }
     },
   });
 

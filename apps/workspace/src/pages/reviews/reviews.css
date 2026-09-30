@@ -1,0 +1,28 @@
+/* Reviews in the workspace — the salon's read-only window. Stars in the
+   brand colour; the rest is the admin system's own cards and tables. */
+.wstars{display:inline-flex;gap:1px;vertical-align:middle}
+.wstar{position:relative;display:inline-block;width:var(--star,14px);height:var(--star,14px)}
+.wstar svg{position:absolute;inset:0;width:100%;height:100%}
+.wstar .off svg{fill:#E5DED9}
+.wstar .on{position:absolute;inset:0;overflow:hidden;width:var(--fill,0%)}
+.wstar .on svg{fill:var(--brand,#FF8D67);width:var(--star,14px)}
+.rvw-summary{display:grid;grid-template-columns:auto 1fr 1fr;gap:28px;padding:18px 20px;align-items:center}
+.rvw-score{display:grid;gap:4px;justify-items:start}
+.rvw-big{font-size:40px;font-weight:800;line-height:1;color:var(--ink)}
+.rvw-dims{display:grid;gap:8px}
+.rvw-dim{display:grid;grid-template-columns:110px 36px auto;align-items:center;gap:8px}
+.rvw-dist{display:grid;gap:6px}
+.rvw-bar{display:grid;grid-template-columns:36px 1fr 28px;align-items:center;gap:8px;font-size:12.5px}
+.rvw-bar i{display:block;height:8px;border-radius:4px;background:#EFE9E5;overflow:hidden}
+.rvw-bar i b{display:block;height:100%;background:var(--brand,#FF8D67)}
+.rvw-filters{display:flex;gap:12px;flex-wrap:wrap}
+.rvw-filters label{display:grid;gap:2px;font-size:12px}
+.rvw-list{display:grid;gap:12px;padding:8px 20px 18px}
+.rvw-item{border:1px solid var(--line-soft,#F0EAE7);border-radius:12px;padding:14px 16px;background:#fff}
+.rvw-item.hl{box-shadow:0 0 0 2px var(--brand,#FF8D67)}
+.rvw-item.void{opacity:.6}
+.rvw-item-h{display:flex;align-items:center;gap:10px}
+.rvw-item-d{display:flex;gap:14px;flex-wrap:wrap;font-size:12.5px;color:var(--muted);margin-top:6px}
+.rvw-item p{margin:8px 0 0;font-size:14px;line-height:1.5;color:var(--ink)}
+.rvw-item-f{margin-top:8px;font-size:12px}
+@media (max-width:900px){.rvw-summary{grid-template-columns:1fr}}

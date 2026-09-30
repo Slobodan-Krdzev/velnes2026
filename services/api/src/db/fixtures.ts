@@ -441,6 +441,94 @@ export async function backfillFixtureAmenities(batch: string, adminUrl: string):
   }
 }
 
+/**
+ * Give a batch believable reviews (Alex, 2026-09-30): fixture consumers
+ * (accounts on the fixture domain) whose past visits at the salon are
+ * really theirs — completed appointments, written the way the seed
+ * writes them — and one review per visit, with variety: some with
+ * words, some without, spread over the salon's professionals and
+ * dimensions. Every fourth salon gets none, because a new salon has
+ * none. Idempotent per batch: a salon that already has fixture reviews
+ * is skipped. Everything lands in tenant-scoped tables, so `remove`
+ * sweeps it; the fixture accounts go with the last batch that used them.
+ */
+export async function addFixtureReviews(batch: string, adminUrl: string): Promise<{ salons: number; reviews: number }> {
+  const admin = new pg.Client({ connectionString: adminUrl });
+  await admin.connect();
+  const WORDS: (string | null)[] = [
+    'Great massage and a very clean salon.', null, 'Одлична услуга, многу чисто и пријатно.', 'Professional and on time — will be back.',
+    null, 'Shërbim i shkëlqyer, ambient shumë i pastër.', 'Started ten minutes late, but the treatment itself was excellent.', null,
+    'Топла препорака, персоналот е одличен.', 'Good, though the room was a little noisy.', null, 'Best haircut I have had in years.',
+  ];
+  try {
+    const salons = (await admin.query(`SELECT id, name FROM businesses WHERE fixture_batch = $1 ORDER BY created_at`, [batch])).rows as { id: string; name: string }[];
+    const hash = await argon2.hash(FIXTURE_PASSWORD);
+    let reviews = 0;
+    let touched = 0;
+    await admin.query('BEGIN');
+    for (const [i, s] of salons.entries()) {
+      if (i % 4 === 3) continue; // the new salon: no reviews yet
+      const had = await admin.query(`SELECT 1 FROM reviews WHERE tenant_id = $1 LIMIT 1`, [s.id]);
+      if (had.rowCount) continue;
+      const loc = (await admin.query(`SELECT id FROM locations WHERE tenant_id = $1 ORDER BY created_at LIMIT 1`, [s.id])).rows[0] as { id: string } | undefined;
+      const staff = (await admin.query(`SELECT id FROM employees WHERE tenant_id = $1 AND bookable ORDER BY created_at`, [s.id])).rows as { id: string }[];
+      const services = (await admin.query(`SELECT id FROM services WHERE tenant_id = $1 ORDER BY sort LIMIT 6`, [s.id])).rows as { id: string }[];
+      if (!loc || !staff.length || !services.length) continue;
+      touched += 1;
+      const n = [42, 11, 27, 6, 18, 33, 9, 15][i % 8]!;
+      for (let k = 0; k < n; k++) {
+        const [first, last] = PEOPLE[(i * 7 + k * 3) % PEOPLE.length]!;
+        const email = `${slugify(first!)}.${slugify(last!)}.client@${FIXTURE_DOMAIN}`;
+        // One account per name; the address is the identity (its unique
+        // index is on lower(email), which ON CONFLICT cannot name).
+        let cu = await admin.query(`SELECT id FROM client_users WHERE lower(email) = lower($1)`, [email]);
+        if (!cu.rowCount)
+          cu = await admin.query(
+            `INSERT INTO client_users (email, password_hash, first, last, lang, email_verified_at) VALUES ($1, $2, $3, $4, $5, now()) RETURNING id`,
+            [email, hash, first, last, ['en', 'mk', 'sq'][k % 3]],
+          );
+        const clientId = cu.rows[0].id as string;
+        let cust = await admin.query(`SELECT customer_id FROM client_customer_links WHERE client_user_id = $1 AND tenant_id = $2`, [clientId, s.id]);
+        let customerId: string;
+        if (cust.rowCount) customerId = cust.rows[0].customer_id as string;
+        else {
+          cust = await admin.query(`INSERT INTO customers (tenant_id, name, email, cust_group) VALUES ($1, $2, $3, 'Regular') RETURNING id`, [s.id, `${first} ${last}`, email]);
+          customerId = cust.rows[0].id as string;
+          await admin.query(`INSERT INTO client_customer_links (client_user_id, tenant_id, customer_id) VALUES ($1, $2, $3)`, [clientId, s.id, customerId]);
+        }
+        const emp = staff[(k + i) % staff.length]!;
+        const svc = services[(k * 2 + i) % services.length]!;
+        const daysAgo = 3 + ((k * 11 + i * 5) % 170);
+        const appt = await admin.query(
+          `INSERT INTO appointments (tenant_id, location_id, date, start_min, duration_min, kind, status, title, service_id, employee_id, customer_id, price, source, client_user_id)
+           VALUES ($1, $2, CURRENT_DATE - $3::int, $4, 45, 'appointment', 'confirmed', $5, $6, $7, $8, 1500, 'marketplace', $9) RETURNING id, date`,
+          [s.id, loc.id, daysAgo, 540 + ((k * 7) % 14) * 30, `${first} ${last}`, svc.id, emp.id, customerId, clientId],
+        );
+        // Mostly happy, with honest dips: a salon at 4.6–4.9, never a flat 5.0.
+        const dip = (k * 13 + i) % 9;
+        const service = dip === 0 ? 3 : dip < 3 ? 4 : 5;
+        const timing = dip === 1 ? 3 : dip < 4 ? 4 : 5;
+        const cleanliness = dip === 2 ? 4 : 5;
+        const professional = dip === 3 ? 3 : dip < 5 ? 4 : 5;
+        await admin.query(
+          `INSERT INTO reviews (tenant_id, location_id, appointment_id, client_user_id, customer_id, service_id, employee_id,
+             service_rating, timing_rating, cleanliness_rating, professional_rating, body, appointment_date, created_at)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$13::date + interval '1 day')`,
+          [s.id, loc.id, appt.rows[0].id, clientId, customerId, svc.id, emp.id, service, timing, cleanliness, professional, WORDS[(k + i) % WORDS.length], appt.rows[0].date],
+        );
+        reviews += 1;
+      }
+    }
+    await admin.query('COMMIT');
+    return { salons: touched, reviews };
+  } catch (e) {
+    await admin.query('ROLLBACK').catch(() => undefined);
+    throw e;
+  } finally {
+    await admin.end();
+  }
+}
+
 /** The batches present, with their salon counts. */
 export async function listFixtureBatches(adminUrl: string): Promise<{ batch: string; salons: number; since: Date }[]> {
   const admin = new pg.Client({ connectionString: adminUrl });
@@ -528,6 +616,16 @@ export async function removeFixtureBatch(batch: string, adminUrl: string): Promi
     for (const t of order) await admin.query(`DELETE FROM ${t} WHERE tenant_id = ANY($1)`, [ids]);
     await admin.query(`DELETE FROM registrations WHERE business_id = ANY($1)`, [ids]);
     await admin.query(`DELETE FROM businesses WHERE id = ANY($1) AND fixture_batch = $2`, [ids, batch]);
+    // Fixture consumers (the reviews' authors) that no remaining salon links to.
+    await admin.query(
+      `DELETE FROM client_notifications WHERE client_user_id IN (
+         SELECT id FROM client_users cu WHERE cu.email LIKE $1 AND NOT EXISTS (SELECT 1 FROM client_customer_links l WHERE l.client_user_id = cu.id))`,
+      [`%@${FIXTURE_DOMAIN}`],
+    );
+    await admin.query(
+      `DELETE FROM client_users cu WHERE cu.email LIKE $1 AND NOT EXISTS (SELECT 1 FROM client_customer_links l WHERE l.client_user_id = cu.id)`,
+      [`%@${FIXTURE_DOMAIN}`],
+    );
     await admin.query('COMMIT');
     return { removed: ids.length, tables: order.length };
   } catch (e) {

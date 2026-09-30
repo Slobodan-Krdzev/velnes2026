@@ -852,6 +852,38 @@ export interface RefreshTokens {
   tokenHash: string;
 }
 
+export interface PlatformFeatures {
+  key: string;
+  since: Generated<Timestamp>;
+}
+
+export interface ReviewReminders {
+  appointmentId: string;
+  clientUserId: string;
+  sentAt: Generated<Timestamp>;
+  tenantId: string;
+}
+
+export interface Reviews {
+  appointmentDate: Timestamp;
+  appointmentId: string;
+  body: string | null;
+  bodyStatus: Generated<string>;
+  cleanlinessRating: number;
+  clientUserId: string;
+  createdAt: Generated<Timestamp>;
+  customerId: string | null;
+  employeeId: string | null;
+  id: Generated<string>;
+  locationId: string;
+  professionalRating: number;
+  ratingStatus: Generated<string>;
+  serviceId: string | null;
+  serviceRating: number;
+  tenantId: string;
+  timingRating: number;
+}
+
 export interface Registrations {
   businessId: string | null;
   draft: Json;
@@ -1229,6 +1261,7 @@ export interface DB {
   merchantTransactions: MerchantTransactions;
   paymentAccounts: PaymentAccounts;
   personalOffers: PersonalOffers;
+  platformFeatures: PlatformFeatures;
   platformNotices: PlatformNotices;
   premiumOffers: PremiumOffers;
   productCategories: ProductCategories;
@@ -1237,6 +1270,8 @@ export interface DB {
   purchaseOrders: PurchaseOrders;
   refreshTokens: RefreshTokens;
   registrations: Registrations;
+  reviewReminders: ReviewReminders;
+  reviews: Reviews;
   roles: Roles;
   scheduleExceptions: ScheduleExceptions;
   schemaMigrations: SchemaMigrations;

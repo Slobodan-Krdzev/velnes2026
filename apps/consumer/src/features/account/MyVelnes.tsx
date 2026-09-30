@@ -4,7 +4,7 @@ import { t } from '../../lib/i18n-core.js';
 import { LangMenu } from '../../app/LangMenu.js';
 import { useLang } from '../../lib/i18n.js';
 import { useMemo, useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import type { z } from 'zod';
 import type { ClientAppointmentSchema } from '@velnes/contracts';
 import { SalonMap } from '../../components/SalonMap.js';
@@ -12,6 +12,8 @@ import { useWheelScroll } from '../../lib/useWheelScroll.js';
 import { useUserLocation } from '../../lib/geo.js';
 import { ApiError } from '../../lib/api/client.js';
 import { fmtMKD, minutesLbl } from '../../lib/api/mappers.js';
+import { ReviewForm, ReviewGiven } from './ReviewForm.js';
+import { Stars } from '../../components/Stars.js';
 import {
   useFavourites,
   useMyAppointments,
@@ -19,6 +21,7 @@ import {
   useMyOffers,
   useMySalons,
   useSession,
+  rememberReturnTo,
 } from '../../lib/api/session.js';
 
 type Appt = z.infer<typeof ClientAppointmentSchema>;
@@ -109,6 +112,11 @@ function ApptRow({ a, onOpen }: { a: Appt; onOpen: () => void }) {
           </div>
           <div style={{ marginTop: '7px', display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
             <StatusBadge a={a} />
+            {a.review ? (
+              <span className="rv-mini"><Stars value={(a.review.service + a.review.timing + a.review.cleanliness) / 3} size={12} /></span>
+            ) : a.canReview ? (
+              <span className="acc-badge warn">{t('c.rv.write')}</span>
+            ) : null}
             <b style={{ marginLeft: 'auto', color: 'var(--ink)' }}>{fmtMKD(a.price)}</b>
           </div>
         </div>
@@ -135,6 +143,12 @@ export function MyVelnes({ section = 'over' }: { section?: SecId }) {
   useWheelScroll(chipsRef);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
+  // The review form: opened by its button, or by `?review=1` (a mail or
+  // notification link) — the door still decides whether it may be sent.
+  const [search] = useSearchParams();
+  const wantReview = search.get('review') === '1';
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const [reviewDone, setReviewDone] = useState(false);
 
   const unread = notifs.data?.unread ?? 0;
   const list = useMemo(() => appts.data?.appointments ?? [], [appts.data]);
@@ -148,7 +162,14 @@ export function MyVelnes({ section = 'over' }: { section?: SecId }) {
             <div className="auth-wrap">
             <div className="acc-empty">
               <b>{t('c.acc.signIn')}</b>{t('c.acc.signInSub')}<br />
-              <button className="btn btn-p" onClick={() => nav('/login')}>{t('c.acc.login')}</button>
+              <button
+                className="btn btn-p"
+                onClick={() => {
+                  // A review link opened signed out: come back here after.
+                  rememberReturnTo(`${window.location.pathname}${window.location.search}`);
+                  nav('/login');
+                }}
+              >{t('c.acc.login')}</button>
               </div>
             </div>
           </section>
@@ -576,13 +597,31 @@ export function MyVelnes({ section = 'over' }: { section?: SecId }) {
                         </button>
                       </div>
                     </>
-                  ) : current.salonSlug ? (
-                    <button
-                      className="btn btn-p"
-                      style={{ width: '100%' }}
-                      onClick={() => nav(`/salon/${current.salonSlug}`)}
-                    >{t('c.acc.bookAgain')}</button>
-                  ) : null}
+                  ) : (
+                    <>
+                      {reviewDone ? (
+                        <div className="acc-card rv-done" role="status">
+                          <b>{t('c.rv.thanks')}</b>
+                          <div className="sm muted">{t('c.rv.thanksSub')}</div>
+                        </div>
+                      ) : null}
+                      {current.review ? <ReviewGiven r={current.review} /> : null}
+                      {current.canReview && (reviewOpen || wantReview) ? (
+                        <ReviewForm a={current} onDone={() => { setReviewOpen(false); setReviewDone(true); }} />
+                      ) : current.canReview ? (
+                        <button className="btn btn-p" style={{ width: '100%' }} onClick={() => setReviewOpen(true)}>
+                          {t('c.rv.write')}
+                        </button>
+                      ) : null}
+                      {current.salonSlug ? (
+                        <button
+                          className="btn btn-g"
+                          style={{ width: '100%' }}
+                          onClick={() => nav(`/salon/${current.salonSlug}`)}
+                        >{t('c.acc.bookAgain')}</button>
+                      ) : null}
+                    </>
+                  )}
                 </>
               ) : null}
 
@@ -604,8 +643,7 @@ export function MyVelnes({ section = 'over' }: { section?: SecId }) {
                           style={{ cursor: 'pointer' }}
                           onClick={() => {
                             void markRead(n.id);
-                            if (n.refType === 'appointment' && n.refId)
-                              nav(`/account/appointments/${n.refId}`);
+                            if (n.refType === 'appointment' && n.refId) nav(`/account/appointments/${n.refId}${n.kind === 'review' ? '?review=1' : ''}`);
                           }}
                         >
                           <span

@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { BrowserRouter, Route, Routes, useLocation } from 'react-router-dom';
+import { BrowserRouter, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { Login, Register } from './features/account/Auth.js';
 import { MyVelnes } from './features/account/MyVelnes.js';
 import { BookingProvider } from './features/booking/store.js';
@@ -19,12 +19,13 @@ import { BusinessBenefits, BusinessResources, ForBusiness, PartnerSupport } from
 import { About, Careers, Contact, Press } from './features/public/company.js';
 import { Cookies, Privacy, Terms } from './features/public/legal.js';
 import { NotFound } from './features/public/NotFound.js';
-import { SessionProvider, useFavourites, useSession } from './lib/api/session.js';
+import { SessionProvider, takeReturnTo, useFavourites, useSession } from './lib/api/session.js';
 import { GeoProvider } from './lib/geo.js';
 import { I18nextProvider } from 'react-i18next';
 import { LangSync, i18n } from './lib/i18n.js';
 
-const qc = new QueryClient({
+/** Exported for tests, which clear it between renders. */
+export const qc = new QueryClient({
   defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false } },
 });
 
@@ -42,6 +43,20 @@ function PendingFavourite() {
   useEffect(() => {
     if (signedIn) void applyPending();
   }, [signedIn, applyPending]);
+  return null;
+}
+
+/** A page asked for while signed out (a review link from a mail or a
+ *  notification) is opened once a session appears. Inside the router,
+ *  unlike its sibling above, because it navigates. */
+function PendingReturn() {
+  const { signedIn } = useSession();
+  const nav = useNavigate();
+  useEffect(() => {
+    if (!signedIn) return;
+    const to = takeReturnTo();
+    if (to) nav(to, { replace: true });
+  }, [signedIn, nav]);
   return null;
 }
 
@@ -79,6 +94,7 @@ export function App() {
           <BrowserRouter>
           <SearchSheetProvider>
             <ScrollToTop />
+            <PendingReturn />
             {/* The desktop header, once, sticky above every route — and the
                 phone chrome likewise. Each hides itself on the other's side
                 of 900px. */}

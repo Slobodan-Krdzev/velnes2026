@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { categoryVM, type CategoryVM, minutesLbl, placeLine, priceLbl, rowKey, serviceVM, type ServiceVM } from '../../lib/api/mappers.js';
+import { RatingChip } from '../../components/Stars.js';
 import {
   useCategories,
   useMostChosen,
@@ -316,7 +317,7 @@ function BestD({ s, on = false, onSelect }: { s: ServiceVM; on?: boolean; onSele
             {av ? <span className="tiny-tag" style={{ background: '#EAF2E4', color: '#3E5A34' }}>{t('c.now')}</span> : null}
           </div>
           <div className="sm muted">
-            {IcPin} {whereLine(s, away)} <span className="vok">{IcVok}</span>
+            {IcPin} {whereLine(s, away)} <span className="vok">{IcVok}</span> <RatingChip rating={s.salon.rating} />
           </div>
           <p style={{ margin: '2px 0', fontSize: '14px' }}>{minutesLbl(s.durationMin)}</p>
           {av ? <span className="avail">{IcClock} {av}</span> : null}
@@ -346,7 +347,7 @@ function AltD({ s, on = false, onSelect }: { s: ServiceVM; on?: boolean; onSelec
       <div>
         <h4>{s.name}</h4>
         <div className="sm muted">
-          {IcPin} {whereLine(s, away)} <span className="vok">{IcVok}</span>
+          {IcPin} {whereLine(s, away)} <span className="vok">{IcVok}</span> <RatingChip rating={s.salon.rating} />
         </div>
         {av ? <span className="avail">{IcClock} {av}</span> : null}
       </div>
@@ -377,7 +378,7 @@ function BestM({ s }: { s: ServiceVM }) {
       <div className="bd">
         <h3>{s.name}</h3>
         <div className="sm muted">
-          {IcPin} {whereLine(s, away)} <span className="vok">{IcVok}</span>
+          {IcPin} {whereLine(s, away)} <span className="vok">{IcVok}</span> <RatingChip rating={s.salon.rating} />
         </div>
         <div style={{ fontSize: '13.5px' }}>{minutesLbl(s.durationMin)}</div>
         {av ? <span className="avail">{IcClock} {av}</span> : null}
@@ -405,7 +406,7 @@ function AltM({ s }: { s: ServiceVM }) {
       <div>
         <h4>{s.name}</h4>
         <div className="sm muted">
-          {IcPin} {whereLine(s, away)}
+          {IcPin} {whereLine(s, away)} <RatingChip rating={s.salon.rating} />
           {av ? (
             <>
               {' · '}
@@ -821,8 +822,7 @@ export function Results() {
         // The card the pin opens. Everything on it is something the
         // platform actually knows — the salon's own photograph, whether
         // it can be booked, and what this treatment costs there. No
-        // rating: there are no reviews yet, and a star nobody earned is
-        // worse than no star at all.
+        // The salon's verified score, when it has one (2026-09-30).
         photo: s.salon.hasPhoto ? s.salon.photo : null,
         badge: s.salon.bookable ? t('c.res.instant') : null,
         price: priceLbl(s),

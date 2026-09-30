@@ -9,6 +9,7 @@ import { CatalogPage } from './pages/catalog/Catalog.js';
 import { CustomersPage } from './pages/customers/Customers.js';
 import { HomePage } from './pages/flightdeck/Flightdeck.js';
 import { ReportsPage } from './pages/reports/Reports.js';
+import { ReviewsPage } from './pages/reviews/Reviews.js';
 import { MarketingPage } from './pages/marketing/Marketing.js';
 import { SettingsPage } from './pages/settings/Settings.js';
 import { SuppliersPage } from './pages/suppliers/Suppliers.js';
@@ -64,6 +65,7 @@ export function App() {
                 <Route path="/customers/:id" element={<CustomersPage />} />
                 <Route path="/marketing" element={<MarketingPage />} />
                 <Route path="/reports" element={<ReportsPage />} />
+                <Route path="/reviews" element={<ReviewsPage />} />
                 <Route path="/support" element={<SupportPage />} />
                 <Route path="/settings" element={<SettingsPage />} />
                 <Route path="*" element={<Navigate to="/" replace />} />

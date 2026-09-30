@@ -448,6 +448,9 @@ importers:
       '@velnes/contracts':
         specifier: workspace:^
         version: link:../../packages/contracts
+      '@velnes/i18n':
+        specifier: workspace:^
+        version: link:../../packages/i18n
       argon2:
         specifier: ^0.45.1
         version: 0.45.1

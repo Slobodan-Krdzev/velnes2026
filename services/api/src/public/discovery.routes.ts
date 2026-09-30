@@ -24,6 +24,8 @@ import {
   DiscoveryNewestSchema,
   NEWEST_SALON_DAYS,
   DiscoveryViewerSchema,
+  PublicReviewsPageSchema,
+  PublicReviewsQuerySchema,
 } from '@velnes/contracts';
 import { amenitiesByLocation } from '../modules/locations/locations.service.js';
 import type { DiscoveryServiceCard } from '@velnes/contracts';
@@ -50,6 +52,7 @@ import { priceOf, applyFilters, priceTercilesOf } from '../modules/search/filter
 import { NOW_WINDOW_MIN, readNow } from '../modules/search/now-intent.js';
 import { empsFor, firstStartWithin } from '../modules/booking/booking.service.js';
 import { db, withClient, withTenant } from '../db/index.js';
+import { employeeRatings, publicReviews, ratingsForBusinesses, reviewSummary } from '../modules/reviews/reviews.service.js';
 
 const ErrorSchema = z.object({ error: z.string(), message: z.string() });
 
@@ -562,12 +565,16 @@ export async function gatherCategory(categoryId: string): Promise<
       })
     : [];
   const createdAt = new Map(created.map((b) => [b.id, b.createdAt]));
+  // Every salon's verified-review score, one query for the whole page.
+  const ratings = await ratingsForBusinesses();
 
   const services: DiscoveryServiceCard[] = [];
   const meta = new Map<string, CandidateMeta>();
   for (const b of listed) {
     const photo = cardPhoto(b.gallery);
     const show = b.marketplace.showPrices;
+    // The salon's score, unless it hides reviews; never a 0.0.
+    const rating = b.marketplace.showReviews ? (ratings.get(b.id) ?? null) : null;
     // Every ACTIVE location, and for each the treatments really offered
     // there (Alex, 2026-09-29): active and online at that location, with
     // somebody there who does it — the same rule the salon page's
@@ -621,6 +628,7 @@ export async function gatherCategory(categoryId: string): Promise<
               bookable: true,
               showPrices: show,
               amenities: amenities.get(place.id) ?? [],
+              rating,
             },
             location: { id: place.id, name: place.name, city: place.city, address: place.address, lat: place.lat, lng: place.lng },
             // Learned only when a request asks for *now*; see the doors.
@@ -809,6 +817,7 @@ export async function discoveryRoutes(app: FastifyInstance) {
       const now = new Date();
       const position = req.query.lat != null && req.query.lng != null ? { lat: req.query.lat, lng: req.query.lng } : null;
       const listed = await listedBusinesses();
+      const ratings = await ratingsForBusinesses();
       // Candidates: open salons, each with the categories it really serves.
       const cards = [];
       for (const b of listed) {
@@ -838,6 +847,7 @@ export async function discoveryRoutes(app: FastifyInstance) {
             lat: pin.lat,
             lng: pin.lng,
             bookable: true,
+            rating: b.marketplace.showReviews ? (ratings.get(b.id) ?? null) : null,
           },
           catIds: cats,
           km: position && pin.lat != null && pin.lng != null ? haversineKm(position, { lat: pin.lat, lng: pin.lng }) : null,
@@ -920,6 +930,7 @@ export async function discoveryRoutes(app: FastifyInstance) {
     url: '/discovery/newest',
     schema: { response: { 200: DiscoveryNewestSchema } },
     handler: async () => {
+      const newestRatings = await ratingsForBusinesses();
       const since = Date.now() - NEWEST_SALON_DAYS * 86_400_000;
       const fresh = (await listedBusinesses())
         .filter((b) => b.createdAt.getTime() >= since)
@@ -951,6 +962,7 @@ export async function discoveryRoutes(app: FastifyInstance) {
           lat: pin.lat,
           lng: pin.lng,
           bookable: true,
+          rating: b.marketplace.showReviews ? (newestRatings.get(b.id) ?? null) : null,
           joinedAt: b.createdAt.toISOString(),
         });
         if (salons.length === 8) break;
@@ -1147,6 +1159,7 @@ export async function discoveryRoutes(app: FastifyInstance) {
     schema: { response: { 200: DiscoverySalonsSchema } },
     handler: async () => {
       const listed = await listedBusinesses();
+      const ratings = await ratingsForBusinesses();
       const salons = [];
       for (const b of listed) {
         const photo = cardPhoto(b.gallery);
@@ -1174,6 +1187,7 @@ export async function discoveryRoutes(app: FastifyInstance) {
           lat: pin.lat,
           lng: pin.lng,
           bookable: open,
+          rating: b.marketplace.showReviews ? (ratings.get(b.id) ?? null) : null,
         });
       }
       return { salons };
@@ -1613,7 +1627,10 @@ export async function discoveryRoutes(app: FastifyInstance) {
       if (!biz)
         return reply.code(404).send({ error: 'UNKNOWN_SALON', message: 'No salon here' });
       const pin = await firstPin(biz.id);
-      const { team, products, locations, addr } = await withTenant(biz.id, async (trx) => {
+      const { team, products, locations, addr, reviews, teamRatings } = await withTenant(biz.id, async (trx) => {
+        // Verified reviews, unless the salon hides them.
+        const reviews = biz.marketplace.showReviews ? await reviewSummary(trx, biz.id) : null;
+        const teamRatings = biz.marketplace.showReviews ? await employeeRatings(trx, biz.id) : new Map<string, { avg: number; count: number }>();
         const team = biz.marketplace.showTeam
           ? await trx
               .selectFrom('employees')
@@ -1666,7 +1683,7 @@ export async function discoveryRoutes(app: FastifyInstance) {
           address: biz.address ?? any?.address ?? null,
           city: biz.city ?? any?.city ?? null,
         };
-        return { team, products, locations, addr };
+        return { team, products, locations, addr, reviews, teamRatings };
       });
       return {
         id: biz.id,
@@ -1683,12 +1700,35 @@ export async function discoveryRoutes(app: FastifyInstance) {
         gallery: galleryOf(biz.gallery),
         socials: biz.socials,
         showPrices: biz.marketplace.showPrices,
-        team: team.map((e) => ({ id: e.id, name: e.name, role: e.roleTitle, avatar: e.avatar })),
+        team: team.map((e) => ({ id: e.id, name: e.name, role: e.roleTitle, avatar: e.avatar, rating: teamRatings.get(e.id) ?? null })),
         products,
         bookable: locations.length > 0,
         publishableKey: locations.length ? consumerKey(biz.slug) : null,
         locations,
+        reviews,
       };
+    },
+  });
+
+  /**
+   * A page of a salon's verified reviews, newest first — its own door
+   * so the salon page stays light and the list can grow. The public
+   * shape carries a first name and an initial, never more.
+   */
+  r.route({
+    method: 'GET',
+    url: '/discovery/salons/:slug/reviews',
+    schema: {
+      params: z.object({ slug: z.string().min(1) }),
+      querystring: PublicReviewsQuerySchema,
+      response: { 200: PublicReviewsPageSchema, 404: ErrorSchema },
+    },
+    handler: async (req, reply) => {
+      const listed = await listedBusinesses();
+      const biz = listed.find((b) => b.slug === req.params.slug);
+      if (!biz) return reply.code(404).send({ error: 'UNKNOWN_SALON', message: 'No salon here' });
+      if (!biz.marketplace.showReviews) return { reviews: [], total: 0, offset: req.query.offset, limit: req.query.limit };
+      return publicReviews(biz.id, req.query.offset, req.query.limit);
     },
   });
 }

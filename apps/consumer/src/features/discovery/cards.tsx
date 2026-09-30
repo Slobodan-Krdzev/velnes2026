@@ -9,6 +9,7 @@ import {
 } from '../../lib/api/queries.js';
 import { fmtMKD, slugify, type CategoryVM, type SalonVM } from '../../lib/api/mappers.js';
 import { useSuggest, type SuggestItem, salonSugKey, salonSugLabel } from './useSuggest.js';
+import { RatingChip } from '../../components/Stars.js';
 import {
   rememberPendingFavourite,
   useFavourites,
@@ -140,8 +141,8 @@ export function FavHeart({
 }
 
 /** Salon recommendation card — the prototype's rc2 markup, fed real data.
- *  Rating/distance/price rows wait for their subsystems; the city line is
- *  what we can honestly say today. */
+ *  The rating is the salon's verified-review score (2026-09-30); distance
+ *  and price rows still wait for their subsystems. */
 export function SalonCard({ s }: { s: SalonVM }) {
   const nav = useNavigate();
   return (
@@ -161,6 +162,7 @@ export function SalonCard({ s }: { s: SalonVM }) {
         <h3>{s.name}</h3>
         <div className="rrow2">
           <span>{s.city}</span>
+          <RatingChip rating={s.rating} />
         </div>
         {s.reason ? <div className="rwhy">{reasonLbl(s.reason)}</div> : null}
       </div>

@@ -16,6 +16,7 @@ import type {
   AmenityKey,
   PriceBand,
   PublicServicesResponseSchema,
+  PublicReviewsPageSchema,
 } from '@velnes/contracts';
 import { pub, pubGet, pubPost } from './client.js';
 
@@ -24,6 +25,7 @@ type Salons = z.infer<typeof DiscoverySalonsSchema>;
 type Recommended = z.infer<typeof DiscoveryRecommendedSchema>;
 type Newest = z.infer<typeof DiscoveryNewestSchema>;
 type SalonDetail = z.infer<typeof DiscoverySalonDetailSchema>;
+type PublicReviewsPage = z.infer<typeof PublicReviewsPageSchema>;
 type Services = z.infer<typeof PublicServicesResponseSchema>;
 type CategoryServices = z.infer<typeof DiscoveryCategoryServicesSchema>;
 type RankedServices = z.infer<typeof DiscoveryRankedServicesSchema>;
@@ -141,6 +143,16 @@ export function useNewest() {
       if (!res.ok) throw new Error(res.statusText);
       return (await res.json()) as Newest;
     },
+    staleTime: 60_000,
+  });
+}
+
+/** A salon's verified reviews, newest first, `limit` at a time. */
+export function useSalonReviews(slug: string | undefined, limit: number) {
+  return useQuery({
+    queryKey: ['salon-reviews', slug, limit],
+    queryFn: () => pub<PublicReviewsPage>(`/discovery/salons/${slug}/reviews?limit=${limit}`),
+    enabled: Boolean(slug),
     staleTime: 60_000,
   });
 }

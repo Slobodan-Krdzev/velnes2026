@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { MoneySchema } from './catalog.js';
 import { AVATAR_MAX_CHARS } from './auth.js';
 import { ClockSchema } from './scheduling.js';
+import { ClientReviewSchema } from './reviews.js';
 
 /** Client users: the ordinary people who book through the consumer
  *  app. The platform's fourth principal — one account, one email, every
@@ -117,6 +118,19 @@ export const ClientAppointmentSchema = z.object({
   paid: z.boolean().default(false),
   /** Free cancellation window the salon set for that location. */
   cancelHours: z.number().int(),
+  /**
+   * Reviews (2026-09-30). `completed` is the platform's definition —
+   * booked or confirmed, the end already passed in the salon's clock —
+   * decided here, so the app never re-derives it from a browser clock.
+   * `review` is the one this visit carries, or null; `canReview` is
+   * completed and not yet reviewed. The submit door re-checks everything.
+   */
+  completed: z.boolean().default(false),
+  canReview: z.boolean().default(false),
+  review: ClientReviewSchema.nullable().default(null),
+  serviceId: z.uuid().nullable().default(null),
+  employeeId: z.uuid().nullable().default(null),
+  locationId: z.uuid().nullable().default(null),
 });
 export const ClientAppointmentsSchema = z.object({
   appointments: z.array(ClientAppointmentSchema),
