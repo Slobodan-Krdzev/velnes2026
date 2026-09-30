@@ -14,6 +14,11 @@ import { Home } from './features/discovery/Home.js';
 import { Results } from './features/discovery/Results.js';
 import { SearchSheetProvider } from './features/discovery/SearchSheet.js';
 import { Salon } from './features/salon/Salon.js';
+import { HelpCenter, HowItWorks, Treatments } from './features/public/visitor.js';
+import { BusinessBenefits, BusinessResources, ForBusiness, PartnerSupport } from './features/public/business.js';
+import { About, Careers, Contact, Press } from './features/public/company.js';
+import { Cookies, Privacy, Terms } from './features/public/legal.js';
+import { NotFound } from './features/public/NotFound.js';
 import { SessionProvider, useFavourites, useSession } from './lib/api/session.js';
 import { GeoProvider } from './lib/geo.js';
 import { I18nextProvider } from 'react-i18next';
@@ -102,7 +107,23 @@ export function App() {
               <Route path="/account/notifs" element={<MyVelnes section="notifs" />} />
               <Route path="/account/cards" element={<MyVelnes section="cards" />} />
               <Route path="/account/appointments/:id" element={<MyVelnes section="appts" />} />
-              <Route path="*" element={<Home />} />
+              {/* The public information pages (2026-09-30), and a real
+                  not-found page where the wildcard used to show the home. */}
+              <Route path="/treatments" element={<Treatments />} />
+              <Route path="/how-it-works" element={<HowItWorks />} />
+              <Route path="/help" element={<HelpCenter />} />
+              <Route path="/for-business" element={<ForBusiness />} />
+              <Route path="/business-benefits" element={<BusinessBenefits />} />
+              <Route path="/business-resources" element={<BusinessResources />} />
+              <Route path="/partner-support" element={<PartnerSupport />} />
+              <Route path="/about" element={<About />} />
+              <Route path="/careers" element={<Careers />} />
+              <Route path="/press" element={<Press />} />
+              <Route path="/contact" element={<Contact />} />
+              <Route path="/privacy" element={<Privacy />} />
+              <Route path="/terms" element={<Terms />} />
+              <Route path="/cookies" element={<Cookies />} />
+              <Route path="*" element={<NotFound />} />
             </Routes>
             {/* The footer, once, under every route. */}
             <SiteFooter />

@@ -20,3 +20,9 @@ export function businessOnboardingUrl(): string {
   }
   return 'http://localhost:5173/onboarding';
 }
+
+/** The workspace itself — where a listed business signs in. The same
+ *  resolution as the onboarding door, without the path. */
+export function workspaceUrl(): string {
+  return businessOnboardingUrl().replace(/\/onboarding$/, '');
+}

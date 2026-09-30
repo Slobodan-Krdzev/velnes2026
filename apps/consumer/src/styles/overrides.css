@@ -1471,3 +1471,81 @@ a.pop-go:hover {
 .fav.on svg {
   fill: currentColor;
 }
+
+/* ── Public information pages (Alex, 2026-09-30) ──────────────────
+   One kit for the sixteen pages: a centred column at reading width
+   (narrower for legal and help), the serif headings, the warm cards,
+   coral accents — the Premium page's family, generalised. One tree for
+   every width; the grids fold at 700 and 1024. */
+.pub{padding:26px 18px 64px}
+.pub-wrap{max-width:960px;margin-inline:auto}
+.pub-narrow .pub-wrap{max-width:760px}
+.pub-hero{text-align:center;padding:22px 0 10px}
+.pub-eyebrow{display:inline-block;font-size:11.5px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--brand-hover);margin-bottom:10px}
+.pub-hero h1{font-size:clamp(28px,5vw,40px);line-height:1.12;margin:0 0 12px;color:var(--ink)}
+.pub-lead{max-width:62ch;margin:0 auto;font-size:16px;line-height:1.55;color:var(--muted)}
+.pub-sec{margin-top:36px}
+.pub-sec > h2{font-size:clamp(20px,3vw,26px);margin:0 0 8px;color:var(--ink)}
+.pub-sub{margin:0 0 16px;font-size:14.5px;line-height:1.55;color:var(--muted);max-width:70ch}
+.pub-p{margin:0;font-size:15px;line-height:1.6;max-width:70ch}
+.pub-grid{display:grid;grid-template-columns:1fr;gap:12px}
+@media (min-width:700px){.pub-grid{grid-template-columns:1fr 1fr}}
+@media (min-width:1024px){.pub-grid.cols-3{grid-template-columns:1fr 1fr 1fr}}
+.pub-card{background:#fff;border:1px solid var(--line-soft);border-radius:16px;padding:18px;box-shadow:var(--shadow);min-width:0}
+.pub-card .pub-ic{display:inline-grid;place-items:center;width:42px;height:42px;border-radius:12px;background:var(--warm);color:var(--brand);margin-bottom:10px}
+.pub-card h3{margin:0 0 4px;font-size:16px;font-weight:700;color:var(--ink)}
+.pub-card p{margin:0;font-size:14px;line-height:1.5;color:var(--muted)}
+.pub-steps{list-style:none;margin:0;padding:0;display:grid;gap:12px}
+.pub-steps li{display:flex;gap:14px;align-items:flex-start;background:var(--warm);border-radius:16px;padding:16px 18px}
+.pub-steps .pub-n{flex:0 0 auto;display:grid;place-items:center;width:32px;height:32px;border-radius:50%;background:var(--brand);color:#fff;font-weight:800;font-size:14px}
+.pub-steps h3{margin:2px 0 4px;font-size:16px;color:var(--ink)}
+.pub-steps p{margin:0;font-size:14.5px;line-height:1.55;color:var(--text)}
+.pub-faq{display:grid;gap:8px}
+.pub-faq details{background:#fff;border:1px solid var(--line-soft);border-radius:14px;padding:0 16px;box-shadow:var(--shadow)}
+.pub-faq summary{cursor:pointer;list-style:none;display:flex;justify-content:space-between;align-items:center;gap:12px;padding:14px 0;font-weight:700;font-size:15px;color:var(--ink)}
+.pub-faq summary::-webkit-details-marker{display:none}
+.pub-faq summary::after{content:"+";flex:0 0 auto;width:26px;height:26px;display:grid;place-items:center;border-radius:50%;background:var(--warm);color:var(--brand-hover);font-weight:800}
+.pub-faq details[open] summary::after{content:"–"}
+.pub-faq details p{margin:0;padding:0 0 16px;font-size:14.5px;line-height:1.6;color:var(--text);max-width:70ch}
+.pub-list{margin:0;padding:0;list-style:none;display:grid;grid-template-columns:1fr;gap:8px}
+@media (min-width:700px){.pub-list{grid-template-columns:1fr 1fr}}
+.pub-list li{background:#fff;border:1px solid var(--line-soft);border-radius:12px;padding:12px 14px;font-size:14.5px;color:var(--ink);display:flex;gap:10px;align-items:center}
+.pub-list li::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--brand);flex:0 0 auto}
+.pub-cta{margin-top:36px;text-align:center;background:#fff;border:1px solid var(--line);border-radius:16px;padding:24px 20px}
+.pub-cta b{display:block;font-family:var(--fd);font-weight:400;font-size:22px;color:var(--ink)}
+.pub-cta p{margin:8px auto 16px;max-width:56ch;font-size:14.5px;color:var(--muted);line-height:1.55}
+.pub-cta .pub-actions{margin-top:16px}
+.pub-actions{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+.pub-actions .btn{max-width:100%}
+.pub-empty{text-align:center;background:var(--warm);border-radius:16px;padding:32px 20px}
+.pub-empty b{display:block;font-family:var(--fd);font-weight:400;font-size:20px;color:var(--ink)}
+.pub-empty p{margin:8px auto 0;max-width:48ch;font-size:14.5px;color:var(--muted)}
+.pub-updated{margin:14px 0 0;font-size:12.5px;color:var(--muted)}
+.pub-legal{display:grid;gap:22px;margin-top:28px}
+.pub-legal section h2{font-size:19px;margin:0 0 6px;color:var(--ink)}
+.pub-legal section p{margin:0;font-size:15px;line-height:1.65;color:var(--text)}
+.pub-dl{margin:0;display:grid;gap:10px}
+.pub-dl div{background:#fff;border:1px solid var(--line-soft);border-radius:12px;padding:12px 14px}
+.pub-dl dt{font-weight:700;font-size:14.5px;color:var(--ink)}
+.pub-dl dd{margin:2px 0 0;font-size:14px;color:var(--muted);line-height:1.5}
+.pub-catgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+@media (min-width:700px){.pub-catgrid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media (min-width:1024px){.pub-catgrid{grid-template-columns:repeat(4,minmax(0,1fr))}}
+.pub-catgrid .catcard{width:auto}
+.pub-brand{display:inline-flex;align-items:center;gap:12px;background:#fff;border:1px solid var(--line-soft);border-radius:16px;padding:18px 24px;margin:6px 0 14px;color:var(--brand)}
+.pub-brand-mark svg{height:34px}
+.pub-brand-name{font-size:30px;color:var(--ink)}
+.pub-contact{display:grid;grid-template-columns:1fr;gap:12px}
+@media (min-width:700px){.pub-contact{grid-template-columns:1fr 1fr 1fr}}
+.pub-mail{display:inline-block;margin-top:10px;font-weight:700;color:var(--brand-hover);word-break:break-all}
+.pub-mail:hover{text-decoration:underline}
+.pub-nf{text-align:center;padding:36px 0 20px}
+.pub-nf-mark{display:inline-grid;place-items:center;width:72px;height:72px;border-radius:50%;background:var(--warm);color:var(--brand);margin-bottom:16px}
+.pub-nf-mark svg{height:34px}
+.pub-nf h1{font-size:clamp(26px,5vw,36px);margin:0 0 10px;color:var(--ink)}
+.pub-nf .pub-lead{margin-bottom:22px}
+.pub-chips{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
+@media (max-width:899.98px){.pub{padding:18px 16px 40px}}
+/* The footer without its newsletter column: four link columns beside the brand. */
+.d-foot .foot-g{grid-template-columns:1.4fr repeat(4,1fr)}
+@media (max-width:1100px){.d-foot .foot-g{grid-template-columns:1fr 1fr 1fr;row-gap:22px}.d-foot .fb{grid-column:1 / -1}}

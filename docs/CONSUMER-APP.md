@@ -425,6 +425,39 @@ a salon with none falls back to the prototype's decorative image, which
 is the one place the app still shows a picture that is not the salon's
 own.
 
+## The public pages (2026-09-30)
+
+Every footer link leads to a page of its own under
+`apps/consumer/src/features/public/` (Alex, 2026-09-30): `/treatments`
+(the real category door and "Most chosen", each card opening its results
+page), `/how-it-works`, `/help` (questions answered from what the product
+does — cancellation is the salon's own window, reschedule is cancel and
+rebook, payments run on the mock), `/for-business`, `/business-benefits`,
+`/business-resources`, `/partner-support` (the workspace's Support ticket
+and the inbox), `/about`, `/careers` (an honest empty state — no
+vacancies exist), `/press` (no coverage is claimed), `/contact`, and the
+three legal pages. One small kit (`Public.tsx`: hero, section, card grid,
+numbered steps, disclosure questions, CTA panel, empty state) in one
+tree for every width; `usePageMeta` sets the tab title, description and
+a `noindex` for the not-found page, and `index.html` carries the
+site-wide description. The wildcard route is a real `NotFound` (home
+and search CTAs) instead of the home page in disguise; the HTTP status
+stays 200 because the app is client-rendered on Vercel. Copy ships in
+en/mk/sq (`c.pub.*`, 303 keys; mk/sq need the same native review as the
+rest). **Decisions:** "Membership" keeps linking to the existing, truthful
+`/premium`; "Gift cards" is removed from the footer — a customer can
+redeem a salon's code at payment but nobody can buy or issue one; the
+social icons and the newsletter form are gone (no profiles, no
+destination). **The one contact channel** is `VITE_SUPPORT_EMAIL`, which
+defaults to the HQ inbox the support tickets already go to
+(`lib/support.ts`); no phone, address or company identity is shown
+because none is on record. **Privacy, Terms and Cookies** describe what
+the product verifiably does (data kept, the booking rules, the four
+browser-storage keys, Google Fonts and OpenStreetMap as the only third
+parties, no cookies, no analytics) with a "last updated" date, and claim
+no governing law, controller identity, retention period or compliance
+status — those, and the final legal wording, need Alex's lawyer.
+
 ## The footer, under every route (2026-09-30)
 
 The site footer is `app/SiteFooter.tsx`, rendered once in `App` after
