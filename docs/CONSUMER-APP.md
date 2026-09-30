@@ -967,3 +967,16 @@ own arrival parameters (`service`, `location`, `employee`, `variant`,
 the client appointments door now carries `variantId` and
 `modifierOptionIds` for it. Nothing is locked: the cart can be added
 to, emptied or changed, and "any professional" is one tap away.
+
+**Booking changes (2026-09-30, Alex).** A visit's card offers
+*Reschedule* and *Cancel appointment* only when the door says so
+(`canReschedule`, `canCancel`, `cancelDeadline`, `cancelBlockedReason`
+on every appointment). A reschedule is a request: the picker shows the
+visit's own free starts, the confirmation says the appointment only
+changes after the salon approves, and the card then reads "Waiting for
+salon approval" with Withdraw. A decline asks keep-or-cancel; cancel is
+offered only while the cancellation window is open. When the window has
+closed the button is gone and the card says why (the salon's hours'
+notice, or that the visit has started) and to contact the salon.
+Cancelling takes a confirmation and, for a visit paid online, shows the
+refund state afterwards. Full story: `docs/BOOKING-CHANGES.md`.

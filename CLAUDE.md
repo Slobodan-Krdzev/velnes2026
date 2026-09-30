@@ -51,7 +51,7 @@ loyalty/premium and geo search stay deferred, not faked (see
 `docs/CONSUMER-APP.md`). Per-phase docs live in `docs/`
 (FOUNDATIONS, CATALOG, SCHEDULING, TILL, I18N, WORKSPACE, EMPLOYEE-APP,
 BOOKING-PAGE, REGISTRATIONS-HQ, CUSTOMERS-MARKETING, SUPPLIERS,
-CONSUMER-APP, NAVIGATION-SEARCH, REVIEWS) — each ends with its honest deferrals, which together
+CONSUMER-APP, NAVIGATION-SEARCH, REVIEWS, BOOKING-CHANGES) — each ends with its honest deferrals, which together
 form the backlog.
 Search/discovery is **built** (2026-09-21): one universal search bar,
 `search_documents` as the cross-tenant matching projection,
@@ -59,6 +59,12 @@ Search/discovery is **built** (2026-09-21): one universal search bar,
 gaining `textRelevance`, server-side filters, a real "Most chosen", a
 zero-result miss log and the HQ Search lab. `docs/SEARCH.md` §12 carries
 what each step settled; §14 its deferrals.
+Booking changes are **built** (2026-09-30): a customer reschedule is a
+request the salon approves or declines (the original stays until
+then), cancellation is policy-governed with the window snapshotted at
+booking, cancelled visits stay on the calendar muted, refunds are an
+intent behind a `PaymentProvider` seam (mock only), and a freed slot
+enters the existing Premium queue once. `docs/BOOKING-CHANGES.md`.
 All apps are trilingual (en/mk/sq, `packages/i18n`, completeness
 tested); MK/SQ dictionaries still need native review.
 Principals: tenant employees, `hq_users`, `supplier_users`,
