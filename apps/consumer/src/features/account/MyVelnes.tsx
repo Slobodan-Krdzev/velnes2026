@@ -13,6 +13,7 @@ import { useUserLocation } from '../../lib/geo.js';
 import { ApiError } from '../../lib/api/client.js';
 import { fmtMKD, minutesLbl } from '../../lib/api/mappers.js';
 import { ReviewForm, ReviewGiven } from './ReviewForm.js';
+import { CancelConfirm, PaymentLines, PolicyCard, RequestCard, ReschedulePicker, VisitHistory } from './Changes.js';
 import { Stars } from '../../components/Stars.js';
 import {
   useFavourites,
@@ -120,6 +121,9 @@ function StatusBadge({ a }: { a: Appt }) {
   const b = bucketOf(a);
   if (b === 'canc') return <span className="acc-badge off">{t('c.acc.cancelled')}</span>;
   if (a.status === 'requested' && b === 'up') return <span className="acc-badge warn">{t('c.acc.awaiting')}</span>;
+  // A change request in flight shows on the visit, never as its status.
+  if (b === 'up' && a.changeRequest?.status === 'pending') return <span className="acc-badge warn">{t('c.acc.rsWaitingShort')}</span>;
+  if (b === 'up' && a.changeRequest?.status === 'declined' && !a.changeRequest.customerDecision) return <span className="acc-badge off">{t('c.acc.rsDeclinedShort')}</span>;
   if (b === 'past') return <span className="acc-badge mut">{t('c.acc.completed')}</span>;
   return <span className="acc-badge ok">{t('c.acc.confirmed')}</span>;
 }
@@ -168,14 +172,20 @@ export function MyVelnes({ section = 'over' }: { section?: SecId }) {
   // The section chips are a rail too: the wheel slides them.
   const chipsRef = useRef<HTMLDivElement | null>(null);
   useWheelScroll(chipsRef);
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState('');
+  // The change cards own their own busy/error state now.
+  const busy = false;
+  const err = '';
   // The review form: opened by its button, or by `?review=1` (a mail or
   // notification link) — the door still decides whether it may be sent.
   const [search] = useSearchParams();
   const wantReview = search.get('review') === '1';
   const [reviewOpen, setReviewOpen] = useState(false);
   const [reviewDone, setReviewDone] = useState(false);
+  // Booking changes: the picker and the cancel confirmation are sheets
+  // over the detail; the server's rights decide what is offered.
+  const [rescheduleOpen, setRescheduleOpen] = useState(false);
+  const [cancelOpen, setCancelOpen] = useState(false);
+  const [rsSent, setRsSent] = useState(false);
 
   const unread = notifs.data?.unread ?? 0;
   const list = useMemo(() => appts.data?.appointments ?? [], [appts.data]);
@@ -206,21 +216,6 @@ export function MyVelnes({ section = 'over' }: { section?: SecId }) {
   }
 
   const go = (s: SecId) => nav(s === 'over' ? '/account' : `/account/${s}`);
-
-  const cancel = async (id: string) => {
-    setBusy(true);
-    setErr('');
-    try {
-      await api(`/me/appointments/${id}/cancel`, { method: 'POST' });
-      await Promise.all([
-        qc.invalidateQueries({ queryKey: ['my-appointments'] }),
-        qc.invalidateQueries({ queryKey: ['my-notifications'] }),
-      ]);
-    } catch (e) {
-      setErr(e instanceof ApiError ? e.message : t('c.acc.cancelFailed'));
-    }
-    setBusy(false);
-  };
 
   const markRead = async (id: string | null) => {
     await api('/me/notifications/read', { method: 'POST', body: JSON.stringify({ id }) });
@@ -562,6 +557,18 @@ export function MyVelnes({ section = 'over' }: { section?: SecId }) {
                       <span>{t('c.acc.reference')}</span>
                       <b>{current.ref}</b>
                     </div>
+                    <PaymentLines a={current} />
+                    {current.cancellation ? (
+                      <div className="acc-kv">
+                        <span>{t('c.acc.cancelledOn')}</span>
+                        <b>
+                          {new Date(current.cancellation.at).toLocaleString(lang, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                          <span className="muted" style={{ display: 'block', fontWeight: 500 }}>
+                            {current.cancellation.by === 'customer' ? t('c.acc.h.byYou') : current.cancellation.by === 'salon' ? t('c.acc.h.bySalon') : ''}
+                          </span>
+                        </b>
+                      </div>
+                    ) : null}
                     {bucketOf(current) !== 'up' ? (
                       <div className="acc-actions">
                         {current.canReview && !(reviewOpen || wantReview) ? (
@@ -604,39 +611,52 @@ export function MyVelnes({ section = 'over' }: { section?: SecId }) {
                   ) : null}
                   {bucketOf(current) === 'up' ? (
                     <>
-                      <div className="acc-card">
-                        <div className="acc-lbl">{t('c.acc.policy')}</div>
-                        <div className="sm" style={{ color: 'var(--ink)' }}>
-                          Free cancellation up to {current.cancelHours} hours before your appointment.
+                      {rsSent ? (
+                        <div className="acc-card rv-done" role="status">
+                          <b>{t('c.acc.rsSentTitle')}</b>
+                          <div className="sm muted">{t('c.acc.rsSentSub')}</div>
                         </div>
-                      </div>
+                      ) : null}
+                      <RequestCard a={current} onCancelInstead={() => setCancelOpen(true)} />
+                      {rescheduleOpen ? (
+                        <ReschedulePicker
+                          a={current}
+                          onClose={() => setRescheduleOpen(false)}
+                          onSent={() => {
+                            setRescheduleOpen(false);
+                            setRsSent(true);
+                          }}
+                        />
+                      ) : null}
+                      {cancelOpen ? (
+                        <CancelConfirm a={current} onClose={() => setCancelOpen(false)} onDone={() => setCancelOpen(false)} />
+                      ) : null}
+                      {!rescheduleOpen && !cancelOpen ? <PolicyCard a={current} /> : null}
                       {err ? <div className="acc-err">{err}</div> : null}
-                      <div style={{ display: 'grid', gap: '10px' }}>
-                        {current.status === 'booked' && !current.paid ? (
-                          <>
-                            <button className="btn btn-p" style={{ width: '100%' }} onClick={() => nav(`/pay/${current.id}`)}>
-                              {t('c.acc.payNow', { amount: fmtMKD(current.price) })}
+                      {!rescheduleOpen && !cancelOpen ? (
+                        <div style={{ display: 'grid', gap: '10px' }}>
+                          {current.status === 'booked' && !current.paid ? (
+                            <>
+                              <button className="btn btn-p" style={{ width: '100%' }} onClick={() => nav(`/pay/${current.id}`)}>
+                                {t('c.acc.payNow', { amount: fmtMKD(current.price) })}
+                              </button>
+                              <div className="muted" style={{ fontSize: 13, marginTop: -4 }}>{t('c.acc.payNote')}</div>
+                            </>
+                          ) : null}
+                          {current.paid ? <div className="acc-badge ok" style={{ justifySelf: 'start' }}>{t('c.acc.paidOnline')}</div> : null}
+                          {current.canReschedule ? (
+                            <button className="btn btn-p" style={{ width: '100%' }} onClick={() => { setRsSent(false); setRescheduleOpen(true); }}>
+                              {t('c.acc.reschedule')}
                             </button>
-                            <div className="muted" style={{ fontSize: 13, marginTop: -4 }}>{t('c.acc.payNote')}</div>
-                          </>
-                        ) : null}
-                        {current.paid ? <div className="acc-badge ok" style={{ justifySelf: 'start' }}>{t('c.acc.paidOnline')}</div> : null}
-                        {current.salonSlug ? (
-                          <button
-                            className="btn btn-p"
-                            style={{ width: '100%' }}
-                            onClick={() => nav(bookAgainHref(current))}
-                          >{t('c.acc.bookAgain')}</button>
-                        ) : null}
-                        <button
-                          className="btn btn-g"
-                          style={{ width: '100%' }}
-                          disabled={busy}
-                          onClick={() => void cancel(current.id)}
-                        >
-                          {busy ? 'Cancelling…' : t('c.acc.cancelAppt')}
-                        </button>
-                      </div>
+                          ) : null}
+                          {current.canCancel && !(current.changeRequest?.status === 'declined' && !current.changeRequest.customerDecision) ? (
+                            <button className="btn btn-g" style={{ width: '100%' }} disabled={busy} onClick={() => setCancelOpen(true)}>
+                              {t('c.acc.cancelAppt')}
+                            </button>
+                          ) : null}
+                        </div>
+                      ) : null}
+                      <VisitHistory a={current} />
                     </>
                   ) : (
                     <>
@@ -650,6 +670,7 @@ export function MyVelnes({ section = 'over' }: { section?: SecId }) {
                       {current.canReview && (reviewOpen || wantReview) ? (
                         <ReviewForm a={current} onDone={() => { setReviewOpen(false); setReviewDone(true); }} />
                       ) : null}
+                      <VisitHistory a={current} />
                     </>
                   )}
                 </>

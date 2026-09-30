@@ -1614,3 +1614,15 @@ a.pop-go:hover {
   flex: 0 0 auto;
   white-space: nowrap;
 }
+
+/* Booking changes (Alex, 2026-09-30): the request cards, the blocked
+   window, the cancel confirmation. */
+.acc-blocked{background:#FBEFE9;color:#7A3A1E;border-radius:12px;padding:10px 12px;line-height:1.45}
+.acc-blocked b{display:block;margin-bottom:2px}
+.acc-blocked .muted{margin-top:4px}
+.rs-note{background:var(--warm);border-radius:12px;padding:10px 12px;line-height:1.45;margin-top:10px}
+.rs-pick .dayrow{margin-top:12px}
+.btn-danger{background:#B4531F;border-color:#B4531F;color:#fff}
+.btn-danger:hover{background:#9A4418;border-color:#9A4418}
+
+.rs-pick .btn:disabled,.rs-confirm .btn:disabled,.cx-confirm .btn:disabled{opacity:.55;cursor:not-allowed}

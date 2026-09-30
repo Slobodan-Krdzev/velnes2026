@@ -1042,7 +1042,24 @@ function ApptsTab({ id }: { id: string }) {
   if (!d) return null;
   if (!d.upcoming.length && !d.history.length)
     return <Empty title={t('cust.noAppointments')} sub={t('cust.noAppointmentsSub')} />;
+  // Factual counts (Alex, 2026-09-30), never a score: cancellations by
+  // actor, no-shows as recorded, completed as past and not missed.
+  const statusOf = (a: (typeof d.history)[number]) =>
+    a.status === 'cancelled'
+      ? a.cancelledBy === 'customer'
+        ? t('cust.cancelledByCustomer')
+        : a.cancelledBy === 'salon'
+          ? t('cust.cancelledBySalon')
+          : t('cal.cancelled')
+      : a.status.replace('_', ' ');
   return (
+    <>
+    <div className="grid4" data-testid="appt-stats">
+      <Stat label={t('cust.apptTotal')} value={d.stats.total} />
+      <Stat label={t('cust.apptCompleted')} value={d.stats.completed} />
+      <Stat label={t('cust.apptCancelled')} value={d.stats.cancelledByCustomer} hint={d.stats.cancelledBySalon ? t('cust.apptCancelledBySalon', { n: d.stats.cancelledBySalon }) : ''} />
+      <Stat label={t('cust.apptNoShows')} value={d.stats.noShows} />
+    </div>
     <table>
       <thead>
         <tr>
@@ -1054,7 +1071,7 @@ function ApptsTab({ id }: { id: string }) {
       </thead>
       <tbody>
         {d.upcoming.map((a) => (
-          <tr key={a.id}>
+          <tr key={a.id} className={a.status === 'cancelled' ? 'dim' : ''}>
             <td className="bold">
               {a.serviceName}
               <span className="muted" style={{ display: 'block', fontSize: 12 }}>
@@ -1065,7 +1082,7 @@ function ApptsTab({ id }: { id: string }) {
               {dateShort(a.date)} · {a.start} – {a.end}
             </td>
             <td>
-              <span className="badge accent">{t('cust.upcoming')}</span>
+              {a.status === 'cancelled' ? <span className="badge danger">{statusOf(a)}</span> : <span className="badge accent">{t('cust.upcoming')}</span>}
             </td>
             <td className="right bold tnum">{money(a.price)}</td>
           </tr>
@@ -1083,7 +1100,7 @@ function ApptsTab({ id }: { id: string }) {
             </td>
             <td>
               <span className={`badge ${a.status === 'cancelled' || a.status === 'no_show' ? 'danger' : 'success'}`}>
-                {a.status.replace('_', ' ')}
+                {statusOf(a)}
               </span>
             </td>
             <td className="right bold tnum">{money(a.price)}</td>
@@ -1091,6 +1108,7 @@ function ApptsTab({ id }: { id: string }) {
         ))}
       </tbody>
     </table>
+    </>
   );
 }
 

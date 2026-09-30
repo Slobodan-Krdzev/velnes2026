@@ -25,6 +25,7 @@ import { DateField } from '../../lib/DateField.js';
 import { useOutsideClose } from '../../lib/pop.js';
 import { money } from '../../lib/money.js';
 import { useToast } from '../../lib/toast.js';
+import { ChangesPanel } from './Changes.js';
 
 /** The prototype's appointment drawer (PANELS.appointment): the save
  *  group sits top-right in the panel head, the body runs mode rows →
@@ -871,6 +872,7 @@ function EditBody({ appointment: a, onClose }: { appointment: Appointment; onClo
         {requested ? (
           <div className="note">{t('drawer.requestNote')}</div>
         ) : null}
+        {a.kind === 'appointment' ? <ChangesPanel a={a} onClose={onClose} /> : null}
         {requested ? (
           <div style={{ display: 'grid', gap: 8 }}>
             <button

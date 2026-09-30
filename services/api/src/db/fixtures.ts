@@ -529,6 +529,162 @@ export async function addFixtureReviews(batch: string, adminUrl: string): Promis
   }
 }
 
+/**
+ * Booking changes (Alex, 2026-09-30) — every state the consumer and the
+ * workspace can show, on the batch's first salon, for one fixture
+ * consumer (changes.client@fixture.velnes.test, password
+ * `velnes-fixture`): an ordinary upcoming visit; one inside a closed
+ * cancellation window; a pending reschedule request; a declined one
+ * waiting for the customer; an approved one; a kept original; a
+ * customer cancellation; a cancellation that fed Premium; a prepaid
+ * cancellation refunded; a prepaid cancellation whose refund failed.
+ * Idempotent per batch: a salon that already has them is skipped.
+ */
+export async function addFixtureChanges(batch: string, adminUrl: string): Promise<{ salons: number; appointments: number }> {
+  const admin = new pg.Client({ connectionString: adminUrl });
+  await admin.connect();
+  try {
+    const salons = (await admin.query(`SELECT id, name FROM businesses WHERE fixture_batch = $1 ORDER BY created_at LIMIT 1`, [batch])).rows as { id: string; name: string }[];
+    const hash = await argon2.hash(FIXTURE_PASSWORD);
+    let made = 0;
+    let touched = 0;
+    await admin.query('BEGIN');
+    for (const s of salons) {
+      const email = `changes.client@${FIXTURE_DOMAIN}`;
+      let cu = await admin.query(`SELECT id FROM client_users WHERE lower(email) = lower($1)`, [email]);
+      if (!cu.rowCount)
+        cu = await admin.query(
+          `INSERT INTO client_users (email, password_hash, first, last, lang, email_verified_at) VALUES ($1, $2, 'Slobodan', 'Krstevski', 'en', now()) RETURNING id`,
+          [email, hash],
+        );
+      const clientId = cu.rows[0].id as string;
+      const had = await admin.query(`SELECT 1 FROM appointments WHERE tenant_id = $1 AND client_user_id = $2 LIMIT 1`, [s.id, clientId]);
+      if (had.rowCount) continue;
+      const loc = (await admin.query(`SELECT id FROM locations WHERE tenant_id = $1 ORDER BY created_at LIMIT 1`, [s.id])).rows[0] as { id: string } | undefined;
+      const staff = (await admin.query(`SELECT id, name FROM employees WHERE tenant_id = $1 AND bookable ORDER BY created_at`, [s.id])).rows as { id: string; name: string }[];
+      const services = (await admin.query(`SELECT id, name FROM services WHERE tenant_id = $1 ORDER BY sort LIMIT 4`, [s.id])).rows as { id: string; name: string }[];
+      if (!loc || !staff.length || !services.length) continue;
+      touched += 1;
+      let cust = await admin.query(`SELECT customer_id FROM client_customer_links WHERE client_user_id = $1 AND tenant_id = $2`, [clientId, s.id]);
+      let customerId: string;
+      if (cust.rowCount) customerId = cust.rows[0].customer_id as string;
+      else {
+        cust = await admin.query(`INSERT INTO customers (tenant_id, name, email, cust_group) VALUES ($1, 'Slobodan Krstevski', $2, 'Regular') RETURNING id`, [s.id, email]);
+        customerId = cust.rows[0].id as string;
+        await admin.query(`INSERT INTO client_customer_links (client_user_id, tenant_id, customer_id) VALUES ($1, $2, $3)`, [clientId, s.id, customerId]);
+      }
+      // A Premium member of this salon, so a released slot has somebody to be offered to.
+      const member = await admin.query(
+        `INSERT INTO customers (tenant_id, name, email, cust_group, premium) VALUES ($1, 'Marija Premium', $2, 'VIP', $3) RETURNING id`,
+        [s.id, `marija.premium.${batch}@${FIXTURE_DOMAIN}`, JSON.stringify({ status: 'active', since: '2026-01-15', renews: '2027-01-15' })],
+      );
+      const emp = staff[0]!;
+      const svc = (k: number) => services[k % services.length]!;
+      const appt = async (o: { days: number; startMin: number; status?: string; cancelHours?: number; svc: number; price?: number; cancelledBy?: string; reason?: string; key?: string }) => {
+        const r = await admin.query(
+          `INSERT INTO appointments (tenant_id, location_id, date, start_min, duration_min, prep_min, reset_min, kind, status, title, service_id, employee_id, customer_id, price, source, client_user_id, cancel_hours, cancelled_at, cancelled_by, cancel_reason, idempotency_key)
+           VALUES ($1, $2, CURRENT_DATE + $3::int, $4, 45, 0, 10, 'appointment', $5, 'Slobodan Krstevski', $6, $7, $8, $9, 'client', $10, $11, $12, $13, $14, $15) RETURNING id, date::text AS date`,
+          [s.id, loc.id, o.days, o.startMin, o.status ?? 'booked', svc(o.svc).id, emp.id, customerId, o.price ?? 1500, clientId, o.cancelHours ?? 24,
+            o.cancelledBy ? new Date(Date.now() - 86_400_000) : null, o.cancelledBy ?? null, o.reason ?? null, o.key ?? null],
+        );
+        made += 1;
+        const id = r.rows[0].id as string;
+        await line(id, 'Created', 'Slobodan Krstevski', 'client', {}, -3);
+        return { id, date: r.rows[0].date as string };
+      };
+      const line = (id: string, what: string, by: string, source: string, meta: Record<string, unknown>, daysAgo: number) =>
+        admin.query(
+          `INSERT INTO appointment_history (tenant_id, appointment_id, what, by_name, source, meta, at) VALUES ($1, $2, $3, $4, $5, $6, now() + ($7::int * interval '1 day'))`,
+          [s.id, id, what, by, source, JSON.stringify(meta), daysAgo],
+        );
+      const req = (appointmentId: string, o: { status: string; originalDate: string; originalStart: number; days: number; start: number; reason?: string; decision?: string }) =>
+        admin.query(
+          `INSERT INTO booking_change_requests (tenant_id, appointment_id, status, original_date, original_start_min, original_duration_min, original_employee_id, requested_date, requested_start_min, requested_employee_id, requested_by_client_user_id, requested_at, resolved_by_employee_id, resolved_at, decline_reason, customer_decision, decided_at)
+           VALUES ($1, $2, $3, $4, $5, 45, $6, CURRENT_DATE + $7::int, $8, $6, $9, now() - interval '1 day', $10, $11, $12, $13, $14)`,
+          [s.id, appointmentId, o.status, o.originalDate, o.originalStart, emp.id, o.days, o.start, clientId,
+            o.status === 'pending' ? null : emp.id, o.status === 'pending' ? null : new Date(Date.now() - 3_600_000 * 20), o.reason ?? null, o.decision ?? null, o.decision ? new Date(Date.now() - 3_600_000 * 10) : null],
+        );
+      const paid = async (appointmentId: string, price: number, refund: 'refunded' | 'failed', chargeRef: string) => {
+        const number = `FIX-${appointmentId.slice(0, 8).toUpperCase()}`;
+        const inv = await admin.query(
+          `INSERT INTO invoices (tenant_id, location_id, number, customer_id, customer_name, method, status, total, idempotency_key)
+           VALUES ($1, $2, $3, $4, 'Slobodan Krstevski', 'Online card', $5, $6, $7) RETURNING id`,
+          [s.id, loc.id, number, customerId, refund === 'refunded' ? 'Refunded' : 'Paid', price, `pay:${appointmentId}`],
+        );
+        await admin.query(
+          `INSERT INTO invoice_lines (tenant_id, invoice_id, description, qty, unit_price, item_class, appointment_id) VALUES ($1, $2, 'Treatment', 1, $3, 'service', $4)`,
+          [s.id, inv.rows[0].id, price, appointmentId],
+        );
+        await admin.query(
+          `INSERT INTO refunds (tenant_id, appointment_id, invoice_id, amount, method, status, provider, charge_ref, provider_ref, requested_at, completed_at, attempts, failure_reason)
+           VALUES ($1, $2, $3, $4, 'Online card', $5, 'mock', $6, $7, now() - interval '1 day', $8, $9, $10)`,
+          [s.id, appointmentId, inv.rows[0].id, price, refund, chargeRef, refund === 'refunded' ? `mock_rf_${appointmentId.slice(0, 16)}` : null,
+            refund === 'refunded' ? new Date(Date.now() - 86_000_000) : null, refund === 'refunded' ? 1 : 5, refund === 'failed' ? 'Mock provider refused the refund' : null],
+        );
+        await line(appointmentId, 'Refund requested', 'Slobodan Krstevski', 'system', { amount: price, method: 'Online card' }, -1);
+        await line(appointmentId, refund === 'refunded' ? 'Refund completed' : 'Refund failed', 'mock', 'system', { amount: price }, -1);
+      };
+      const hm = (h: number, m = 0) => h * 60 + m;
+      const plus = (iso: string, n: number) => {
+        const d = new Date(`${iso}T00:00:00Z`);
+        d.setUTCDate(d.getUTCDate() + n);
+        return d.toISOString().slice(0, 10);
+      };
+
+      // 1. An ordinary upcoming visit — cancellation still open.
+      await appt({ days: 5, startMin: hm(10), svc: 0 });
+      // 2. Inside a closed window: tomorrow at 10:00 with a 48-hour policy.
+      await appt({ days: 1, startMin: hm(10), svc: 1, cancelHours: 48 });
+      // 3. A pending reschedule request.
+      const a3 = await appt({ days: 6, startMin: hm(11), svc: 2 });
+      await req(a3.id, { status: 'pending', originalDate: a3.date, originalStart: hm(11), days: 8, start: hm(14) });
+      await line(a3.id, 'Reschedule requested', 'Slobodan Krstevski', 'client', { from: `${a3.date} 11:00`, to: `${plus(a3.date, 2)} 14:00` }, -1);
+      // 4. A declined request, waiting for the customer.
+      const a4 = await appt({ days: 7, startMin: hm(9), svc: 3 });
+      await req(a4.id, { status: 'declined', originalDate: a4.date, originalStart: hm(9), days: 9, start: hm(16), reason: 'Fully booked that afternoon' });
+      await line(a4.id, 'Reschedule requested', 'Slobodan Krstevski', 'client', { from: `${a4.date} 09:00`, to: `${plus(a4.date, 2)} 16:00` }, -1);
+      await line(a4.id, 'Reschedule declined', emp.name, 'staff', { reason: 'Fully booked that afternoon' }, -1);
+      // 5. An approved reschedule: the visit already sits at the new time.
+      const a5 = await appt({ days: 9, startMin: hm(12), svc: 0 });
+      await req(a5.id, { status: 'approved', originalDate: a5.date, originalStart: hm(15), days: 9, start: hm(12) });
+      await line(a5.id, 'Reschedule requested', 'Slobodan Krstevski', 'client', { from: `${a5.date} 15:00`, to: `${a5.date} 12:00` }, -2);
+      await line(a5.id, 'Reschedule approved', emp.name, 'staff', { from: `${a5.date} 15:00`, to: `${a5.date} 12:00` }, -1);
+      // 6. Declined, and the customer kept the original.
+      const a6 = await appt({ days: 10, startMin: hm(13), svc: 1 });
+      await req(a6.id, { status: 'resolved', originalDate: a6.date, originalStart: hm(13), days: 12, start: hm(10), reason: 'Therapist away that day', decision: 'keep' });
+      await line(a6.id, 'Reschedule requested', 'Slobodan Krstevski', 'client', { from: `${a6.date} 13:00`, to: `${plus(a6.date, 2)} 10:00` }, -2);
+      await line(a6.id, 'Reschedule declined', emp.name, 'staff', { reason: 'Therapist away that day' }, -1);
+      await line(a6.id, 'Original appointment kept', 'Slobodan Krstevski', 'client', { when: `${a6.date} 13:00` }, -1);
+      // 7. Cancelled by the customer, within the window.
+      const a7 = await appt({ days: 4, startMin: hm(10), svc: 2, status: 'cancelled', cancelledBy: 'customer', reason: 'Cannot make it' });
+      await line(a7.id, 'Cancelled', 'Slobodan Krstevski', 'client', { by: 'customer', reason: 'Cannot make it' }, -1);
+      // 8. Cancelled, and the freed slot offered to Premium.
+      const a8 = await appt({ days: 5, startMin: hm(14), svc: 3, status: 'cancelled', cancelledBy: 'customer' });
+      await line(a8.id, 'Cancelled', 'Slobodan Krstevski', 'client', { by: 'customer' }, -1);
+      await admin.query(
+        `INSERT INTO member_recs (tenant_id, location_id, date, start_at, end_at, service_id, variant_id, employee_id, normal_price, rec_pct, rec_price, candidates, slot_key)
+         VALUES ($1, $2, CURRENT_DATE + 5, '14:00', '14:45', $3, NULL, $4, 1500, 35, 975, $5, $6)`,
+        [s.id, loc.id, svc(3).id, emp.id, JSON.stringify([{ cid: member.rows[0].id, name: 'Marija Premium', score: 40, why: ['reliable — no no-shows', 'inside their preferred time window'] }]), `${loc.id}|${plus(a8.date, 0)}|${emp.id}|14:00`],
+      );
+      // 9. Prepaid, cancelled, refunded.
+      const a9 = await appt({ days: 6, startMin: hm(16), svc: 0, status: 'cancelled', cancelledBy: 'customer', price: 1800 });
+      await line(a9.id, 'Cancelled', 'Slobodan Krstevski', 'client', { by: 'customer' }, -1);
+      await paid(a9.id, 1800, 'refunded', 'mock_ch_fixture_ok');
+      // 10. Prepaid, cancelled by the salon, the refund refused by the provider.
+      const a10 = await appt({ days: 7, startMin: hm(17), svc: 1, status: 'cancelled', cancelledBy: 'salon', reason: 'Therapist ill', price: 2200 });
+      await line(a10.id, 'Cancelled', emp.name, 'staff', { by: 'salon', reason: 'Therapist ill' }, -1);
+      await paid(a10.id, 2200, 'failed', 'mock_ch_fixture_fail');
+    }
+    await admin.query('COMMIT');
+    return { salons: touched, appointments: made };
+  } catch (e) {
+    await admin.query('ROLLBACK').catch(() => undefined);
+    throw e;
+  } finally {
+    await admin.end();
+  }
+}
+
 /** The batches present, with their salon counts. */
 export async function listFixtureBatches(adminUrl: string): Promise<{ batch: string; salons: number; since: Date }[]> {
   const admin = new pg.Client({ connectionString: adminUrl });

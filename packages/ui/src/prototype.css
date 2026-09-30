@@ -2435,3 +2435,11 @@ body.ob-src .ob-body{display:flex;align-items:center;justify-content:center;
 .infotip-title{font-weight:800;font-size:13px;margin-bottom:6px}
 .infotip-p{margin:0 0 8px;font-size:13px;line-height:1.45;font-weight:500;color:var(--text)}
 .infotip-p:last-child{margin-bottom:0}
+
+/* Booking changes (Alex, 2026-09-30): a cancelled visit stays on the
+   grid as history — muted and struck, never in the way. */
+.event.ev-cancelled{opacity:.5;border-style:dotted;text-decoration:line-through;pointer-events:auto}
+.timeline{display:grid;gap:6px;margin-top:6px}
+.tl-row{display:grid;grid-template-columns:110px 1fr;gap:10px;align-items:start;font-size:13px}
+.rs-request{border-color:var(--warning)}
+.btn.has-requests{border-color:var(--warning)}

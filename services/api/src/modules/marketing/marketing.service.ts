@@ -12,6 +12,7 @@ import { svcAt, svcTiming, svcVariants } from '../catalog/catalog.service.js';
 import { activityLog, customerInsights, isPremium } from '../customers/customers.service.js';
 import {
   hhmm,
+  instantAt,
   localIso,
   mins,
   scheduleFor,
@@ -355,6 +356,68 @@ export async function memberScore(
     why.push(`already received ${n} offer${n > 1 ? 's' : ''} recently`);
   }
   return { score, why };
+}
+
+/**
+ * A slot a cancellation just freed, offered where the platform already
+ * offers openings (Alex, 2026-09-30): the same `member_recs` queue,
+ * the same scoring, the same Approve/Decline and staircase after it.
+ * The differences from the scan: this is push, for one explicit slot,
+ * deduped by `slot_key` (a retried cancellation adds nothing), and it
+ * honours `minLeadMin` — an opening in ninety minutes is not an
+ * opportunity anyone can be offered in time. The customer who freed it
+ * is not a candidate for it. Nothing here when Premium is off, when
+ * the salon has no Premium members, or when the slot is not offerable.
+ */
+export async function releaseSlotToPremium(
+  trx: Trx,
+  leg: { tenantId: string; locationId: string; date: string; startMin: number; durationMin: number; serviceId: string | null; variantId: string | null; employeeId: string | null; price: number; customerId: string | null },
+  now = new Date(),
+) {
+  if (!PREMIUM_RULES.enabled || !leg.serviceId) return null;
+  const loc = await trx.selectFrom('locations').select('tz').where('id', '=', leg.locationId).executeTakeFirst();
+  const start = instantAt(loc?.tz ?? 'Europe/Skopje', leg.date, leg.startMin);
+  if (start.getTime() - now.getTime() < PREMIUM_RULES.minLeadMin * 60_000) return null;
+  const slotKey = `${leg.locationId}|${leg.date}|${leg.employeeId ?? 'any'}|${hhmm(leg.startMin)}`;
+  const taken = await trx.selectFrom('memberRecs').select('id').where('slotKey', '=', slotKey).executeTakeFirst();
+  if (taken) return null;
+  const members = await trx
+    .selectFrom('customers')
+    .selectAll()
+    .where('blacklisted', '=', false)
+    .where('id', '!=', leg.customerId ?? '00000000-0000-0000-0000-000000000000')
+    .execute();
+  const hour = Math.floor(leg.startMin / 60);
+  const candidates = [];
+  for (const m of members.filter((x) => isPremium(x.premium))) {
+    const s = await memberScore(trx, m.id, { serviceId: leg.serviceId, empId: leg.employeeId, date: leg.date, hour });
+    candidates.push({ cid: m.id, name: m.name, ...s });
+  }
+  candidates.sort((a, b) => b.score - a.score);
+  if (!candidates.length) return null;
+  const recPct = Math.min(35, PREMIUM_RULES.maxDiscountPct);
+  return trx
+    .insertInto('memberRecs')
+    .values({
+      tenantId: leg.tenantId,
+      locationId: leg.locationId,
+      date: new Date(leg.date),
+      startAt: hhmm(leg.startMin),
+      endAt: hhmm(leg.startMin + leg.durationMin),
+      serviceId: leg.serviceId,
+      variantId: leg.variantId,
+      employeeId: leg.employeeId,
+      normalPrice: leg.price,
+      recPct,
+      recPrice: Math.max(0, Math.round(leg.price * (1 - recPct / 100))),
+      candidates: JSON.stringify(candidates),
+      slotKey,
+    })
+    // The unique index is partial (slot_key IS NOT NULL): the conflict
+    // target must say so, or Postgres cannot match it.
+    .onConflict((oc) => oc.columns(['tenantId', 'slotKey']).where('slotKey', 'is not', null).doNothing())
+    .returningAll()
+    .executeTakeFirst();
 }
 
 /** One recommendation from tomorrow's gaps — deterministic: the first

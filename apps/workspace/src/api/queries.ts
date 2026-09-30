@@ -2,6 +2,9 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
   LineQuoteRequestSchema} from '@velnes/contracts';
 import {
+  AppointmentChangesSchema,
+  ChangeRequestListSchema,
+  ChangeRequestSchema,
   AppointmentListResponseSchema,
   AvailabilityResponseSchema,
   BookResponseSchema,
@@ -104,6 +107,34 @@ export const useDecideRequest = () => {
         ...(v.reason ? { reason: v.reason } : {}),
       }),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ['appointments'] }),
+  });
+};
+
+/** Booking changes (2026-09-30): what a visit went through, the
+ *  requests waiting for the salon, and the two decisions. */
+export const useAppointmentChanges = (id: string | null) =>
+  useQuery({
+    queryKey: ['appointment-changes', id],
+    queryFn: () => get(AppointmentChangesSchema, `/appointments/${id}/changes`),
+    enabled: !!id,
+    staleTime: 10_000,
+  });
+export const useChangeRequests = (status: 'pending' | 'declined' | 'approved' | 'withdrawn' | 'resolved' = 'pending') =>
+  useQuery({
+    queryKey: ['change-requests', status],
+    queryFn: () => get(ChangeRequestListSchema, `/change-requests?status=${status}`),
+    refetchInterval: 60_000,
+  });
+export const useDecideChange = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (v: { id: string; action: 'approve' | 'decline'; reason?: string | undefined }) =>
+      post(ChangeRequestSchema, `/change-requests/${v.id}/${v.action}`, v.reason ? { reason: v.reason } : {}),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['appointments'] });
+      void qc.invalidateQueries({ queryKey: ['appointment-changes'] });
+      void qc.invalidateQueries({ queryKey: ['change-requests'] });
+    },
   });
 };
 

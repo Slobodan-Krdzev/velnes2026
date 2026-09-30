@@ -18,6 +18,8 @@ const base = {
   ref: 'AAAAAAAA', salonName: 'Velnes Fizio Centar', salonSlug: 'velnes-fizio', locationName: 'Centar', locationAddress: 'Makedonija 12', lat: null, lng: null,
   serviceName: 'Sports massage', employeeName: 'Maria Petrovska', durationMin: 45, price: 1800, status: 'booked', paid: false, cancelHours: 24,
   serviceId: null, employeeId: null, locationId: null,
+  // Booking changes (2026-09-30): what the door always sends.
+  canReschedule: true, canCancel: true, cancelDeadline: null, cancelBlockedReason: null, changeRequest: null, cancellation: null, payment: { status: 'unpaid', method: null, amount: null }, refund: null, history: [],
 };
 let appointments: Record<string, unknown>[] = [
   { ...base, id: APPT, date: '2026-09-20', time: '10:00', end: '10:45', completed: true, canReview: true, review: null },

@@ -12,6 +12,10 @@ import {
   BookingRefusalSchema,
   HoldRequestSchema,
   HoldResponseSchema,
+  AppointmentChangesSchema,
+  ChangeRequestDecisionSchema,
+  ChangeRequestListSchema,
+  ChangeRequestSchema,
 } from '@velnes/contracts';
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
@@ -32,6 +36,9 @@ import {
 } from './booking.service.js';
 import { notifyClient } from '../clients/clients.service.js';
 import { afterDecided } from './requests.service.js';
+import { approveReschedule, cancelVisit, declineReschedule, paymentOf, refundOf, requestOf, visitHistory, visitLegs } from './changes.service.js';
+import { processRefund } from '../payments/refunds.service.js';
+import { hhmm, localIso } from '../scheduling/scheduling.service.js';
 
 const ErrorSchema = z.object({ error: z.string(), message: z.string() });
 const IdParams = z.object({ id: z.uuid() });
@@ -219,13 +226,31 @@ export function bookingRoutes(app: FastifyInstance) {
     },
     handler: async (req, reply) => {
       try {
+        // Cancelling is its own right, and its own door (Alex,
+        // 2026-09-30): the whole visit, the facts, the refund intent and
+        // the customer's word — the last two after the commit.
+        if (req.body.status === 'cancelled') {
+          const out = await withTenant(req.claims.ten, async (trx) => {
+            const perms = await permsFor(trx, req.claims);
+            if (!can(perms, 'appointments.cancel'))
+              throw new BookingError('FORBIDDEN', 'Missing permission: appointments.cancel');
+            const actor = await trx.selectFrom('employees').select('name').where('id', '=', req.claims.sub).executeTakeFirst();
+            const r = await cancelVisit(trx, {
+              appointmentId: req.params.id,
+              by: 'salon',
+              actor: { employeeId: req.claims.sub, name: actor?.name ?? '' },
+              reason: req.body.reason ?? null,
+            });
+            return { r, a: await getAppointment(trx, req.params.id) };
+          });
+          if (out.r.notice && out.r.clientUserId) await notifyClient(out.r.clientUserId, out.r.notice);
+          for (const rid of out.r.refundIds) await processRefund(rid);
+          return out.a;
+        }
         return await withTenant(req.claims.ten, async (trx) => {
-          // Cancelling is its own right; every other change is an edit.
           const perms = await permsFor(trx, req.claims);
-          const key =
-            req.body.status === 'cancelled' ? 'appointments.cancel' : 'appointments.edit';
-          if (!can(perms, key))
-            throw new BookingError('FORBIDDEN', `Missing permission: ${key}`);
+          if (!can(perms, 'appointments.edit'))
+            throw new BookingError('FORBIDDEN', 'Missing permission: appointments.edit');
           return patchAppointment(trx, req.claims, req.params.id, req.body);
         });
       } catch (e) {
@@ -262,4 +287,132 @@ export function bookingRoutes(app: FastifyInstance) {
       }
     },
   });
+
+  /* ── Booking changes (Alex, 2026-09-30) — docs/BOOKING-CHANGES.md ── */
+
+  /** What a visit went through: the request, the cancellation, the
+   *  money and the timeline — beside the appointment, for the drawer. */
+  r.route({
+    method: 'GET',
+    url: '/appointments/:id/changes',
+    preHandler: [app.authenticate],
+    schema: { params: IdParams, response: { 200: AppointmentChangesSchema, 403: ErrorSchema, 404: ErrorSchema } },
+    handler: async (req, reply) => {
+      try {
+        return await withTenant(req.claims.ten, async (trx) => {
+          const perms = await permsFor(trx, req.claims);
+          const wide = can(perms, 'appointments.view_location');
+          if (!wide && !can(perms, 'appointments.view_own'))
+            throw new BookingError('FORBIDDEN', 'Missing permission: appointments.view_own');
+          const legs = await visitLegs(trx, req.params.id);
+          const first = legs[0]!;
+          if (!wide && !legs.some((l) => l.employeeId === req.claims.sub))
+            throw new BookingError('FORBIDDEN', 'Missing permission: appointments.view_location');
+          return {
+            changeRequest: await requestOf(trx, first.id),
+            cancellation:
+              first.status === 'cancelled' && first.cancelledAt && first.cancelledBy
+                ? { at: first.cancelledAt.toISOString(), by: first.cancelledBy as 'customer' | 'salon' | 'system' | 'hq', reason: first.cancelReason }
+                : null,
+            cancelHours: first.cancelHours,
+            payment: await paymentOf(trx, legs),
+            refund: await refundOf(trx, legs),
+            history: await visitHistory(trx, req.params.id),
+          };
+        });
+      } catch (e) {
+        return sendBookingError(reply, e);
+      }
+    },
+  });
+
+  /** The requests waiting for the salon (or already answered), newest
+   *  first — the calendar's inbox. Own-agenda readers see their own. */
+  r.route({
+    method: 'GET',
+    url: '/change-requests',
+    preHandler: [app.authenticate],
+    schema: {
+      querystring: z.object({ status: z.enum(['pending', 'declined', 'approved', 'withdrawn', 'resolved']).optional(), limit: z.coerce.number().int().min(1).max(100).default(50) }),
+      response: { 200: ChangeRequestListSchema, 403: ErrorSchema },
+    },
+    handler: async (req, reply) =>
+      withTenant(req.claims.ten, async (trx) => {
+        const perms = await permsFor(trx, req.claims);
+        const wide = can(perms, 'appointments.view_location');
+        if (!wide && !can(perms, 'appointments.view_own'))
+          return reply.code(403).send({ error: 'FORBIDDEN', message: 'Missing permission: appointments.view_own' });
+        let q = trx
+          .selectFrom('bookingChangeRequests as r')
+          .innerJoin('appointments as a', 'a.id', 'r.appointmentId')
+          .leftJoin('locations as l', 'l.id', 'a.locationId')
+          .leftJoin('services as s', 's.id', 'a.serviceId')
+          .leftJoin('employees as e', 'e.id', 'a.employeeId')
+          .leftJoin('employees as by', 'by.id', 'r.resolvedByEmployeeId')
+          .selectAll('r')
+          .select(['a.locationId', 'a.employeeId', 'a.title', 'l.name as locationName', 's.name as serviceName', 'e.name as employeeName', 'by.name as resolvedByName'])
+          .orderBy('r.requestedAt', 'desc')
+          .limit(req.query.limit);
+        if (req.query.status) q = q.where('r.status', '=', req.query.status);
+        const rows = await q.execute();
+        return {
+          requests: rows
+            .filter((x) => wide || x.employeeId === req.claims.sub)
+            .map((x) => ({
+              id: x.id,
+              appointmentId: x.appointmentId,
+              status: x.status as 'pending' | 'approved' | 'declined' | 'withdrawn' | 'resolved',
+              originalDate: localIso(x.originalDate),
+              originalTime: hhmm(x.originalStartMin),
+              originalEnd: hhmm(x.originalStartMin + x.originalDurationMin),
+              requestedDate: localIso(x.requestedDate),
+              requestedTime: hhmm(x.requestedStartMin),
+              requestedEnd: hhmm(x.requestedStartMin + x.originalDurationMin),
+              requestedAt: x.requestedAt.toISOString(),
+              resolvedAt: x.resolvedAt?.toISOString() ?? null,
+              resolvedByName: x.resolvedByName ?? null,
+              declineReason: x.declineReason,
+              customerDecision: (x.customerDecision as 'keep' | 'cancel' | null) ?? null,
+              decidedAt: x.decidedAt?.toISOString() ?? null,
+              locationId: x.locationId,
+              locationName: x.locationName ?? '—',
+              customerName: x.title,
+              serviceName: x.serviceName ?? x.title,
+              employeeName: x.employeeName ?? null,
+            })),
+        };
+      }),
+  });
+
+  /** Approve: re-checked through the gate now, every leg moved, the
+   *  customer told. Decline: nothing moves, the customer is asked. Both
+   *  behind appointments.edit, like a booking request's decision. */
+  for (const action of ['approve', 'decline'] as const)
+    r.route({
+      method: 'POST',
+      url: `/change-requests/:id/${action}`,
+      preHandler: [app.authenticate],
+      schema: {
+        params: IdParams,
+        // A bare POST arrives as a null body.
+        body: ChangeRequestDecisionSchema.nullish(),
+        response: { 200: ChangeRequestSchema, 403: ErrorSchema, 404: ErrorSchema, 409: BookingRefusalSchema },
+      },
+      handler: async (req, reply) => {
+        try {
+          const out = await withTenant(req.claims.ten, async (trx) => {
+            const perms = await permsFor(trx, req.claims);
+            if (!can(perms, 'appointments.edit'))
+              throw new BookingError('FORBIDDEN', 'Missing permission: appointments.edit');
+            return action === 'approve'
+              ? approveReschedule(trx, req.claims, req.params.id)
+              : declineReschedule(trx, req.claims, req.params.id, req.body?.reason);
+          });
+          if (out.notice && out.clientUserId) await notifyClient(out.clientUserId, out.notice);
+          return out.request;
+        } catch (e) {
+          return sendBookingError(reply, e);
+        }
+      },
+    });
 }

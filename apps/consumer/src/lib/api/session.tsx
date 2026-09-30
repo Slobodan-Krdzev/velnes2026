@@ -52,8 +52,10 @@ async function call<T>(path: string, init: RequestInit & { token?: string | null
     },
   });
   if (!res.ok) {
-    const body = (await res.json().catch(() => ({}))) as { error?: string; message?: string };
-    throw new ApiError(res.status, body.error ?? 'ERROR', body.message ?? res.statusText);
+    // A refusal from the booking gate carries its code and params, so
+    // the app can say it in its own language (`refusal.<code>`).
+    const body = (await res.json().catch(() => ({}))) as { error?: string; code?: string; message?: string; params?: Record<string, string | number> };
+    throw new ApiError(res.status, body.code ?? body.error ?? 'ERROR', body.message ?? res.statusText, body.params ?? {});
   }
   return res.json() as Promise<T>;
 }

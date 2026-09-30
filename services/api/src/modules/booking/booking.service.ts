@@ -68,6 +68,8 @@ interface CheckReq {
   custId?: string | null | undefined;
   key?: string | undefined; // your own hold does not block you
   ignoreId?: string | undefined; // editing yourself
+  /** Every leg of the visit being moved: none of them is in its own way. */
+  ignoreIds?: readonly string[] | undefined;
   prepMin?: number | undefined;
   resetMin?: number | undefined;
 }
@@ -279,6 +281,7 @@ export async function bookingCheck(trx: Trx, req: CheckReq): Promise<Refusal | n
   const clash = others.find(
     (a) =>
       a.id !== req.ignoreId &&
+      !req.ignoreIds?.includes(a.id) &&
       a.startMin - a.prepMin < endM &&
       startM < a.startMin + a.durationMin + a.resetMin,
   );
@@ -292,7 +295,7 @@ export async function bookingCheck(trx: Trx, req: CheckReq): Promise<Refusal | n
     return refuse('SLOT_HELD', {}, 'Somebody is paying for that time right now');
   // The room is taken exactly as long as the employee.
   const rooms = loc.rooms || 2;
-  const busyRooms = await busyRoomsAt(trx, req.locationId, req.date, startM, endM, req.ignoreId);
+  const busyRooms = await busyRoomsAt(trx, req.locationId, req.date, startM, endM, req.ignoreId, req.ignoreIds);
   if (busyRooms >= rooms)
     return refuse('ROOMS_FULL', { rooms, loc: loc.name }, `All ${rooms} rooms at ${loc.name} are taken then`);
   return null;
@@ -307,6 +310,7 @@ async function busyRoomsAt(
   startM: number,
   endM: number,
   ignoreId?: string | undefined,
+  ignoreIds?: readonly string[] | undefined,
 ): Promise<number> {
   const roomRows = await trx
     .selectFrom('appointments')
@@ -319,6 +323,7 @@ async function busyRoomsAt(
   return roomRows.filter(
     (a) =>
       a.id !== ignoreId &&
+      !ignoreIds?.includes(a.id) &&
       a.startMin - a.prepMin < endM &&
       startM < a.startMin + a.durationMin + a.resetMin,
   ).length;
@@ -627,7 +632,7 @@ export async function confirmBooking(
 
   const loc = await trx
     .selectFrom('locations')
-    .select(['tenantId', 'name'])
+    .select(['tenantId', 'name', 'cancelHours'])
     .where('id', '=', req.locationId)
     .executeTakeFirst();
   if (!loc) throw new BookingError('NOT_FOUND', 'Unknown location');
@@ -783,6 +788,9 @@ export async function confirmBooking(
       deposit: req.deposit,
       paid: req.deposit ? 'deposit' : 'unpaid',
       idempotencyKey: req.key,
+      // The cancellation window as promised at booking — the terms
+      // accepted then govern this visit (docs/BOOKING-CHANGES.md §2.4).
+      cancelHours: loc.cancelHours,
     })
     .returning('id')
     .executeTakeFirstOrThrow();
@@ -882,6 +890,20 @@ export async function patchAppointment(
       .insertInto('appointmentHistory')
       .values({ tenantId: a.tenantId, appointmentId: id, what: 'Moved', byName: '', source: 'staff' })
       .execute();
+  }
+  if (patch.status === 'cancelled' && a.status !== 'cancelled') {
+    // One door for every cancellation (Alex, 2026-09-30): the facts
+    // (when, by whom, why), the whole visit, the refund intent, the
+    // released slot and the customer's word all live in changes.service.
+    const { cancelVisit } = await import('./changes.service.js');
+    const actor = await trx.selectFrom('employees').select('name').where('id', '=', claims.sub).executeTakeFirst();
+    await cancelVisit(trx, {
+      appointmentId: id,
+      by: 'salon',
+      actor: { employeeId: claims.sub, name: actor?.name ?? '' },
+      reason: patch.reason ?? null,
+    });
+    return toContract(trx, id);
   }
   if (patch.status && patch.status !== a.status) {
     await trx
@@ -1058,6 +1080,8 @@ async function freeFor(
     pool: string[];
     anyEmployee: boolean;
     key?: string | undefined;
+    /** The visit being moved, if any — its own legs never block it. */
+    ignoreIds?: readonly string[] | undefined;
     /** Why candidates fell away, for the door to explain a blank day. */
     stats?: PaceStats | undefined;
   },
@@ -1087,6 +1111,7 @@ async function freeFor(
       emp,
       sid: q.leg.serviceId,
       key: q.key,
+      ignoreIds: q.ignoreIds,
       prepMin: q.leg.prepMin,
       resetMin: q.leg.resetMin,
     });
@@ -1096,7 +1121,7 @@ async function freeFor(
 }
 
 /** When each treatment starts, given when the visit starts. */
-function legStarts(startMin: number, legs: ChainLeg[]): number[] {
+export function legStarts(startMin: number, legs: { treatmentMin: number; prepMin: number; resetMin: number }[]): number[] {
   const out: number[] = [];
   let t = startMin;
   legs.forEach((leg, i) => {
@@ -1150,6 +1175,8 @@ export async function chainAvailability(
     employeeId: string | 'any';
     date: string;
     key?: string | undefined;
+    /** The visit being moved (a reschedule): its own legs are not in the way. */
+    ignoreIds?: readonly string[] | undefined;
     /** The clock, for tests; the wall clock otherwise. */
     now?: Date | undefined;
   },
@@ -1191,6 +1218,7 @@ export async function chainAvailability(
         pool: pools[i]!,
         anyEmployee: q.employeeId === 'any',
         key: q.key,
+        ignoreIds: q.ignoreIds,
         stats,
       });
       if (!who) {

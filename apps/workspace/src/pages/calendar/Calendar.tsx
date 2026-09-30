@@ -3,8 +3,8 @@ import { AppointmentSchema } from '@velnes/contracts';
 import { empColorOf, I, Icon } from '@velnes/ui';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useLocation } from 'react-router-dom';
-import { useAppointments, useEmployees, useLocations } from '../../api/queries.js';
+import { useLocation, useSearchParams } from 'react-router-dom';
+import { useAppointments, useChangeRequests, useEmployees, useLocations } from '../../api/queries.js';
 import { get, useSession } from '@velnes/client';
 import { useOutsideClose } from '../../lib/pop.js';
 import { useScope } from '../../shell/Shell.js';
@@ -120,7 +120,7 @@ function Event({
         />
       ) : null}
       <button
-        className={`event ${a.kind} ev-${evTone(a, category)}${paint ? ' ev-emp' : ''}${a.status === 'requested' ? ' ev-requested' : ''}`}
+        className={`event ${a.kind} ev-${evTone(a, category)}${paint ? ' ev-emp' : ''}${a.status === 'requested' ? ' ev-requested' : ''}${a.status === 'cancelled' ? ' ev-cancelled' : ''}`}
         style={
           {
             top: `${top}%`,
@@ -276,7 +276,14 @@ export function CalendarPage() {
   const [view, setView] = useState<'day' | 'week'>('day');
   const [date, setDate] = useState(localIso(new Date()));
   // A bell entry opens its appointment: jump to its day, open the drawer.
-  const asked = (useLocation().state as { appointment?: string } | null)?.appointment;
+  // A mail's link does the same with `?appointment=`; the navigation
+  // search opens the requests inbox with `?requests=1`.
+  const [search] = useSearchParams();
+  const asked = (useLocation().state as { appointment?: string } | null)?.appointment ?? search.get('appointment') ?? undefined;
+  const [showCancelled, setShowCancelled] = useState(true);
+  const [inbox, setInbox] = useState(search.get('requests') === '1');
+  const requests = useChangeRequests('pending');
+  const pending = requests.data?.requests ?? [];
   useEffect(() => {
     if (!asked) return;
     let live = true;
@@ -327,12 +334,14 @@ export function CalendarPage() {
   // One query per scoped location, merged.
   const appts = useAppointments(scopeLocs[0] ?? null, from, to);
   const appts2 = useAppointments(scopeLocs[1] ?? null, from, to);
+  // Cancelled visits stay on the grid, muted (Alex, 2026-09-30): there
+  // WAS an appointment here, and the filter can hide them, not history.
   const list = useMemo(
     () =>
       [...(appts.data?.appointments ?? []), ...(appts2.data?.appointments ?? [])].filter(
-        (a) => a.status !== 'cancelled' && (calEmp === 'all' || a.employeeId === calEmp),
+        (a) => (showCancelled || a.status !== 'cancelled') && (calEmp === 'all' || a.employeeId === calEmp),
       ),
-    [appts.data, appts2.data, calEmp],
+    [appts.data, appts2.data, calEmp, showCancelled],
   );
 
   const today = localIso(new Date());
@@ -518,6 +527,18 @@ export function CalendarPage() {
                 </div>
                 <div className="filterrow">
                   <span className="fi">
+                    <Icon d={I.x} size={20} />
+                  </span>
+                  <span className="fl">{t('cal.showCancelled')}</span>
+                  <input
+                    type="checkbox"
+                    aria-label={t('cal.showCancelled')}
+                    checked={showCancelled}
+                    onChange={(e) => setShowCancelled(e.target.checked)}
+                  />
+                </div>
+                <div className="filterrow">
+                  <span className="fi">
                     <Icon d={I.users} size={20} />
                   </span>
                   <span className="fl">{t('cal.employeesFilter')}</span>
@@ -540,6 +561,44 @@ export function CalendarPage() {
               </div>
             ) : null}
           </div>
+        </div>
+        <div className="pop" style={{ marginLeft: 'auto' }}>
+          <button
+            className={`btn btn-secondary btn-pill${inbox ? ' open' : ''}${pending.length ? ' has-requests' : ''}`}
+            aria-haspopup="menu"
+            aria-expanded={inbox}
+            onClick={() => setInbox((v) => !v)}
+          >
+            {t('cal.requests')}
+            {pending.length ? <span className="badge warning" style={{ marginLeft: 6 }}>{pending.length}</span> : null}
+          </button>
+          {inbox ? (
+            <div className="menu menu-right menu-wide" role="menu" aria-label={t('cal.requests')}>
+              {pending.length ? (
+                pending.map((r) => (
+                  <button
+                    key={r.id}
+                    className="menu-item"
+                    role="menuitem"
+                    onClick={() => {
+                      setInbox(false);
+                      void get(AppointmentSchema, `/appointments/${r.appointmentId}`).then((a) => {
+                        setDate(a.date);
+                        setDrawer({ open: true, appointment: a });
+                      });
+                    }}
+                  >
+                    <span className="bold">{r.customerName}</span>
+                    <span className="muted" style={{ display: 'block', fontSize: 12 }}>
+                      {r.serviceName} · {r.originalDate.slice(5)} {r.originalTime} → {r.requestedDate.slice(5)} {r.requestedTime}
+                    </span>
+                  </button>
+                ))
+              ) : (
+                <div className="menu-item muted">{t('cal.noRequests')}</div>
+              )}
+            </div>
+          ) : null}
         </div>
         <button className="btn btn-primary" onClick={() => setDrawer({ open: true })}>
           {t('cal.add')} <Icon d={I.plus} size={20} w={2.5} />

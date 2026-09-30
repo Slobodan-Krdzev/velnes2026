@@ -1,5 +1,6 @@
 import { startMailLoop } from './modules/mail/mail.sender.js';
 import { startReviewReminderLoop } from './modules/reviews/reviews.service.js';
+import { startRefundLoop } from './modules/payments/refunds.service.js';
 import { buildServer } from './server.js';
 
 const app = await buildServer();
@@ -7,6 +8,9 @@ const app = await buildServer();
 startMailLoop();
 // Reviews: the one "how was your visit?" a day after a completed visit.
 startReviewReminderLoop();
+// Refunds: the intents a cancellation left behind, and the provider's
+// refusals, tried again until they clear or give up.
+startRefundLoop();
 
 const port = Number(process.env.PORT ?? 3001);
 // Production sits behind a reverse proxy on the same box: bind to

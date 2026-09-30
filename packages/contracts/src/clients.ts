@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { MoneySchema } from './catalog.js';
 import { AVATAR_MAX_CHARS } from './auth.js';
-import { ClockSchema } from './scheduling.js';
+import { ClockSchema, AppointmentHistoryEntrySchema, CancelBlockedReasonSchema, CancellationSchema, ChangeRequestSchema, PaymentSummarySchema, RefundSummarySchema } from './scheduling.js';
 import { ClientReviewSchema } from './reviews.js';
 
 /** Client users: the ordinary people who book through the consumer
@@ -137,6 +137,27 @@ export const ClientAppointmentSchema = z.object({
    *  time left to pick. */
   variantId: z.uuid().nullable().default(null),
   modifierOptionIds: z.array(z.uuid()).default([]),
+  /**
+   * Booking changes (2026-09-30) — docs/BOOKING-CHANGES.md. Rights are
+   * the server's decision; the window is the one accepted at booking
+   * (`cancelHours` above is that snapshot); the active or last change
+   * request, the cancellation as a fact, the payment and refund state
+   * and the visit's timeline.
+   */
+  canReschedule: z.boolean().default(false),
+  canCancel: z.boolean().default(false),
+  cancelDeadline: z.iso.datetime().nullable().default(null),
+  cancelBlockedReason: CancelBlockedReasonSchema.nullable().default(null),
+  changeRequest: ChangeRequestSchema.nullable().default(null),
+  cancellation: CancellationSchema.nullable().default(null),
+  payment: PaymentSummarySchema.default({ status: 'unpaid', method: null, amount: null }),
+  refund: RefundSummarySchema.nullable().default(null),
+  history: z.array(AppointmentHistoryEntrySchema).default([]),
+});
+/** A new time for the visit — the whole visit moves by its own geometry. */
+export const ClientRescheduleRequestSchema = z.object({
+  date: z.iso.date(),
+  time: ClockSchema,
 });
 export const ClientAppointmentsSchema = z.object({
   appointments: z.array(ClientAppointmentSchema),

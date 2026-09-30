@@ -22,6 +22,7 @@ const appointment = {
   id: APPT, ref: 'AAAAAAAA', salonName: 'Velnes Fizio Centar', salonSlug: 'velnes-fizio', locationName: 'Centar', locationAddress: 'Makedonija 12', lat: null, lng: null,
   serviceName: 'Sports massage · 60 min', employeeName: 'Maria Petrovska', date: '2026-09-20', time: '10:00', end: '11:00', durationMin: 60, price: 2400, status: 'booked', paid: false, cancelHours: 24,
   completed: true, canReview: false, review: null, serviceId: SVC, employeeId: EMP, locationId: LOC, variantId: VAR, modifierOptionIds: [OPT],
+  canReschedule: true, canCancel: true, cancelDeadline: null, cancelBlockedReason: null, changeRequest: null, cancellation: null, payment: { status: 'unpaid', method: null, amount: null }, refund: null, history: [],
 };
 const detail = {
   id: '10000000-0000-4000-8000-000000000001', slug: 'velnes-fizio', name: 'Velnes Fizio Centar', city: 'Skopje', address: 'Makedonija 12', phone: null,

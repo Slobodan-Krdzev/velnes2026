@@ -88,10 +88,24 @@ export const CustomerApptRowSchema = z.object({
   status: z.string(),
   source: z.string(),
   price: MoneySchema,
+  /** Who cancelled, when the row is cancelled — never inferred. */
+  cancelledBy: z.enum(['customer', 'salon', 'system', 'hq']).nullable().default(null),
+});
+/** Factual counts from the appointment statuses — operational history,
+ *  never a score. A reschedule, a declined request or a kept original is
+ *  not a cancellation; a salon's cancellation is not the customer's. */
+export const CustomerApptStatsSchema = z.object({
+  total: z.number().int(),
+  completed: z.number().int(),
+  upcoming: z.number().int(),
+  cancelledByCustomer: z.number().int(),
+  cancelledBySalon: z.number().int(),
+  noShows: z.number().int(),
 });
 export const CustomerApptsSchema = z.object({
   upcoming: z.array(CustomerApptRowSchema),
   history: z.array(CustomerApptRowSchema),
+  stats: CustomerApptStatsSchema.default({ total: 0, completed: 0, upcoming: 0, cancelledByCustomer: 0, cancelledBySalon: 0, noShows: 0 }),
 });
 
 export const CustomerInvoiceRowSchema = z.object({

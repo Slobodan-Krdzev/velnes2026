@@ -76,13 +76,56 @@ export interface AppointmentHistory {
   at: Generated<Timestamp>;
   byName: Generated<string>;
   id: Generated<string>;
+  meta: Json | null;
   source: Generated<string>;
   tenantId: string;
   what: string;
 }
+export interface BookingChangeRequests {
+  appointmentId: string;
+  createdAt: Generated<Timestamp>;
+  customerDecision: string | null;
+  decidedAt: Timestamp | null;
+  declineReason: string | null;
+  id: Generated<string>;
+  kind: Generated<string>;
+  originalDate: Timestamp;
+  originalDurationMin: number;
+  originalEmployeeId: string | null;
+  originalStartMin: number;
+  requestedAt: Generated<Timestamp>;
+  requestedByClientUserId: string | null;
+  requestedDate: Timestamp;
+  requestedEmployeeId: string | null;
+  requestedStartMin: number;
+  resolvedAt: Timestamp | null;
+  resolvedByEmployeeId: string | null;
+  status: Generated<string>;
+  tenantId: string;
+}
+export interface Refunds {
+  amount: number;
+  appointmentId: string;
+  attempts: Generated<number>;
+  chargeRef: string | null;
+  completedAt: Timestamp | null;
+  failureReason: string | null;
+  id: Generated<string>;
+  invoiceId: string;
+  method: string;
+  provider: string;
+  providerRef: string | null;
+  requestedAt: Generated<Timestamp>;
+  status: Generated<string>;
+  tenantId: string;
+}
 
 export interface Appointments {
   anyEmp: Generated<boolean>;
+  cancelHours: number | null;
+  cancelledAt: Timestamp | null;
+  cancelledBy: string | null;
+  cancelReason: string | null;
   clientUserId: string | null;
   createdAt: Generated<Timestamp>;
   customerId: string | null;
@@ -693,6 +736,7 @@ export interface MailOutbox {
 }
 
 export interface MemberRecs {
+  slotKey: string | null;
   candidates: Json;
   createdAt: Generated<Timestamp>;
   date: Timestamp;
@@ -1212,6 +1256,7 @@ export interface Widgets {
 export interface DB {
   appointmentHistory: AppointmentHistory;
   appointments: Appointments;
+  bookingChangeRequests: BookingChangeRequests;
   assistantActions: AssistantActions;
   assistantDrafts: AssistantDrafts;
   auditLog: AuditLog;
@@ -1269,6 +1314,7 @@ export interface DB {
   purchaseOrderLines: PurchaseOrderLines;
   purchaseOrders: PurchaseOrders;
   refreshTokens: RefreshTokens;
+  refunds: Refunds;
   registrations: Registrations;
   reviewReminders: ReviewReminders;
   reviews: Reviews;
