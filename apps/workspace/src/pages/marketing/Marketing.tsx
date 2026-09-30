@@ -22,6 +22,7 @@ import { Toggle } from '../settings/bits.js';
 import { useLocations } from '../../api/queries.js';
 import { money } from '../../lib/money.js';
 import { useToast } from '../../lib/toast.js';
+import { ReviewsPage } from '../reviews/Reviews.js';
 
 /** viewMarketing: discounts, offers (last-minute + personal),
  *  Velnes Premium (rules, recommendations, staged member offers).
@@ -56,6 +57,9 @@ const hhmm = (m: number) =>
 
 export function MarketingPage() {
   const { t } = useTranslation();
+  // Reviews live here (Alex, 2026-09-30), for whoever may see them.
+  const { can } = useSession();
+  const tabs = TABS.filter(([k]) => k !== 'reviews' || can('reviews.view'));
   // `?tab=` from the navigation search, or the flightdeck's route state
   // (which this page used to ignore) — either names the tab to open.
   const [params] = useSearchParams();
@@ -75,7 +79,7 @@ export function MarketingPage() {
       <div className="card">
         <div style={{ padding: '16px 20px 0' }}>
           <div className="tabs">
-            {TABS.map(([k, label]) => (
+            {tabs.map(([k, label]) => (
               <button key={k} className={`tab ${tab === k ? 'active' : ''}`} onClick={() => setTab(k)}>
                 {t(label)}
               </button>
@@ -87,7 +91,7 @@ export function MarketingPage() {
         {tab === 'premium' ? <Premium /> : null}
         {tab === 'waiting' ? <Soon body={t('mkt.waitingSoon')} /> : null}
         {tab === 'loyalty' ? <Soon body={t('mkt.loyaltySoon')} /> : null}
-        {tab === 'reviews' ? <Soon body={t('mkt.reviewsSoon')} /> : null}
+        {tab === 'reviews' && can('reviews.view') ? <ReviewsPage /> : null}
         {tab === 'campaigns' ? <Soon body={t('mkt.campaignsSoon')} /> : null}
       </div>
     </>

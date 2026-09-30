@@ -8,9 +8,9 @@ import { useLocations } from '../../api/queries.js';
 import './reviews.css';
 
 /**
- * Reviews (Alex, 2026-09-30): what customers said after completed
- * appointments — the salon's score, its parts, each professional's own
- * score, and the list. Read-only: nothing here edits, hides or deletes
+ * Reviews (Alex, 2026-09-30): Marketing › Reviews — what customers said
+ * after completed appointments: the salon's score, its parts, each
+ * professional's own score, and the list. Read-only: nothing here edits, hides or deletes
  * a review, and there is no door that could. A `?review=` in the URL
  * (the bell's notice) opens with that one highlighted.
  */
@@ -60,8 +60,8 @@ export function ReviewsPage() {
   const filtered = Boolean(loc || emp || stars);
 
   return (
-    <div className="stacked">
-      <div className="card">
+    <div className="rvw">
+      <div>
         <div className="card-header">
           <h2>{t('rvw.title')}</h2>
           <span className="muted" style={{ fontWeight: 500 }}>{t('rvw.readOnly')}</span>
@@ -101,8 +101,8 @@ export function ReviewsPage() {
       </div>
 
       {s && s.count > 0 ? (
-        <div className="grid2">
-          <div className="card">
+        <div className="grid2 rvw-cols">
+          <div>
             <div className="card-header"><h2>{t('rvw.byProfessional')}</h2></div>
             <table className="tbl">
               <tbody>
@@ -117,7 +117,7 @@ export function ReviewsPage() {
               </tbody>
             </table>
           </div>
-          <div className="card">
+          <div>
             <div className="card-header"><h2>{t('rvw.byLocation')}</h2></div>
             <table className="tbl">
               <tbody>
@@ -136,7 +136,7 @@ export function ReviewsPage() {
       ) : null}
 
       {!none ? (
-        <div className="card">
+        <div>
           <div className="card-header">
             <h2>{t('rvw.list')}</h2>
             <div className="rvw-filters">

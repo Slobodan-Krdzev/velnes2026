@@ -125,9 +125,9 @@ scan needs one more branch and nothing else changes.
   spread, five newest, "Show more"); result cards, recommendation cards
   and team rows show "★ 4.8 (127)" through one `Stars`/`RatingChip`
   component; the star input is a radio group.
-- **Workspace**: `/reviews` is a sidebar destination (permission
-  `reviews.view`, icon sparkle, in the navigation search); the page
-  shows the score, the parts, per-professional and per-location
+- **Workspace**: Marketing › Reviews (Alex: not a top-level tile;
+  `/marketing?tab=reviews`, permission `reviews.view`, in the
+  navigation search as Marketing › Reviews); the tab shows the score, the parts, per-professional and per-location
   scores, and the filterable list; the team table shows each
   professional's line; the bell's `review` notice opens the review.
   Nothing edits.

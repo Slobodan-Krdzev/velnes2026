@@ -26,3 +26,6 @@
 .rvw-item p{margin:8px 0 0;font-size:14px;line-height:1.5;color:var(--ink)}
 .rvw-item-f{margin-top:8px;font-size:12px}
 @media (max-width:900px){.rvw-summary{grid-template-columns:1fr}}
+.rvw{display:grid}
+.rvw > div + div{border-top:1px solid var(--line-soft,#F0EAE7)}
+.rvw-cols > div + div{border-left:1px solid var(--line-soft,#F0EAE7)}
