@@ -1440,3 +1440,27 @@ a.pop-go:hover {
     margin-right: 24px;
   }
 }
+
+/* ── The site footer under every route (Alex, 2026-09-30) ─────────
+   It lives outside the pages, in wrappers of its own, so it must not
+   claim a screen's height; and a page ends where its content ends —
+   the 86px the prototype's home page kept under its own footer would
+   now be a hole above it. The salon page's fixed Book-now bar needs
+   its clearance *after* the footer, or the bar covers the footer's
+   last lines. */
+.d-env.site-foot,
+.m-env.site-foot {
+  min-height: 0;
+}
+@media (max-width: 899.98px) {
+  .m-page {
+    padding-bottom: 24px;
+  }
+  .m-page.has-bar {
+    padding-bottom: 24px;
+  }
+  /* The bar with its booking card is ~150px above the tab bar. */
+  .m-env:has(.m-page.has-bar) ~ .m-env.site-foot .m-foot {
+    padding-bottom: calc(20px + 156px);
+  }
+}

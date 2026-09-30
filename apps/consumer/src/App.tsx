@@ -7,6 +7,7 @@ import { BookingProvider } from './features/booking/store.js';
 import { BookConfirmed, BookIdentity, BookProfile, BookReview } from './features/booking/steps.js';
 import { BookPay } from './features/booking/pay.js';
 import { MobileChrome } from './app/MobileChrome.js';
+import { SiteFooter } from './app/SiteFooter.js';
 import { Premium } from './features/premium/Premium.js';
 import { DHeader } from './app/chrome.js';
 import { Home } from './features/discovery/Home.js';
@@ -103,6 +104,8 @@ export function App() {
               <Route path="/account/appointments/:id" element={<MyVelnes section="appts" />} />
               <Route path="*" element={<Home />} />
             </Routes>
+            {/* The footer, once, under every route. */}
+            <SiteFooter />
           </SearchSheetProvider>
           </BrowserRouter>
           </BookingProvider>

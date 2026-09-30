@@ -425,6 +425,19 @@ a salon with none falls back to the prototype's decorative image, which
 is the one place the app still shows a picture that is not the salon's
 own.
 
+## The footer, under every route (2026-09-30)
+
+The site footer is `app/SiteFooter.tsx`, rendered once in `App` after
+the routes (Alex, 2026-09-30: "visible on all pages"). The markup is
+the home page's, verbatim, in both environments, each wrapper hiding
+itself on the other side of 900px like the pages do; the home no longer
+carries its own. A phone page now ends 24px under its content instead
+of the prototype's 86px (that was room under the home's own footer, and
+would be a hole above this one), and the salon page's fixed Book-now
+bar gets its clearance after the footer rather than before it — the
+`:has()` rule in `overrides.css` — so the bar never covers the
+copyright line.
+
 ## The phone home, re-ordered (2026-09-29)
 
 Search is the phone home's hero and nothing competes with it in the
