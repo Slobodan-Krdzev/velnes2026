@@ -535,6 +535,20 @@ export function MyVelnes({ section = 'over' }: { section?: SecId }) {
                       <span>{t('c.acc.reference')}</span>
                       <b>{current.ref}</b>
                     </div>
+                    {bucketOf(current) !== 'up' ? (
+                      <div className="acc-actions">
+                        {current.canReview && !(reviewOpen || wantReview) ? (
+                          <button className="btn btn-p" onClick={() => setReviewOpen(true)}>
+                            {t('c.rv.write')}
+                          </button>
+                        ) : null}
+                        {current.salonSlug ? (
+                          <button className={`btn ${current.canReview && !(reviewOpen || wantReview) ? 'btn-g' : 'btn-p'}`} onClick={() => nav(`/salon/${current.salonSlug}`)}>
+                            {t('c.acc.bookAgain')}
+                          </button>
+                        ) : null}
+                      </div>
+                    ) : null}
                   </div>
                   {current.locationAddress || current.lat != null ? (
                     <div className="acc-card">
@@ -608,17 +622,6 @@ export function MyVelnes({ section = 'over' }: { section?: SecId }) {
                       {current.review ? <ReviewGiven r={current.review} /> : null}
                       {current.canReview && (reviewOpen || wantReview) ? (
                         <ReviewForm a={current} onDone={() => { setReviewOpen(false); setReviewDone(true); }} />
-                      ) : current.canReview ? (
-                        <button className="btn btn-p" style={{ width: '100%' }} onClick={() => setReviewOpen(true)}>
-                          {t('c.rv.write')}
-                        </button>
-                      ) : null}
-                      {current.salonSlug ? (
-                        <button
-                          className="btn btn-g"
-                          style={{ width: '100%' }}
-                          onClick={() => nav(`/salon/${current.salonSlug}`)}
-                        >{t('c.acc.bookAgain')}</button>
                       ) : null}
                     </>
                   )}

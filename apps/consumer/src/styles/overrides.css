@@ -1602,3 +1602,7 @@ a.pop-go:hover {
 .rv-item p{margin:8px 0 6px;font-size:14.5px;line-height:1.55;color:var(--text)}
 .rv-item-f .vok,.rv-given .vok{color:var(--ok);font-weight:800}
 @media (max-width:480px){.rv-head{grid-template-columns:1fr}.rv-dims{grid-template-columns:1fr 1fr 1fr;gap:6px}.rv-dims b{font-size:15px}}
+
+/* The past visit's actions, in its own card (Alex, 2026-09-30). */
+.acc-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}
+.acc-actions .btn{flex:1 1 160px}
