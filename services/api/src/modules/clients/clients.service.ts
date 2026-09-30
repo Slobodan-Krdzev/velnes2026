@@ -35,6 +35,8 @@ interface ClientRow {
   createdAt: Date;
   personalisedResults: boolean;
   locationAllowed: boolean | null;
+  /** Velnes Loyalty's cached balance (docs/LOYALTY.md). */
+  loyaltyPoints?: number;
 }
 
 export function toProfile(c: ClientRow): ClientProfile {
@@ -51,6 +53,7 @@ export function toProfile(c: ClientRow): ClientProfile {
     since: isoDate(c.createdAt)!,
     personalisedResults: c.personalisedResults,
     locationAllowed: c.locationAllowed,
+    loyaltyPoints: c.loyaltyPoints ?? 0,
   };
 }
 

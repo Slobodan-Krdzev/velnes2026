@@ -1626,3 +1626,19 @@ a.pop-go:hover {
 .btn-danger:hover{background:#9A4418;border-color:#9A4418}
 
 .rs-pick .btn:disabled,.rs-confirm .btn:disabled,.cx-confirm .btn:disabled{opacity:.55;cursor:not-allowed}
+
+/* Velnes Loyalty (Alex, 2026-09-30): the flower in the brand colour, a
+   balance that reads like a balance, a ledger that reads like a story. */
+.loy-ic{display:inline-grid;place-items:center;width:40px;height:40px;border-radius:12px;background:var(--warm);color:var(--brand);flex:0 0 auto}
+.loy-ic.big{width:56px;height:56px;border-radius:16px;margin:0 auto 8px}
+.loy-ic.big svg{width:30px;height:30px}
+.loy-balance{font-weight:800;color:var(--brand-hover);font-size:16px}
+.loy-hero{text-align:center;padding-top:22px}
+.loy-big{font-family:var(--serif,inherit);font-size:44px;font-weight:800;line-height:1;color:var(--ink);letter-spacing:-.5px}
+.loy-row .loy-what{display:block}
+.loy-delta{color:#3E5A34;white-space:nowrap}
+.loy-delta.neg{color:#B4531F}
+.loy-earned{margin-top:8px;display:inline-block;padding:4px 12px;border-radius:999px;background:var(--warm);color:var(--brand-hover);font-weight:800}
+
+.loy-row > span:first-child{flex:1;text-align:left}
+.loy-row .loy-what{text-align:left;color:var(--ink)}

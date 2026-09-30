@@ -151,6 +151,15 @@ export const HQ_NAV: NavEntry<HqCtx>[] = [
     go: { tab: 'search', sub: 'hq-misses' },
   },
   {
+    id: 'hq.loyalty', title: 'hq.loyalty', crumbs: ['hq.tabCustomers'], icon: I.users,
+    aliases: {
+      en: ['loyalty', 'points', 'loyalty points', 'rewards', 'velnes points', 'consumer points', 'balance'],
+      mk: ['лојалност', 'поени', 'поени за лојалност', 'награди', 'velnes поени', 'салдо'],
+      sq: ['besnikëri', 'pikë', 'pikë besnikërie', 'shpërblime', 'pikë velnes', 'bilanci'],
+    },
+    go: { tab: 'customers', sub: 'hq-loyalty' },
+  },
+  {
     id: 'hq.audit', title: 'hq.tabAudit', crumbs: [], icon: I.note,
     aliases: {
       en: ['platform log', 'audit log', 'audit', 'history', 'who did what', 'activity'],

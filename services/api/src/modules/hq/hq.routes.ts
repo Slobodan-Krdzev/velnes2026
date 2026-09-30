@@ -1,4 +1,5 @@
 import { env } from '../../env.js';
+import { loyaltyLookup } from '../loyalty/loyalty.service.js';
 import {
   HqApproveResponseSchema,
   HqAuditListSchema,
@@ -15,6 +16,7 @@ import {
   HqBrandCreateSchema,
   HqBrandListSchema,
   HqOutboxListSchema,
+  HqLoyaltyLookupSchema,
   HqRoleCreateSchema,
   HqRoleListSchema,
   HqRolePatchSchema,
@@ -1137,6 +1139,23 @@ export function hqRoutes(app: FastifyInstance) {
         await trx.deleteFrom('hqUsers').where('id', '=', u.id).execute();
         return { ok: true as const };
       });
+    },
+  });
+
+  /** Velnes Loyalty (2026-09-30): support's read-only window on one
+   *  account's ledger, by email. No adjustment door in V1. */
+  r.route({
+    method: 'GET',
+    url: '/hq/loyalty',
+    preHandler: [app.authenticateHq],
+    schema: {
+      querystring: z.object({ email: z.string().min(3).max(200) }),
+      response: { 200: HqLoyaltyLookupSchema, 404: z.object({ error: z.string(), message: z.string() }) },
+    },
+    handler: async (req, reply) => {
+      const out = await loyaltyLookup(req.query.email);
+      if (!out) return reply.code(404).send({ error: 'NOT_FOUND', message: 'No account with that address' });
+      return out;
     },
   });
 

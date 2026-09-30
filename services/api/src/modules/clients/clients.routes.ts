@@ -29,6 +29,7 @@ import {
   ClientRescheduleRequestSchema,
   ChangeRequestSchema,
   AvailabilityResponseSchema,
+  LoyaltyAccountSchema,
 } from '@velnes/contracts';
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
@@ -51,6 +52,8 @@ import {
   type Leg,
 } from '../booking/changes.service.js';
 import { processRefund } from '../payments/refunds.service.js';
+import { awardRegistration, awardReview, loyaltyAccountOf } from '../loyalty/loyalty.service.js';
+import { createI18n } from '@velnes/i18n';
 import { afterBooked } from '../booking/requests.service.js';
 import { payAppointment, quotePayment } from '../payments/payments.service.js';
 import { randomBytes } from 'node:crypto';
@@ -489,12 +492,22 @@ export async function clientRoutes(app: FastifyInstance) {
     handler: async (req, reply) => {
       try {
         const c = await verifyClientEmail(req.body.email, req.body.code);
-        await notifyClient(c.id, {
-          kind: 'account',
-          title: 'Welcome to Velnes',
-          body: 'Your account is ready. Find a salon and book your first appointment.',
-          refType: 'general',
-        });
+        // Velnes Loyalty (2026-09-30): the welcome bonus lands on the
+        // first verification, once — the ledger's unique source sees to
+        // it — and the welcome bell says the number. A repeated verify
+        // awards nothing and rings nothing.
+        const bonus = await awardRegistration(c.id);
+        // The session's profile carries the balance as it now is.
+        c.loyaltyPoints = (c.loyaltyPoints ?? 0) + bonus;
+        if (bonus) {
+          const t = createI18n((['en', 'mk', 'sq'] as const).includes(c.lang as 'en') ? (c.lang as 'en' | 'mk' | 'sq') : 'en').t;
+          await notifyClient(c.id, {
+            kind: 'account',
+            title: t('loy.welcomeTitle'),
+            body: t('loy.welcomeBody', { n: bonus }),
+            refType: 'loyalty',
+          });
+        }
         return await session(c, reply);
       } catch (e) {
         return fail(reply, e);
@@ -798,7 +811,15 @@ export async function clientRoutes(app: FastifyInstance) {
     },
     handler: async (req, reply) => {
       try {
-        return await submitReview(req.clientClaims.sub, req.params.id, req.body);
+        const review = await submitReview(req.clientClaims.sub, req.params.id, req.body);
+        // Velnes Loyalty: the review's own points, once per review (the
+        // review id is the source). The thank-you card says the number;
+        // no second bell rings for it.
+        const tenantId = await withClient(req.clientClaims.sub, (trx) =>
+          trx.selectFrom('appointments').select('tenantId').where('id', '=', req.params.id).executeTakeFirst(),
+        );
+        const loyaltyPoints = await awardReview(req.clientClaims.sub, review.id, tenantId?.tenantId ?? '');
+        return { ...review, ...(loyaltyPoints ? { loyaltyPoints } : {}) };
       } catch (e) {
         if (e instanceof ReviewError) {
           const status = e.code === 'NOT_FOUND' ? 404 : 409;
@@ -807,6 +828,18 @@ export async function clientRoutes(app: FastifyInstance) {
         throw e;
       }
     },
+  });
+
+  // ---- Velnes Loyalty (2026-09-30) — docs/LOYALTY.md ---------------
+
+  /** The account's own balance and ledger, newest first. Read only:
+   *  nothing a client sends can move a point. */
+  r.route({
+    method: 'GET',
+    url: '/me/loyalty',
+    preHandler: [app.authenticateClient],
+    schema: { response: { 200: LoyaltyAccountSchema } },
+    handler: async (req) => loyaltyAccountOf(req.clientClaims.sub),
   });
 
   // ---- the bell ----------------------------------------------------

@@ -315,8 +315,22 @@ export interface ClientNotifications {
   title: string;
 }
 
+export interface ClientLoyaltyLedger {
+  clientUserId: string;
+  createdAt: Generated<Timestamp>;
+  createdBy: Generated<string>;
+  id: Generated<string>;
+  meta: Generated<Json>;
+  note: string | null;
+  points: number;
+  sourceId: string | null;
+  sourceType: string | null;
+  tenantId: string | null;
+  type: string;
+}
 export interface ClientUsers {
   avatar: string | null;
+  loyaltyPoints: Generated<number>;
   createdAt: Generated<Timestamp>;
   dob: Timestamp | null;
   email: string;
@@ -1268,6 +1282,7 @@ export interface DB {
   checkouts: Checkouts;
   clientCustomerLinks: ClientCustomerLinks;
   clientFavourites: ClientFavourites;
+  clientLoyaltyLedger: ClientLoyaltyLedger;
   clientNotifications: ClientNotifications;
   clientPaymentMethods: ClientPaymentMethods;
   clientUsers: ClientUsers;

@@ -7,13 +7,14 @@
  *   fixtures amenities --batch demo-2026-09   (give an older batch its amenities)
  *   fixtures reviews   --batch demo-2026-09   (verified reviews on completed fixture visits)
  *   fixtures changes   --batch demo-2026-09   (every reschedule / cancellation / refund state, one consumer)
+ *   fixtures loyalty   --batch demo-2026-09   (Velnes Loyalty ledgers in every shape)
  *
  * Needs the API connection (API_DATABASE_URL — the doors run under it)
  * and the owner connection (DATABASE_URL — tagging and removal cross
  * tenants, which RLS forbids the API role). On the VPS:
  *   node --env-file=/srv/velnes/api/.env /srv/velnes/api/fixtures.js add --batch demo --count 12
  */
-import { addFixtureBatch, addFixtureChanges, addFixtureReviews, backfillFixtureAmenities, FIXTURE_PASSWORD, listFixtureBatches, removeFixtureBatch } from './fixtures.js';
+import { addFixtureBatch, addFixtureChanges, addFixtureLoyalty, addFixtureReviews, backfillFixtureAmenities, FIXTURE_PASSWORD, listFixtureBatches, removeFixtureBatch } from './fixtures.js';
 
 const [cmd, ...rest] = process.argv.slice(2);
 const arg = (name: string) => {
@@ -58,12 +59,17 @@ try {
     if (!batch) throw new Error('--batch <name> is required');
     const r = await addFixtureChanges(batch, adminUrl);
     console.log(r.salons ? `Gave the first salon of batch "${batch}" ${r.appointments} visits in every change state — sign in as changes.client@fixture.velnes.test / ${FIXTURE_PASSWORD}.` : `No batch "${batch}" (or it already has them).`);
+  } else if (cmd === 'loyalty') {
+    const batch = arg('batch');
+    if (!batch) throw new Error('--batch <name> is required');
+    const r = await addFixtureLoyalty(batch, adminUrl);
+    console.log(r.rows ? `Wrote ${r.rows} Velnes Loyalty rows for ${r.consumers} consumers of batch "${batch}" (changes/welcome/active/quiet .client@fixture.velnes.test / ${FIXTURE_PASSWORD}).` : `No batch "${batch}" (or it already has them).`);
   } else if (cmd === 'list') {
     const rows = await listFixtureBatches(adminUrl);
     if (!rows.length) console.log('No fixture batches.');
     for (const r of rows) console.log(`${r.batch.padEnd(24)} ${String(r.salons).padStart(3)} salons   since ${new Date(r.since).toISOString().slice(0, 10)}`);
   } else {
-    console.log('usage: fixtures add --batch <name> [--count N] | remove --batch <name> | amenities --batch <name> | reviews --batch <name> | changes --batch <name> | list');
+    console.log('usage: fixtures add --batch <name> [--count N] | remove --batch <name> | amenities --batch <name> | reviews --batch <name> | changes --batch <name> | loyalty --batch <name> | list');
     process.exit(2);
   }
   const { closeDb } = await import('./index.js');

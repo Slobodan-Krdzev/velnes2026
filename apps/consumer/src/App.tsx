@@ -122,6 +122,7 @@ export function App() {
               <Route path="/account/favs" element={<MyVelnes section="favs" />} />
               <Route path="/account/notifs" element={<MyVelnes section="notifs" />} />
               <Route path="/account/cards" element={<MyVelnes section="cards" />} />
+              <Route path="/account/loyalty" element={<MyVelnes section="loyalty" />} />
               <Route path="/account/appointments/:id" element={<MyVelnes section="appts" />} />
               {/* The public information pages (2026-09-30), and a real
                   not-found page where the wildcard used to show the home. */}

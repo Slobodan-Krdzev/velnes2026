@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { BusinessSettingsSchema, type AmenityKey, type RegistrationDraft } from '@velnes/contracts';
+import { BusinessSettingsSchema, LOYALTY_RULES, appointmentPoints, type AmenityKey, type RegistrationDraft } from '@velnes/contracts';
 import argon2 from 'argon2';
 import { sql } from 'kysely';
 import pg from 'pg';
@@ -677,6 +677,157 @@ export async function addFixtureChanges(batch: string, adminUrl: string): Promis
     }
     await admin.query('COMMIT');
     return { salons: touched, appointments: made };
+  } catch (e) {
+    await admin.query('ROLLBACK').catch(() => undefined);
+    throw e;
+  } finally {
+    await admin.end();
+  }
+}
+
+/**
+ * Velnes Loyalty (Alex, 2026-09-30) — docs/LOYALTY.md §54: realistic
+ * ledgers on the batch's first salon. Consumer A (the booking-changes
+ * consumer, `changes.client@…`): the welcome bonus, a one-service
+ * visit, its review, a two-service visit with two products — every
+ * number from the rules, so the totals follow the confirmed formula.
+ * Plus: a welcome-only consumer, an active one with many rows, a
+ * consumer with none, and the visits that earn nothing (cancelled,
+ * no-show, completed and unreviewed) beside a rescheduled visit that
+ * earned exactly once. Rows are written directly, as the platform
+ * would have written them; idempotent per batch.
+ */
+export async function addFixtureLoyalty(batch: string, adminUrl: string): Promise<{ consumers: number; rows: number }> {
+  const admin = new pg.Client({ connectionString: adminUrl });
+  await admin.connect();
+  try {
+    const salon = (await admin.query(`SELECT id, name FROM businesses WHERE fixture_batch = $1 ORDER BY created_at LIMIT 1`, [batch])).rows[0] as { id: string; name: string } | undefined;
+    if (!salon) return { consumers: 0, rows: 0 };
+    const hash = await argon2.hash(FIXTURE_PASSWORD);
+    const loc = (await admin.query(`SELECT id FROM locations WHERE tenant_id = $1 ORDER BY created_at LIMIT 1`, [salon.id])).rows[0] as { id: string } | undefined;
+    const emp = (await admin.query(`SELECT id FROM employees WHERE tenant_id = $1 AND bookable ORDER BY created_at LIMIT 1`, [salon.id])).rows[0] as { id: string } | undefined;
+    const services = (await admin.query(`SELECT id, name FROM services WHERE tenant_id = $1 ORDER BY sort LIMIT 3`, [salon.id])).rows as { id: string; name: string }[];
+    if (!loc || !emp || services.length < 2) return { consumers: 0, rows: 0 };
+    let rows = 0;
+    let consumers = 0;
+    await admin.query('BEGIN');
+    const account = async (email: string, first: string, last: string, lang: string) => {
+      let cu = await admin.query(`SELECT id FROM client_users WHERE lower(email) = lower($1)`, [email]);
+      if (!cu.rowCount)
+        cu = await admin.query(
+          `INSERT INTO client_users (email, password_hash, first, last, lang, email_verified_at) VALUES ($1, $2, $3, $4, $5, now() - interval '20 days') RETURNING id`,
+          [email, hash, first, last, lang],
+        );
+      const clientId = cu.rows[0].id as string;
+      let link = await admin.query(`SELECT customer_id FROM client_customer_links WHERE client_user_id = $1 AND tenant_id = $2`, [clientId, salon.id]);
+      let customerId: string;
+      if (link.rowCount) customerId = link.rows[0].customer_id as string;
+      else {
+        link = await admin.query(`INSERT INTO customers (tenant_id, name, email, cust_group) VALUES ($1, $2, $3, 'Regular') RETURNING id`, [salon.id, `${first} ${last}`, email]);
+        customerId = link.rows[0].customer_id ?? link.rows[0].id;
+        await admin.query(`INSERT INTO client_customer_links (client_user_id, tenant_id, customer_id) VALUES ($1, $2, $3)`, [clientId, salon.id, customerId]);
+      }
+      return { clientId, customerId, name: `${first} ${last}` };
+    };
+    const ledger = async (clientId: string, type: string, points: number, sourceType: string | null, sourceId: string | null, meta: Record<string, unknown>, daysAgo: number) => {
+      const r = await admin.query(
+        `INSERT INTO client_loyalty_ledger (client_user_id, type, points, source_type, source_id, tenant_id, meta, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, now() - ($8::int * interval '1 day'))
+         ON CONFLICT DO NOTHING RETURNING id`,
+        [clientId, type, points, sourceType, sourceId, sourceType === 'account' ? null : salon.id, JSON.stringify({ ruleVersion: LOYALTY_RULES.version, ...meta }), daysAgo],
+      );
+      if (r.rowCount) rows += 1;
+      await admin.query(`UPDATE client_users SET loyalty_points = (SELECT COALESCE(SUM(points), 0) FROM client_loyalty_ledger WHERE client_user_id = $1) WHERE id = $1`, [clientId]);
+    };
+    const visit = async (a: { clientId: string; customerId: string; name: string }, daysAgo: number, startMin: number, svcs: string[], status = 'confirmed', products = 0) => {
+      const key = randomUUID();
+      const ids: string[] = [];
+      let start = startMin;
+      for (const [i, sid] of svcs.entries()) {
+        const r = await admin.query(
+          `INSERT INTO appointments (tenant_id, location_id, date, start_min, duration_min, kind, status, title, service_id, employee_id, customer_id, price, source, client_user_id, cancel_hours, idempotency_key, cancelled_by, cancelled_at)
+           VALUES ($1, $2, CURRENT_DATE - $3::int, $4, 45, 'appointment', $5, $6, $7, $8, $9, 1500, 'client', $10, 24, $11, $12, $13) RETURNING id`,
+          [salon.id, loc.id, daysAgo, start, status, a.name, sid, emp.id, a.customerId, a.clientId, svcs.length > 1 ? `${key}:${i + 1}` : key,
+            status === 'cancelled' ? 'customer' : null, status === 'cancelled' ? new Date(Date.now() - daysAgo * 86_400_000) : null],
+        );
+        ids.push(r.rows[0].id as string);
+        start += 45;
+      }
+      if (products > 0) {
+        const number = `LOY-${ids[0]!.slice(0, 8).toUpperCase()}`;
+        const inv = await admin.query(
+          `INSERT INTO invoices (tenant_id, location_id, number, customer_id, customer_name, method, status, total, idempotency_key, date)
+           VALUES ($1, $2, $3, $4, $5, 'Card', 'Paid', $6, $7, CURRENT_DATE - $8::int) RETURNING id`,
+          [salon.id, loc.id, number, a.customerId, a.name, 1500 * svcs.length + 550 * products, `fixture:${ids[0]}`, daysAgo],
+        );
+        await admin.query(`INSERT INTO invoice_lines (tenant_id, invoice_id, description, qty, unit_price, item_class, appointment_id, sort) VALUES ($1, $2, 'Treatment', 1, 1500, 'service', $3, 0)`, [salon.id, inv.rows[0].id, ids[0]]);
+        await admin.query(`INSERT INTO invoice_lines (tenant_id, invoice_id, description, qty, unit_price, item_class, sort) VALUES ($1, $2, 'Hair product', $3, 550, 'product', 1)`, [salon.id, inv.rows[0].id, products]);
+      }
+      return ids;
+    };
+    const awardVisit = async (a: { clientId: string }, ids: string[], serviceCount: number, productUnits: number, daysAgo: number) => {
+      const pts = appointmentPoints(serviceCount, productUnits);
+      await ledger(a.clientId, 'appointment_completed', pts.total, 'appointment', ids[0]!, { serviceCount, servicePoints: pts.servicePoints, productUnits, productPoints: pts.productPoints, total: pts.total, salonName: salon.name }, daysAgo);
+    };
+
+    // Consumer A — the booking-changes consumer, when present in this batch.
+    const A = await account(`changes.client@${FIXTURE_DOMAIN}`, 'Slobodan', 'Krstevski', 'en');
+    const had = await admin.query(`SELECT 1 FROM client_loyalty_ledger WHERE client_user_id = $1 LIMIT 1`, [A.clientId]);
+    if (!had.rowCount) {
+      consumers += 1;
+      await ledger(A.clientId, 'registration_bonus', LOYALTY_RULES.registration, 'account', A.clientId, {}, 20);
+      const v1 = await visit(A, 12, 600, [services[0]!.id]);
+      await awardVisit(A, v1, 1, 0, 12);
+      const rv = await admin.query(
+        `INSERT INTO reviews (tenant_id, location_id, appointment_id, client_user_id, customer_id, service_id, employee_id, service_rating, timing_rating, cleanliness_rating, professional_rating, body, appointment_date, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, 5, 4, 5, 5, 'Lovely, calm and on time.', CURRENT_DATE - 12, now() - interval '11 days') ON CONFLICT (appointment_id) DO NOTHING RETURNING id`,
+        [salon.id, loc.id, v1[0], A.clientId, A.customerId, services[0]!.id, emp.id],
+      );
+      if (rv.rowCount) await ledger(A.clientId, 'review_submitted', LOYALTY_RULES.review, 'review', rv.rows[0].id, {}, 11);
+      const v2 = await visit(A, 5, 660, [services[0]!.id, services[1]!.id], 'confirmed', 2);
+      await awardVisit(A, v2, 2, 2, 5);
+      // The visits that earn nothing, and the one that earned once.
+      await visit(A, 3, 540, [services[1]!.id], 'cancelled');
+      await visit(A, 2, 540, [services[0]!.id], 'no_show');
+      await visit(A, 1, 900, [services[2]?.id ?? services[0]!.id]); // completed, unreviewed, not yet settled by the sweep in a fresh world
+      const moved = await visit(A, 8, 720, [services[1]!.id]);
+      await admin.query(
+        `INSERT INTO booking_change_requests (tenant_id, appointment_id, status, original_date, original_start_min, original_duration_min, original_employee_id, requested_date, requested_start_min, requested_employee_id, requested_by_client_user_id, requested_at, resolved_by_employee_id, resolved_at)
+         VALUES ($1, $2, 'approved', CURRENT_DATE - 9, 600, 45, $3, CURRENT_DATE - 8, 720, $3, $4, now() - interval '10 days', $3, now() - interval '10 days')`,
+        [salon.id, moved[0], emp.id, A.clientId],
+      );
+      await awardVisit(A, moved, 1, 0, 8);
+    }
+    // Welcome only.
+    const B = await account(`welcome.client@${FIXTURE_DOMAIN}`, 'Ana', 'Petrova', 'mk');
+    if (!(await admin.query(`SELECT 1 FROM client_loyalty_ledger WHERE client_user_id = $1 LIMIT 1`, [B.clientId])).rowCount) {
+      consumers += 1;
+      await ledger(B.clientId, 'registration_bonus', LOYALTY_RULES.registration, 'account', B.clientId, {}, 6);
+    }
+    // Active: many visits, some products, a review or two.
+    const C = await account(`active.client@${FIXTURE_DOMAIN}`, 'Bojana', 'Nikolova', 'sq');
+    if (!(await admin.query(`SELECT 1 FROM client_loyalty_ledger WHERE client_user_id = $1 LIMIT 1`, [C.clientId])).rowCount) {
+      consumers += 1;
+      await ledger(C.clientId, 'registration_bonus', LOYALTY_RULES.registration, 'account', C.clientId, {}, 60);
+      for (let k = 0; k < 7; k++) {
+        const n = 1 + (k % 3);
+        const products = k % 2 ? k % 4 : 0;
+        const ids = await visit(C, 55 - k * 7, 540 + (k % 3) * 60, services.slice(0, n).map((s) => s.id), 'confirmed', products);
+        await awardVisit(C, ids, n, products, 55 - k * 7);
+        if (k % 3 === 0) {
+          const rv = await admin.query(
+            `INSERT INTO reviews (tenant_id, location_id, appointment_id, client_user_id, customer_id, service_id, employee_id, service_rating, timing_rating, cleanliness_rating, professional_rating, body, appointment_date, created_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, 5, 5, 5, 4, NULL, CURRENT_DATE - $8::int, now() - ($8::int * interval '1 day') + interval '1 day') ON CONFLICT (appointment_id) DO NOTHING RETURNING id`,
+            [salon.id, loc.id, ids[0], C.clientId, C.customerId, services[0]!.id, emp.id, 55 - k * 7],
+          );
+          if (rv.rowCount) await ledger(C.clientId, 'review_submitted', LOYALTY_RULES.review, 'review', rv.rows[0].id, {}, 54 - k * 7);
+        }
+      }
+    }
+    // Nothing at all: an account that exists and has never earned.
+    await account(`quiet.client@${FIXTURE_DOMAIN}`, 'Marko', 'Stojanov', 'en');
+    await admin.query('COMMIT');
+    return { consumers, rows };
   } catch (e) {
     await admin.query('ROLLBACK').catch(() => undefined);
     throw e;

@@ -26,6 +26,8 @@ export function ReviewForm({ a, onDone }: { a: Appt; onDone: () => void }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const [done, setDone] = useState(false);
+  /** Velnes Loyalty points the submission earned, from the door. */
+  const [earned, setEarned] = useState(0);
   const complete = DIMS.every((d) => stars[d] != null);
 
   const submit = async () => {
@@ -33,12 +35,17 @@ export function ReviewForm({ a, onDone }: { a: Appt; onDone: () => void }) {
     setBusy(true);
     setErr('');
     try {
-      await api(`/me/appointments/${a.id}/review`, {
+      const out = await api<{ loyaltyPoints?: number }>(`/me/appointments/${a.id}/review`, {
         method: 'POST',
         body: JSON.stringify({ ...stars, body: body.trim() || undefined }),
       });
+      setEarned(out.loyaltyPoints ?? 0);
       setDone(true);
-      await Promise.all([qc.invalidateQueries({ queryKey: ['my-appointments'] }), qc.invalidateQueries({ queryKey: ['my-notifications'] })]);
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ['my-appointments'] }),
+        qc.invalidateQueries({ queryKey: ['my-notifications'] }),
+        qc.invalidateQueries({ queryKey: ['my-loyalty'] }),
+      ]);
       onDone();
     } catch (e) {
       const code = e instanceof ApiError ? e.code : '';
@@ -53,6 +60,7 @@ export function ReviewForm({ a, onDone }: { a: Appt; onDone: () => void }) {
       <div className="acc-card rv-done" role="status">
         <b>{t('c.rv.thanks')}</b>
         <div className="sm muted">{t('c.rv.thanksSub')}</div>
+        {earned ? <div className="loy-earned">{t('c.loy.thanksPoints', { n: earned.toLocaleString() })}</div> : null}
       </div>
     );
 

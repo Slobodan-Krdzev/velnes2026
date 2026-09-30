@@ -41,6 +41,9 @@ export const ClientReviewSchema = ReviewRatingsSchema.extend({
   id: z.uuid(),
   body: z.string().nullable(),
   at: z.string(),
+  /** Velnes Loyalty points this submission earned — on the submit
+   *  response only, for the thank-you card (docs/LOYALTY.md). */
+  loyaltyPoints: z.number().int().optional(),
 });
 
 /** The salon page's summary: the salon's score (service, timing,

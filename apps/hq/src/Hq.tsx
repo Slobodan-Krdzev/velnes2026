@@ -10,6 +10,7 @@ import {
   HqCategoryRequestListSchema,
   HqBrandListSchema,
   HqOutboxListSchema,
+  HqLoyaltyLookupSchema,
   HqRoleListSchema,
   HqSupplierListSchema,
   HqTeamListSchema,
@@ -325,7 +326,12 @@ export function Hq({
           </div>
         </header>
         <main id="view">
-          {tab === 'customers' ? <Customers say={say} me={user} /> : null}
+          {tab === 'customers' ? (
+            <>
+              <Customers say={say} me={user} />
+              <LoyaltyLookup />
+            </>
+          ) : null}
           {tab === 'categories' ? <Categories say={say} /> : null}
           {tab === 'suppliers' ? <Suppliers say={say} isSuper={user.role === 'hq_super'} /> : null}
           {tab === 'tickets' ? (
@@ -3327,6 +3333,88 @@ function Tickets({
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+/**
+ * Velnes Loyalty (2026-09-30) — docs/LOYALTY.md: support's read-only
+ * window on one consumer account's platform points, by email. No
+ * button here moves a point; adjustments are a future, permissioned
+ * door.
+ */
+function LoyaltyLookup() {
+  const { t } = useTranslation();
+  const [email, setEmail] = useState('');
+  const [state, setState] = useState<{ kind: 'idle' } | { kind: 'none' } | { kind: 'found'; d: z.infer<typeof HqLoyaltyLookupSchema> }>({ kind: 'idle' });
+  const find = async () => {
+    if (email.trim().length < 3) return;
+    try {
+      const d = await hqGet(HqLoyaltyLookupSchema, `/hq/loyalty?email=${encodeURIComponent(email.trim())}`);
+      setState({ kind: 'found', d });
+    } catch (e) {
+      if (e instanceof HqApiError && e.status === 404) setState({ kind: 'none' });
+      else throw e;
+    }
+  };
+  return (
+    <div className="card" style={{ marginTop: 16 }}>
+      <div className="card-header">
+        <h2 id="hq-loyalty">{t('hq.loyalty')}</h2>
+        <span className="muted">{t('hq.loyaltySub')}</span>
+      </div>
+      <form
+        style={{ display: 'flex', gap: 8, padding: '0 20px 14px', flexWrap: 'wrap' }}
+        onSubmit={(e) => {
+          e.preventDefault();
+          void find();
+        }}
+      >
+        <input className="input" type="email" aria-label={t('hq.loyaltyEmail')} placeholder={t('hq.loyaltyEmail')} value={email} onChange={(e) => setEmail(e.target.value)} style={{ flex: '1 1 260px' }} />
+        <button className="btn btn-primary" type="submit">{t('hq.loyaltyFind')}</button>
+      </form>
+      {state.kind === 'none' ? <div className="muted" style={{ padding: '0 20px 16px' }}>{t('hq.loyaltyNone')}</div> : null}
+      {state.kind === 'found' ? (
+        <div style={{ padding: '0 20px 16px' }} data-testid="loyalty-lookup">
+          <div className="grid2" style={{ marginBottom: 10 }}>
+            <div>
+              <span className="stat-label">{state.d.account.name || state.d.account.email}</span>
+              <div className="muted">{state.d.account.email} · {state.d.account.since}{state.d.account.verified ? '' : ' · unverified'}</div>
+            </div>
+            <div>
+              <span className="stat-label">{t('hq.loyaltyBalance')}</span>
+              <div className="bold tnum" style={{ fontSize: 22 }}>{state.d.balance.toLocaleString()}</div>
+            </div>
+          </div>
+          {state.d.entries.length ? (
+            <table>
+              <thead>
+                <tr>
+                  <th>{t('hq.when')}</th>
+                  <th>{t('hq.what')}</th>
+                  <th className="right">{t('hq.change')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {state.d.entries.map((e) => (
+                  <tr key={e.id}>
+                    <td className="muted tnum" style={{ whiteSpace: 'nowrap' }}>{e.at.slice(0, 16).replace('T', ' ')}</td>
+                    <td>
+                      <span className="bold">{e.type.replace(/_/g, ' ')}</span>
+                      <span className="muted" style={{ display: 'block', fontSize: 12 }}>
+                        {[e.salonName, e.sourceType ? `${e.sourceType} ${e.sourceId ?? ''}` : null].filter(Boolean).join(' · ')}
+                      </span>
+                    </td>
+                    <td className={`right bold tnum${e.points < 0 ? ' danger' : ''}`}>{e.points > 0 ? '+' : ''}{e.points}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <div className="muted">{t('hq.loyaltyEmpty')}</div>
+          )}
+        </div>
+      ) : null}
     </div>
   );
 }

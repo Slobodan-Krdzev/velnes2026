@@ -66,6 +66,9 @@ export const ClientProfileSchema = z.object({
    * once.
    */
   locationAllowed: z.boolean().nullable(),
+  /** Velnes Loyalty (2026-09-30): the cached balance of the platform
+   *  ledger — docs/LOYALTY.md. Whole points. */
+  loyaltyPoints: z.number().int().default(0),
 });
 export type ClientProfile = z.infer<typeof ClientProfileSchema>;
 

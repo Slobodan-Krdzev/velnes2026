@@ -14,6 +14,7 @@ import { ApiError } from '../../lib/api/client.js';
 import { fmtMKD, minutesLbl } from '../../lib/api/mappers.js';
 import { ReviewForm, ReviewGiven } from './ReviewForm.js';
 import { CancelConfirm, PaymentLines, PolicyCard, RequestCard, ReschedulePicker, VisitHistory } from './Changes.js';
+import { LoyaltyCard, LoyaltySection, useMyLoyalty } from './Loyalty.js';
 import { Stars } from '../../components/Stars.js';
 import {
   useFavourites,
@@ -47,10 +48,12 @@ const secs = () => [
   { id: 'appts' as const, t: t('c.acc.appts'), sub: t('c.acc.apptsSub') },
   // Third, where the prototype puts it.
   { id: 'favs' as const, t: t('c.acc.favs'), sub: t('c.acc.favsSub') },
+  // Velnes Loyalty (2026-09-30): the platform points, docs/LOYALTY.md.
+  { id: 'loyalty' as const, t: t('c.loy.title'), sub: t('c.loy.cardSub') },
   { id: 'cards' as const, t: t('c.acc.cards'), sub: t('c.acc.cardsSub') },
   { id: 'notifs' as const, t: t('c.acc.notifs'), sub: '' },
 ];
-type SecId = 'general' | 'appts' | 'favs' | 'notifs' | 'cards' | 'over' | 'appt';
+type SecId = 'general' | 'appts' | 'favs' | 'notifs' | 'cards' | 'over' | 'appt' | 'loyalty';
 
 const titles = (): Record<string, string> => ({
   over: t('c.acc.title'),
@@ -60,6 +63,7 @@ const titles = (): Record<string, string> => ({
   favs: t('c.acc.favs'),
   cards: t('c.acc.cards'),
   notifs: t('c.acc.notifs'),
+  loyalty: t('c.loy.title'),
 });
 
 
@@ -168,6 +172,7 @@ export function MyVelnes({ section = 'over' }: { section?: SecId }) {
   const appts = useMyAppointments();
   const notifs = useMyNotifications();
   const salons = useMySalons();
+  const loyalty = useMyLoyalty();
   const [tab, setTab] = useState<'up' | 'past' | 'canc'>('up');
   // The section chips are a rail too: the wheel slides them.
   const chipsRef = useRef<HTMLDivElement | null>(null);
@@ -366,6 +371,9 @@ export function MyVelnes({ section = 'over' }: { section?: SecId }) {
                       <button className="btn btn-p" onClick={() => nav('/')}>{t('c.acc.findSalon')}</button>
                     </div>
                   )}
+                  {/* Velnes Loyalty: the balance from the ledger, and the way
+                      to the whole story. */}
+                  <LoyaltyCard balance={loyalty.data?.balance ?? profile.loyaltyPoints ?? 0} onOpen={() => go('loyalty')} />
                   {/* Velnes Premium, in a sentence, with the page that says
                       the rest — membership itself is not open yet. */}
                   <div className="acc-card acc-prem">
@@ -679,6 +687,9 @@ export function MyVelnes({ section = 'over' }: { section?: SecId }) {
               {/* ---- favourites ---- */}
               {sec === 'favs' ? <Favourites /> : null}
 
+              {/* ---- Velnes Loyalty ---- */}
+              {sec === 'loyalty' ? <LoyaltySection /> : null}
+
               {/* ---- notifications ---- */}
               {sec === 'notifs' ? (
                 <>
@@ -695,6 +706,7 @@ export function MyVelnes({ section = 'over' }: { section?: SecId }) {
                           onClick={() => {
                             void markRead(n.id);
                             if (n.refType === 'appointment' && n.refId) nav(`/account/appointments/${n.refId}${n.kind === 'review' ? '?review=1' : ''}`);
+                            else if (n.refType === 'loyalty') go('loyalty');
                           }}
                         >
                           <span
