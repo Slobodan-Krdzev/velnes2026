@@ -72,10 +72,28 @@ describe('products with a booking, on the salon page', () => {
     expect(card.getAttribute('aria-pressed')).toBe('true');
     expect(card.textContent).toContain('In your visit');
     // The cart: a product row, the total with it, the points with it.
-    const row = await within(cart).findByTestId('cart-product');
-    expect(row.textContent).toContain('Resistance band set');
+    const row0 = await within(cart).findByTestId('cart-product');
+    expect(row0.textContent).toContain('Resistance band set');
     expect(within(cart).getByText(/3\.100/)).toBeDefined(); // 1.900 + 1.200
     expect(within(cart).getByTestId('loyalty-earn').textContent).toContain('120 Velnes points'); // 100 + 20
+    // More of it: the card's stepper, mirrored in the cart row.
+    const stepper = card.parentElement!.querySelector('[data-testid="qty"]')!;
+    fireEvent.click(within(stepper as HTMLElement).getByRole('button', { name: /One more Resistance band set/ }));
+    await waitFor(() => expect(card.textContent).toContain('2 in your visit'));
+    expect(within(cart).getByTestId('cart-product').textContent).toContain('2 × 1.200');
+    expect(within(cart).getByText(/4\.300/)).toBeDefined(); // 1.900 + 2 × 1.200
+    expect(within(cart).getByTestId('loyalty-earn').textContent).toContain('140 Velnes points'); // 100 + 2 × 20
+    // Fewer, from the cart row this time; below one it is out.
+    const rowStep = within(within(cart).getByTestId('cart-product')).getByRole('button', { name: /One fewer Resistance band set/ });
+    fireEvent.click(rowStep);
+    await waitFor(() => expect(within(cart).getByText(/3\.100/)).toBeDefined());
+    fireEvent.click(within(within(cart).getByTestId('cart-product')).getByRole('button', { name: /One fewer Resistance band set/ }));
+    await waitFor(() => expect(within(cart).queryByTestId('cart-product')).toBeNull());
+    expect(card.getAttribute('aria-pressed')).toBe('false');
+    // In once more, then out again, from the row's remove.
+    fireEvent.click(card);
+    await within(cart).findByTestId('cart-product');
+    const row = within(cart).getByTestId('cart-product');
     // Out again, from the row.
     fireEvent.click(within(row).getByRole('button', { name: /Remove Resistance band set/ }));
     await waitFor(() => expect(within(cart).queryByTestId('cart-product')).toBeNull());

@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { t } from '../../lib/i18n-core.js';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import type { z } from 'zod';
-import type { PublicServiceSchema } from '@velnes/contracts';
+import { PRODUCT_QTY_MAX, type PublicServiceSchema } from '@velnes/contracts';
 import { fmtMKD, minutesLbl } from '../../lib/api/mappers.js';
 import { useSalonDetail, useSalonServices, useVisitSlots } from '../../lib/api/queries.js';
 import { useMyOffers } from '../../lib/api/session.js';
@@ -396,6 +396,13 @@ function useSalonPage() {
     toggleProd: (id: string) =>
       setProds((c) => (c.some((x) => x.productId === id) ? c.filter((x) => x.productId !== id) : [...c, { productId: id, qty: 1 }])),
     removeProd: (id: string) => setProds((c) => c.filter((x) => x.productId !== id)),
+    /** One more or one fewer of a product (Alex, 2026-10-01); fewer than
+     *  one takes it out, more than the door accepts stays at the ceiling. */
+    stepProd: (id: string, d: 1 | -1) =>
+      setProds((c) =>
+        c.flatMap((x) => (x.productId !== id ? [x] : x.qty + d < 1 ? [] : [{ ...x, qty: Math.min(PRODUCT_QTY_MAX, x.qty + d) }])),
+      ),
+    prodQty: (id: string) => prods.find((x) => x.productId === id)?.qty ?? 0,
     inCart: (id: string) => cart.some((c) => c.serviceId === id),
     /** The promised price for a treatment here, if this person holds one. */
     offerPrice: (id: string) => offerFor(id, null)?.specialPrice ?? null,
@@ -539,6 +546,27 @@ function BookButton({ p, desktop, onBook, style, arrow }: { p: Page; desktop: bo
     >
       {label} {arrow || need ? IcArr : null}
     </button>
+  );
+}
+
+/**
+ * How many of a product (Alex, 2026-10-01): a minus, the count, a plus.
+ * Minus below one takes the product out; plus stops at the door's
+ * ceiling. Lives beside the card and in the cart row, never inside
+ * another button.
+ */
+function QtyStepper({ name, qty, onStep, compact = false }: { name: string; qty: number; onStep: (d: 1 | -1) => void; compact?: boolean }) {
+  return (
+    <span className={`qty${compact ? ' compact' : ''}`} data-testid="qty" data-qty={qty}>
+      {compact ? null : <span className="qty-lbl">{t('c.sal.qty')}</span>}
+      <button type="button" className="qty-b" aria-label={t('c.sal.fewer', { name })} onClick={() => onStep(-1)}>
+        −
+      </button>
+      <b className="qty-n" aria-live="polite">{qty}</b>
+      <button type="button" className="qty-b" aria-label={t('c.sal.more', { name })} disabled={qty >= PRODUCT_QTY_MAX} onClick={() => onStep(1)}>
+        +
+      </button>
+    </span>
   );
 }
 
@@ -778,25 +806,32 @@ function BookCard({ p, desktop }: { p: Page; desktop: boolean }) {
               <div className="tr-grid">
                 {p.shelf.map((pr) => {
                   const on = p.inProds(pr.id);
+                  const qty = p.prodQty(pr.id);
                   return (
-                    <button
-                      key={pr.id}
-                      className={`tr-card${desktop ? ' dtr' : ''}${on ? ' on' : ''}`}
-                      aria-pressed={on}
-                      data-product={pr.id}
-                      onClick={() => p.toggleProd(pr.id)}
-                    >
-                      <span className="row1">
-                        <span className="nm">
-                          {IcBottle}
-                          <span className="t">{pr.name}</span>
+                    <div key={pr.id} className={`tr-wrap${on ? ' on' : ''}`}>
+                      <button
+                        className={`tr-card${desktop ? ' dtr' : ''}${on ? ' on' : ''}`}
+                        aria-pressed={on}
+                        data-product={pr.id}
+                        onClick={() => p.toggleProd(pr.id)}
+                      >
+                        <span className="row1">
+                          <span className="nm">
+                            {IcBottle}
+                            <span className="t">{pr.name}</span>
+                          </span>
                         </span>
-                      </span>
-                      <span className="in2">
-                        <span>{on ? t('c.sal.inVisit') : t('c.sal.product')}</span>
-                        <b>{fmtMKD(pr.price)}</b>
-                      </span>
-                    </button>
+                        <span className="in2">
+                          <span>{on ? (qty > 1 ? t('c.sal.inVisitN', { n: qty }) : t('c.sal.inVisit')) : t('c.sal.product')}</span>
+                          <b>{fmtMKD(pr.price)}</b>
+                        </span>
+                      </button>
+                      {/* More than one of it: the stepper is the card's
+                          sibling, so the card stays one button. */}
+                      {on ? (
+                        <QtyStepper name={pr.name} qty={qty} onStep={(d) => p.stepProd(pr.id, d)} />
+                      ) : null}
+                    </div>
                   );
                 })}
               </div>
@@ -1151,7 +1186,10 @@ export function Salon() {
                       <div className="dcart-row dcart-prod" key={l.productId} data-testid="cart-product">
                         <span className="nm2">
                           {l.name}
-                          <span className="sub2">{l.qty > 1 ? `${l.qty} × ${fmtMKD(l.unitPrice)} · ` : ''}{t('c.sal.product')}</span>
+                          <span className="sub2 sub2-qty">
+                            <QtyStepper name={l.name} qty={l.qty} onStep={(d) => p.stepProd(l.productId, d)} compact />
+                            {l.qty > 1 ? `${l.qty} × ${fmtMKD(l.unitPrice)}` : t('c.sal.product')}
+                          </span>
                         </span>
                         <b style={{ color: 'var(--ink)' }}>{fmtMKD(l.price)}</b>
                         <button className="x" aria-label={t('c.sal.remove', { name: l.name })} onClick={() => p.removeProd(l.productId)}>

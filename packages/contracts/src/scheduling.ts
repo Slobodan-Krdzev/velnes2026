@@ -105,9 +105,11 @@ export const AppointmentKindSchema = z.enum(['appointment', 'blocked', 'absence'
  * visit's first appointment — the money moves on the invoice, online or
  * at the till, never here.
  */
+/** The most of one product a booking may carry; the app's stepper stops here. */
+export const PRODUCT_QTY_MAX = 10;
 export const BookProductSchema = z.object({
   productId: z.uuid(),
-  qty: z.number().int().min(1).max(10).default(1),
+  qty: z.number().int().min(1).max(PRODUCT_QTY_MAX).default(1),
 });
 export type BookProduct = z.infer<typeof BookProductSchema>;
 export const BookProductsSchema = z.array(BookProductSchema).max(12);

@@ -1734,3 +1734,61 @@ a.pop-go:hover {
 .dcart-row.dcart-prod .nm2 {
   font-weight: 600;
 }
+
+/* How many of a product (Alex, 2026-10-01): under the card once it is in
+   the visit, and in the cart row, compact. Sibling buttons, never nested. */
+.qty {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+}
+.tr-wrap > .qty {
+  margin-top: 6px;
+  justify-self: start;
+}
+.qty-lbl {
+  color: var(--muted);
+  font-weight: 600;
+  margin-right: 4px;
+}
+.qty-b {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 1.5px solid var(--line);
+  background: #fff;
+  color: var(--ink);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+}
+.qty-b:hover:not(:disabled) {
+  border-color: var(--ink);
+}
+.qty-b:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.qty-n {
+  min-width: 14px;
+  text-align: center;
+  color: var(--ink);
+}
+.qty.compact {
+  gap: 4px;
+  margin-right: 6px;
+}
+.qty.compact .qty-b {
+  width: 22px;
+  height: 22px;
+  font-size: 13px;
+}
+.dcart-row .sub2-qty {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 3px;
+}

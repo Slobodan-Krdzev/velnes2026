@@ -314,8 +314,10 @@ Two decisions worth recording:
   appointment is rung up, and the drawer lists them. Every screen after
   the salon page shows them: identity, review, confirmation, pay, My
   Velnes. Not gated on stock — the shelf's count is the salon's own
-  bookkeeping, and the till does not refuse on it either. Quantity is
-  one per toggle for now; the schema carries `qty`.
+  bookkeeping, and the till does not refuse on it either. A stepper
+  under the card and in the cart row sets how many (up to
+  `PRODUCT_QTY_MAX`, named once in the contract); fewer than one takes
+  the product out.
   `booking/products.test.ts`, `salon/Products.test.tsx`, the till and
   drawer tests.
 
