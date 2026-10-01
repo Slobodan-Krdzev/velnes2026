@@ -5,6 +5,7 @@ import {
   AppointmentChangesSchema,
   ChangeRequestListSchema,
   ChangeRequestSchema,
+  PendingRequestsSchema,
   AppointmentListResponseSchema,
   AvailabilityResponseSchema,
   BookResponseSchema,
@@ -106,9 +107,21 @@ export const useDecideRequest = () => {
         decision: v.decision,
         ...(v.reason ? { reason: v.reason } : {}),
       }),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ['appointments'] }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['appointments'] });
+      void qc.invalidateQueries({ queryKey: ['pending-requests'] });
+    },
   });
 };
+
+/** Everything waiting for the salon's answer (Alex, 2026-10-01): the
+ *  flight deck's card and the Requests screen read this one door. */
+export const usePendingRequests = () =>
+  useQuery({
+    queryKey: ['pending-requests'],
+    queryFn: () => get(PendingRequestsSchema, '/requests/pending'),
+    refetchInterval: 60_000,
+  });
 
 /** Booking changes (2026-09-30): what a visit went through, the
  *  requests waiting for the salon, and the two decisions. */
@@ -134,6 +147,7 @@ export const useDecideChange = () => {
       void qc.invalidateQueries({ queryKey: ['appointments'] });
       void qc.invalidateQueries({ queryKey: ['appointment-changes'] });
       void qc.invalidateQueries({ queryKey: ['change-requests'] });
+      void qc.invalidateQueries({ queryKey: ['pending-requests'] });
     },
   });
 };

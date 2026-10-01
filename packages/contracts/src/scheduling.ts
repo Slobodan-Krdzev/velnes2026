@@ -296,6 +296,36 @@ export const ChangeRequestRowSchema = ChangeRequestSchema.extend({
   employeeName: z.string().nullable(),
 });
 export const ChangeRequestListSchema = z.object({ requests: z.array(ChangeRequestRowSchema) });
+
+/**
+ * What customers are waiting on the salon for (Alex, 2026-10-01): the
+ * booking requests not yet accepted or declined, and the reschedule
+ * requests not yet approved or declined — one door, `GET
+ * /requests/pending`, read by the flight deck's card and the Requests
+ * screen alike, so the number and the list can never disagree.
+ */
+export const BookingRequestRowSchema = z.object({
+  id: z.uuid(),
+  locationId: z.uuid(),
+  locationName: z.string(),
+  customerName: z.string(),
+  serviceName: z.string(),
+  employeeName: z.string().nullable(),
+  date: z.iso.date(),
+  time: ClockSchema,
+  end: ClockSchema,
+  price: MoneySchema,
+  source: z.string(),
+  requestedAt: z.iso.datetime(),
+  /** How many product units ride on the visit. */
+  productUnits: z.number().int().default(0),
+});
+export type BookingRequestRow = z.infer<typeof BookingRequestRowSchema>;
+export const PendingRequestsSchema = z.object({
+  bookings: z.array(BookingRequestRowSchema),
+  reschedules: z.array(ChangeRequestRowSchema),
+});
+export type PendingRequests = z.infer<typeof PendingRequestsSchema>;
 export const ChangeRequestDecisionSchema = z.object({ reason: z.string().max(300).optional() });
 
 /** One line of a visit's timeline — the history table with its

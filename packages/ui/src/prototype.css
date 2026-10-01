@@ -211,6 +211,9 @@ textarea.input{height:110px;padding:12px 14px;resize:vertical}
 .card-header{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--line)}
 .card-header h2{font-size:20px;line-height:26px;font-weight:700}
 .stat{border:1px solid var(--line);border-radius:var(--r-card);padding:20px;display:flex;flex-direction:column;gap:4px}
+/* A stat that leads somewhere (the flight deck's requests, 2026-10-01). */
+button.stat-link{background:#fff;text-align:left;cursor:pointer;font:inherit;color:inherit}
+button.stat-link:hover{border-color:var(--ink)}
 .stat-label{font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.03em;color:var(--ink-muted)}
 .stat-value{font-size:24px;line-height:30px;font-weight:700;font-variant-numeric:tabular-nums}
 .stat-hint{font-size:12px;font-weight:500;color:var(--ink-muted);display:flex;gap:8px;align-items:center}

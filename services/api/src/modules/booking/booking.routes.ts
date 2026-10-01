@@ -15,10 +15,12 @@ import {
   AppointmentChangesSchema,
   ChangeRequestDecisionSchema,
   ChangeRequestListSchema,
+  PendingRequestsSchema,
   ChangeRequestSchema,
 } from '@velnes/contracts';
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
+import { sql } from 'kysely';
 import { z } from 'zod';
 import { withTenant } from '../../db/index.js';
 import { can, permsFor } from '../auth/authz.service.js';
@@ -324,6 +326,100 @@ export function bookingRoutes(app: FastifyInstance) {
         return sendBookingError(reply, e);
       }
     },
+  });
+
+  /**
+   * Everything waiting for the salon's answer (Alex, 2026-10-01): the
+   * booking requests still `requested`, and the pending reschedules —
+   * for the flight deck's card and the Requests screen.
+   */
+  r.route({
+    method: 'GET',
+    url: '/requests/pending',
+    preHandler: [app.authenticate],
+    schema: { response: { 200: PendingRequestsSchema, 403: ErrorSchema } },
+    handler: async (req, reply) =>
+      withTenant(req.claims.ten, async (trx) => {
+        const perms = await permsFor(trx, req.claims);
+        const wide = can(perms, 'appointments.view_location');
+        if (!wide && !can(perms, 'appointments.view_own'))
+          return reply.code(403).send({ error: 'FORBIDDEN', message: 'Missing permission: appointments.view_own' });
+        const rows = await trx
+          .selectFrom('appointments as a')
+          .leftJoin('locations as l', 'l.id', 'a.locationId')
+          .leftJoin('services as s', 's.id', 'a.serviceId')
+          .leftJoin('employees as e', 'e.id', 'a.employeeId')
+          .select(['a.id', 'a.locationId', 'a.employeeId', 'a.title', 'a.date', 'a.startMin', 'a.durationMin', 'a.price', 'a.source', 'a.createdAt'])
+          .select(['l.name as locationName', 's.name as serviceName', 'e.name as employeeName'])
+          .where('a.kind', '=', 'appointment')
+          .where('a.status', '=', 'requested')
+          .orderBy('a.createdAt', 'desc')
+          .limit(200)
+          .execute();
+        const ids = rows.map((x) => x.id);
+        const units = ids.length
+          ? await trx
+              .selectFrom('appointmentProducts')
+              .select(['appointmentId', sql<number>`COALESCE(SUM(qty), 0)`.as('units')])
+              .where('appointmentId', 'in', ids)
+              .groupBy('appointmentId')
+              .execute()
+          : [];
+        const bookings = rows
+          .filter((x) => wide || x.employeeId === req.claims.sub)
+          .map((x) => ({
+            id: x.id,
+            locationId: x.locationId,
+            locationName: x.locationName ?? '—',
+            customerName: x.title,
+            serviceName: x.serviceName ?? x.title,
+            employeeName: x.employeeName ?? null,
+            date: localIso(x.date),
+            time: hhmm(x.startMin),
+            end: hhmm(x.startMin + x.durationMin),
+            price: x.price,
+            source: x.source,
+            requestedAt: x.createdAt.toISOString(),
+            productUnits: Number(units.find((u) => u.appointmentId === x.id)?.units ?? 0),
+          }));
+        const pending = await trx
+          .selectFrom('bookingChangeRequests as r')
+          .innerJoin('appointments as a', 'a.id', 'r.appointmentId')
+          .leftJoin('locations as l', 'l.id', 'a.locationId')
+          .leftJoin('services as s', 's.id', 'a.serviceId')
+          .leftJoin('employees as e', 'e.id', 'a.employeeId')
+          .selectAll('r')
+          .select(['a.locationId', 'a.employeeId', 'a.title', 'l.name as locationName', 's.name as serviceName', 'e.name as employeeName'])
+          .where('r.status', '=', 'pending')
+          .orderBy('r.requestedAt', 'desc')
+          .limit(200)
+          .execute();
+        const reschedules = pending
+          .filter((x) => wide || x.employeeId === req.claims.sub)
+          .map((x) => ({
+            id: x.id,
+            appointmentId: x.appointmentId,
+            status: 'pending' as const,
+            originalDate: localIso(x.originalDate),
+            originalTime: hhmm(x.originalStartMin),
+            originalEnd: hhmm(x.originalStartMin + x.originalDurationMin),
+            requestedDate: localIso(x.requestedDate),
+            requestedTime: hhmm(x.requestedStartMin),
+            requestedEnd: hhmm(x.requestedStartMin + x.originalDurationMin),
+            requestedAt: x.requestedAt.toISOString(),
+            resolvedAt: null,
+            resolvedByName: null,
+            declineReason: x.declineReason,
+            customerDecision: null,
+            decidedAt: null,
+            locationId: x.locationId,
+            locationName: x.locationName ?? '—',
+            customerName: x.title,
+            serviceName: x.serviceName ?? x.title,
+            employeeName: x.employeeName ?? null,
+          }));
+        return { bookings, reschedules };
+      }),
   });
 
   /** The requests waiting for the salon (or already answered), newest

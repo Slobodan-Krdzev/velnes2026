@@ -52,13 +52,13 @@ export const WORKSPACE_NAV: NavEntry<WsCtx>[] = [
     go: { path: '/calendar' },
   },
   {
-    id: 'ws.calendar.requests', title: 'nav.requests', crumbs: ['nav.calendar'], icon: I.calendar, visible: perm('appointments.view_own'),
+    id: 'ws.calendar.requests', title: 'nav.requests', crumbs: ['nav.flightdeck'], icon: I.calendar, visible: perm('appointments.view_own'),
     aliases: {
-      en: ['reschedule requests', 'reschedule', 'booking changes', 'change requests', 'move appointment', 'customer requests', 'cancellations', 'cancelled appointments'],
-      mk: ['барања за презакажување', 'презакажување', 'промени на термини', 'барања', 'преместување термин', 'откажувања', 'откажани термини'],
-      sq: ['kërkesa për ndryshim orari', 'ndryshim orari', 'ndryshime terminesh', 'kërkesa', 'zhvendos termin', 'anulime', 'termine të anuluara'],
+      en: ['booking requests', 'pending requests', 'reschedule requests', 'reschedule', 'booking changes', 'change requests', 'move appointment', 'customer requests', 'cancellations', 'cancelled appointments', 'accept', 'decline'],
+      mk: ['барања за резервација', 'барања за презакажување', 'презакажување', 'промени на термини', 'барања', 'преместување термин', 'откажувања', 'откажани термини'],
+      sq: ['kërkesa rezervimi', 'kërkesa për ndryshim orari', 'ndryshim orari', 'ndryshime terminesh', 'kërkesa', 'zhvendos termin', 'anulime', 'termine të anuluara'],
     },
-    go: { path: '/calendar?requests=1' },
+    go: { path: '/requests' },
   },
   {
     id: 'ws.till', title: 'nav.till', crumbs: [], icon: I.register, quick: true, visible: perm('pos.checkout'),
