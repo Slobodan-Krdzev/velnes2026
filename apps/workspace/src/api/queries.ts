@@ -6,6 +6,7 @@ import {
   ChangeRequestListSchema,
   ChangeRequestSchema,
   PendingRequestsSchema,
+  DuePaymentsSchema,
   AppointmentListResponseSchema,
   AvailabilityResponseSchema,
   BookResponseSchema,
@@ -160,3 +161,13 @@ export const useCancelAppointment = () => {
     onSuccess: () => void qc.invalidateQueries({ queryKey: ['appointments'] }),
   });
 };
+
+/** Due payments (Alex, 2026-10-01): past visits never paid, for the
+ *  till's Due tab — one door, the till reads it per location. */
+export const useDuePayments = (locationId: string | null) =>
+  useQuery({
+    queryKey: ['till-due', locationId],
+    queryFn: () => get(DuePaymentsSchema, `/till/due?locationId=${locationId}`),
+    enabled: !!locationId,
+    refetchInterval: 60_000,
+  });

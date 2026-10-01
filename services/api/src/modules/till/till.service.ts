@@ -1,10 +1,11 @@
-import type { AccessClaims, Invoice, SaleRequest, SaleResponse } from '@velnes/contracts';
+import type { AccessClaims, DuePayment, Invoice, SaleRequest, SaleResponse } from '@velnes/contracts';
 import { sql } from 'kysely';
 import type { Trx } from '../../db/index.js';
 import { logAudit } from '../audit/audit.service.js';
 import { priceFor, prodAt, svcChoice, svcLine } from '../catalog/catalog.service.js';
 import { locLive } from '../locations/locations.service.js';
-import { localIso, todayIso } from '../scheduling/scheduling.service.js';
+import { hhmm, localIso, nowAt, todayIso } from '../scheduling/scheduling.service.js';
+import { productsFor } from '../booking/booking.service.js';
 
 export class TillError extends Error {
   constructor(
@@ -839,4 +840,76 @@ export async function refundInvoice(trx: Trx, claims: AccessClaims, id: string, 
     reason,
   });
   return invoiceContract(trx, id);
+}
+
+/**
+ * Due payments (Alex, 2026-10-01): visits that happened and were never
+ * paid. "Happened" is the location's clock — the end already passed
+ * today, or any earlier day; "never paid" is the invoice truth — no line
+ * on a non-refunded invoice references the appointment (the same test
+ * `toContract`'s `paid` makes). Cancelled, no-show and still-requested
+ * visits owe nothing. Oldest first: the longest-owed is the first tile.
+ */
+export async function listDue(trx: Trx, q: { locationId?: string | undefined }, now = new Date()): Promise<{ due: DuePayment[]; total: number }> {
+  const locs = await trx.selectFrom('locations').select(['id', 'name', 'tz']).execute();
+  const clock = new Map(locs.map((l) => [l.id, { name: l.name, ...nowAt(l.tz ?? 'Europe/Skopje', now) }]));
+  let query = trx
+    .selectFrom('appointments as a')
+    .leftJoin('services as s', 's.id', 'a.serviceId')
+    .leftJoin('employees as e', 'e.id', 'a.employeeId')
+    .select(['a.id', 'a.locationId', 'a.customerId', 'a.title', 'a.date', 'a.startMin', 'a.durationMin', 'a.price', 'a.deposit', 'a.paid', 'a.source'])
+    .select(['s.name as serviceName', 'e.name as employeeName'])
+    .where('a.kind', '=', 'appointment')
+    .where('a.status', 'in', ['booked', 'confirmed'])
+    .where('a.paid', '!=', 'paid')
+    .where(({ not, exists, selectFrom }) =>
+      not(
+        exists(
+          selectFrom('invoiceLines as l')
+            .innerJoin('invoices as i', 'i.id', 'l.invoiceId')
+            .select('l.id')
+            .whereRef('l.appointmentId', '=', 'a.id')
+            .where('i.status', '!=', 'Refunded'),
+        ),
+      ),
+    )
+    .orderBy('a.date')
+    .orderBy('a.startMin')
+    .limit(500);
+  if (q.locationId) query = query.where('a.locationId', '=', q.locationId);
+  const rows = await query.execute();
+  const dayNum = (iso: string) => Math.floor(Date.UTC(Number(iso.slice(0, 4)), Number(iso.slice(5, 7)) - 1, Number(iso.slice(8, 10))) / 86_400_000);
+  const happened = rows.filter((a) => {
+    const c = clock.get(a.locationId);
+    if (!c) return false;
+    const d = localIso(a.date);
+    return d < c.date || (d === c.date && a.startMin + a.durationMin <= c.min);
+  });
+  const products = await productsFor(
+    trx,
+    happened.map((a) => a.id),
+  );
+  const due = happened.map((a) => {
+    const c = clock.get(a.locationId)!;
+    const deposit = a.paid === 'deposit' ? a.deposit : 0;
+    return {
+      appointmentId: a.id,
+      locationId: a.locationId,
+      locationName: c.name,
+      customerId: a.customerId,
+      customerName: a.title,
+      serviceName: a.serviceName ?? a.title,
+      employeeName: a.employeeName ?? null,
+      date: localIso(a.date),
+      start: hhmm(a.startMin),
+      end: hhmm(a.startMin + a.durationMin),
+      price: a.price,
+      deposit,
+      due: Math.max(0, a.price - deposit),
+      daysAgo: Math.max(0, dayNum(c.date) - dayNum(localIso(a.date))),
+      source: a.source,
+      products: products.get(a.id) ?? [],
+    };
+  });
+  return { due, total: due.reduce((n, d) => n + d.due, 0) };
 }

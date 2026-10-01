@@ -1,7 +1,7 @@
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { App } from '../../App.js';
+import { App, queryClient } from '../../App.js';
 import { setAccessToken } from '@velnes/client';
 
 const LOC = '20000000-0000-4000-8000-000000000001';
@@ -20,7 +20,7 @@ const me = {
   perms: { 'pos.checkout': 'business', 'pos.refund': 'business' },
 };
 
-function mockApi(sales: { body: unknown }[], appointments: unknown[] = []) {
+function mockApi(sales: { body: unknown }[], appointments: unknown[] = [], due: unknown[] = []) {
   vi.stubGlobal(
     'fetch',
     vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
@@ -70,6 +70,7 @@ function mockApi(sales: { body: unknown }[], appointments: unknown[] = []) {
           ],
         });
       if (path.includes('/appointments?')) return ok({ appointments });
+      if (path.includes('/till/due')) return ok({ due, total: 0 });
       if (path.endsWith('/sales') && init?.method === 'POST') {
         const body = JSON.parse(String(init.body)) as { method: string };
         sales.push({ body });
@@ -109,6 +110,7 @@ async function openTill() {
 describe('cash register', () => {
   beforeEach(() => {
     localStorage.clear();
+    queryClient.clear();
     setAccessToken(null);
   });
   afterEach(() => {
@@ -172,4 +174,19 @@ describe('cash register', () => {
     const toast = await screen.findByRole('status');
     expect(toast.textContent).toContain('CEN-2026-0414');
   });
+
+  it('the Due tab lists past visits never paid, bucketed by age, and rings one up with its products', async () => {
+    mockApi([], [], [
+      { appointmentId: 'aaaaaaaa-0000-4000-8000-000000000009', locationId: LOC, locationName: 'Centar', customerId: null, customerName: 'Owing Tester', serviceName: 'Rehab training', employeeName: 'Maria Petrovska', date: '2026-09-24', start: '09:00', end: '09:45', price: 1500, deposit: 0, due: 1500, daysAgo: 7, source: 'client', products: [{ productId: PROD, name: 'Kinesiology tape roll', qty: 1, unitPrice: 550 }] },
+    ]);
+    await openTill();
+    // The due door answers after the location is known. A cheap poll:
+    // jsdom's role queries are slow enough to starve the fetch chain.
+    await waitFor(() => expect([...document.querySelectorAll('.ttab')].some((e) => e.textContent === 'Due · 1')).toBe(true), { timeout: 8000, interval: 400 });
+    await userEvent.click(screen.getByRole('button', { name: 'Due · 1' }));
+    expect(screen.getByText('This week')).toBeDefined();
+    await userEvent.click(await screen.findByRole('button', { name: /Owing Tester/ }));
+    expect(screen.getByText('With the booking')).toBeDefined();
+    expect(screen.getByText(/2\.050/, { selector: 'button' })).toBeDefined(); // 1.500 + 550
+  }, 15_000);
 });

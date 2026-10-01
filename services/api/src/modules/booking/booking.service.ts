@@ -599,7 +599,7 @@ export async function productsOf(trx: Trx, appointmentId: string): Promise<Visit
 }
 
 /** The same, for many appointments in one query. */
-async function productsFor(trx: Trx, ids: string[]): Promise<Map<string, VisitProduct[]>> {
+export async function productsFor(trx: Trx, ids: string[]): Promise<Map<string, VisitProduct[]>> {
   const out = new Map<string, VisitProduct[]>();
   if (!ids.length) return out;
   const rows = await trx

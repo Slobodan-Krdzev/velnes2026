@@ -135,3 +135,37 @@ export const DrawerCloseResponseSchema = z.object({
   cashSales: z.number().int(),
 });
 export type DrawerCloseResponse = z.infer<typeof DrawerCloseResponseSchema>;
+
+/**
+ * Due payments (Alex, 2026-10-01): visits that happened — booked or
+ * confirmed, their end already passed in the location's clock — and
+ * were never paid: no live invoice line references them. The till's
+ * Due tab rings them up like a Today's appointment. `due` is what is
+ * still owed (the price less a deposit taken at booking); the sale door
+ * charges the appointment's price as it always has — netting a deposit
+ * at the till is not built yet, so `deposit` is shown, not subtracted.
+ */
+export const DuePaymentSchema = z.object({
+  appointmentId: z.uuid(),
+  locationId: z.uuid(),
+  locationName: z.string(),
+  customerId: z.uuid().nullable(),
+  customerName: z.string(),
+  serviceName: z.string(),
+  employeeName: z.string().nullable(),
+  date: z.iso.date(),
+  start: z.string(),
+  end: z.string(),
+  price: MoneySchema,
+  deposit: MoneySchema,
+  due: MoneySchema,
+  /** Whole days since the visit, in the location's clock; 0 = today. */
+  daysAgo: z.number().int(),
+  source: z.string(),
+  /** Products reserved with the booking, so the basket can carry them. */
+  products: z.array(z.object({ productId: z.uuid(), name: z.string(), qty: z.number().int(), unitPrice: MoneySchema })).default([]),
+});
+export type DuePayment = z.infer<typeof DuePaymentSchema>;
+export const DueQuerySchema = z.object({ locationId: z.uuid().optional() });
+export const DuePaymentsSchema = z.object({ due: z.array(DuePaymentSchema), total: MoneySchema });
+export type DuePayments = z.infer<typeof DuePaymentsSchema>;
