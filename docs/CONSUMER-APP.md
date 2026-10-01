@@ -320,6 +320,11 @@ Two decisions worth recording:
   the product out.
   `booking/products.test.ts`, `salon/Products.test.tsx`, the till and
   drawer tests.
+- **The confirmation on desktop is two columns (2026-10-01).** The
+  tick, the word and Back to home on the left, sticky; the visit's card
+  and its map on the right, the pair centred at the identity step's
+  width. Below 1024px the single column keeps its old order (word,
+  card, map, button) through `display: contents` and one `order`.
 
 ## A visit is several treatments
 

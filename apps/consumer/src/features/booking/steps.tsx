@@ -274,7 +274,11 @@ export function BookConfirmed() {
   };
   return (
     <section data-screen="confirm">
-      <div className="confirm-wrap">
+      {/* Desktop (Alex, 2026-10-01): two columns — the word and the way
+          on, on the left; the visit and its map on the right. Phones and
+          tablets keep the single column in the same order as before. */}
+      <div className="confirm-wrap confirm-split">
+        <div className="confirm-lead">
         <div className="okring">
           <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>
         </div>
@@ -296,6 +300,11 @@ export function BookConfirmed() {
                 ? t('c.pay.venueDone', { amount: fmtMKD(payment.amount), loc: state.locationName })
                 : t('c.bk.confirmedAt', { loc: state.locationName })}
         </p>
+        <div className="confirm-actions" style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginTop: '18px' }}>
+          <button className="btn btn-p" onClick={done}>{t('c.bk.backHome')}</button>
+        </div>
+        </div>
+        <div className="confirm-detail">
         <div className="sumcard">
           <div className="row"><span className="k">{t('c.bk.salon')}</span><span className="v">{draft?.salonName ?? state.locationName}</span></div>
           <div className="row"><span className="k">{t('c.bk.for')}</span><span className="v">{draft?.forWhom === 'other' ? draft.guestName : 'Myself'}</span></div>
@@ -345,8 +354,6 @@ export function BookConfirmed() {
             />
           </div>
         ) : null}
-        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginTop: '18px' }}>
-          <button className="btn btn-p" onClick={done}>{t('c.bk.backHome')}</button>
         </div>
       </div>
     </section>

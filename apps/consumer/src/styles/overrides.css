@@ -986,6 +986,23 @@ a.pop-go:hover {
   .authwrap-split .auth-form>.fld:first-child{margin-top:0}
 }
 
+/* ── Confirmation, desktop: two columns (Alex, 2026-10-01) ──────────
+   The tick, the word and Back home on the left; the visit's card and
+   its map on the right, the pair centred like the identity step. On a
+   phone the single column keeps the old order: word, card, map, button. */
+@media (max-width:1023px){
+  .confirm-split .confirm-actions{order:3}
+  .confirm-split .confirm-lead{display:contents}
+  .confirm-split .confirm-detail{display:contents}
+  .confirm-split{display:flex;flex-direction:column}
+}
+@media (min-width:1024px){
+  .confirm-wrap.confirm-split{max-width:980px;display:grid;grid-template-columns:1fr 1fr;
+    column-gap:56px;align-items:center;min-height:calc(100vh - 90px);padding-top:24px}
+  .confirm-split .confirm-lead{position:sticky;top:110px;align-self:start}
+  .confirm-split .confirm-detail{min-width:0}
+}
+
 /* ── Payment section ──────────────────────────────────────────────── */
 .pay-code{display:flex;gap:8px}
 .pay-code .tin{flex:1;min-width:0}
