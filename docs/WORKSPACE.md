@@ -425,3 +425,12 @@ Icons are one shared path map (`@velnes/ui`'s `AMENITY_ICONS`), a
 different shape per amenity, always the brand colour. Fixture salons
 carry realistic sets for their kind. Search will filter on the keys
 later; nothing here is built for that yet beyond the keys being stable.
+
+## Velnes news: what is new is green (2026-10-01)
+
+The bell's list marks the notices newer than the last look with a light
+green row. The last look is the per-browser `velnes.noticesSeen` marker
+the dot already used; the shell captures it as the list opens and moves
+it on at the same moment, so the rows stay green for the whole look and
+are plain on the next one. Nothing is stored server-side — the same
+convenience as the dot, not read state. `shell/Notices.test.tsx`.

@@ -95,6 +95,11 @@ export function Shell() {
     }
   })();
   const unseen = !!latest && latest > seen;
+  // What counts as NEW while the list is open (Alex, 2026-10-01): the
+  // notices since the last look. Captured as the list opens — the seen
+  // marker moves on at the same moment, so the rows stay green until
+  // the next time the bell is opened, not just until the next render.
+  const [freshSince, setFreshSince] = useState<string | null>(null);
   const scopeRef = useOutsideClose(scopeMenu, () => setScopeMenu(false));
   const envRef = useOutsideClose(envMenu, () => setEnvMenu(false));
   const scopeValue = useMemo(() => ({ scope, setScope }), [scope]);
@@ -266,6 +271,7 @@ export function Shell() {
                 aria-haspopup="menu"
                 aria-expanded={notifOpen}
                 onClick={() => {
+                  if (!notifOpen) setFreshSince(seen);
                   setNotifOpen((v) => !v);
                   if (latest) {
                     try {
@@ -290,7 +296,8 @@ export function Shell() {
                     (notices.data?.notices ?? []).map((n) => (
                       <button
                         key={n.id}
-                        className="menu-row"
+                        className={`menu-row${freshSince != null && n.createdAt > freshSince ? ' new' : ''}`}
+                        data-new={freshSince != null && n.createdAt > freshSince ? '1' : undefined}
                         onClick={() => {
                           setNotifOpen(false);
                           // A notice knows its screen: category news opens
