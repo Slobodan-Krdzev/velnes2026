@@ -19,6 +19,7 @@ import { LocationHours } from './LocationHours.js';
 import { IcArr, IcClock, IcPin, IcSpark, IcVok } from '../discovery/cards.js';
 import { useBooking } from '../booking/store.js';
 import { LoyaltyEarn } from '../account/Loyalty.js';
+import { SalonSkeleton } from '../../components/Skeleton.js';
 import { distanceKm, distanceLbl, useUserLocation } from '../../lib/geo.js';
 
 type PublicService = z.infer<typeof PublicServiceSchema>;
@@ -801,7 +802,13 @@ export function Salon() {
     seeded.current = name;
     setBoxQ(name);
   }, [d?.name, setBoxQ]);
-  if (!d) return null;
+  if (!d)
+    return (
+      <>
+        <div className="d-env"><section className="d-wrap" style={{ paddingTop: 24 }}><SalonSkeleton /></section></div>
+        <div className="m-env"><section className="m-page" style={{ padding: 16 }}><SalonSkeleton /></section></div>
+      </>
+    );
   const photo = d.gallery[0]?.img ? `url("${d.gallery[0].img}")` : 'var(--ih)';
   const photo2 = d.gallery[1]?.img ? `url("${d.gallery[1].img}")` : 'var(--if)';
   const printedAddress = [d.address, d.city].filter(Boolean).join(', ');

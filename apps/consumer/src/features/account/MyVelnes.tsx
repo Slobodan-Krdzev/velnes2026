@@ -16,6 +16,7 @@ import { ReviewForm, ReviewGiven } from './ReviewForm.js';
 import { CancelConfirm, PaymentLines, PolicyCard, RequestCard, ReschedulePicker, VisitHistory } from './Changes.js';
 import { LoyaltyCard, LoyaltySection, useMyLoyalty } from './Loyalty.js';
 import { AvatarPicker } from '../../components/AvatarPicker.js';
+import { SkelRows } from '../../components/Skeleton.js';
 import { Stars } from '../../components/Stars.js';
 import {
   useFavourites,
@@ -502,7 +503,7 @@ export function MyVelnes({ section = 'over' }: { section?: SecId }) {
                       </button>
                     ))}
                   </div>
-                  {appts.isLoading ? null : list.filter((a) => bucketOf(a) === tab).length ? (
+                  {appts.isLoading ? <SkelRows n={3} /> : list.filter((a) => bucketOf(a) === tab).length ? (
                     list
                       .filter((a) => bucketOf(a) === tab)
                       .map((a) => (
@@ -703,7 +704,7 @@ export function MyVelnes({ section = 'over' }: { section?: SecId }) {
                   <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '8px' }}>
                     <button className="acc-link" onClick={() => void markRead(null)}>{t('c.acc.markRead')}</button>
                   </div>
-                  {notifs.data?.notifications.length ? (
+                  {notifs.isLoading ? <SkelRows n={4} /> : notifs.data?.notifications.length ? (
                     <div className="acc-card">
                       {notifs.data.notifications.map((n) => {
                         const open = openNotif === n.id;
@@ -797,8 +798,7 @@ function Favourites() {
   const nav = useNavigate();
   const { data, isLoading, isError, toggle } = useFavourites();
 
-  if (isLoading)
-    return <div className="sm muted" style={{ padding: '18px 4px' }}>{t('c.acc.favsLoading')}</div>;
+  if (isLoading) return <SkelRows n={3} />;
   if (isError || !data)
     return (
       <div className="acc-err">{t('c.acc.favsError')}</div>

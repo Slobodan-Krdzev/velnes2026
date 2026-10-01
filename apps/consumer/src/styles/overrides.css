@@ -1672,3 +1672,30 @@ a.pop-go:hover {
 .acc-notif-chev.on{transform:rotate(90deg)}
 .acc-notif-detail{display:grid;gap:10px;padding:2px 0 14px 20px;justify-items:start}
 .acc-notif-appt{display:grid;gap:3px;padding:10px 12px;border-radius:12px;background:var(--warm);width:100%;box-sizing:border-box;justify-items:start}
+
+/* ── Motion (Alex, 2026-10-01) ────────────────────────────────────────
+   Skeletons where lists load, an entrance for every screen, a slide
+   for the booking bar, a reveal for every panel that opens in place.
+   All of it off under prefers-reduced-motion. */
+.skel-rows{display:grid;gap:10px}
+.skel-rail{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.skel-rail.m{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;padding:0 16px}
+.skel-rail .skel-card.best .skel-ph{height:120px}
+.skel-salon{display:grid;gap:12px}
+.skel-salon .skel-ph.hero{height:220px;border-radius:18px}
+.skel-salon .skel-line.title{height:22px;border-radius:8px;margin-top:6px}
+.skel-tiles{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:8px}
+.skel-tiles .skel-card{grid-template-columns:1fr;padding:14px}
+.page-enter{animation:page-in .22s ease-out both}
+@keyframes page-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.m-bookbar{animation:bar-up .3s cubic-bezier(.22,.68,.35,1) both}
+@keyframes bar-up{from{transform:translateY(100%)}to{transform:none}}
+@keyframes reveal{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.acc-notif-detail,.rs-pick,.rs-confirm,.rs-pending,.rs-declined,.rs-approved,.cx-confirm,.rv-form,.rv-done,.acc-blocked,
+.loy-earn,.pro-grid,.dcart .dcart-row,.dcart .dcart-when,.dcart .dcart-tot,.dcart-mini,.acc-card.loy-hero{animation:reveal .2s ease-out both}
+.m-bookbar .btn,.dcart .btn{transition:transform .12s ease,filter .12s ease}
+.m-bookbar .btn:active,.dcart .btn:active{transform:scale(.98)}
+@media (prefers-reduced-motion:reduce){
+  .page-enter,.m-bookbar,.acc-notif-detail,.rs-pick,.rs-confirm,.rs-pending,.rs-declined,.rs-approved,.cx-confirm,.rv-form,.rv-done,
+  .acc-blocked,.loy-earn,.pro-grid,.dcart .dcart-row,.dcart .dcart-when,.dcart .dcart-tot,.dcart-mini,.acc-card.loy-hero,.dcart{animation:none}
+}

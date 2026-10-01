@@ -4,6 +4,7 @@ import { t } from '../../lib/i18n-core.js';
 import { i18n } from '../../lib/i18n-core.js';
 import { useSession } from '../../lib/api/session.js';
 import { dayLbl } from '../../lib/api/mappers.js';
+import { SkelRows } from '../../components/Skeleton.js';
 
 /**
  * Velnes Loyalty in My Velnes (Alex, 2026-09-30) — docs/LOYALTY.md.
@@ -110,6 +111,7 @@ export function LoyaltySection() {
       </div>
       <div className="acc-card">
         <div className="acc-lbl">{t('c.loy.recent')}</div>
+        {!d ? <SkelRows n={3} /> : null}
         {d && !d.entries.length ? <div className="sm muted">{t('c.loy.none')}</div> : null}
         {(d?.entries ?? []).map((e) => (
           <EntryRow key={e.id} e={e} />

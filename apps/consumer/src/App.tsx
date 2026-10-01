@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, type ReactNode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BrowserRouter, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { Login, Register } from './features/account/Auth.js';
@@ -72,6 +72,22 @@ function PendingReturn() {
  * filter — which writes `?price=low` into the URL — does not throw the
  * reader back to the top of the list they were reading.
  */
+/**
+ * Screens enter (Alex, 2026-10-01): the route's content fades and
+ * lifts in on every path change — a key on the frame remounts it, so
+ * the one animation serves every screen and every account section.
+ * Query-only changes (a tab, `?review=1`) stay put. Reduced motion
+ * turns it off in CSS.
+ */
+function PageFrame({ children }: { children: ReactNode }) {
+  const { pathname } = useLocation();
+  return (
+    <div className="page-enter" key={pathname}>
+      {children}
+    </div>
+  );
+}
+
 function ScrollToTop() {
   const { pathname } = useLocation();
   useEffect(() => {
@@ -100,6 +116,7 @@ export function App() {
                 of 900px. */}
             <DHeader />
             <MobileChrome />
+            <PageFrame>
             <Routes>
               <Route path="/" element={<Home />} />
               <Route path="/s/:category" element={<Results />} />
@@ -142,6 +159,7 @@ export function App() {
               <Route path="/cookies" element={<Cookies />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
+            </PageFrame>
             {/* The footer, once, under every route. */}
             <SiteFooter />
           </SearchSheetProvider>
