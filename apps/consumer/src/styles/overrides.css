@@ -1702,3 +1702,13 @@ a.pop-go:hover {
   .page-enter,.m-bookbar,.acc-notif-detail,.rs-pick,.rs-confirm,.rs-pending,.rs-declined,.rs-approved,.cx-confirm,.rv-form,.rv-done,
   .acc-blocked,.loy-earn,.pro-grid,.dcart .dcart-row,.dcart .dcart-when,.dcart .dcart-tot,.dcart-mini,.acc-card.loy-hero,.dcart{animation:none}
 }
+
+/* The Book now button as a pointer (Alex, 2026-10-01): short of a step
+   it names the step and scrolls there. The anchor keeps clear of the
+   sticky chrome, then glows once so the eye lands on it. */
+.bk-anchor{scroll-margin-top:96px;border-radius:8px}
+@keyframes bk-flash{0%{background:transparent}25%{background:var(--warm)}100%{background:transparent}}
+.bk-flash{animation:bk-flash 1.5s ease-out}
+.btn.bk-need{background:var(--ink);border-color:var(--ink)}
+.btn.bk-need:hover{filter:brightness(1.15)}
+@media (prefers-reduced-motion:reduce){.bk-flash{animation:none}}

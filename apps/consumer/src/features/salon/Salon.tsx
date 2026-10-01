@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactElement } from 'react';
 import { useTranslation } from 'react-i18next';
 import { t } from '../../lib/i18n-core.js';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
@@ -299,7 +299,7 @@ function useSalonPage() {
   });
   // Required groups nobody has answered yet: the visit cannot be booked
   // until they are, and the button says which one.
-  const missing = lines.flatMap((l) => l.missing.map((g) => ({ service: l.svc.name, group: g.name })));
+  const missing = lines.flatMap((l) => l.missing.map((g) => ({ service: l.svc.name, group: g.name, serviceId: l.serviceId, groupId: g.id })));
   const free = useMemo(() => (availQ.data?.slots ?? []).filter((s) => s.free).map((s) => s.t), [availQ.data]);
   // The time is the person's to pick — nothing is chosen for them, so
   // "Date & time" is ticked only once they have tapped one (Alex,
@@ -442,6 +442,70 @@ function chosenOf(p: Page, serviceId: string) {
   return l ? { durationMin: l.durationMin, price: l.price, label: l.variant?.label ?? null } : null;
 }
 
+/**
+ * What still stands between the visit and Book now (Alex, 2026-10-01):
+ * the first unmet step, in the order the page asks for them — a
+ * treatment, every required option, then a time. One place decides it
+ * so the desktop card and the phone bar never disagree.
+ */
+type Need = { kind: 'service' } | { kind: 'option'; group: string; service: string; serviceId: string; groupId: string } | { kind: 'time' } | null;
+function needOf(p: Page): Need {
+  if (!p.lines.length) return { kind: 'service' };
+  const m = p.missing[0];
+  if (m) return { kind: 'option', ...m };
+  if (!p.time) return { kind: 'time' };
+  return null;
+}
+
+/** Each layout has its own copy of the booking card (CSS shows one), so
+ *  the anchors are prefixed by layout and the bar scrolls to its own. */
+const anchorOf = (need: NonNullable<Need>, desktop: boolean) => {
+  const pfx = desktop ? 'd-' : 'm-';
+  if (need.kind === 'service') return `${pfx}bk-treat`;
+  if (need.kind === 'time') return `${pfx}bk-when`;
+  return `${pfx}bk-opt-${need.serviceId}-${need.groupId}`;
+};
+
+/** Bring the step into view and let it glow for a moment, so the eye
+ *  lands where the hand is needed. Honours reduced motion. */
+export function revealStep(id: string) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const still = typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  el.scrollIntoView?.({ behavior: still ? 'auto' : 'smooth', block: 'start' });
+  el.classList.remove('bk-flash');
+  void el.offsetWidth; // restart the animation when tapped twice
+  el.classList.add('bk-flash');
+  window.setTimeout(() => el.classList.remove('bk-flash'), 1600);
+}
+
+/**
+ * The one button under the summary. Complete, it books; short of a
+ * step, it names that step ("Select a treatment", "Select date &
+ * time", "Select Pressure") and a tap scrolls there — never a dead,
+ * grey button that leaves the person guessing what it wants.
+ */
+function BookButton({ p, desktop, onBook, style, arrow }: { p: Page; desktop: boolean; onBook: () => void; style?: CSSProperties; arrow?: boolean }) {
+  const need = needOf(p);
+  const label = !need
+    ? t('c.sal.bookNow')
+    : need.kind === 'service'
+      ? t('c.sal.needService')
+      : need.kind === 'time'
+        ? t('c.sal.needTime')
+        : t('c.sal.needOption', { group: need.group });
+  return (
+    <button
+      className={`btn btn-p${need ? ' bk-need' : ''}`}
+      style={style}
+      data-need={need?.kind ?? 'none'}
+      onClick={need ? () => revealStep(anchorOf(need, desktop)) : onBook}
+    >
+      {label} {arrow || need ? IcArr : null}
+    </button>
+  );
+}
+
 /** The book card core — identical structure in both environments (the
  *  prototype's desktop variant adds .dtr to cards). */
 function BookCard({ p, desktop }: { p: Page; desktop: boolean }) {
@@ -494,7 +558,7 @@ function BookCard({ p, desktop }: { p: Page; desktop: boolean }) {
           ) : null}
         </>
       ) : null}
-      <div className="bk-h" style={desktop ? undefined : { marginTop: '4px' }}>{t('c.sal.step1')}</div>
+      <div className="bk-h bk-anchor" id={desktop ? 'd-bk-treat' : 'm-bk-treat'} style={desktop ? undefined : { marginTop: '4px' }}>{t('c.sal.step1')}</div>
       <div className="bk-sub spark">
         {IcSpark}
         <span className="muted">{t('c.sal.mostBooked')}</span>
@@ -578,7 +642,7 @@ function BookCard({ p, desktop }: { p: Page; desktop: boolean }) {
               const unmet = g.required && !g.options.some((o) => l.mods.includes(o.id));
               return (
                 <div key={g.id}>
-                  <div className="bk-sub" style={{ marginTop: '14px' }}>
+                  <div className="bk-sub bk-anchor" id={`${desktop ? 'd-' : 'm-'}bk-opt-${l.serviceId}-${g.id}`} style={{ marginTop: '14px' }}>
                     <span className="muted">
                       {g.name} · {l.svc.name}
                       <small className={unmet ? 'mod-req unmet' : 'mod-req'}>
@@ -698,7 +762,7 @@ function BookCard({ p, desktop }: { p: Page; desktop: boolean }) {
       {/* Nothing to schedule yet: the section is there, and inert, until
           a treatment is in the visit — a day and time for no treatment
           is not a step anyone can complete. Alex, 2026-09-21. */}
-      <div className="bk-h" style={{ marginTop: '20px' }}>
+      <div className="bk-h bk-anchor" id={desktop ? 'd-bk-when' : 'm-bk-when'} style={{ marginTop: '20px' }}>
         {t('c.sal.step2')}
         {!p.lines.length ? <span className="sm muted bk-hint">{t('c.sal.chooseFirst')}</span> : null}
       </div>
@@ -1046,18 +1110,7 @@ export function Salon() {
                     <b>{showPrice}</b>
                   </div>
                   <LoyaltyEarn serviceCount={p.lines.length} />
-                  <button className="btn btn-p" style={{ width: '100%' }} disabled={!p.lines.length || !p.time || p.missing.length > 0} onClick={book}>
-                    {t('c.sal.bookNow')}
-                  </button>
-                  {!p.lines.length || !p.time || p.missing.length ? (
-                    <div className="sm muted" style={{ textAlign: 'center', marginTop: '7px' }}>
-                      {!p.lines.length
-                        ? t('c.sal.chooseFirstDot')
-                        : p.missing.length
-                          ? t('c.sal.chooseGroup', { group: p.missing[0]!.group, service: p.missing[0]!.service })
-                          : t('c.sal.pickTime')}
-                    </div>
-                  ) : null}
+                  <BookButton p={p} desktop onBook={book} style={{ width: '100%' }} />
                 </div>
               )}
             </div>
@@ -1137,12 +1190,7 @@ export function Salon() {
                   </span>
                 </div>
                 <LoyaltyEarn serviceCount={p.lines.length} className="m" />
-                <button className="btn btn-p" disabled={!p.lines.length || !p.time || p.missing.length > 0} onClick={book}>
-                  {t('c.sal.bookNow')} {IcArr}
-                </button>
-                {p.missing.length ? (
-                  <span className="sm muted">{t('c.sal.chooseGroup', { group: p.missing[0]!.group, service: p.missing[0]!.service })}</span>
-                ) : null}
+                <BookButton p={p} desktop={false} onBook={book} arrow />
                 <span className="safe">{IcVok} {t('c.sal.safe')}</span>
               </div>
             ) : null}

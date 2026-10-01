@@ -289,6 +289,15 @@ Two decisions worth recording:
   ever blank: reached with nothing to book, it says what belongs there
   and offers "Find a salon"; signed in with the profile still loading,
   it shows the summary's skeleton. `features/booking/Review.test.tsx`.
+- **The Book now button names the missing step (2026-10-01).** A grey
+  button with a hint under it left people guessing. `needOf` decides,
+  in one place, the first unmet step in the order the page asks for them
+  — a treatment, each required option group, a time — and the button
+  (desktop cart and phone bar alike) reads "Select a treatment", "Select
+  {group}" or "Select date & time"; a tap scrolls to that step in the
+  button's own layout (`d-`/`m-` anchors, `scroll-margin-top` clears the
+  sticky chrome) and the heading glows once. Complete, it is "Book now"
+  again. `features/salon/BookCta.test.tsx`.
 
 ## A visit is several treatments
 
