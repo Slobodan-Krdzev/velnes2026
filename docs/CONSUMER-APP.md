@@ -280,6 +280,15 @@ Two decisions worth recording:
   first location — and, for the demo tenant, a location where the only
   physiotherapist's measured pace exceeds the catalog duration, so the
   engine (correctly) offers nothing.
+- **The draft survives a reload (2026-10-01).** The in-flight booking
+  lived only in React state, so refreshing `/book/review` (or opening it
+  cold) rendered nothing at all. The draft is now mirrored into
+  `sessionStorage` under `velnes.booking.draft` — this tab only, read
+  back when the app starts, cleared by the confirmation screen so a
+  finished visit never resurfaces as a draft. And no booking step is
+  ever blank: reached with nothing to book, it says what belongs there
+  and offers "Find a salon"; signed in with the profile still loading,
+  it shows the summary's skeleton. `features/booking/Review.test.tsx`.
 
 ## A visit is several treatments
 

@@ -2893,6 +2893,7 @@ export const en = {
   'c.sal.verified': 'Verified salon',
   'c.bk.confirm': 'Confirm your booking',
   'c.bk.pickFirst': 'Pick a treatment at a salon first — your booking summary appears here.',
+  'c.bk.findSalon': 'Find a salon',
   'c.bk.emailHold': 'Enter your email to hold this appointment — no account or password needed.',
   'c.bk.for': 'For',
   'c.bk.salon': 'Salon',

@@ -12,6 +12,7 @@ import { useSession } from '../../lib/api/session.js';
 import { IcArr } from '../discovery/cards.js';
 import { SalonMap } from '../../components/SalonMap.js';
 import { useBooking } from './store.js';
+import { SkelLines, SkelRows } from '../../components/Skeleton.js';
 
 /** Guest identity steps — prototype markup, wired to the real booking
  *  door. The email verification-code step waits for the SMTP phase; the
@@ -49,6 +50,24 @@ const IcCheck = (
   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>
 );
 
+/** A booking step reached with nothing to book — a reload after the
+ *  visit was confirmed, a link opened cold. Never a blank page: say what
+ *  belongs here and offer the way back. */
+export function NoDraft() {
+  const nav = useNavigate();
+  return (
+    <section className="acc" data-screen="email" data-testid="no-draft">
+      <div className="authwrap">
+        <h1>{t('c.bk.confirm')}</h1>
+        <div className="sub">{t('c.bk.pickFirst')}</div>
+        <button className="btn btn-p" style={{ width: '100%', marginTop: '18px', minHeight: '50px' }} onClick={() => nav('/')}>
+          {t('c.bk.findSalon')} {IcArr}
+        </button>
+      </div>
+    </section>
+  );
+}
+
 export function BookIdentity() {
   useTranslation();
   const nav = useNavigate();
@@ -62,19 +81,7 @@ export function BookIdentity() {
   const [fw, setFw] = useState<'self' | 'other'>(draft?.forWhom ?? 'self');
   const [guest, setGuest] = useState(draft?.guestName ?? '');
   const [err, setErr] = useState('');
-  if (!draft) {
-    return (
-      <section className="acc" data-screen="email">
-        <div className="authwrap">
-          <h1>{t('c.bk.confirm')}</h1>
-          <div className="sub">{t('c.bk.pickFirst')}</div>
-          <button className="btn btn-p" style={{ width: '100%', marginTop: '18px', minHeight: '50px' }} onClick={() => nav('/')}>
-            Find a salon {IcArr}
-          </button>
-        </div>
-      </section>
-    );
-  }
+  if (!draft) return <NoDraft />;
   const next = () => {
     if (!/.+@.+\..+/.test(email)) {
       setErr(t('c.bk.validEmail'));
@@ -335,7 +342,19 @@ export function BookReview() {
   useEffect(() => {
     if (!signedIn) nav('/book/identity', { replace: true });
   }, [signedIn, nav]);
-  if (!draft || !profile) return null;
+  if (!draft) return <NoDraft />;
+  // Signed in, profile still on its way: the summary's shape, not a blank.
+  if (!profile) {
+    return (
+      <section data-screen="email">
+        <div className="authwrap" data-testid="review-loading">
+          <h1>{t('c.bk.confirm')}</h1>
+          <SkelLines n={2} widths={['w60', 'w40']} />
+          <div className="minisum"><SkelRows n={5} /></div>
+        </div>
+      </section>
+    );
+  }
   const book = async () => {
     setBusy(true);
     setErr('');

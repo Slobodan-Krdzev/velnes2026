@@ -2875,6 +2875,7 @@ export const sq: Record<TranslationKey, string> = {
   'c.sal.verified': 'Sallon i verifikuar',
   'c.bk.confirm': 'Konfirmoni rezervimin',
   'c.bk.pickFirst': 'Zgjidhni fillimisht një trajtim në një sallon — përmbledhja e rezervimit shfaqet këtu.',
+  'c.bk.findSalon': 'Gjej një sallon',
   'c.bk.emailHold': 'Shkruani e-mailin tuaj për ta mbajtur këtë termin — nuk nevojitet llogari apo fjalëkalim.',
   'c.bk.for': 'Për',
   'c.bk.salon': 'Salloni',
