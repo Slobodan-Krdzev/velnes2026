@@ -2784,6 +2784,7 @@ export const sq: Record<TranslationKey, string> = {
   'c.cards.at': 'te {{salon}}',
   'c.cards.bookDirect': 'Rezervoni direkt në këtë sallon',
   'c.cards.viewSalon': 'Shiko sallonin',
+  "c.cards.book": "Rezervo",
   'c.cards.nothingMatched': 'Asgjë nuk përputhet me “{{q}}” — provoni një trajtim ose emrin e një salloni.',
   'c.cards.live': 'Çdo opsion është aktiv dhe i rezervueshëm',
   'c.cards.noMatch': 'Nuk ka përputhje? Do të tregojmë alternativa të mençura.',

@@ -723,20 +723,21 @@ export function NowNearM({ n }: { n: NowNear }) {
             </span>
           ) : null}
         </div>
-        <div className="slotrow" style={{ marginTop: '7px' }}>
+        {/* One row (Alex, 2026-10-01): the start it can make, and Book. */}
+        <div className="slotrow nn-row" style={{ marginTop: '7px' }}>
           {b.slotHref ? (
             <button className="slot-s" onClick={() => nav(b.slotHref!)}>
               {t('c.home.nowAt', { t: b.at })}
             </button>
           ) : null}
+          <button
+            className="btn btn-g nn-book"
+            style={{ minHeight: '36px', padding: '6px 14px', fontSize: '13.5px' }}
+            onClick={() => nav(b.href)}
+          >
+            {t('c.cards.book')} {IcArr}
+          </button>
         </div>
-        <button
-          className="btn btn-g"
-          style={{ minHeight: '38px', padding: '6px 14px', fontSize: '13.5px', marginTop: '8px' }}
-          onClick={() => nav(b.href)}
-        >
-          {t('c.res.viewBook')} {IcArr}
-        </button>
       </div>
     </article>
   );

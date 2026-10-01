@@ -2802,6 +2802,7 @@ export const en = {
   'c.cards.at': 'at {{salon}}',
   'c.cards.bookDirect': 'Book directly at this salon',
   'c.cards.viewSalon': 'View salon',
+  "c.cards.book": "Book",
   'c.cards.nothingMatched': 'Nothing matched “{{q}}” — try a treatment, or a salon name.',
   'c.cards.live': 'Every option is live & bookable',
   'c.cards.noMatch': 'No match? We’ll show smart alternatives.',

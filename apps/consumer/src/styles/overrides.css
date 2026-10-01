@@ -1648,3 +1648,7 @@ a.pop-go:hover {
 .loy-earn-ic{display:inline-grid;place-items:center;color:var(--brand)}
 .loy-earn-ic svg{width:16px;height:16px}
 .loy-earn.m{margin:0 0 8px}
+
+/* "Available now" card on the phone: the slot and Book share a row. */
+.nn-row{align-items:center;justify-content:space-between}
+.nn-row .nn-book{margin-left:auto;flex:0 0 auto}

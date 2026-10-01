@@ -2784,6 +2784,7 @@ export const mk: Record<TranslationKey, string> = {
   'c.cards.at': 'во {{salon}}',
   'c.cards.bookDirect': 'Резервирајте директно во овој салон',
   'c.cards.viewSalon': 'Види салон',
+  "c.cards.book": "Закажи",
   'c.cards.nothingMatched': 'Ништо не одговара на „{{q}}“ — пробајте третман или име на салон.',
   'c.cards.live': 'Секоја опција е активна и може да се резервира',
   'c.cards.noMatch': 'Нема совпаѓање? Ќе прикажеме паметни алтернативи.',
