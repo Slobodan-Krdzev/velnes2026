@@ -868,6 +868,20 @@ function EditBody({ appointment: a, onClose }: { appointment: Appointment; onClo
             <span className="hint">{t('drawer.optionsHint')}</span>
           </div>
         ) : null}
+        {a.products.length ? (
+          <div className="field" data-testid="booked-products">
+            <span>{t('drawer.products')}</span>
+            <div className="chips">
+              {a.products.map((p) => (
+                <span key={p.productId} className="chip">
+                  {p.qty > 1 ? `${p.qty} × ` : ''}
+                  {p.name} · {money(p.unitPrice * p.qty)}
+                </span>
+              ))}
+            </div>
+            <span className="hint">{t('drawer.productsHint')}</span>
+          </div>
+        ) : null}
         {a.source === 'marketplace' && !requested ? <div className="note">{t('drawer.marketplaceNote')}</div> : null}
         {requested ? (
           <div className="note">{t('drawer.requestNote')}</div>

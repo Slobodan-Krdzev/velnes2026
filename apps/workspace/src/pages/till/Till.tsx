@@ -1,5 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { SaleResponseSchema, ValidateCodeResponseSchema, type SaleLine } from '@velnes/contracts';
+import { SaleResponseSchema, ValidateCodeResponseSchema, type SaleLine, type VisitProduct } from '@velnes/contracts';
 import { I, Icon } from '@velnes/ui';
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -143,6 +143,8 @@ export function TillPage() {
     price: number;
     letter: string;
     img?: string | null | undefined;
+    /** Products the customer reserved with the booking (Alex, 2026-10-01). */
+    products?: VisitProduct[] | undefined;
   }
   const inCat = (c: string | null) => posCategory === 'all' || c === posCategory;
   let tiles: Tile[] = [];
@@ -181,7 +183,27 @@ export function TillPage() {
         meta: `${a.start} · ${a.serviceName ?? ''}`,
         price: a.price,
         letter: a.title[0] ?? '?',
+        products: a.products,
       }));
+
+  /**
+   * Products reserved with a booking ring up with it (Alex, 2026-10-01):
+   * when the appointment lands in the basket, its products follow as
+   * ordinary product lines — at this location's shelf price, the one
+   * the sale door will charge — removable like any other line. They
+   * come along once, with the appointment, never again on a re-tap.
+   */
+  const bookedProductLines = (items: VisitProduct[] | undefined): BasketLine[] =>
+    (items ?? []).map((p) => ({
+      key: uuid(),
+      kind: 'product' as const,
+      refId: p.productId,
+      name: p.name,
+      sub: t('till.withBooking'),
+      price: products.find((x) => x.id === p.productId)?.config.price ?? p.unitPrice,
+      qty: p.qty,
+      disc: 0,
+    }));
 
   const tillQty = (id: string) => basket.reduce((n, l) => n + (l.refId === id ? l.qty : 0), 0);
 
@@ -211,6 +233,7 @@ export function TillPage() {
               qty: 1,
               disc: 0,
             },
+            ...bookedProductLines(a.products),
           ],
     );
     toast(t('till.onTill', { name: a.title }));
@@ -234,6 +257,7 @@ export function TillPage() {
           qty: 1,
           disc: 0,
         },
+        ...(tile.kind === 'appointment' ? bookedProductLines(tile.products) : []),
       ];
     });
   const setQty = (key: string, d: number) =>

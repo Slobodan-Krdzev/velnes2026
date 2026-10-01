@@ -99,8 +99,12 @@ export const DiscoveryProductSchema = z.object({
   id: z.uuid(),
   name: z.string(),
   category: z.string().nullable(),
-  /** Whole MKD denars, as stored. */
+  /** Whole MKD denars, as stored on the product (the salon-wide price). */
   price: z.number().int(),
+  /** Where it is actually sold, and for how much there (2026-10-01):
+   *  the shelf of each live location that sells it. A location missing
+   *  here does not sell it; the app offers products per location. */
+  at: z.array(z.object({ locationId: z.uuid(), price: z.number().int() })).default([]),
 });
 /** A gallery entry: the photograph a salon uploaded, or — when it has
  *  only named the space so far — the colour tile the workspace editor

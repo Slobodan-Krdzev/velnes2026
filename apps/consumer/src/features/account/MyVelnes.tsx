@@ -569,6 +569,12 @@ export function MyVelnes({ section = 'over' }: { section?: SecId }) {
                       <span>{t('c.acc.price')}</span>
                       <b>{fmtMKD(current.price)}</b>
                     </div>
+                    {(current.products ?? []).map((p) => (
+                      <div className="acc-kv" key={p.productId} data-testid="appt-product">
+                        <span>{t('c.bk.product')}</span>
+                        <b>{p.qty > 1 ? `${p.qty} × ` : ''}{p.name} · {fmtMKD(p.unitPrice * p.qty)}</b>
+                      </div>
+                    ))}
                     <div className="acc-kv">
                       <span>{t('c.acc.reference')}</span>
                       <b>{current.ref}</b>

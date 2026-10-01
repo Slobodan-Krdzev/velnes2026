@@ -298,6 +298,26 @@ Two decisions worth recording:
   button's own layout (`d-`/`m-` anchors, `scroll-margin-top` clears the
   sticky chrome) and the heading glows once. Complete, it is "Book now"
   again. `features/salon/BookCta.test.tsx`.
+- **Products with the booking (2026-10-01).** The salon page's products
+  were a picture; now they are the shelf of the chosen location (the
+  discovery detail says per product where it is sold and for how much,
+  from the same `prodAt` the till asks), and a product toggles into the
+  visit like a treatment: a cart row, the total, the points preview
+  (+20 a unit). The booking doors take `products[]`; `confirmChain`
+  reserves them against the visit's first treatment in
+  `appointment_products` (name and shelf price snapshotted; a product
+  the location does not sell is refused `PRODUCT_UNAVAILABLE` and
+  nothing is booked). A reservation, not a sale: the pay quote lists
+  them at the shelf price charged now and the pay door writes them as
+  product lines on the treatment's invoice (stock moves there); unpaid,
+  the workspace till pre-fills the basket with them when the
+  appointment is rung up, and the drawer lists them. Every screen after
+  the salon page shows them: identity, review, confirmation, pay, My
+  Velnes. Not gated on stock — the shelf's count is the salon's own
+  bookkeeping, and the till does not refuse on it either. Quantity is
+  one per toggle for now; the schema carries `qty`.
+  `booking/products.test.ts`, `salon/Products.test.tsx`, the till and
+  drawer tests.
 
 ## A visit is several treatments
 

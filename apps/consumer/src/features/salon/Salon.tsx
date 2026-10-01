@@ -127,17 +127,17 @@ function TrCard({
         : s.variants.length
           ? t('c.from', { p: fmtMKD(Math.min(s.price, s.priceFrom ?? s.price)) })
           : fmtMKD(s.price);
+  // The heart is a button of its own, so it sits BESIDE the card button
+  // in a wrapper that positions it — a button inside a button is not
+  // HTML, and the browser said so on every salon page (Alex, 2026-10-01).
   return (
-    <button className={`tr-card${desktop ? ' dtr' : ''}${on ? ' on' : ''}`} onClick={onToggle}>
+    <div className="tr-wrap">
+    <button className={`tr-card${desktop ? ' dtr' : ''}${on ? ' on' : ''}`} aria-pressed={on} onClick={onToggle}>
       <span className="row1">
         <span className="nm">
           {IcScissors}
           <span className="t">{s.name}</span>
         </span>
-        {/* A departure from the prototype, and a necessary one: the
-            prototype's Favourites section lists saved services but gives
-            nowhere to save one. See docs/FAVOURITES.md. */}
-        <FavHeart kind="service" id={s.id} label={s.name} className="fav fav-inline" />
       </span>
       <span className="in2">
         <span>
@@ -150,6 +150,11 @@ function TrCard({
         </b>
       </span>
     </button>
+    {/* A departure from the prototype, and a necessary one: the
+        prototype's Favourites section lists saved services but gives
+        nowhere to save one. See docs/FAVOURITES.md. */}
+    <FavHeart kind="service" id={s.id} label={s.name} className="fav fav-inline" />
+    </div>
   );
 }
 
@@ -214,6 +219,10 @@ function useSalonPage() {
   // prototype's desktop cart is multi-select, and a salon visit really
   // is "haircut then colour" — so the cart is the state, not one id.
   const [cart, setCart] = useState<{ serviceId: string; variantId: string | null; mods: string[] }[]>([]);
+  // Products to take home with the visit (Alex, 2026-10-01): a toggle
+  // per product, like the treatments; the shelf of the chosen location
+  // decides what is offered and at what price.
+  const [prods, setProds] = useState<{ productId: string; qty: number }[]>([]);
   const [empId, setEmpId] = useState('any');
   const [locOpen, setLocOpen] = useState(false);
   const [openVariantFor, setOpenVariantFor] = useState<string | null>(null);
@@ -319,7 +328,26 @@ function useSalonPage() {
   }, [date, lines.length, availQ.data]);
   // What the door will actually charge for the visit: every line at the
   // price its own option carries. Never a "from" price.
-  const price = lines.reduce((n, l) => n + l.price, 0);
+  // The shelf at this location: what the salon sells here, priced here.
+  const shelf = useMemo(
+    () =>
+      (detail?.products ?? []).flatMap((pr) => {
+        const here = (pr.at ?? []).find((a) => a.locationId === locationId);
+        return here ? [{ id: pr.id, name: pr.name, category: pr.category, price: here.price }] : [];
+      }),
+    [detail?.products, locationId],
+  );
+  const plines = useMemo(
+    () =>
+      prods.flatMap((x) => {
+        const pr = shelf.find((s) => s.id === x.productId);
+        return pr ? [{ productId: pr.id, name: pr.name, qty: x.qty, unitPrice: pr.price, price: pr.price * x.qty }] : [];
+      }),
+    [prods, shelf],
+  );
+  const productUnits = plines.reduce((n, l) => n + l.qty, 0);
+  // What the visit costs: treatments plus the products taken home.
+  const price = lines.reduce((n, l) => n + l.price, 0) + plines.reduce((n, l) => n + l.price, 0);
   const durationMin = lines.reduce((n, l) => n + l.durationMin, 0);
   const dayLbl = days.find((d) => d.iso === date)?.lbl ?? date;
   /**
@@ -361,6 +389,13 @@ function useSalonPage() {
     prevDays: () => setDayOffset(Math.max(0, dayOffset - 4)),
     lines,
     cart,
+    shelf,
+    plines,
+    productUnits,
+    inProds: (id: string) => prods.some((x) => x.productId === id),
+    toggleProd: (id: string) =>
+      setProds((c) => (c.some((x) => x.productId === id) ? c.filter((x) => x.productId !== id) : [...c, { productId: id, qty: 1 }])),
+    removeProd: (id: string) => setProds((c) => c.filter((x) => x.productId !== id)),
     inCart: (id: string) => cart.some((c) => c.serviceId === id),
     /** The promised price for a treatment here, if this person holds one. */
     offerPrice: (id: string) => offerFor(id, null)?.specialPrice ?? null,
@@ -407,8 +442,9 @@ function useSalonPage() {
     locIdx,
     pickLoc: (i: number) => {
       setLocIdx(i);
-      // A different location is a different catalog and a different team.
+      // A different location is a different catalog, shelf and team.
       setCart([]);
+      setProds([]);
       setEmpId('any');
       setLocOpen(false);
     },
@@ -714,7 +750,7 @@ function BookCard({ p, desktop }: { p: Page; desktop: boolean }) {
           ))}
         </div>
       ) : null}
-      {d.products.length ? (
+      {p.shelf.length ? (
         <>
           <div
             className="bk-h prod-tg"
@@ -731,7 +767,7 @@ function BookCard({ p, desktop }: { p: Page; desktop: boolean }) {
             }}
           >
             {d.name} products
-            <span className="tiny-tag" style={{ marginLeft: '9px' }}>{t('c.sal.productsN', { n: d.products.length })}</span>
+            <span className="tiny-tag" style={{ marginLeft: '9px' }}>{t('c.sal.productsN', { n: p.shelf.length })}</span>
             <span className="chv">{IcChevD}</span>
           </div>
           {p.prodOpen ? (
@@ -740,20 +776,29 @@ function BookCard({ p, desktop }: { p: Page; desktop: boolean }) {
                 <span className="muted">{t('c.sal.products')}</span>
               </div>
               <div className="tr-grid">
-                {d.products.map((pr) => (
-                  <button key={pr.id} className={`tr-card${desktop ? ' dtr' : ''}`} style={{ cursor: 'default' }}>
-                    <span className="row1">
-                      <span className="nm">
-                        {IcBottle}
-                        <span className="t">{pr.name}</span>
+                {p.shelf.map((pr) => {
+                  const on = p.inProds(pr.id);
+                  return (
+                    <button
+                      key={pr.id}
+                      className={`tr-card${desktop ? ' dtr' : ''}${on ? ' on' : ''}`}
+                      aria-pressed={on}
+                      data-product={pr.id}
+                      onClick={() => p.toggleProd(pr.id)}
+                    >
+                      <span className="row1">
+                        <span className="nm">
+                          {IcBottle}
+                          <span className="t">{pr.name}</span>
+                        </span>
                       </span>
-                    </span>
-                    <span className="in2">
-                      <span>{t('c.sal.product')}</span>
-                      <b>{fmtMKD(pr.price)}</b>
-                    </span>
-                  </button>
-                ))}
+                      <span className="in2">
+                        <span>{on ? t('c.sal.inVisit') : t('c.sal.product')}</span>
+                        <b>{fmtMKD(pr.price)}</b>
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
           ) : null}
@@ -829,6 +874,7 @@ function goBook(p: Page, nav: (to: string) => void, setDraft: ReturnType<typeof 
       durationMin: l.durationMin,
       price: l.price,
     })),
+    products: p.plines.map((l) => ({ productId: l.productId, name: l.name, qty: l.qty, price: l.price })),
     // The first treatment names the visit for doors that take one.
     serviceId: first.serviceId,
     serviceName: p.lines.map((l) => l.name).join(' + '),
@@ -1077,7 +1123,7 @@ export function Salon() {
               </div>
               {p.cartMin ? (
                 <div className="dcart-mini">
-                  {p.lines.length} {p.lines.length === 1 ? 'item' : 'items'} · {showPrice}
+                  {p.lines.length + p.plines.length} {p.lines.length + p.plines.length === 1 ? 'item' : 'items'} · {showPrice}
                 </div>
               ) : (
                 <div>
@@ -1101,6 +1147,18 @@ export function Salon() {
                         </button>
                       </div>
                     ))}
+                    {p.plines.map((l) => (
+                      <div className="dcart-row dcart-prod" key={l.productId} data-testid="cart-product">
+                        <span className="nm2">
+                          {l.name}
+                          <span className="sub2">{l.qty > 1 ? `${l.qty} × ${fmtMKD(l.unitPrice)} · ` : ''}{t('c.sal.product')}</span>
+                        </span>
+                        <b style={{ color: 'var(--ink)' }}>{fmtMKD(l.price)}</b>
+                        <button className="x" aria-label={t('c.sal.remove', { name: l.name })} onClick={() => p.removeProd(l.productId)}>
+                          ✕
+                        </button>
+                      </div>
+                    ))}
                   </div>
                   <div className="dcart-when sm muted">
                     {p.dayLbl} · {p.time || '—'} · {minutesLbl(p.durationMin)} · {p.empName}
@@ -1109,7 +1167,7 @@ export function Salon() {
                     <span>{t('c.sal.total')}</span>
                     <b>{showPrice}</b>
                   </div>
-                  <LoyaltyEarn serviceCount={p.lines.length} />
+                  <LoyaltyEarn serviceCount={p.lines.length} productUnits={p.productUnits} />
                   <BookButton p={p} desktop onBook={book} style={{ width: '100%' }} />
                 </div>
               )}
@@ -1189,7 +1247,7 @@ export function Salon() {
                     <b data-sum="price">{showPrice}</b>
                   </span>
                 </div>
-                <LoyaltyEarn serviceCount={p.lines.length} className="m" />
+                <LoyaltyEarn serviceCount={p.lines.length} productUnits={p.productUnits} className="m" />
                 <BookButton p={p} desktop={false} onBook={book} arrow />
                 <span className="safe">{IcVok} {t('c.sal.safe')}</span>
               </div>

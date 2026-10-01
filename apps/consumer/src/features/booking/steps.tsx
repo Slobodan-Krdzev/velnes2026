@@ -27,8 +27,11 @@ export interface BookedVisit {
   end: string;
   serviceName: string;
   items: { ref: string; serviceName: string; time: string; end: string; price: number; employeeName: string }[];
+  /** Products reserved with the visit (2026-10-01). */
+  products?: { productId: string; name: string; qty: number; unitPrice: number }[];
   locationName: string;
   employeeName: string;
+  /** The treatments' total; products are listed beside it. */
   price: number;
   /** `requested` at a salon that confirms by hand: no payment yet. */
   status?: 'booked' | 'requested';
@@ -53,6 +56,17 @@ const IcCheck = (
 /** A booking step reached with nothing to book — a reload after the
  *  visit was confirmed, a link opened cold. Never a blank page: say what
  *  belongs here and offer the way back. */
+/** The products in the draft, as one summary row — or nothing. */
+function ProductsRow({ products }: { products: { name: string; qty: number }[] }) {
+  if (!products.length) return null;
+  return (
+    <div className="r" data-testid="draft-products">
+      <span className="k">{t('c.bk.products')}</span>
+      <span className="v">{products.map((p) => (p.qty > 1 ? `${p.qty} × ${p.name}` : p.name)).join(', ')}</span>
+    </div>
+  );
+}
+
 export function NoDraft() {
   const nav = useNavigate();
   return (
@@ -111,6 +125,7 @@ export function BookIdentity() {
               {draft.items.map((i) => i.name).join(' + ')} · {minutesLbl(draft.durationMin)}
             </span>
           </div>
+          <ProductsRow products={draft.products} />
           <div className="r"><span className="k">{t('c.bk.dateTime')}</span><span className="v">{draft.dayLbl} · {draft.time}</span></div>
           <div className="r"><span className="k">{t('c.bk.total')}</span><span className="v">{fmtMKD(draft.price)}</span></div>
         </div>
@@ -196,6 +211,7 @@ export function BookProfile() {
         date: draft.date,
         time: draft.time,
         employeeId: draft.employeeId,
+        products: draft.products.map((p) => ({ productId: p.productId, qty: p.qty })),
         name,
         phone: phone.trim(),
         email: draft.email,
@@ -301,10 +317,19 @@ export function BookConfirmed() {
               <div className="row"><span className="k">{t('c.bk.professional')}</span><span className="v">{state.employeeName || 'Any available professional'}</span></div>
             </>
           )}
+          {(state.products ?? []).map((p) => (
+            <div className="row" key={p.productId} data-testid="confirmed-product">
+              <span className="k">{t('c.bk.product')}</span>
+              <span className="v">{p.qty > 1 ? `${p.qty} × ` : ''}{p.name} · {fmtMKD(p.unitPrice * p.qty)}</span>
+            </div>
+          ))}
           <div className="row"><span className="k">{t('c.bk.email')}</span><span className="v">{draft?.email ?? '—'}</span></div>
           <div className="row"><span className="k">{t('c.bk.dateTime')}</span><span className="v">{state.date} · {state.time} – {state.end}</span></div>
           <div className="row"><span className="k">{t('c.bk.reference')}</span><span className="v">{state.ref.slice(0, 8).toUpperCase()}</span></div>
-          <div className="row tot"><span className="k" style={{ color: 'var(--ink)', fontWeight: '700' }}>{t('c.bk.total')}</span><span className="v">{fmtMKD(state.price)}</span></div>
+          <div className="row tot">
+            <span className="k" style={{ color: 'var(--ink)', fontWeight: '700' }}>{t('c.bk.total')}</span>
+            <span className="v">{fmtMKD(payment?.amount ?? state.price + (state.products ?? []).reduce((n, p) => n + p.unitPrice * p.qty, 0))}</span>
+          </div>
           {payment ? (
             <div className="row"><span className="k">{t('c.pay.line')}</span><span className="v">{payment.status === 'paid' ? t('c.pay.paidWith', { card: cardLbl }) : t('c.pay.atVenue')}</span></div>
           ) : null}
@@ -375,6 +400,7 @@ export function BookReview() {
           date: draft.date,
           time: draft.time,
           employeeId: draft.employeeId,
+          products: draft.products.map((p) => ({ productId: p.productId, qty: p.qty })),
         }),
       });
       await Promise.all([
@@ -404,6 +430,7 @@ export function BookReview() {
               {draft.items.map((i) => i.name).join(' + ')} · {minutesLbl(draft.durationMin)}
             </span>
           </div>
+          <ProductsRow products={draft.products} />
           <div className="r"><span className="k">{t('c.bk.professional')}</span><span className="v">{draft.employeeName}</span></div>
           <div className="r"><span className="k">{t('c.bk.dateTime')}</span><span className="v">{draft.dayLbl} · {draft.time}</span></div>
           <div className="r"><span className="k">{t('c.bk.total')}</span><span className="v">{fmtMKD(draft.price)}</span></div>

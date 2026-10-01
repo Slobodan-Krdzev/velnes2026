@@ -20,7 +20,7 @@ const me = {
   perms: { 'pos.checkout': 'business', 'pos.refund': 'business' },
 };
 
-function mockApi(sales: { body: unknown }[]) {
+function mockApi(sales: { body: unknown }[], appointments: unknown[] = []) {
   vi.stubGlobal(
     'fetch',
     vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
@@ -69,7 +69,7 @@ function mockApi(sales: { body: unknown }[]) {
             },
           ],
         });
-      if (path.includes('/appointments?')) return ok({ appointments: [] });
+      if (path.includes('/appointments?')) return ok({ appointments });
       if (path.endsWith('/sales') && init?.method === 'POST') {
         const body = JSON.parse(String(init.body)) as { method: string };
         sales.push({ body });
@@ -114,6 +114,32 @@ describe('cash register', () => {
   afterEach(() => {
     cleanup();
     vi.unstubAllGlobals();
+  });
+
+  it('an appointment booked with products brings them into the basket, at the shelf price, removable', async () => {
+    const today = (() => {
+      const d = new Date();
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    })();
+    mockApi([], [
+      {
+        id: 'aaaaaaaa-0000-4000-8000-000000000001', locationId: LOC, date: today, start: '10:00', end: '11:00', kind: 'appointment', status: 'booked',
+        title: 'Katerina Stojanovska', serviceId: SVC, serviceName: 'Rehab training', serviceCategory: 'Rehab', variantId: null, variantLabel: null,
+        modifierNames: [], employeeId: me.id, anyEmp: false, customerId: null, price: 1500, durationMin: 60, prepMin: 0, resetMin: 0, basis: 'catalog',
+        source: 'client', paid: false,
+        // Booked at 500 — the shelf says 550 today, and the shelf is what the sale door charges.
+        products: [{ productId: PROD, name: 'Kinesiology tape roll', qty: 2, unitPrice: 500 }],
+      },
+    ]);
+    await openTill();
+    await userEvent.click(await screen.findByRole('button', { name: /Katerina/ }));
+    const line = await screen.findByText('With the booking');
+    expect(line.closest('.basket-line')?.textContent).toContain('Kinesiology tape roll');
+    // 1.500 for the treatment + 2 × 550 at today's shelf price.
+    expect(screen.getByText(/2\.600/, { selector: 'button' })).toBeDefined();
+    // Tapping the appointment again rings nothing up twice.
+    await userEvent.click(screen.getByRole('button', { name: /Katerina/ }));
+    expect(screen.getAllByText('With the booking')).toHaveLength(1);
   });
 
   it('rings up tiles and totals the receipt like the prototype', async () => {

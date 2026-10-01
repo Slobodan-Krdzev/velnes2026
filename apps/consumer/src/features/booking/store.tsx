@@ -13,6 +13,9 @@ export interface BookingDraft {
   lng: number | null;
   /** Every treatment in the visit, in the order they happen. */
   items: { serviceId: string; variantId: string | null; modifierOptionIds: string[]; name: string; durationMin: number; price: number }[];
+  /** Products to take home with the visit (2026-10-01); `price` is the
+   *  line total, `price` on the draft counts them in. */
+  products: { productId: string; name: string; qty: number; price: number }[];
   serviceId: string;
   variantId: string | null;
   serviceName: string;
@@ -52,7 +55,7 @@ function readDraft(): BookingDraft | null {
     const raw = sessionStorage.getItem(DRAFT_KEY);
     if (!raw) return null;
     const d = JSON.parse(raw) as BookingDraft;
-    return d && typeof d === 'object' && Array.isArray(d.items) && d.slug ? d : null;
+    return d && typeof d === 'object' && Array.isArray(d.items) && d.slug ? { ...d, products: Array.isArray(d.products) ? d.products : [] } : null;
   } catch {
     return null;
   }

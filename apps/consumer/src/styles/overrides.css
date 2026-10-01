@@ -133,8 +133,10 @@
 
 /* On a treatment row, between the name and the tick. Static rather than
    absolute: the row is a flex line and the heart is one of its items. */
-.tr-card .fav-inline {
-  position: static;
+.tr-wrap .fav-inline {
+  position: absolute;
+  top: 9px;
+  right: 9px;
   display: grid;
   place-items: center;
   width: 30px;
@@ -146,9 +148,23 @@
   color: var(--muted);
   cursor: pointer;
 }
-.tr-card .fav-inline:hover,
-.tr-card .fav-inline.on {
+.tr-wrap .fav-inline:hover,
+.tr-wrap .fav-inline.on {
   color: var(--brand);
+}
+/* The heart is the card button's sibling, not its child (a button in a
+   button is not HTML): the wrapper is the grid item and positions it,
+   the card fills the wrapper, and the name keeps clear of the heart. */
+.tr-wrap {
+  position: relative;
+  display: grid;
+  min-width: 0;
+}
+.tr-wrap .tr-card {
+  width: 100%;
+}
+.tr-wrap .tr-card .row1 {
+  padding-right: 30px;
 }
 /* The tick already sits at the end of the row; with a heart there too,
    only the heart should be pushed out. */
@@ -582,8 +598,8 @@ a.pop-go:hover {
 .tr-card .row1 {
   align-items: flex-start;
 }
-.tr-card .row1 .fav-inline {
-  margin-top: -2px;
+.tr-wrap .fav-inline {
+  margin-top: 0;
 }
 
 /* ── A chosen treatment is coloured, not ticked ─────────────────────
@@ -1712,3 +1728,9 @@ a.pop-go:hover {
 .btn.bk-need{background:var(--ink);border-color:var(--ink)}
 .btn.bk-need:hover{filter:brightness(1.15)}
 @media (prefers-reduced-motion:reduce){.bk-flash{animation:none}}
+
+/* Products in the visit (Alex, 2026-10-01): a product row in the cart
+   reads like a treatment row; its card toggles like a treatment card. */
+.dcart-row.dcart-prod .nm2 {
+  font-weight: 600;
+}

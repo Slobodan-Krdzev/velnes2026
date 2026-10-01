@@ -75,6 +75,12 @@ describe('verified reviews', () => {
   beforeAll(async () => {
     await app.ready();
     await admin.connect();
+    // The seed reviews the demo consumer's past confirmed visits, and one
+    // of those is pinned to this week's Wednesday — so from Thursday the
+    // seed carries a review the salon-wide counts below would see. This
+    // file pins its own precondition: the demo consumer has none.
+    await admin.query(`DELETE FROM reviews WHERE client_user_id = (SELECT id FROM client_users WHERE email = 'katerina@velnes.mk')`);
+    resetRatingsCache();
     me = await signUp(EMAIL, 'Ana', 'Dimitrova', 'mk');
     other = await signUp(OTHER, 'Petar', 'P');
     const cust = await admin.query(

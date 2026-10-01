@@ -1,8 +1,8 @@
-import type { AccessClaims, Appointment, BookRequest, RefusalCode } from '@velnes/contracts';
+import type { AccessClaims, Appointment, BookProduct, BookRequest, RefusalCode, VisitProduct } from '@velnes/contracts';
 import type { Trx } from '../../db/index.js';
 import { logAudit } from '../audit/audit.service.js';
 import { autoConfirmOn } from './requests.service.js';
-import { priceFor, svcAt, svcChoice, svcLine } from '../catalog/catalog.service.js';
+import { priceFor, prodAt, svcAt, svcChoice, svcLine } from '../catalog/catalog.service.js';
 import { locLive } from '../locations/locations.service.js';
 import type { DaySchedule } from '@velnes/contracts';
 import {
@@ -584,7 +584,75 @@ export async function createHold(
   return { holdId: row.id, until: until.toISOString() };
 }
 
-async function toContract(trx: Trx, id: string): Promise<Appointment> {
+/**
+ * Products with a booking (Alex, 2026-10-01) — the reservation rows of
+ * one appointment (the visit's first), as every screen reads them.
+ */
+export async function productsOf(trx: Trx, appointmentId: string): Promise<VisitProduct[]> {
+  const rows = await trx
+    .selectFrom('appointmentProducts')
+    .select(['productId', 'name', 'qty', 'unitPrice'])
+    .where('appointmentId', '=', appointmentId)
+    .orderBy('createdAt')
+    .execute();
+  return rows.map((r) => ({ productId: r.productId, name: r.name, qty: r.qty, unitPrice: r.unitPrice }));
+}
+
+/** The same, for many appointments in one query. */
+async function productsFor(trx: Trx, ids: string[]): Promise<Map<string, VisitProduct[]>> {
+  const out = new Map<string, VisitProduct[]>();
+  if (!ids.length) return out;
+  const rows = await trx
+    .selectFrom('appointmentProducts')
+    .select(['appointmentId', 'productId', 'name', 'qty', 'unitPrice'])
+    .where('appointmentId', 'in', ids)
+    .orderBy('createdAt')
+    .execute();
+  for (const r of rows) {
+    const list = out.get(r.appointmentId) ?? [];
+    list.push({ productId: r.productId, name: r.name, qty: r.qty, unitPrice: r.unitPrice });
+    out.set(r.appointmentId, list);
+  }
+  return out;
+}
+
+/**
+ * Reserve products against a visit. The shelf at the chosen location is
+ * the judge — the same `prodAt` the till asks — so nothing is promised
+ * that the till would refuse: not sold here, not active, own-use. The
+ * price snapshot is the shelf's at this moment; the invoice, written
+ * later, charges the shelf's then (the pay quote says which).
+ */
+async function reserveProducts(
+  trx: Trx,
+  ctx: { tenantId: string; appointmentId: string; locationId: string },
+  products: BookProduct[],
+): Promise<VisitProduct[]> {
+  if (!products.length) return [];
+  // The same product twice is one line with the quantities added.
+  const merged = new Map<string, number>();
+  for (const p of products) merged.set(p.productId, (merged.get(p.productId) ?? 0) + p.qty);
+  const out: VisitProduct[] = [];
+  for (const [productId, qty] of merged) {
+    const p = await trx
+      .selectFrom('products')
+      .select(['id', 'name', 'own', 'active'])
+      .where('id', '=', productId)
+      .executeTakeFirst();
+    if (!p) throw new BookingRefused(refuse('PRODUCT_UNAVAILABLE', { name: '' }, 'That product is not sold here'));
+    const cfg = await prodAt(trx, productId, ctx.locationId);
+    if (p.own || !p.active || !cfg.active || !cfg.pos)
+      throw new BookingRefused(refuse('PRODUCT_UNAVAILABLE', { name: p.name }, `${p.name} is not sold at this location`));
+    await trx
+      .insertInto('appointmentProducts')
+      .values({ tenantId: ctx.tenantId, appointmentId: ctx.appointmentId, productId, name: p.name, qty, unitPrice: cfg.price })
+      .execute();
+    out.push({ productId, name: p.name, qty, unitPrice: cfg.price });
+  }
+  return out;
+}
+
+async function toContract(trx: Trx, id: string, products?: VisitProduct[]): Promise<Appointment> {
   const a = await trx
     .selectFrom('appointments as a')
     .leftJoin('services as s', 's.id', 'a.serviceId')
@@ -605,6 +673,7 @@ async function toContract(trx: Trx, id: string): Promise<Appointment> {
     .executeTakeFirst();
   return {
     paid: !!paidLine,
+    products: products ?? (await productsOf(trx, id)),
     id: a.id,
     locationId: a.locationId,
     date: localIso(a.date),
@@ -860,7 +929,11 @@ export async function listAppointments(trx: Trx, q: { locationId: string; from: 
     .orderBy('startMin')
     .execute();
   const out = [];
-  for (const r of rows) out.push(await toContract(trx, r.id));
+  const products = await productsFor(
+    trx,
+    rows.map((r) => r.id),
+  );
+  for (const r of rows) out.push(await toContract(trx, r.id, products.get(r.id) ?? []));
   return out;
 }
 
@@ -1277,7 +1350,7 @@ export async function availableChainSlots(
 export async function confirmChain(
   trx: Trx,
   claims: AccessClaims | null,
-  req: Omit<BookRequest, 'serviceId' | 'variantId' | 'modifierOptionIds'> & { items: ChainItem[] },
+  req: Omit<BookRequest, 'serviceId' | 'variantId' | 'modifierOptionIds'> & { items: ChainItem[]; products?: BookProduct[] },
 ): Promise<Appointment[]> {
   if (!req.items.length) throw new BookingError('NOT_FOUND', 'Nothing to book');
   // Idempotency first, exactly as confirmBooking does it: a retried
@@ -1339,6 +1412,12 @@ export async function confirmChain(
       ...(out[0]?.customerId ? { customerId: out[0].customerId } : {}),
     });
     out.push(a);
+  }
+  // Products ride on the visit's first treatment (Alex, 2026-10-01).
+  if (req.products?.length) {
+    const first = out[0]!;
+    const loc = await trx.selectFrom('locations').select('tenantId').where('id', '=', req.locationId).executeTakeFirstOrThrow();
+    first.products = await reserveProducts(trx, { tenantId: loc.tenantId, appointmentId: first.id, locationId: req.locationId }, req.products);
   }
   return out;
 }

@@ -67,3 +67,15 @@ declines) until one is chosen, exactly like the mail transport.
 **Seed.** The prototype's gift cards, four promo codes across their
 lifecycle states, loyalty config + reconciling ledger, the recipes,
 historical invoices CEN-2026-0409..0412 and the counter at 413.
+
+## Products reserved with an app booking (2026-10-01)
+
+A consumer can add products to a visit when booking in the Velnes app
+(`appointment_products`, see `docs/CONSUMER-APP.md`). The till treats
+them as what they are — a reservation: when such an appointment is rung
+up (tapped on Today's, or sent from the drawer's Take payment), its
+products follow into the basket as ordinary product lines at this
+location's shelf price, marked "With the booking", removable and
+re-countable like any line. The sale door is unchanged; the same lines
+would have been typed by hand. Paid online, the app's pay door already
+wrote those lines, and the appointment leaves the till as before.

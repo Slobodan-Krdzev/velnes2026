@@ -30,7 +30,10 @@ const base = {
   variantId: null, variantLabel: null, modifierNames: [], employeeId: EMP, anyEmp: false, customerId: null, price: 1200, durationMin: 30,
   prepMin: 0, resetMin: 10, basis: 'catalog', source: 'client', paid: false,
 };
-const live = { ...base, id: A1, start: '10:00', end: '10:30', status: 'confirmed', title: 'Katerina Stojanovska' };
+const live = {
+  ...base, id: A1, start: '10:00', end: '10:30', status: 'confirmed', title: 'Katerina Stojanovska',
+  products: [{ productId: '70000000-0000-4000-8000-000000000003', name: 'Kinesiology tape roll', qty: 2, unitPrice: 550 }],
+};
 const gone = { ...base, id: A2, start: '12:00', end: '12:30', status: 'cancelled', title: 'Ivana Nikolikj' };
 const request = {
   id: REQ, appointmentId: A1, status: 'pending', originalDate: today, originalTime: '10:00', originalEnd: '10:30',
@@ -93,6 +96,8 @@ describe('booking changes on the calendar', () => {
     await userEvent.click(pill);
     await userEvent.click(await screen.findByRole('menuitem', { name: /Katerina/ }));
     const card = await screen.findByTestId('change-request');
+    // What the customer reserved with the booking, for the room and the till.
+    expect(screen.getByTestId('booked-products').textContent).toMatch(/2 × Kinesiology tape roll · 1\.100/);
     expect(within(card).getByText('Reschedule request')).toBeDefined();
     expect(within(card).getByText(/10\.01 · 12:00/)).toBeDefined();
     expect(within(card).getByText(/stays booked until you approve/)).toBeDefined();

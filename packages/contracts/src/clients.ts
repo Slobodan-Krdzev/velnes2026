@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { MoneySchema } from './catalog.js';
 import { AVATAR_MAX_CHARS } from './auth.js';
-import { ClockSchema, AppointmentHistoryEntrySchema, CancelBlockedReasonSchema, CancellationSchema, ChangeRequestSchema, PaymentSummarySchema, RefundSummarySchema } from './scheduling.js';
+import { ClockSchema, AppointmentHistoryEntrySchema, BookProductsSchema, CancelBlockedReasonSchema, CancellationSchema, ChangeRequestSchema, PaymentSummarySchema, RefundSummarySchema, VisitProductSchema } from './scheduling.js';
 import { ClientReviewSchema } from './reviews.js';
 
 /** Client users: the ordinary people who book through the consumer
@@ -158,6 +158,8 @@ export const ClientAppointmentSchema = z.object({
   payment: PaymentSummarySchema.default({ status: 'unpaid', method: null, amount: null }),
   refund: RefundSummarySchema.nullable().default(null),
   history: z.array(AppointmentHistoryEntrySchema).default([]),
+  /** Products reserved with the visit (2026-10-01), on its first treatment. */
+  products: z.array(VisitProductSchema).default([]),
 });
 /** A new time for the visit — the whole visit moves by its own geometry. */
 export const ClientRescheduleRequestSchema = z.object({
@@ -208,6 +210,8 @@ export const ClientBookRequestSchema = z.object({
     .min(1)
     .max(8)
     .optional(),
+  /** Products to take home with the visit (2026-10-01). */
+  products: BookProductsSchema.optional(),
 });
 
 /** The salons a client is a customer of — the bridge, from their side. */

@@ -37,7 +37,7 @@ import { sql } from 'kysely';
 import { z } from 'zod';
 import { db, withClient, withHq, withTenant } from '../../db/index.js';
 import { env } from '../../env.js';
-import { BookingError, BookingRefused, chainAvailability, confirmChain } from '../booking/booking.service.js';
+import { BookingError, BookingRefused, chainAvailability, confirmChain, productsOf } from '../booking/booking.service.js';
 import {
   cancelVisit,
   keepOriginal,
@@ -220,6 +220,7 @@ async function myAppointments(clientUserId: string) {
         payment: Awaited<ReturnType<typeof paymentOf>>;
         refund: Awaited<ReturnType<typeof refundOf>>;
         history: Awaited<ReturnType<typeof visitHistory>>;
+        products: Awaited<ReturnType<typeof productsOf>>;
       };
       const extras = new Map<string, Extras>();
       for (const legs of byVisit.values()) {
@@ -235,9 +236,11 @@ async function myAppointments(clientUserId: string) {
           first.status === 'cancelled' && first.cancelledAt && first.cancelledBy
             ? { at: first.cancelledAt.toISOString(), by: first.cancelledBy as 'customer' | 'salon' | 'system' | 'hq', reason: first.cancelReason }
             : null;
+        // Products ride on the visit's first treatment, and are shown there.
+        const products = await productsOf(trx, first.id);
         for (const leg of legs) {
           const history = await visitHistory(trx, leg.id);
-          extras.set(leg.id, { ...rights, changeRequest, cancellation, payment, refund, history });
+          extras.set(leg.id, { ...rights, changeRequest, cancellation, payment, refund, history, products: leg.id === first.id ? products : [] });
         }
       }
       return { locs, svcs, vars, emps, extras };
@@ -994,6 +997,7 @@ export async function clientRoutes(app: FastifyInstance) {
             time: req.body.time,
             employeeId: req.body.employeeId,
             items,
+            products: req.body.products ?? [],
             customerId,
             name: `${c.first} ${c.last}`.trim() || c.email,
             phone: c.phone ?? '',

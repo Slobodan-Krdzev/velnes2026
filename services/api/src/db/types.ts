@@ -81,6 +81,16 @@ export interface AppointmentHistory {
   tenantId: string;
   what: string;
 }
+export interface AppointmentProducts {
+  appointmentId: string;
+  createdAt: Generated<Timestamp>;
+  id: Generated<string>;
+  name: string;
+  productId: string;
+  qty: number;
+  tenantId: string;
+  unitPrice: number;
+}
 export interface BookingChangeRequests {
   appointmentId: string;
   createdAt: Generated<Timestamp>;
@@ -1269,6 +1279,7 @@ export interface Widgets {
 
 export interface DB {
   appointmentHistory: AppointmentHistory;
+  appointmentProducts: AppointmentProducts;
   appointments: Appointments;
   bookingChangeRequests: BookingChangeRequests;
   assistantActions: AssistantActions;

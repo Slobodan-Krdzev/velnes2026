@@ -6,6 +6,8 @@ import {
   BookingRefusalSchema,
   ClockSchema,
   HoldResponseSchema,
+  BookProductsSchema,
+  VisitProductSchema,
 } from './scheduling.js';
 
 /**
@@ -110,6 +112,8 @@ export const PublicBookRequestSchema = z.object({
   /** More than one treatment in the same visit. When present this is
    *  what gets booked, and serviceId names the first of them. */
   items: z.array(ChainItemSchema).min(1).max(8).optional(),
+  /** Products to take home with the visit — docs/CONSUMER-APP.md. */
+  products: BookProductsSchema.optional(),
   name: z.string().min(1),
   phone: z.string().min(3),
   email: z.email().optional(),
@@ -135,8 +139,11 @@ export const PublicBookResponseSchema = z.object({
       }),
     )
     .default([]),
+  /** Products reserved with the visit, as booked. */
+  products: z.array(VisitProductSchema).default([]),
   locationName: z.string(),
   employeeName: z.string(),
+  /** The treatments' total; products are listed, and paid, beside it. */
   price: MoneySchema,
   /** `requested` when the salon confirms bookings by hand: the visit
    *  holds its slot and the customer pays only once it is accepted. */

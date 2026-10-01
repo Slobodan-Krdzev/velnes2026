@@ -1733,7 +1733,7 @@ export async function discoveryRoutes(app: FastifyInstance) {
               .orderBy('name')
               .execute()
           : [];
-        const products = await trx
+        const shelf = await trx
           .selectFrom('products as p')
           .leftJoin('productCategories as c', 'c.id', 'p.categoryId')
           .select(['p.id', 'p.name', 'p.price'])
@@ -1776,6 +1776,33 @@ export async function discoveryRoutes(app: FastifyInstance) {
           address: biz.address ?? any?.address ?? null,
           city: biz.city ?? any?.city ?? null,
         };
+        // Where each product is actually sold, and for how much there —
+        // the location's shelf row when it has one, else the product's
+        // own terms, exactly as the till's `prodAt` decides (2026-10-01).
+        const rows =
+          shelf.length && locations.length
+            ? await trx
+                .selectFrom('locationCatalogProducts')
+                .select(['locationId', 'productId', 'price', 'active', 'pos'])
+                .where(
+                  'productId',
+                  'in',
+                  shelf.map((p) => p.id),
+                )
+                .where(
+                  'locationId',
+                  'in',
+                  locations.map((l) => l.id),
+                )
+                .execute()
+            : [];
+        const products = shelf.map((p) => ({
+          ...p,
+          at: locations.flatMap((l) => {
+            const c = rows.find((r) => r.productId === p.id && r.locationId === l.id);
+            return (c?.active ?? true) && (c?.pos ?? true) ? [{ locationId: l.id, price: c?.price ?? p.price }] : [];
+          }),
+        }));
         return { team, products, locations, addr, reviews, teamRatings };
       });
       return {

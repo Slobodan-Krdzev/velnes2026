@@ -50,8 +50,10 @@ Numbered as in the brief.
    a `service` line carrying `appointment_id` and N `product` lines
    carrying `product_id` (`appointment_id` null) on the same
    `invoice_id`. Products sold with no appointment in the basket have
-   no customer at all and cannot be attributed. The consumer's online
-   payment covers services only.
+   no customer at all and cannot be attributed. Products reserved with
+   an app booking (2026-10-01, `appointment_products`) land on that same
+   invoice — through the app's pay door or the till's pre-filled basket
+   — so they count here with no rule of their own.
 9. **Quantity.** `invoice_lines.qty` (integer, ≥ 1); the workspace
    stepper increments it; stock moves by `-qty`.
 10. **Void/refund.** `refundInvoice` flips `invoices.status` to

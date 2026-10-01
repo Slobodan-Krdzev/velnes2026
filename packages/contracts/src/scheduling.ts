@@ -98,6 +98,29 @@ export const HoldResponseSchema = z.object({
 export const AppointmentStatusSchema = z.enum(['booked', 'confirmed', 'cancelled', 'no_show', 'requested']);
 export const AppointmentKindSchema = z.enum(['appointment', 'blocked', 'absence', 'chore', 'note']);
 
+/**
+ * Products with a booking (Alex, 2026-10-01). What the customer asks
+ * to take home with the visit; the shelf at the chosen location decides
+ * whether it is sold there and at what price. A reservation against the
+ * visit's first appointment — the money moves on the invoice, online or
+ * at the till, never here.
+ */
+export const BookProductSchema = z.object({
+  productId: z.uuid(),
+  qty: z.number().int().min(1).max(10).default(1),
+});
+export type BookProduct = z.infer<typeof BookProductSchema>;
+export const BookProductsSchema = z.array(BookProductSchema).max(12);
+/** A reserved product as every screen after the booking reads it. */
+export const VisitProductSchema = z.object({
+  productId: z.uuid(),
+  name: z.string(),
+  qty: z.number().int(),
+  /** Shelf price when booked, whole MKD. */
+  unitPrice: z.number().int(),
+});
+export type VisitProduct = z.infer<typeof VisitProductSchema>;
+
 export const BookRequestSchema = z.object({
   key: z.string().min(8),
   locationId: z.uuid(),
@@ -143,6 +166,8 @@ export const AppointmentSchema = z.object({
   // True once a live invoice line references this appointment — the
   // till stops offering it, the drawer can say so.
   paid: z.boolean().default(false),
+  /** Products reserved with the visit (on its first treatment only). */
+  products: z.array(VisitProductSchema).default([]),
 });
 export type Appointment = z.infer<typeof AppointmentSchema>;
 
@@ -215,6 +240,8 @@ export const RefusalCodeSchema = z.enum([
   'SLOT_TAKEN',
   'NOT_CHANGEABLE',
   'TIME_PASSED',
+  /** A product asked for with the booking is not sold at that location. */
+  'PRODUCT_UNAVAILABLE',
 ]);
 export type RefusalCode = z.infer<typeof RefusalCodeSchema>;
 

@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { servicePoints, type LoyaltyAccount, type LoyaltyEntry } from '@velnes/contracts';
+import { appointmentPoints, type LoyaltyAccount, type LoyaltyEntry } from '@velnes/contracts';
 import { t } from '../../lib/i18n-core.js';
 import { i18n } from '../../lib/i18n-core.js';
 import { useSession } from '../../lib/api/session.js';
@@ -33,14 +33,16 @@ export function useMyLoyalty() {
 /**
  * What a visit being put together will earn — the same rule the
  * ledger uses (`servicePoints`, one place), shown as a preview in the
- * booking summary (Alex, 2026-09-30). Products are sold at the till,
- * so the preview is the services' points; a guest is told what
- * signing in would earn, since a guest has no wallet.
+ * booking summary (Alex, 2026-09-30) — the services' points plus the
+ * products taken home with the visit; a guest is told what signing in
+ * would earn, since a guest has no wallet.
  */
-export function LoyaltyEarn({ serviceCount, className = '' }: { serviceCount: number; className?: string }) {
+export function LoyaltyEarn({ serviceCount, productUnits = 0, className = '' }: { serviceCount: number; productUnits?: number; className?: string }) {
   const { signedIn } = useSession();
   if (serviceCount < 1) return null;
-  const n = fmtPoints(servicePoints(serviceCount));
+  // Products booked with the visit (2026-10-01) count like products
+  // sold with it — the same rule, from the same place.
+  const n = fmtPoints(appointmentPoints(serviceCount, productUnits).total);
   return (
     <div className={`loy-earn${className ? ` ${className}` : ''}`} data-testid="loyalty-earn">
       <span className="loy-earn-ic" aria-hidden="true">{IcFlower}</span>
