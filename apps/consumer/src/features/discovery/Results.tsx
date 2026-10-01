@@ -157,8 +157,13 @@ function useLiveLine(s: ServiceVM) {
  *  already named so the salon page can open on it. */
 function salonHref(s: ServiceVM) {
   // The place too: a two-location salon opens at the location this
-  // result was for, not at its first.
-  return `/salon/${s.salon.slug}?service=${encodeURIComponent(s.id)}&location=${encodeURIComponent(s.location.id)}`;
+  // result was for, not at its first. A card that can start now carries
+  // its start and its professional, so the salon page is ready to book.
+  const base = `/salon/${s.salon.slug}?service=${encodeURIComponent(s.id)}&location=${encodeURIComponent(s.location.id)}`;
+  if (!s.availableAt) return base;
+  const today = new Date();
+  const iso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+  return `${base}&date=${iso}&time=${s.availableAt}${s.availableEmployeeId ? `&employee=${encodeURIComponent(s.availableEmployeeId)}` : ''}`;
 }
 
 /**

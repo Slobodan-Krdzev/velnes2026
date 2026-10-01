@@ -108,6 +108,8 @@ export interface ServiceVM {
   /** "HH:MM" when the door was asked for *now* and this can start within
    *  the next half hour; null otherwise. Never computed here. */
   availableAt: string | null;
+  /** Who can take that start, when the door said. */
+  availableEmployeeId: string | null;
   /** The first free start on the day asked for, when a day (or a party)
    *  was asked: the salon's date and "HH:MM". Never computed here. */
   availableOn: { date: string; at: string } | null;
@@ -169,6 +171,7 @@ export function serviceVM(s: DiscoveryServiceCard): ServiceVM {
     price: s.price,
     priceFrom: s.priceFrom,
     availableAt: s.availableAt ?? null,
+    availableEmployeeId: s.availableEmployeeId ?? null,
     availableOn: s.availableOn ?? null,
     salon: {
       slug: s.salon.slug,

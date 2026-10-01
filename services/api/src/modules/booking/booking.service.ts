@@ -361,6 +361,14 @@ export async function firstStartWithin(
   trx: Trx,
   q: { locationId: string; serviceId: string; windowMin: number; now?: Date | undefined; party?: number | undefined },
 ): Promise<string | null> {
+  return (await firstFreeWithin(trx, q))?.t ?? null;
+}
+
+/** The same, with who can take it — the card's link chooses them. */
+export async function firstFreeWithin(
+  trx: Trx,
+  q: { locationId: string; serviceId: string; windowMin: number; now?: Date | undefined; party?: number | undefined },
+): Promise<{ t: string; emp: string | null } | null> {
   const loc = await trx
     .selectFrom('locations')
     .select('tz')
@@ -368,7 +376,18 @@ export async function firstStartWithin(
     .executeTakeFirst();
   if (!loc) return null;
   const today = nowAt(loc.tz, q.now).date;
-  return firstStartOn(trx, { locationId: q.locationId, serviceId: q.serviceId, date: today, now: q.now, windowMin: q.windowMin, party: q.party });
+  const slots = await availableSlots(trx, {
+    locationId: q.locationId,
+    serviceId: q.serviceId,
+    employeeId: 'any',
+    date: today,
+    now: q.now,
+    windowMin: q.windowMin,
+    party: q.party,
+    firstOnly: true,
+  });
+  const s = slots.find((x) => x.free);
+  return s ? { t: s.t, emp: s.emp } : null;
 }
 
 /**

@@ -229,6 +229,9 @@ export const DiscoveryServiceCardSchema = z.object({
    * team's hours, existing appointments, holds and rooms.
    */
   availableAt: z.string().nullable().default(null),
+  /** Who can take that start (2026-10-01) — so the card's link lands on
+   *  the salon page with the professional chosen as well as the time. */
+  availableEmployeeId: z.uuid().nullable().default(null),
   /**
    * The first free start on the day that was asked for (`when`), or —
    * for a party with no day — the first day within the horizon that

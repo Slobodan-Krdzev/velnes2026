@@ -53,7 +53,7 @@ import { priceOf, applyFilters, priceTercilesOf } from '../modules/search/filter
 import { NOW_WINDOW_MIN, readNow } from '../modules/search/now-intent.js';
 import { daysFor } from '../modules/search/when.js';
 import { nowAt } from '../modules/scheduling/scheduling.service.js';
-import { empsFor, firstStartOn, firstStartWithin } from '../modules/booking/booking.service.js';
+import { empsFor, firstFreeWithin, firstStartOn } from '../modules/booking/booking.service.js';
 import { db, withClient, withTenant } from '../db/index.js';
 import { employeeRatings, publicReviews, ratingsForBusinesses, reviewSummary } from '../modules/reviews/reviews.service.js';
 
@@ -274,13 +274,14 @@ export interface TextCandidates {
  * that refetches on every filter tap must not re-walk every calendar.
  */
 const NOW_TTL_MS = 20_000;
-const nowCache = new Map<string, { at: number; value: string | null }>();
+type NowSlot = { t: string; emp: string | null } | null;
+const nowCache = new Map<string, { at: number; value: NowSlot }>();
 async function availableNowOf(
   candidates: RankCandidate[],
   now: Date,
   party = 1,
-): Promise<Map<string, string | null>> {
-  const out = new Map<string, string | null>();
+): Promise<Map<string, NowSlot>> {
+  const out = new Map<string, NowSlot>();
   const byBiz = new Map<string, RankCandidate[]>();
   for (const c of candidates) {
     const list = byBiz.get(c.salon.businessId) ?? [];
@@ -301,7 +302,7 @@ async function availableNowOf(
       // The candidate is a treatment AT a location: that location's own
       // first start, never a sibling's.
       for (const c of todo) {
-        const at = await firstStartWithin(trx, {
+        const at = await firstFreeWithin(trx, {
           locationId: c.locationId,
           serviceId: c.id,
           windowMin: NOW_WINDOW_MIN,
@@ -714,6 +715,7 @@ export async function gatherCategory(categoryId: string): Promise<
             location: { id: place.id, name: place.name, city: place.city, address: place.address, lat: place.lat, lng: place.lng },
             // Learned only when a request asks for *now*; see the doors.
             availableAt: null,
+            availableEmployeeId: null,
             availableOn: null,
           });
         }
@@ -1549,7 +1551,7 @@ export async function discoveryRoutes(app: FastifyInstance) {
       // start, and that becomes its availability — and the order.
       const soon = wantNow ? await availableNowOf(onDay, now, req.body.party) : null;
       const admitted = soon
-        ? onDay.map((c) => ({ ...c, availableAt: soon.get(candKey(c)) ?? null }))
+        ? onDay.map((c) => ({ ...c, availableAt: soon.get(candKey(c))?.t ?? null, availableEmployeeId: soon.get(candKey(c))?.emp ?? null }))
         : onDay;
       const ranked = rank(admitted, { position, history }, cfg.payload, { now });
       // A page with almost nothing on it is a miss the customer feels,
@@ -1571,6 +1573,7 @@ export async function discoveryRoutes(app: FastifyInstance) {
         services: ranked.map((x) => ({
           ...byKey.get(candKey(x.candidate))!,
           availableAt: x.candidate.availableAt ?? null,
+          availableEmployeeId: x.candidate.availableEmployeeId ?? null,
           availableOn: x.candidate.availableOn ?? null,
         })),
         salons: nearMisses,
@@ -1681,7 +1684,7 @@ export async function discoveryRoutes(app: FastifyInstance) {
       const onDay = await admitOnDay(cut.admitted, req.body.when, req.body.party, now);
       const soon = req.body.now ? await availableNowOf(onDay, now, req.body.party) : null;
       const admitted = soon
-        ? onDay.map((c) => ({ ...c, availableAt: soon.get(candKey(c)) ?? null }))
+        ? onDay.map((c) => ({ ...c, availableAt: soon.get(candKey(c))?.t ?? null, availableEmployeeId: soon.get(candKey(c))?.emp ?? null }))
         : onDay;
       const ranked = rank(admitted, { position, history }, cfg.payload, { now });
       const byKey = new Map(services.map((s) => [cardKey(s), s]));
@@ -1690,6 +1693,7 @@ export async function discoveryRoutes(app: FastifyInstance) {
         services: ranked.map((r) => ({
           ...byKey.get(candKey(r.candidate))!,
           availableAt: r.candidate.availableAt ?? null,
+          availableEmployeeId: r.candidate.availableEmployeeId ?? null,
           availableOn: r.candidate.availableOn ?? null,
         })),
         rankVersion: cfg.version,

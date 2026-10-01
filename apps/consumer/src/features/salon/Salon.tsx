@@ -239,11 +239,17 @@ function useSalonPage() {
     const variantId = qv && match.variants.some((v) => v.id === qv) ? qv : null;
     const known = new Set(match.modifiers.flatMap((g) => g.options.map((o) => o.id)));
     const mods = (params.get('mods') ?? '').split(',').filter((id) => known.has(id));
+    const qd = params.get('date');
+    const qt = params.get('time');
+    // Arriving with a time is arriving to book (Alex, 2026-10-01): a
+    // required choice the link did not make is made with its first
+    // option, so Book is one tap away — and still one tap to change.
+    if (qt)
+      for (const g of match.modifiers)
+        if (g.required && g.options[0] && !g.options.some((o) => mods.includes(o.id))) mods.push(g.options[0].id);
     setCart([{ serviceId: match.id, variantId, mods }]);
     const qe = params.get('employee');
     if (qe && match.employees.some((e) => e.id === qe)) setEmpId(qe);
-    const qd = params.get('date');
-    const qt = params.get('time');
     if (qd && days.some((d) => d.iso === qd)) setDate(qd);
     if (qt) setTime(qt);
   }, [services, cart.length, params, days]);

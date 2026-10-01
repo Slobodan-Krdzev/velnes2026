@@ -659,9 +659,15 @@ function nowNearBits(n: NowNear) {
     today,
     price,
     at,
-    // The start it can make is at *this* location: the link opens there.
-    href: `/salon/${n.s.salon.slug}?service=${encodeURIComponent(n.s.id)}&location=${encodeURIComponent(n.s.location.id)}`,
-    slotHref: at ? `/salon/${n.s.salon.slug}?service=${encodeURIComponent(n.s.id)}&location=${encodeURIComponent(n.s.location.id)}&date=${today}&time=${at}` : null,
+    // The start it can make is at *this* location: the link opens there,
+    // with the time and the professional who can take it (Alex,
+    // 2026-10-01), so Book is one tap away on the salon page.
+    href: at
+      ? `/salon/${n.s.salon.slug}?service=${encodeURIComponent(n.s.id)}&location=${encodeURIComponent(n.s.location.id)}&date=${today}&time=${at}${n.s.availableEmployeeId ? `&employee=${encodeURIComponent(n.s.availableEmployeeId)}` : ''}`
+      : `/salon/${n.s.salon.slug}?service=${encodeURIComponent(n.s.id)}&location=${encodeURIComponent(n.s.location.id)}`,
+    slotHref: at
+      ? `/salon/${n.s.salon.slug}?service=${encodeURIComponent(n.s.id)}&location=${encodeURIComponent(n.s.location.id)}&date=${today}&time=${at}${n.s.availableEmployeeId ? `&employee=${encodeURIComponent(n.s.availableEmployeeId)}` : ''}`
+      : null,
     away: n.km == null ? null : t('c.res.fromYou', { d: distanceLbl(n.km) }),
   };
 }
