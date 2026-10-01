@@ -128,22 +128,22 @@ export async function updateService(
   await reconcileNested(trx, tenantId, serviceId, w);
   await applyPerformers(trx, tenantId, serviceId, w.performerIds);
   // The location rows are what the list, the booking engine and the
-  // till read (Alex, 2026-10-01: "the price is not saved"). A row that
-  // still mirrored the old salon-wide value follows the new one; a row
-  // a location set differently on purpose keeps its own.
+  // till read (Alex, 2026-10-01: "the price is not saved"). A row
+  // follows the salon-wide price unless someone set a price for that
+  // location (`custom_price`) — likewise the duration.
   if (before.price !== w.price)
     await trx
       .updateTable('locationCatalogServices')
       .set({ price: w.price })
       .where('serviceId', '=', serviceId)
-      .where('price', '=', before.price)
+      .where('customPrice', '=', false)
       .execute();
   if (before.durationMin !== w.durationMin)
     await trx
       .updateTable('locationCatalogServices')
       .set({ durationMin: w.durationMin })
       .where('serviceId', '=', serviceId)
-      .where('durationMin', '=', before.durationMin)
+      .where('customDuration', '=', false)
       .execute();
   if (before.price !== w.price)
     await logAudit(trx, tenantId, {
@@ -343,6 +343,10 @@ export async function patchServiceOverride(
     pos: patch.pos ?? current?.pos ?? s.pos,
     prepMin: patch.prepMin === undefined ? (current?.prepMin ?? null) : patch.prepMin,
     resetMin: patch.resetMin === undefined ? (current?.resetMin ?? null) : patch.resetMin,
+    // Set here, for this location: the row is this location's own from
+    // now on and no longer follows the salon-wide value.
+    customPrice: patch.price !== undefined ? true : (current?.customPrice ?? false),
+    customDuration: patch.durationMin !== undefined ? true : (current?.customDuration ?? false),
   };
   await trx
     .insertInto('locationCatalogServices')

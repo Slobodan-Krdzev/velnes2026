@@ -665,6 +665,8 @@ export interface LocationCatalogProducts {
 
 export interface LocationCatalogServices {
   active: Generated<boolean>;
+  customDuration: Generated<boolean>;
+  customPrice: Generated<boolean>;
   durationMin: number;
   locationId: string;
   online: Generated<boolean>;

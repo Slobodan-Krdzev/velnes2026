@@ -33,7 +33,7 @@ describe('catalog price edits reach the location rows', () => {
   afterAll(async () => {
     // Back to the seed's numbers.
     await admin.query(`UPDATE services SET price = 1800, duration_min = 45 WHERE id = $1`, [demo.s1]);
-    await admin.query(`UPDATE location_catalog_services SET price = 1800, duration_min = 45 WHERE service_id = $1`, [demo.s1]);
+    await admin.query(`UPDATE location_catalog_services SET price = 1800, duration_min = 45, custom_price = false, custom_duration = false WHERE service_id = $1`, [demo.s1]);
     await admin.query(`UPDATE products SET price = 1200, active = true WHERE id = $1`, [demo.p1]);
     await admin.query(`UPDATE location_catalog_products SET price = 1200, active = true WHERE product_id = $1`, [demo.p1]);
     await admin.query(`DELETE FROM audit_log WHERE action = 'Price changed' AND ts > now() - interval '5 minutes'`);
@@ -42,10 +42,13 @@ describe('catalog price edits reach the location rows', () => {
     await closeDb();
   });
 
-  it('a service: rows mirroring the old price follow, a location’s own price stays, and so for the duration', async () => {
-    // Aerodrom sets its own price first.
+  it('a service: rows follow the salon-wide price unless a location set its own — even a row the old bug left behind follows', async () => {
+    // Aerodrom sets its own price first — through the door, which marks it.
     const over = await app.inject({ method: 'PATCH', url: `${API_PREFIX}/locations/${demo.locAerodrom}/catalog/services/${demo.s1}`, headers: H, payload: { price: 1700 } });
     expect(over.statusCode).toBe(200);
+    // Centar's row drifted (edited salon-wide while rows stayed, the old
+    // bug): nobody set it for Centar, so it still follows.
+    await admin.query(`UPDATE location_catalog_services SET price = 1750 WHERE service_id = $1 AND location_id = $2`, [demo.s1, demo.locCentar]);
     // The panel's write, built the way the panel builds it: from the
     // location catalog's service, its variants and option groups kept.
     type Full = { name: string; category: string | null; vat: number; status: string; pos: boolean; online: boolean; prepMin: number | null; resetMin: number | null; variants: { id: string; label: string; durationMin: number; price: number; std: boolean }[]; modifiers: { id: string; name: string; type: string; required: boolean; options: { id: string; name: string; price: number; durationMin: number }[] }[] };

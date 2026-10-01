@@ -78,9 +78,14 @@ and the till read the **location rows** (`location_catalog_services`,
 `location_catalog_products`), while the panel's PUT wrote only the
 salon-wide `services.price` / `products.price`; the seed gives every
 location a row, so the number on screen never moved. Now `updateService`
-carries a changed price (and duration) to every location row that still
-mirrored the old salon-wide value, and leaves a row a location set
-differently on purpose; `updateProduct` carries the price to every shelf
+carries a changed price (and duration) to every location row that is
+not that location's own: a row becomes its own only when someone sets
+its price (or duration) for that location — the inline cell, the
+panel's per-location table, the override door — which flips
+`location_catalog_services.custom_price` / `custom_duration`
+(`20261001150000_location_price_custom.sql`; nothing is custom until
+set, so rows the old bug left behind heal on the next salon-wide
+edit). Un-marking a row is not built. `updateProduct` carries the price to every shelf
 row — the workspace has no per-location product price, so there is
 nothing to preserve — and the active flag likewise. And the assistant's
 floating button shared the corner with the panel's Save, so a click
