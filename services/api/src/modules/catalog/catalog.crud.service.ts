@@ -127,6 +127,24 @@ export async function updateService(
     .execute();
   await reconcileNested(trx, tenantId, serviceId, w);
   await applyPerformers(trx, tenantId, serviceId, w.performerIds);
+  // The location rows are what the list, the booking engine and the
+  // till read (Alex, 2026-10-01: "the price is not saved"). A row that
+  // still mirrored the old salon-wide value follows the new one; a row
+  // a location set differently on purpose keeps its own.
+  if (before.price !== w.price)
+    await trx
+      .updateTable('locationCatalogServices')
+      .set({ price: w.price })
+      .where('serviceId', '=', serviceId)
+      .where('price', '=', before.price)
+      .execute();
+  if (before.durationMin !== w.durationMin)
+    await trx
+      .updateTable('locationCatalogServices')
+      .set({ durationMin: w.durationMin })
+      .where('serviceId', '=', serviceId)
+      .where('durationMin', '=', before.durationMin)
+      .execute();
   if (before.price !== w.price)
     await logAudit(trx, tenantId, {
       actorEmployeeId: claims.sub,
@@ -448,6 +466,23 @@ export async function updateProduct(
     })
     .where('id', '=', productId)
     .execute();
+  // The shelf rows are what the list, the app and the till read. A
+  // product has no per-location price of its own anywhere in the
+  // workspace, so every shelf row follows the salon-wide price — unlike
+  // a service, whose locations may price it differently on purpose.
+  if (w.price !== undefined && w.price !== before.price)
+    await trx
+      .updateTable('locationCatalogProducts')
+      .set({ price: w.price })
+      .where('productId', '=', productId)
+      .execute();
+  if (w.active !== undefined && w.active !== before.active)
+    await trx
+      .updateTable('locationCatalogProducts')
+      .set({ active: w.active })
+      .where('productId', '=', productId)
+      .where('active', '=', before.active)
+      .execute();
   if (w.price !== undefined && w.price !== before.price)
     await logAudit(trx, before.tenantId, {
       actorEmployeeId: claims.sub,

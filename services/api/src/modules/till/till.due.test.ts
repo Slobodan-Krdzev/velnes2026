@@ -50,7 +50,7 @@ describe('due payments', () => {
     await admin.query(`DELETE FROM stock_movements WHERE ref IN (SELECT number FROM invoices WHERE idempotency_key = $1)`, [saleKey]);
     await admin.query(`DELETE FROM invoice_lines WHERE invoice_id IN (SELECT id FROM invoices WHERE idempotency_key = $1)`, [saleKey]);
     await admin.query(`DELETE FROM invoices WHERE idempotency_key = $1`, [saleKey]);
-    await admin.query(`DELETE FROM loyalty_ledger WHERE customer_id = $1 AND created_at > now() - interval '5 minutes'`, [demo.c1]);
+    await admin.query(`DELETE FROM loyalty_ledger WHERE customer_id = $1 AND at > now() - interval '5 minutes'`, [demo.c1]);
     await admin.query(`DELETE FROM appointment_history WHERE appointment_id = ANY($1)`, [all]);
     await admin.query(`DELETE FROM appointments WHERE id = ANY($1)`, [all]);
     await admin.query(`DELETE FROM audit_log WHERE action = 'Sale' AND actor_name = 'Maria Petrovska' AND ts > now() - interval '5 minutes'`);

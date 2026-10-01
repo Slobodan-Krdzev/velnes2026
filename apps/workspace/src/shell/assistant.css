@@ -22,6 +22,12 @@
 .asst-fab:hover {
   transform: translateY(-1px);
 }
+/* A side panel's Save sits in the same corner (Alex, 2026-10-01: a
+   price "not saved" — the click landed here). While a panel is open the
+   assistant steps aside. */
+body:has(.panel.open) .asst-fab {
+  display: none;
+}
 
 .asst-panel {
   position: fixed;

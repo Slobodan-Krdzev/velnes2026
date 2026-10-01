@@ -70,3 +70,19 @@ carries the prototype's two packages (Recovery start pack, Assessment
 with home kit). Honest deferral: **selling** a combo at the till (booking
 its services and deducting its products from stock) is the next
 increment — this delivers creating and managing them.
+
+## A price edited in the panel is saved where it is read (2026-10-01)
+
+Two things made a price edit look unsaved. The list, the booking engine
+and the till read the **location rows** (`location_catalog_services`,
+`location_catalog_products`), while the panel's PUT wrote only the
+salon-wide `services.price` / `products.price`; the seed gives every
+location a row, so the number on screen never moved. Now `updateService`
+carries a changed price (and duration) to every location row that still
+mirrored the old salon-wide value, and leaves a row a location set
+differently on purpose; `updateProduct` carries the price to every shelf
+row — the workspace has no per-location product price, so there is
+nothing to preserve — and the active flag likewise. And the assistant's
+floating button shared the corner with the panel's Save, so a click
+could land on it: it hides while a panel is open.
+`catalog/catalog.price.test.ts`.

@@ -77,8 +77,12 @@ describe('the AI Assistant: plans, previews, approves, executes, audits', () => 
   });
 
   afterAll(async () => {
+    // A salon-wide price change now carries to the location rows that
+    // mirrored it (2026-10-01), so they are put back too.
     await admin.query(`UPDATE services SET price=1200 WHERE id=$1`, [demo.s3]);
+    await admin.query(`UPDATE location_catalog_services SET price=1200 WHERE service_id=$1`, [demo.s3]);
     await admin.query(`UPDATE services SET price=1500 WHERE id=$1`, [demo.s4]);
+    await admin.query(`UPDATE location_catalog_services SET price=1500 WHERE service_id=$1`, [demo.s4]);
     await admin.query(
       `DELETE FROM employee_skills WHERE service_id IN (SELECT id FROM services WHERE tenant_id=$1 AND name='Womens Hair Colouring')`,
       [demo.business],
