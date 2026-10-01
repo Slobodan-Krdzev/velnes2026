@@ -3074,6 +3074,7 @@ export const en = {
   "c.acc.h.byYou": "by you",
   "c.acc.h.bySalon": "by the salon",
   'c.acc.markRead': 'Mark all as read',
+  "c.acc.nViewAppt": "View appointment",
   'c.acc.noNotifs': 'No notifications',
   'c.acc.noNotifsSub': 'You’re all caught up.',
   'c.acc.favsLoading': 'Loading your favourites…',

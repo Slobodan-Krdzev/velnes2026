@@ -3056,6 +3056,7 @@ export const sq: Record<TranslationKey, string> = {
   "c.acc.h.byYou": "nga ju",
   "c.acc.h.bySalon": "nga salloni",
   'c.acc.markRead': 'Shëno të gjitha si të lexuara',
+  "c.acc.nViewAppt": "Shiko terminin",
   'c.acc.noNotifs': 'Nuk ka njoftime',
   'c.acc.noNotifsSub': 'Jeni në rregull me gjithçka.',
   'c.acc.favsLoading': 'Duke ngarkuar të preferuarat…',

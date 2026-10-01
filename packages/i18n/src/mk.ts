@@ -3056,6 +3056,7 @@ export const mk: Record<TranslationKey, string> = {
   "c.acc.h.byYou": "од вас",
   "c.acc.h.bySalon": "од салонот",
   'c.acc.markRead': 'Означи ги сите како прочитани',
+  "c.acc.nViewAppt": "Види го терминот",
   'c.acc.noNotifs': 'Нема известувања',
   'c.acc.noNotifsSub': 'Сè е прочитано.',
   'c.acc.favsLoading': 'Се вчитуваат омилените…',

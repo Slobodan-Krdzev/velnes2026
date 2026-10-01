@@ -38,6 +38,9 @@ type Appt = z.infer<typeof ClientAppointmentSchema>;
 const BELL = (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M18 9a6 6 0 1 0-12 0c0 6-2 7-2 7h16s-2-1-2-7" /><path d="M10.2 20a2 2 0 0 0 3.6 0" /></svg>
 );
+const IcArrSmall = (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M5 12h13M13 6l6 6-6 6" /></svg>
+);
 const BACK = (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14.5 6 8.5 12l6 6" /></svg>
 );
@@ -192,6 +195,9 @@ export function MyVelnes({ section = 'over' }: { section?: SecId }) {
   const [rescheduleOpen, setRescheduleOpen] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [rsSent, setRsSent] = useState(false);
+  // A notification opens in place (Alex, 2026-10-01): the details first,
+  // then a button that leads on — never a tap that carries you away.
+  const [openNotif, setOpenNotif] = useState<string | null>(null);
 
   const unread = notifs.data?.unread ?? 0;
   const list = useMemo(() => appts.data?.appointments ?? [], [appts.data]);
@@ -699,33 +705,68 @@ export function MyVelnes({ section = 'over' }: { section?: SecId }) {
                   </div>
                   {notifs.data?.notifications.length ? (
                     <div className="acc-card">
-                      {notifs.data.notifications.map((n) => (
-                        <div
-                          key={n.id}
-                          className="acc-row"
-                          style={{ cursor: 'pointer' }}
-                          onClick={() => {
-                            void markRead(n.id);
-                            if (n.refType === 'appointment' && n.refId) nav(`/account/appointments/${n.refId}${n.kind === 'review' ? '?review=1' : ''}`);
-                            else if (n.refType === 'loyalty') go('loyalty');
-                          }}
-                        >
-                          <span
-                            style={{
-                              width: '8px',
-                              height: '8px',
-                              borderRadius: '50%',
-                              background: n.read ? 'transparent' : 'var(--brand)',
-                              flex: '0 0 auto',
-                            }}
-                          ></span>
-                          <div className="bd">
-                            <b style={{ fontWeight: n.read ? 600 : 800 }}>{n.title}</b>
-                            <div className="sm muted">{n.body}</div>
+                      {notifs.data.notifications.map((n) => {
+                        const open = openNotif === n.id;
+                        const appt = n.refType === 'appointment' && n.refId ? list.find((a) => a.id === n.refId) : undefined;
+                        const target =
+                          n.refType === 'appointment' && n.refId
+                            ? { label: n.kind === 'review' && appt?.canReview ? t('c.rv.write') : t('c.acc.nViewAppt'), go: () => nav(`/account/appointments/${n.refId}${n.kind === 'review' ? '?review=1' : ''}`) }
+                            : n.refType === 'loyalty'
+                              ? { label: t('c.loy.view'), go: () => go('loyalty') }
+                              : null;
+                        return (
+                          <div key={n.id} className={`acc-notif${open ? ' open' : ''}`}>
+                            <div
+                              className="acc-row"
+                              role="button"
+                              aria-expanded={open}
+                              style={{ cursor: 'pointer' }}
+                              onClick={() => {
+                                if (!n.read) void markRead(n.id);
+                                setOpenNotif(open ? null : n.id);
+                              }}
+                            >
+                              <span
+                                style={{
+                                  width: '8px',
+                                  height: '8px',
+                                  borderRadius: '50%',
+                                  background: n.read ? 'transparent' : 'var(--brand)',
+                                  flex: '0 0 auto',
+                                }}
+                              ></span>
+                              <div className="bd">
+                                <b style={{ fontWeight: n.read ? 600 : 800 }}>{n.title}</b>
+                                <div className="sm muted">{n.body}</div>
+                              </div>
+                              <span className={`muted acc-notif-chev${open ? ' on' : ''}`} aria-hidden="true">›</span>
+                            </div>
+                            {open ? (
+                              <div className="acc-notif-detail" data-testid="notif-detail">
+                                <div className="sm muted">{new Date(n.at).toLocaleString(lang, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</div>
+                                {appt ? (
+                                  <div className="acc-notif-appt">
+                                    <b>{appt.serviceName}</b>
+                                    <div className="sm muted">
+                                      {appt.salonName} · {appt.locationName}
+                                      {appt.employeeName ? ` · ${appt.employeeName}` : ''}
+                                    </div>
+                                    <div className="sm" style={{ color: 'var(--ink)', fontWeight: 700 }}>
+                                      {appt.date} · {appt.time}–{appt.end}
+                                    </div>
+                                    <StatusBadge a={appt} />
+                                  </div>
+                                ) : null}
+                                {target ? (
+                                  <button className="btn btn-p" style={{ minHeight: '38px', padding: '6px 16px', fontSize: '13.5px' }} onClick={target.go}>
+                                    {target.label} {IcArrSmall}
+                                  </button>
+                                ) : null}
+                              </div>
+                            ) : null}
                           </div>
-                          <span className="muted">›</span>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   ) : (
                     <div className="acc-empty">
