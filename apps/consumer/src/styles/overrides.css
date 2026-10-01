@@ -1652,3 +1652,15 @@ a.pop-go:hover {
 /* "Available now" card on the phone: the slot and Book share a row. */
 .nn-row{align-items:center;justify-content:space-between}
 .nn-row .nn-book{margin-left:auto;flex:0 0 auto}
+
+/* The trust block on the phone (Alex, 2026-10-01): the line under the
+   title is its own row, never run on. */
+.m-trust .t4 b,.trust4 .t4 b{display:block}
+.m-trust .t4 small,.trust4 .t4 small{display:block;margin-top:2px}
+
+/* The profile photo picker (Alex, 2026-10-01): the round avatar beside
+   its two actions, in the account and at sign-up. */
+.avpick{display:flex;align-items:center;gap:14px;margin:4px 0 12px}
+.avpick-dot{flex:0 0 auto;font-weight:800;background:var(--warm);color:var(--brand-hover)}
+.avpick-actions{display:flex;flex-direction:column;align-items:flex-start;gap:6px}
+.avpick-actions .btn{min-height:36px;padding:6px 14px;font-size:13px}

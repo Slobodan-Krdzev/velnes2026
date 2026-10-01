@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { ApiError } from '../../lib/api/client.js';
 import { clientAuth, useSession } from '../../lib/api/session.js';
 import { DobPicker } from '../../components/DobPicker.js';
+import { AvatarPicker } from '../../components/AvatarPicker.js';
 
 /** Login and the six-step registration wizard — the prototype's auth
  *  markup, wired to the real client doors. The last step is a real
@@ -113,6 +114,8 @@ interface Draft {
   lang: 'en' | 'mk' | 'sq';
   terms: boolean;
   code: string;
+  /** A profile photo, optional — a small data URL. */
+  avatar: string | null;
 }
 
 export function Register() {
@@ -134,6 +137,7 @@ export function Register() {
     lang: 'en',
     terms: false,
     code: '',
+    avatar: null,
   });
   const set = (p: Partial<Draft>) => setD((x) => ({ ...x, ...p }));
 
@@ -161,6 +165,7 @@ export function Register() {
           phone: `${d.cc} ${d.num}`.trim(),
           dob: d.dob || null,
           lang: d.lang,
+          avatar: d.avatar,
         });
         // Auto-verify while there is no mail provider — Alex's call for
         // testing. The code is read back from the outbox it was queued
@@ -240,6 +245,12 @@ export function Register() {
 
             {step === 1 ? (
               <>
+                <AvatarPicker
+                  value={d.avatar}
+                  initials={`${d.first.trim()[0] ?? ''}${d.last.trim()[0] ?? ''}`.toUpperCase() || '?'}
+                  onChange={(avatar) => set({ avatar })}
+                />
+                <div className="sm muted" style={{ margin: '-4px 0 10px' }}>{t('c.auth.photoOptional')}</div>
                 <label className="acc-flbl">{t('c.auth.first')}</label>
                 <input className="acc-inp" value={d.first} onChange={(e) => set({ first: e.target.value })} />
                 <label className="acc-flbl">{t('c.auth.last')}</label>

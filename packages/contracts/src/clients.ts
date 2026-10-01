@@ -29,6 +29,8 @@ export const ClientRegisterSchema = z.object({
   // ISO date; the prototype's calendar step is optional.
   dob: z.iso.date().nullable().default(null),
   lang: z.enum(['en', 'mk', 'sq']).default('en'),
+  /** A profile photo as a small data URL, optional at sign-up (2026-10-01). */
+  avatar: z.string().max(AVATAR_MAX_CHARS).nullable().default(null),
 });
 
 export const ClientVerifySchema = z.object({

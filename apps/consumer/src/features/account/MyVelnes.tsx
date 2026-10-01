@@ -15,6 +15,7 @@ import { fmtMKD, minutesLbl } from '../../lib/api/mappers.js';
 import { ReviewForm, ReviewGiven } from './ReviewForm.js';
 import { CancelConfirm, PaymentLines, PolicyCard, RequestCard, ReschedulePicker, VisitHistory } from './Changes.js';
 import { LoyaltyCard, LoyaltySection, useMyLoyalty } from './Loyalty.js';
+import { AvatarPicker } from '../../components/AvatarPicker.js';
 import { Stars } from '../../components/Stars.js';
 import {
   useFavourites,
@@ -919,7 +920,24 @@ function General() {
   });
   const [pw, setPw] = useState({ current: '', next: '' });
   const [savingPers, setSavingPers] = useState(false);
+  const [savingPhoto, setSavingPhoto] = useState(false);
   if (!profile) return null;
+
+  /** The photo saves on the spot, like the personalisation switch. */
+  const setPhoto = async (avatar: string | null) => {
+    setErr('');
+    setMsg('');
+    setSavingPhoto(true);
+    try {
+      await api('/me', { method: 'PATCH', body: JSON.stringify({ avatar }) });
+      await qc.invalidateQueries({ queryKey: ['me'] });
+      setMsg(avatar ? t('c.acc.photoSaved') : t('c.acc.photoRemoved'));
+    } catch (e) {
+      setErr(e instanceof ApiError ? e.message : t('c.acc.saveFailed'));
+    } finally {
+      setSavingPhoto(false);
+    }
+  };
 
   /** The personalisation switch saves on the spot — a toggle that needs
    *  an Edit button and a Save button is a toggle nobody trusts. */
@@ -977,6 +995,10 @@ function General() {
 
   return (
     <>
+      <div className="acc-card">
+        <div className="acc-lbl">{t('c.acc.photo')}</div>
+        <AvatarPicker value={profile.avatar} initials={initials(profile)} onChange={(v) => void setPhoto(v)} busy={savingPhoto} />
+      </div>
       <div className="acc-card">
         <div className="acc-lbl">{t('c.acc.info')}</div>
         {edit ? (

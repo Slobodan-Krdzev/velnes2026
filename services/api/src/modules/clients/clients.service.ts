@@ -87,6 +87,7 @@ export async function registerClient(input: {
   phone: string;
   dob: string | null;
   lang: 'en' | 'mk' | 'sq';
+  avatar?: string | null;
 }): Promise<void> {
   const email = norm(input.email);
   const passwordHash = await argon2.hash(input.password);
@@ -119,6 +120,7 @@ export async function registerClient(input: {
         phone: input.phone.trim() || null,
         dob: input.dob,
         lang: input.lang,
+        avatar: input.avatar ?? null,
         emailCode: code,
         emailCodeSentAt: new Date(),
       })

@@ -141,6 +141,7 @@ export const clientAuth = {
     phone: string;
     dob: string | null;
     lang: 'en' | 'mk' | 'sq';
+    avatar?: string | null;
   }) => call<{ pending: true }>('/register', { method: 'POST', body: JSON.stringify(body) }),
   /**
    * The code that was just "sent", for testing — and only ever in
