@@ -91,3 +91,20 @@ nothing to preserve — and the active flag likewise. And the assistant's
 floating button shared the corner with the panel's Save, so a click
 could land on it: it hides while a panel is open.
 `catalog/catalog.price.test.ts`.
+
+## Removing a length (2026-10-01)
+
+Taking a duration out of a service in the panel used to delete the
+`service_variants` row — and a length that was ever booked is referenced
+by appointments (and by personal offers and measured pace), so the
+delete failed and the save died with a message at the end of a scrolled
+panel. Now `reconcileNested` **retires** a referenced length
+(`retired_at`, `20261001160000_variant_retired.sql`): `svcVariants`
+leaves it out, so the catalog, the booking page and the till no longer
+offer it, while the visits that carry it keep their `variant_id` and
+snapshotted `variant_label`. A length nothing references is deleted as
+before. Removing the standard one hands "standard" to the first left —
+in the panel as you remove it, and at the door whatever the panel sent
+— so a service never has lengths and no standard. And the panel's save
+error now sits in the footer beside Save, where the eye is.
+`catalog/catalog.variants.test.ts`, `catalog/Catalog.test.tsx`.

@@ -1104,6 +1104,7 @@ export interface ServiceVariants {
   id: Generated<string>;
   label: string;
   price: number;
+  retiredAt: Timestamp | null;
   serviceId: string;
   sort: Generated<number>;
   std: Generated<boolean>;

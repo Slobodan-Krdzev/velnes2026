@@ -95,6 +95,8 @@ export async function svcVariants(trx: Trx, serviceId: string, locationId: strin
     .selectFrom('serviceVariants')
     .selectAll()
     .where('serviceId', '=', serviceId)
+    // Retired lengths stay only on the visits that carry them.
+    .where('retiredAt', 'is', null)
     .orderBy('sort')
     .execute();
   if (!vs.length) return [];

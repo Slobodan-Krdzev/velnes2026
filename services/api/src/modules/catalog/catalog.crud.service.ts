@@ -226,11 +226,24 @@ async function reconcileNested(trx: Trx, tenantId: string, serviceId: string, w:
       .selectFrom('serviceVariants')
       .select('id')
       .where('serviceId', '=', serviceId)
+      .where('retiredAt', 'is', null)
       .execute();
     const keep = new Set(w.variants.map((v) => v.id).filter(Boolean) as string[]);
     const drop = existing.filter((e) => !keep.has(e.id)).map((e) => e.id);
-    if (drop.length)
-      await trx.deleteFrom('serviceVariants').where('id', 'in', drop).execute();
+    // A duration someone booked, was offered, or was timed on cannot go:
+    // it is retired — out of every catalog, kept for its visits. One
+    // nothing references is deleted (Alex, 2026-10-01).
+    for (const id of drop) {
+      const used =
+        (await trx.selectFrom('appointments').select('id').where('variantId', '=', id).limit(1).executeTakeFirst()) ??
+        (await trx.selectFrom('personalOffers').select('id').where('variantId', '=', id).limit(1).executeTakeFirst()) ??
+        (await trx.selectFrom('empTimings').select('id').where('variantId', '=', id).limit(1).executeTakeFirst());
+      if (used) await trx.updateTable('serviceVariants').set({ retiredAt: new Date(), std: false }).where('id', '=', id).execute();
+      else await trx.deleteFrom('serviceVariants').where('id', '=', id).execute();
+    }
+    // Several lengths, none standard (the standard one was just removed):
+    // the first is what no-choice means.
+    if (w.variants.length && !w.variants.some((v) => v.std)) w.variants[0]!.std = true;
     let sort = 0;
     for (const v of w.variants) {
       if (v.id) {

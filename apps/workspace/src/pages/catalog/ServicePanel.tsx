@@ -351,7 +351,15 @@ export function ServicePanel({
                 <button
                   className="btn btn-subtle btn-sq"
                   aria-label={t('common.delete')}
-                  onClick={() => setVariants((a) => a.filter((_, j) => j !== i))}
+                  onClick={() =>
+                    setVariants((a) => {
+                      // Removing the standard length hands "standard" to
+                      // the first one left — a service never has lengths
+                      // and no standard (Alex, 2026-10-01).
+                      const left = a.filter((_, j) => j !== i);
+                      return left.length && !left.some((x) => x.std) ? left.map((x, j) => ({ ...x, std: j === 0 })) : left;
+                    })
+                  }
                 >
                   <Icon d={I.trash} size={16} />
                 </button>
@@ -576,13 +584,15 @@ export function ServicePanel({
             </div>
           ) : null}
 
+        </div>
+        <div className="panel-foot" style={error ? { flexWrap: 'wrap', rowGap: 6 } : undefined}>
+          {/* A refused save says so where the Save button is — the body
+              scrolls, and a message at its end went unseen. */}
           {error ? (
-            <p role="alert" style={{ color: 'var(--danger)', fontWeight: 600 }}>
+            <p role="alert" className="panel-foot-err" style={{ flexBasis: '100%', margin: 0, color: 'var(--danger)', fontWeight: 600, fontSize: 13 }}>
               {error}
             </p>
           ) : null}
-        </div>
-        <div className="panel-foot">
           <button className="btn btn-ghost" onClick={onClose}>
             {t('common.cancel')}
           </button>
