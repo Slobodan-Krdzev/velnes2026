@@ -418,6 +418,7 @@ export interface ProductWrite {
   name: string;
   category?: string | null | undefined;
   img?: string | null | undefined;
+  description?: string | null | undefined;
   sku?: string | null | undefined;
   price?: number | undefined;
   cost?: number | null | undefined;
@@ -437,6 +438,7 @@ export async function createProduct(trx: Trx, claims: AccessClaims, w: ProductWr
       name: w.name,
       categoryId: catId,
       img: w.img ?? null,
+      description: w.description ?? null,
       sku: w.sku ?? null,
       price: w.price ?? 0,
       cost: w.cost ?? null,
@@ -470,6 +472,7 @@ export async function updateProduct(
       categoryId: catId,
       // Untouched when omitted — the inline row edits never carry it.
       img: w.img === undefined ? before.img : w.img,
+      description: w.description === undefined ? before.description : w.description,
       sku: w.sku === undefined ? before.sku : w.sku,
       price: w.price ?? before.price,
       cost: w.cost === undefined ? before.cost : w.cost,

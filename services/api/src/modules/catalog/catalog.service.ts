@@ -453,6 +453,7 @@ export async function locationCatalog(
       name: p.name,
       category: p.category,
       img: p.img,
+      description: p.description,
       sku: p.sku,
       vat: p.vat,
       own: p.own,

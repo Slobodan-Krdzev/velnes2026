@@ -61,6 +61,8 @@ export function Onboarding() {
     const rows = [
       { on: loading ? null : !!(r?.salon.name || r?.loc.city || r?.salon.phone), label: t('ob.rowDetails') },
       { on: loading ? null : treatN > 0, label: treatN ? t('ob.rowTreatmentsN', { n: treatN }) : t('ob.rowNoTreatments') },
+      // Products count too (Alex, 2026-10-02): a shop is read as a catalogue.
+      { on: loading ? null : (r?.products.length ?? 0) > 0, label: (r?.products.length ?? 0) > 0 ? t('ob.rowProductsN', { n: r!.products.length }) : t('ob.rowNoProducts') },
       { on: loading ? null : (r?.hours.length ?? 0) > 0, label: (r?.hours.length ?? 0) > 0 ? t('ob.rowHours') : t('ob.rowNoHours') },
       { on: loading ? null : (r?.gallery.length ?? 0) > 0, label: (r?.gallery.length ?? 0) > 0 ? t('ob.rowPhotosN', { n: r!.gallery.length }) : t('ob.rowNoPhotos') },
     ];
@@ -88,6 +90,7 @@ export function Onboarding() {
     const treatN = r.services.length || r.serviceNames.length;
     const bits = [
       treatN ? t('ob.rowTreatmentsN', { n: treatN }) : null,
+      r.products.length ? t('ob.rowProductsN', { n: r.products.length }) : null,
       r.hours.length ? t('ob.rowHours').toLowerCase() : null,
       r.loc.city ? t('ob.address') : null,
     ].filter(Boolean);

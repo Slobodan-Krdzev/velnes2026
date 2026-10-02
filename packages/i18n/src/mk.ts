@@ -1242,6 +1242,8 @@ export const mk: Record<TranslationKey, string> = {
   'ob.rowHours': 'Работно време',
   'ob.rowNoHours': 'Работно време — не е најдено',
   'ob.rowPhotosN': '{{n}} фотографии',
+  'ob.rowProductsN': '{{n}} производи',
+  'ob.rowNoProducts': 'Нема пронајдени производи',
   'ob.rowNoPhotos': 'Не се најдени фотографии',
   'ob.address': 'адреса',
   'ob.phone': 'Телефонски број',

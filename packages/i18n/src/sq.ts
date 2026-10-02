@@ -1242,6 +1242,8 @@ export const sq: Record<TranslationKey, string> = {
   'ob.rowHours': 'Orari i punës',
   'ob.rowNoHours': 'Orari i punës — s\'u gjet',
   'ob.rowPhotosN': '{{n}} foto',
+  'ob.rowProductsN': '{{n}} produkte',
+  'ob.rowNoProducts': 'Nuk u gjetën produkte',
   'ob.rowNoPhotos': 'Nuk u gjetën foto',
   'ob.address': 'adresa',
   'ob.phone': 'Numri i telefonit',

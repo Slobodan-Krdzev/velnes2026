@@ -528,3 +528,41 @@ done screen and HQ's "Awaiting SMTP" badge now say what is true
 ("Not verified"). Mail bodies are English only — the applicant's
 language is not captured at registration yet (deferral, with the
 i18n of every other platform mail).
+
+## The web shop, read as a catalogue (2026-10-02)
+
+Alex, from studiotri.mk: "the model got about 20 products; the site has
+more than 200". Two limits had made that the ceiling — the import read
+only the home page plus pages named like price lists, and the extractor
+was told to return at most 20 products — and neither limit was the
+site's fault. `shop.service.ts` now walks the shop deterministically:
+same-host navigation links scored as listings (short paths and names,
+never account/cart/contact nor long product slugs), each fetched under
+the import's SSRF guards, a page counted as a listing from three priced
+tiles, its pagination followed; a tile is a product link with a name
+(heading or titled element inside the link, else the link's text with
+the price taken out, else the image's alt), the price being charged
+(a marked sale price first, struck-through prices dropped), an image
+(lazy sources before placeholders) and a short description, with
+schema.org Product JSON-LD read as it is. Bounded: 40 candidate pages,
+80 pages in all, 15 per listing, 1000 products, four fetches in flight,
+a 60-second budget — and run alongside the model call, not after it.
+Products are deduped by link and by name; the model's own products
+fill in only what the walk did not find. Categories: the model files
+the names into the HQ taxonomy in concurrent batches of 120 under one
+45-second deadline (`claudeCategoriseProducts`); anything unanswered
+falls to a name heuristic (`guessProductCategory`). The extractor's
+caps rose to 150 services and 60 products with a 16k output budget.
+
+`RegProduct` carries `img` (a link while in review) and `description`;
+approval downloads the picture under the same guards into
+`products.img` and stores the line in the new `products.description`
+(`20261002120000_product_description.sql`). The product panel edits the
+description; the location catalog, the discovery detail and the salon
+page's shelf card carry picture and line. The onboarding screen's
+"We read" list and summary now count products beside treatments.
+On studiotri.mk: 903 products in 55 s, 892 with a picture, 886 with a
+line, 505 with a size read off the name. Deferrals: product pages are
+not opened (the tile's line is the description; the full text would
+cost one fetch per product), and sizes come only from names.
+`shop.service.test.ts`, `registrations.test.ts`, `Onboarding.test.tsx`.

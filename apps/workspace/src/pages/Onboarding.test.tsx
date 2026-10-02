@@ -11,6 +11,11 @@ const importResult = {
   legal: { name: 'Skopje Physio DOOEL' },
   loc: { street: 'Bul. Partizanski 12', city: 'Skopje', zip: '1000' },
   serviceNames: ['Physiotherapy session'],
+  // Read off the shop (2026-10-02): counted beside the treatments.
+  products: [
+    { name: 'Arnica oil 200ml', category: 'Recovery aids', price: 850, sizeMl: 200, stock: 0, cost: null, img: 'https://skopjephysio.mk/i/oil.jpg', description: 'Warming massage oil.' },
+    { name: 'Kinesiology tape', category: 'Recovery aids', price: 550, sizeMl: null, stock: 0, cost: null, img: null, description: null },
+  ],
   hours: [{ day: 'mon', open: '09:00', close: '19:00', closed: false }],
 };
 
@@ -55,6 +60,7 @@ describe('AI-onboarding', () => {
     expect(screen.getByText('Skopje Physio')).toBeDefined();
     expect(screen.getByText('Business details')).toBeDefined();
     expect(screen.getByText('1 treatments')).toBeDefined();
+    expect(screen.getByText('2 products')).toBeDefined();
 
     // Continue carries the draft into the registration wizard.
     await userEvent.click(screen.getByRole('button', { name: /Continue/ }));

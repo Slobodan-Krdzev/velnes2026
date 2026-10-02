@@ -336,7 +336,7 @@ function useSalonPage() {
     () =>
       (detail?.products ?? []).flatMap((pr) => {
         const here = (pr.at ?? []).find((a) => a.locationId === locationId);
-        return here ? [{ id: pr.id, name: pr.name, category: pr.category, price: here.price }] : [];
+        return here ? [{ id: pr.id, name: pr.name, category: pr.category, price: here.price, img: pr.img ?? null, description: pr.description ?? null }] : [];
       }),
     [detail?.products, locationId],
   );
@@ -829,10 +829,11 @@ function BookCard({ p, desktop }: { p: Page; desktop: boolean }) {
                       >
                         <span className="row1">
                           <span className="nm">
-                            {IcBottle}
+                            {pr.img ? <img className="prod-thumb" src={pr.img} alt="" /> : IcBottle}
                             <span className="t">{pr.name}</span>
                           </span>
                         </span>
+                        {pr.description ? <span className="sm muted prod-desc">{pr.description}</span> : null}
                         <span className="in2">
                           <span>{on ? (qty > 1 ? t('c.sal.inVisitN', { n: qty }) : t('c.sal.inVisit')) : t('c.sal.product')}</span>
                           <b>{fmtMKD(pr.price)}</b>

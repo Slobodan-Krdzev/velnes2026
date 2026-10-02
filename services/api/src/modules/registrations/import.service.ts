@@ -7,7 +7,8 @@ import {
   type RegistrationImportResult,
 } from '@velnes/contracts';
 import { env } from '../../env.js';
-import { claudeExtract, htmlToText, type ExtractOutput } from './extract.provider.js';
+import { claudeCategoriseProducts, claudeExtract, htmlToText, snapCategory, toMkd, type ExtractOutput } from './extract.provider.js';
+import { crawlShop, guessProductCategory, type ShopProduct } from './shop.service.js';
 
 /**
  * Phase 1 of AI-onboarding: import a salon from its OWN website. The
@@ -176,7 +177,7 @@ export function collectImages(html: string, finalUrl: string, biz?: Record<strin
 /** Fetch one image under the same SSRF guards and return it as a data
  *  URL, or null on any miss (bad host, non-image, too large, error).
  *  Best-effort: photos never break an import, so this never throws. */
-async function safeFetchImage(input: string): Promise<string | null> {
+export async function safeFetchImage(input: string): Promise<string | null> {
   let url: URL;
   try {
     url = new URL(input);
@@ -447,6 +448,29 @@ export interface ImportOptions {
   productCategories?: string[];
 }
 
+/** A shop tile as the registration carries it: price in whole MKD, the
+ *  category snapped onto the HQ taxonomy, the picture still a link. */
+function toRegProduct(p: ShopProduct, category: string, cats: string[]) {
+  const ml = /(\d{2,4})\s*ml\b/i.exec(p.name)?.[1];
+  return {
+    name: p.name.slice(0, 80),
+    category: cats.length ? snapCategory(category, cats) : category,
+    price: toMkd(p.price, p.currency),
+    sizeMl: ml ? Number(ml) : null,
+    stock: 0,
+    cost: null,
+    img: p.img,
+    description: p.description,
+  };
+}
+
+/** A same-host page as HTML, under the SSRF guards; null on any miss. */
+async function fetchHtml(url: string): Promise<string | null> {
+  const got = await safeFetchBytes(url, MAX_BYTES, 'text/html');
+  if (!got || !(got.type.includes('html') || got.type.includes('text'))) return null;
+  return new TextDecoder('utf-8').decode(got.bytes.slice(0, MAX_BYTES));
+}
+
 /** Fetch raw bytes under the SSRF guards, size-capped. Best-effort:
  *  returns null on any miss and never throws (deep reads never block). */
 async function safeFetchBytes(
@@ -677,6 +701,9 @@ export async function importSalon(
     if (!(e instanceof ImportError && e.code === 'NOTHING_FOUND')) throw e;
   }
 
+  // The model's read of the page and the walk of the shop are
+  // independent: they run side by side (2026-10-02).
+  const shopPromise = crawlShop(html, finalUrl, fetchHtml);
   let ai: ExtractOutput | null = null;
   if (env.onboardingProvider === 'claude') {
     ai = await claudeExtract({
@@ -699,6 +726,19 @@ export async function importSalon(
     );
 
   const result = merge(finalUrl, base, ai);
+
+  // The web shop, read as a catalogue (Alex, 2026-10-02): every product
+  // the site lists, title/price/image/line, from its listing pages — not
+  // the handful the home page shows the model. Best-effort, bounded.
+  const shop = await shopPromise;
+  if (shop.products.length) {
+    const cats = opts.productCategories ?? [];
+    const named = await claudeCategoriseProducts(shop.products.map((p) => p.name), cats);
+    const crawled = shop.products.map((p) => toRegProduct(p, named.get(p.name.toLowerCase().trim()) ?? guessProductCategory(p.name, cats), cats));
+    const have = new Set(crawled.map((p) => p.name.toLowerCase().replace(/\s+/g, ' ').trim()));
+    result.products = [...crawled, ...result.products.filter((p) => !have.has(p.name.toLowerCase().replace(/\s+/g, ' ').trim()))];
+    if (!result.found.includes('products')) result.found.push('products');
+  }
 
   // The salon's own photos — best-effort, never blocking. The hero
   // (og:image) leads, then JSON-LD/inline images; each fetched under the

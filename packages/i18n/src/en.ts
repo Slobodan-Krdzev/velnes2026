@@ -1249,6 +1249,8 @@ export const en = {
   'ob.rowHours': 'Opening hours',
   'ob.rowNoHours': 'Opening hours — not found',
   'ob.rowPhotosN': '{{n}} photos',
+  'ob.rowProductsN': '{{n}} products',
+  'ob.rowNoProducts': 'No products found',
   'ob.rowNoPhotos': 'No photos found',
   'ob.address': 'address',
   'ob.phone': 'Phone number',

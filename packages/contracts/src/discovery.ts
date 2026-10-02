@@ -101,6 +101,9 @@ export const DiscoveryProductSchema = z.object({
   category: z.string().nullable(),
   /** Whole MKD denars, as stored on the product (the salon-wide price). */
   price: z.number().int(),
+  /** The product's picture and line, when the salon has them (2026-10-02). */
+  img: z.string().nullable().default(null),
+  description: z.string().nullable().default(null),
   /** Where it is actually sold, and for how much there (2026-10-01):
    *  the shelf of each live location that sells it. A location missing
    *  here does not sell it; the app offers products per location. */
