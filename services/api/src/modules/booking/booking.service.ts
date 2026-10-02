@@ -23,6 +23,10 @@ import {
 
 export const DAY_START = 480; // 08:00
 export const DAY_END = 1140; // 19:00
+/** The slot grid (Alex, 2026-10-02): a start every quarter hour. The
+ *  prototype drew half hours; a 55-minute cut should be offered at
+ *  14:15 too. Every door that lists or checks starts walks this step. */
+export const SLOT_STEP_MIN = 15;
 export const HOLD_SECONDS = 600;
 
 export interface Refusal {
@@ -485,7 +489,7 @@ export async function availableSlots(
   const quoted = quotedLine.treatmentMin;
   const sch = await scheduleFor(trx, q.locationId, q.date);
   const out: { t: string; emp: string | null; free: boolean }[] = [];
-  for (let m = DAY_START; m + quoted + quotedLine.resetMin <= DAY_END; m += 30) {
+  for (let m = DAY_START; m + quoted + quotedLine.resetMin <= DAY_END; m += SLOT_STEP_MIN) {
     if (m <= cut) continue;
     if (m > until) break;
     if (m - clipPrep(quotedLine.prepMin, m, sch) < DAY_START) continue;
@@ -1293,7 +1297,7 @@ export async function chainAvailability(
   if (pools.some((p) => !p.length)) return { slots: [] };
   const sch = await scheduleFor(trx, q.locationId, q.date);
   const out: { t: string; emp: string | null; free: boolean }[] = [];
-  for (let m = DAY_START; ; m += 30) {
+  for (let m = DAY_START; ; m += SLOT_STEP_MIN) {
     const span = chainSpan(legs, m);
     if (span.to > DAY_END) break;
     if (m <= cut) continue;

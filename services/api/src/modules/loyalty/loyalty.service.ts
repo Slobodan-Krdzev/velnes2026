@@ -145,12 +145,17 @@ export async function visitReward(tenantId: string, anchorId: string) {
       ? (await trx.selectFrom('services').select(['id', 'name']).where('id', 'in', serviceIds).execute())
       : [];
     const biz = await trx.selectFrom('businesses').select('name').where('id', '=', tenantId).executeTakeFirst();
-    const pts = appointmentPoints(delivered.length, productUnits);
+    // Upsales (Alex, 2026-10-02): a length the leg carries (Standard is
+    // the service itself — no length) and each option it carries, one
+    // point-bundle each.
+    const extras = delivered.reduce((n, l) => n + (l.variantId ? 1 : 0) + (l.modifierOptionIds?.length ?? 0), 0);
+    const pts = appointmentPoints(delivered.length, productUnits, extras);
     return {
       first: legs[0]!,
       clientUserId: legs[0]!.clientUserId,
       serviceCount: delivered.length,
       productUnits,
+      extras,
       ...pts,
       salonName: biz?.name ?? '',
       serviceNames: delivered.map((l) => names.find((n) => n.id === l.serviceId)?.name ?? l.title),
@@ -211,6 +216,8 @@ export async function settleVisit(tenantId: string, anchorId: string): Promise<n
         servicePoints: reward.servicePoints,
         productUnits: reward.productUnits,
         productPoints: reward.productPoints,
+        extras: reward.extras,
+        extraPoints: reward.extraPoints,
         total: reward.total,
         salonName: reward.salonName,
         serviceNames: reward.serviceNames,

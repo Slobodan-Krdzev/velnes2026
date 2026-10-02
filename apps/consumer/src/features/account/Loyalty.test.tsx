@@ -13,7 +13,7 @@ const profile = {
 };
 const account = {
   balance: 1450,
-  rules: { version: 1, registration: 100, firstService: 100, additionalService: 30, productUnit: 20, review: 50 },
+  rules: { version: 1, registration: 100, firstService: 100, additionalService: 30, productUnit: 20, extraChoice: 20, review: 50 },
   entries: [
     { id: 'e0000000-0000-4000-8000-000000000003', type: 'review_submitted', points: 50, sourceType: 'review', sourceId: 'r1', salonName: 'Velnes Fizio Centar', meta: {}, at: '2026-09-30T10:00:00.000Z' },
     { id: 'e0000000-0000-4000-8000-000000000002', type: 'appointment_completed', points: 190, sourceType: 'appointment', sourceId: 'a1', salonName: 'Velnes Fizio Centar', meta: { serviceCount: 2, productUnits: 2, servicePoints: 130, productPoints: 40, total: 170 }, at: '2026-09-29T10:00:00.000Z' },
@@ -79,6 +79,7 @@ describe('Velnes Loyalty', () => {
     expect(screen.getByText('How to earn points')).toBeDefined();
     expect(screen.getByText('+100 for your first service, +30 for each additional service')).toBeDefined();
     expect(screen.getByText('+20 per product')).toBeDefined();
+    expect(screen.getByText('Choose beyond Standard — another length, an option').nextSibling?.textContent).toBe('+20');
     expect(screen.getByText('Leave a verified review').nextSibling?.textContent).toBe('+50');
   });
 });

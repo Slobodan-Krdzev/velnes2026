@@ -59,15 +59,16 @@ describe('slots and the clock', () => {
       expect(whole.length).toBeGreaterThan(0);
       expect(whole[0]!.t).toBe('08:00');
 
-      // At 12:10 on the day: 12:00 and earlier are gone, 12:30 is the first.
+      // At 12:10 on the day: 12:00 and earlier are gone, 12:15 — the
+      // quarter-hour grid (2026-10-02) — is the first.
       const midday = await availableSlots(trx, {
         ...base,
         date: wednesday,
         now: clockAt(wednesday, '12:10', 'Europe/Skopje'),
       });
       expect(midday.length).toBeGreaterThan(0);
-      expect(midday[0]!.t).toBe('12:30');
-      expect(midday.map((s) => s.t)).toEqual(whole.map((s) => s.t).filter((t) => t >= '12:30'));
+      expect(midday[0]!.t).toBe('12:15');
+      expect(midday.map((s) => s.t)).toEqual(whole.map((s) => s.t).filter((t) => t >= '12:15'));
 
       // The next day: nothing at all — not "busy", absent.
       const dayAfter = clockAt(wednesday, '09:00', 'Europe/Skopje');

@@ -1809,3 +1809,33 @@ a.pop-go:hover {
   gap: 6px;
   margin-top: 3px;
 }
+
+/* "+20 pts" on a length other than the standard one (Alex, 2026-10-02):
+   the profile tab's count, on a card corner. */
+.pro-card {
+  position: relative;
+}
+.pts-badge {
+  position: absolute;
+  top: -9px;
+  right: 8px;
+  max-width: calc(100% - 16px);
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--brand);
+  color: #fff;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  box-shadow: 0 0 0 2px #fff;
+  pointer-events: none;
+}
+/* Room above the first row of cards for the tags that sit on their edge. */
+.pro-grid {
+  padding-top: 6px;
+}

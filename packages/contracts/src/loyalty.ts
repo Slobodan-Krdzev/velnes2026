@@ -16,13 +16,18 @@ import { z } from 'zod';
  * Everything derived reads the constant from here.
  */
 export const LOYALTY_RULES = {
-  version: 1,
+  /** 2 (2026-10-02): any choice beyond Standard — a length, an option — earns on top. */
+  version: 2,
   /** On the first email verification of an account. */
   registration: 100,
   appointment: {
     firstService: 100,
     additionalService: 30,
     productUnit: 20,
+    /** Each choice beyond the Standard card (Alex, 2026-10-02): a length
+     *  other than the base one, an option from a group — on top of the
+     *  service's own points, once per choice. */
+    extraChoice: 20,
     /** Hours after the visit's end before it is settled — so a checkout
      *  at the till, with its products, is already on the invoice. */
     settleHours: 2,
@@ -41,10 +46,15 @@ export function servicePoints(n: number, rules = LOYALTY_RULES): number {
 export function productPoints(units: number, rules = LOYALTY_RULES): number {
   return Math.max(0, Math.floor(units)) * rules.appointment.productUnit;
 }
-export function appointmentPoints(serviceCount: number, productUnits: number, rules = LOYALTY_RULES) {
+/** Points for choices beyond Standard — lengths and options, counted one each. */
+export function extraPoints(extras: number, rules = LOYALTY_RULES): number {
+  return Math.max(0, Math.floor(extras)) * rules.appointment.extraChoice;
+}
+export function appointmentPoints(serviceCount: number, productUnits: number, extras = 0, rules = LOYALTY_RULES) {
   const s = servicePoints(serviceCount, rules);
   const p = productPoints(productUnits, rules);
-  return { servicePoints: s, productPoints: p, total: s + p };
+  const x = extraPoints(extras, rules);
+  return { servicePoints: s, productPoints: p, extraPoints: x, total: s + p + x };
 }
 
 /** Stable typed reasons. The last six have no writer yet; the ledger
@@ -83,6 +93,7 @@ export const LoyaltyRulesSchema = z.object({
   firstService: z.number().int(),
   additionalService: z.number().int(),
   productUnit: z.number().int(),
+  extraChoice: z.number().int().default(0),
   review: z.number().int(),
 });
 
@@ -106,5 +117,6 @@ export const rulesForClients = () => ({
   firstService: LOYALTY_RULES.appointment.firstService,
   additionalService: LOYALTY_RULES.appointment.additionalService,
   productUnit: LOYALTY_RULES.appointment.productUnit,
+  extraChoice: LOYALTY_RULES.appointment.extraChoice,
   review: LOYALTY_RULES.review,
 });

@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { t } from '../../lib/i18n-core.js';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import type { z } from 'zod';
-import { PRODUCT_QTY_MAX, type PublicServiceSchema } from '@velnes/contracts';
+import { LOYALTY_RULES, PRODUCT_QTY_MAX, type PublicServiceSchema } from '@velnes/contracts';
 import { fmtMKD, minutesLbl } from '../../lib/api/mappers.js';
 import { useSalonDetail, useSalonServices, useVisitSlots } from '../../lib/api/queries.js';
 import { useMyOffers } from '../../lib/api/session.js';
@@ -274,6 +274,9 @@ function useSalonPage() {
         .map((c) => {
           const svc = services.find((x) => x.id === c.serviceId);
           if (!svc) return null;
+          // Standard is the service itself — the door's own rule (svcChoice)
+          // — so the Standard card quotes the base and every length is an
+          // upsale (Alex, 2026-10-02).
           const variant = svc.variants.find((v) => v.id === c.variantId) ?? null;
           const offer = offerFor(svc.id, variant?.id ?? null);
           // The chosen options add to (or take off) the line's price and
@@ -346,6 +349,9 @@ function useSalonPage() {
     [prods, shelf],
   );
   const productUnits = plines.reduce((n, l) => n + l.qty, 0);
+  // Upsales (Alex, 2026-10-02): a length picked over Standard, each
+  // option picked — every one earns points on top.
+  const extras = lines.reduce((n, l) => n + (l.variant ? 1 : 0) + l.mods.length, 0);
   // What the visit costs: treatments plus the products taken home.
   const price = lines.reduce((n, l) => n + l.price, 0) + plines.reduce((n, l) => n + l.price, 0);
   const durationMin = lines.reduce((n, l) => n + l.durationMin, 0);
@@ -392,6 +398,7 @@ function useSalonPage() {
     shelf,
     plines,
     productUnits,
+    extras,
     inProds: (id: string) => prods.some((x) => x.productId === id),
     toggleProd: (id: string) =>
       setProds((c) => (c.some((x) => x.productId === id) ? c.filter((x) => x.productId !== id) : [...c, { productId: id, qty: 1 }])),
@@ -693,6 +700,9 @@ function BookCard({ p, desktop }: { p: Page; desktop: boolean }) {
                       {minutesLbl(v.durationMin)} · {fmtMKD(v.price)}
                     </span>
                   </span>
+                  {/* A length is an upsale over Standard and earns on top —
+                      said on the card, like the count on the profile tab. */}
+                  <span className="pts-badge" data-testid="pts-badge">{t('c.sal.ptsBadge', { n: LOYALTY_RULES.appointment.extraChoice })}</span>
                 </button>
               ))}
             </div>
@@ -734,6 +744,8 @@ function BookCard({ p, desktop }: { p: Page; desktop: boolean }) {
                             <b>{o.name}</b>
                             <span className="sm muted">{bits.length ? bits.join(' · ') : t('c.sal.noChange')}</span>
                           </span>
+                          {/* An option is a choice beyond Standard too. */}
+                          <span className="pts-badge" data-testid="pts-badge">{t('c.sal.ptsBadge', { n: LOYALTY_RULES.appointment.extraChoice })}</span>
                         </button>
                       );
                     })}
@@ -1205,7 +1217,7 @@ export function Salon() {
                     <span>{t('c.sal.total')}</span>
                     <b>{showPrice}</b>
                   </div>
-                  <LoyaltyEarn serviceCount={p.lines.length} productUnits={p.productUnits} />
+                  <LoyaltyEarn serviceCount={p.lines.length} productUnits={p.productUnits} extras={p.extras} />
                   <BookButton p={p} desktop onBook={book} style={{ width: '100%' }} />
                 </div>
               )}
@@ -1285,7 +1297,7 @@ export function Salon() {
                     <b data-sum="price">{showPrice}</b>
                   </span>
                 </div>
-                <LoyaltyEarn serviceCount={p.lines.length} productUnits={p.productUnits} className="m" />
+                <LoyaltyEarn serviceCount={p.lines.length} productUnits={p.productUnits} extras={p.extras} className="m" />
                 <BookButton p={p} desktop={false} onBook={book} arrow />
                 <span className="safe">{IcVok} {t('c.sal.safe')}</span>
               </div>

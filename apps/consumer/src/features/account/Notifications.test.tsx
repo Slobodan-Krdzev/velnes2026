@@ -34,7 +34,7 @@ function mockApi() {
       }
       if (url.includes('/client/me/notifications')) return ok({ notifications, unread: 1 });
       if (url.includes('/client/me/appointments')) return ok({ appointments: [appointment] });
-      if (url.includes('/client/me/loyalty')) return ok({ balance: 100, rules: { version: 1, registration: 100, firstService: 100, additionalService: 30, productUnit: 20, review: 50 }, entries: [] });
+      if (url.includes('/client/me/loyalty')) return ok({ balance: 100, rules: { version: 1, registration: 100, firstService: 100, additionalService: 30, productUnit: 20, extraChoice: 20, review: 50 }, entries: [] });
       if (url.includes('/client/me/offers')) return ok({ offers: [] });
       if (url.includes('/client/me/salons')) return ok({ salons: [] });
       if (url.includes('/client/me/favourites')) return ok({ salons: [], services: [], pros: [] });

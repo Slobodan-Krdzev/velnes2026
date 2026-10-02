@@ -50,7 +50,7 @@ describe('the soonest start, within the half hour', () => {
     });
   });
 
-  it('at 09:20 both 09:30 and 10:00 are inside the window; the soonest wins', async () => {
+  it('at 09:20 the quarter-hour grid offers 09:30 first inside the window; the soonest wins', async () => {
     await withTenant(demo.business, async (trx) => {
       const at = await firstStartWithin(trx, {
         locationId: demo.locCentar,

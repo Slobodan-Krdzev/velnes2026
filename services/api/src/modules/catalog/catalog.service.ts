@@ -139,7 +139,13 @@ export async function svcChoice(
   const vs = (await svcVariants(trx, serviceId, locationId)).filter((v) => v.active);
   if (!vs.length)
     return { vid: null, label: null, price: cfg.price, durationMin: cfg.durationMin };
-  const v = vs.find((x) => x.id === variantId) ?? vs.find((x) => x.std) ?? vs[0]!;
+  // No choice means the service itself — its own minutes and price —
+  // and every length is a step beyond it, an upsale (Alex, 2026-10-02).
+  // The standard flag only says which length the booking page and the
+  // workspace preselect; it never books itself. An unknown or retired
+  // id lands on the service too.
+  const v = vs.find((x) => x.id === variantId);
+  if (!v) return { vid: null, label: null, price: cfg.price, durationMin: cfg.durationMin };
   return { vid: v.id, label: v.label, price: v.price, durationMin: v.durationMin };
 }
 
