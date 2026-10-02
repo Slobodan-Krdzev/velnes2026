@@ -302,14 +302,14 @@ earns 20 points on top — first asked for lengths, then widened to the
 option groups too ("Hair colour brand" and the like). Rule version 2:
 `LOYALTY_RULES.appointment.extraChoice` and `extraPoints`;
 `appointmentPoints(services, units, extras)` carries it in its
-breakdown. "Standard" is what no-choice means at the door
-(`svcChoice`: the length marked standard, else the service itself), so
+breakdown. "Standard" is the service itself — what no-choice means at
+the door (`svcChoice` never books a length nobody chose) — so
 `visitReward` counts, per
-delivered leg, one for a `variant_id` other than that length and one
+delivered leg, one for a `variant_id` (any length is an upsale) and one
 per entry of `modifier_option_ids`. The salon page follows the same
-rule: its Standard card quotes that length's minutes and price (the
-quote equals the charge), every other length and every option wears
-the tag "Earn +20 Loyalty points!" — a count badge, like the profile
-tab's — and the booking summary's preview counts them; the loyalty
-screen's "How to earn" has the row.
+rule: its Standard card quotes the service's own minutes and price (the
+quote equals the charge), every length and every option wears the tag
+"Earn +20 Loyalty points!" — a count badge, like the profile tab's —
+and the booking summary's preview counts them; the loyalty screen's
+"How to earn" has the row.
 `loyalty.test.ts`, `BookAgain.test.tsx`, `Loyalty.test.tsx`.

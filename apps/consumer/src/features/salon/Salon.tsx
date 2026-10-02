@@ -274,11 +274,10 @@ function useSalonPage() {
         .map((c) => {
           const svc = services.find((x) => x.id === c.serviceId);
           if (!svc) return null;
-          // What no-choice means for a service with lengths: the standard
-          // one, else the service itself — the door's own rule (svcChoice),
-          // so the Standard card quotes what will be charged.
-          const noChoice = svc.variants.find((v) => v.std) ?? null;
-          const variant = svc.variants.find((v) => v.id === c.variantId) ?? (c.variantId === null ? noChoice : null);
+          // Standard is the service itself — the door's own rule (svcChoice)
+          // — so the Standard card quotes the base and every length is an
+          // upsale (Alex, 2026-10-02).
+          const variant = svc.variants.find((v) => v.id === c.variantId) ?? null;
           const offer = offerFor(svc.id, variant?.id ?? null);
           // The chosen options add to (or take off) the line's price and
           // time — the same sums the door makes, so the summary never
@@ -292,7 +291,6 @@ function useSalonPage() {
             ...c,
             svc,
             variant,
-            noChoice,
             offer,
             opts,
             missing,
@@ -351,9 +349,9 @@ function useSalonPage() {
     [prods, shelf],
   );
   const productUnits = plines.reduce((n, l) => n + l.qty, 0);
-  // Choices beyond Standard (Alex, 2026-10-02): a length other than what
-  // no-choice means, each option picked — every one earns points on top.
-  const extras = lines.reduce((n, l) => n + (l.variantId && l.variant && l.variant.id !== l.noChoice?.id ? 1 : 0) + l.mods.length, 0);
+  // Upsales (Alex, 2026-10-02): a length picked over Standard, each
+  // option picked — every one earns points on top.
+  const extras = lines.reduce((n, l) => n + (l.variant ? 1 : 0) + l.mods.length, 0);
   // What the visit costs: treatments plus the products taken home.
   const price = lines.reduce((n, l) => n + l.price, 0) + plines.reduce((n, l) => n + l.price, 0);
   const durationMin = lines.reduce((n, l) => n + l.durationMin, 0);
@@ -685,7 +683,7 @@ function BookCard({ p, desktop }: { p: Page; desktop: boolean }) {
                 <span>
                   <b>{t('c.sal.standard')}</b>
                   <span className="sm muted">
-                    {minutesLbl(l.noChoice?.durationMin ?? l.svc.durationMin)} · {fmtMKD(l.noChoice?.price ?? l.svc.price)}
+                    {minutesLbl(l.svc.durationMin)} · {fmtMKD(l.svc.price)}
                   </span>
                 </span>
               </button>
@@ -702,9 +700,9 @@ function BookCard({ p, desktop }: { p: Page; desktop: boolean }) {
                       {minutesLbl(v.durationMin)} · {fmtMKD(v.price)}
                     </span>
                   </span>
-                  {/* A length beyond what Standard means earns on top —
+                  {/* A length is an upsale over Standard and earns on top —
                       said on the card, like the count on the profile tab. */}
-                  {v.id !== l.noChoice?.id ? <span className="pts-badge" data-testid="pts-badge">{t('c.sal.ptsBadge', { n: LOYALTY_RULES.appointment.extraChoice })}</span> : null}
+                  <span className="pts-badge" data-testid="pts-badge">{t('c.sal.ptsBadge', { n: LOYALTY_RULES.appointment.extraChoice })}</span>
                 </button>
               ))}
             </div>

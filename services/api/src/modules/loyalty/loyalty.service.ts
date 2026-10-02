@@ -145,18 +145,10 @@ export async function visitReward(tenantId: string, anchorId: string) {
       ? (await trx.selectFrom('services').select(['id', 'name']).where('id', 'in', serviceIds).execute())
       : [];
     const biz = await trx.selectFrom('businesses').select('name').where('id', '=', tenantId).executeTakeFirst();
-    // Choices beyond Standard (Alex, 2026-10-02): a length other than
-    // the one no-choice means (the standard, else the service itself —
-    // svcChoice's own rule), and each option the leg carries, one each.
-    const svcIds = [...new Set(delivered.map((l) => l.serviceId).filter((x): x is string => Boolean(x)))];
-    const variants = svcIds.length
-      ? await trx.selectFrom('serviceVariants').select(['id', 'serviceId', 'std', 'sort']).where('serviceId', 'in', svcIds).where('retiredAt', 'is', null).orderBy('sort').execute()
-      : [];
-    const noChoiceOf = (serviceId: string | null) => variants.find((v) => v.serviceId === serviceId && v.std)?.id ?? null;
-    const extras = delivered.reduce(
-      (n, l) => n + (l.variantId && l.variantId !== noChoiceOf(l.serviceId) ? 1 : 0) + (l.modifierOptionIds?.length ?? 0),
-      0,
-    );
+    // Upsales (Alex, 2026-10-02): a length the leg carries (Standard is
+    // the service itself — no length) and each option it carries, one
+    // point-bundle each.
+    const extras = delivered.reduce((n, l) => n + (l.variantId ? 1 : 0) + (l.modifierOptionIds?.length ?? 0), 0);
     const pts = appointmentPoints(delivered.length, productUnits, extras);
     return {
       first: legs[0]!,
