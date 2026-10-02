@@ -162,13 +162,15 @@ describe('the decision, not the place', () => {
     expect(getCurrentPosition).toHaveBeenCalledTimes(1);
   });
 
-  it('a timeout gets one gentler second ask before giving up as unavailable', async () => {
+  it('asks coarse first, then GPS once, before giving up as unavailable', async () => {
     const getCurrentPosition = stubFailing({ code: 3 });
     mount();
     fireEvent.click(screen.getByText('allow'));
     await waitFor(() => expect(screen.getByTestId('status').textContent).toBe('unavailable'));
     expect(getCurrentPosition).toHaveBeenCalledTimes(2);
-    expect(getCurrentPosition.mock.calls[1]?.[2]).toMatchObject({ enableHighAccuracy: false });
+    // Coarse first (a wifi fix answers at once), GPS only as the second ask.
+    expect(getCurrentPosition.mock.calls[0]?.[2]).toMatchObject({ enableHighAccuracy: false, maximumAge: 300_000 });
+    expect(getCurrentPosition.mock.calls[1]?.[2]).toMatchObject({ enableHighAccuracy: true });
   });
 });
 

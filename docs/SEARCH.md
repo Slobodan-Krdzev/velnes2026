@@ -493,6 +493,23 @@ one-location salon stays one row with `location: null`.
 
 ---
 
+### 12.13 A "now" search from a phone (2026-10-02)
+
+Alex, from an iPhone on production: "Locating… all the time, results
+so slow to come". Two causes, both fixed. (1) `availableNowOf` and
+`availableOnOf` walked the salons one after another, each in its own
+tenant transaction — 6.8 s for a bare "now" over the fixture salons on
+the VPS against 0.3 s for a text search. They now walk
+`NOW_CONCURRENCY` (4) salons at once, well under the pool of 10, and
+remember each answer for 45 s rather than 20. (2) The app keyed the
+search on a position rounded to ~100 m while the live watch nudged the
+fix every few seconds — every nudge a fresh request and an empty list.
+`useSearch` and the category hook now key on a *settled* position that
+moves only once the person has moved 250 m (`settledPosition`), keep
+the previous list on screen while a refetch runs (`keepPreviousData`),
+and `locate()` asks for a coarse fix first (wifi/cell, a few minutes
+old is fine) before GPS, so "Locating…" lasts a moment, not up to 18 s.
+
 ## 14. Deliberately not in this phase
 
 Professionals as a searchable entity · impressions and exposure decay ·
