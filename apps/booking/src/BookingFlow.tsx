@@ -89,6 +89,7 @@ export function BookingFlow({
   const [emp, setEmp] = useState<string>('any');
   const [date, setDate] = useState(localIso(new Date()));
   const [slots, setSlots] = useState<Slot[]>([]);
+  const [slotsLoading, setSlotsLoading] = useState(false);
   const [time, setTime] = useState<string | null>(null);
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
@@ -130,13 +131,29 @@ export function BookingFlow({
 
   useEffect(() => {
     if (!loc || !svc || !key) return;
+    // A new day (or professional, or length) is a new list: the old one
+    // leaves the screen at once, so a stale slot cannot be tapped while
+    // the new answer is on its way — that tap sent Saturday 15:00 to the
+    // hold door and was refused (2026-10-02). A time still chosen that
+    // the new list does not offer is dropped when it lands.
     setTime(null);
+    setSlots([]);
+    setSlotsLoading(true);
+    let live = true;
     pub(
       AvailabilityResponseSchema,
       `/availability?key=${encodeURIComponent(key)}&locationId=${loc}&serviceId=${svc.id}&date=${date}&employeeId=${emp}${vid ? `&variantId=${vid}` : ''}&holdKey=${idem.current}`,
     )
-      .then((r) => setSlots(r.slots))
-      .catch(() => setSlots([]));
+      .then((r) => {
+        if (!live) return;
+        setSlots(r.slots);
+        setTime((t) => (t && r.slots.some((x) => x.t === t && x.free) ? t : null));
+      })
+      .catch(() => live && setSlots([]))
+      .finally(() => live && setSlotsLoading(false));
+    return () => {
+      live = false;
+    };
   }, [loc, svc, date, vid, emp, key]);
 
   // The hold countdown — when it dies, the time goes back on sale and
@@ -557,6 +574,7 @@ export function BookingFlow({
               </div>
               <div className="field">
                 <span>{t('book.time')}</span>
+                {slotsLoading ? <p className="muted">{t('shell.loading')}</p> : null}
                 {slots.some((s) => s.free) ? (
                   <div className="bslots">
                     {slots.map((s) => (
