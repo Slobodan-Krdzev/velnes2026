@@ -51,7 +51,10 @@ beforeEach(() => {
           ? { ...salons.salons[0], description: '', gallery: [], showPrices: true, team: [], products: [], publishableKey: 'pk_test', locations: [], phone: null }
           : url.includes('/discovery/salons')
             ? salons
-            : { services: [], slots: [] };
+            : url.includes('/discovery/search')
+              ? // The text reaches a salon by name too — offered on a typed search, not on a chip.
+                { services: [], salons: [{ id: '33333333-3333-4333-8333-333333333333', slug: 'zen-rooms', name: 'Zen Rooms', city: 'Skopje' }], directSalon: null, how: 'default', widened: false, personalised: false }
+              : { services: [], slots: [] };
       return { ok: true, json: async () => body } as Response;
     }),
   );
@@ -125,9 +128,20 @@ describe('the consumer app', () => {
     expect(q.get('party')).toBeNull();
     const chip = (await screen.findAllByRole('button', { name: 'Tomorrow' }))[0]!;
     expect(chip.getAttribute('aria-pressed')).toBe('true');
+    // A chip asks for treatments: the salon that carries the word is not offered.
+    expect(q.get('via')).toBe('chip');
+    await new Promise((r) => setTimeout(r, 50));
+    expect(screen.queryByText('Zen Rooms')).toBeNull();
     // Off again: the day leaves the URL.
     chip.click();
     await waitFor(() => expect(new URLSearchParams(window.location.search).get('when')).toBeNull());
+  });
+
+  it('a typed "Massage" still offers the salon that carries the word', async () => {
+    window.history.pushState({}, '', '/search?q=Massage');
+    render(<App />);
+    // Both layouts render; either is enough.
+    expect((await screen.findAllByText('Zen Rooms')).length).toBeGreaterThan(0);
   });
 
   it('"Facial this weekend" and "Manicure" carry the weekend, and just the word', async () => {
@@ -147,7 +161,7 @@ describe('the consumer app', () => {
     await waitFor(() => expect(window.location.pathname).toBe('/search'));
     q = new URLSearchParams(window.location.search);
     expect(q.get('q')).toBe('Manicure');
-    expect([...q.keys()]).toEqual(['q']);
+    expect([...q.keys()]).toEqual(['q', 'via']);
   });
 
   it('"Haircut near me" asks for Near me the way the button would; "Couple massage" is massage for two', async () => {

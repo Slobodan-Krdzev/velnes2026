@@ -131,7 +131,7 @@ export function Home() {
    */
   /** Every "Velnes for Business" door on this page: the workspace's onboarding. */
   const bizUrl = businessOnboardingUrl();
-  const goNow = () => nav(`/search?q=${encodeURIComponent(t('c.home.nowQuery'))}`);
+  const goNow = () => nav(`/search?q=${encodeURIComponent(t('c.home.nowQuery'))}&via=chip`);
   /**
    * The six chips, each a whole search (Alex, 2026-09-30): "Available
    * now" is anything that can start within the half hour; "Massage
@@ -142,8 +142,11 @@ export function Home() {
    * only where two can be seen at the same time. The words go to the
    * door in English, which its synonyms know in every language.
    */
+  // A chip is a treatment search, never a salon lookup (Alex, 2026-10-02):
+  // `via=chip` tells the results page to leave salons that merely carry
+  // the word out. A typed "Massage" still offers them.
   const goChip = (q: string, extra: Record<string, string> = {}) => {
-    const p = new URLSearchParams({ q, ...extra });
+    const p = new URLSearchParams({ q, ...extra, via: 'chip' });
     nav(`/search?${p.toString()}`);
   };
   const chips = (

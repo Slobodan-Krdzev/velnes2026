@@ -57,6 +57,9 @@ export function useCategoryResults(
   categorySlug: string | undefined,
   query: string | null,
   filters: SearchFilters,
+  /** A home chip asked for treatments (Alex, 2026-10-02): salons that
+   *  merely carry the word are not offered and never opened outright. */
+  opts: { treatmentsOnly?: boolean } = {},
 ) {
   const catsQ = useCategories();
   const { token } = useSession();
@@ -104,11 +107,11 @@ export function useCategoryResults(
     rankVersion: answered?.rankVersion ?? null,
     /** A salon named outright. The page redirects rather than rendering.
      *  Only a submitted search can produce one. */
-    directSalon: query ? (byText.data?.directSalon ?? null) : null,
+    directSalon: query && !opts.treatmentsOnly ? (byText.data?.directSalon ?? null) : null,
     /** Salons the text reached but that were not certain enough to open
      *  alone — two sharing a name, or a partial one. Offered rather than
      *  guessed between. */
-    salons: query ? (byText.data?.salons ?? []) : [],
+    salons: query && !opts.treatmentsOnly ? (byText.data?.salons ?? []) : [],
     /** What could be narrowed, described before anything was — so a
      *  choice can always be undone without reloading a different page. */
     facets: answered?.facets ?? { categories: [], price: null, prices: [], amenities: [] },
@@ -520,7 +523,7 @@ export function Results() {
   const {
     cat, cats, rows, best, alts, loaded, unknown, personalised, nowRequested, availableNow,
     directSalon, salons, widened, how, facets, hiddenUnpriced,
-  } = useCategoryResults(category, query, filters);
+  } = useCategoryResults(category, query, filters, { treatmentsOnly: params.get('via') === 'chip' });
 
   /**
    * Nothing has been asked yet — this is the search screen itself

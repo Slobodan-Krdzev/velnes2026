@@ -325,6 +325,12 @@ Two decisions worth recording:
   and its map on the right, the pair centred at the identity step's
   width. Below 1024px the single column keeps its old order (word,
   card, map, button) through `display: contents` and one `order`.
+- **A chip is a treatment search (2026-10-02).** "Massage tomorrow"
+  used to answer with the treatments *and* "Salons called Massage".
+  The home chips now carry `via=chip`; the results page then leaves
+  out the salons the text reached by name and never opens one
+  outright. A typed "Massage" still offers them — the word may well be
+  the salon's name. `App.test.tsx`.
 
 ## A visit is several treatments
 
