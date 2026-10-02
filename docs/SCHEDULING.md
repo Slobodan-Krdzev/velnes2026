@@ -22,7 +22,7 @@ inside the block — no extra buffer), foreign holds, and room capacity.
 The widget can never be more lenient than the front desk.
 
 **Availability.** `GET /availability` is `availableSlots`: only
-`locLive` locations exist; 30-minute grid 08:00–19:00; prep is
+`locLive` locations exist; a quarter-hour grid 08:00–19:00 (`SLOT_STEP_MIN`, 15 since 2026-10-02 — the prototype drew half hours); prep is
 clipped at the period start (09:00 works, the room was ready — 08:30
 does not); with "no preference" the *offered* duration is the
 catalog's and every candidate must fit their own pace-adjusted
