@@ -146,16 +146,13 @@ export async function visitReward(tenantId: string, anchorId: string) {
       : [];
     const biz = await trx.selectFrom('businesses').select('name').where('id', '=', tenantId).executeTakeFirst();
     // Choices beyond Standard (Alex, 2026-10-02): a length other than
-    // the one no-choice means (the standard, else the first — svcChoice's
-    // own rule), and each option the leg carries, one point-bundle each.
+    // the one no-choice means (the standard, else the service itself —
+    // svcChoice's own rule), and each option the leg carries, one each.
     const svcIds = [...new Set(delivered.map((l) => l.serviceId).filter((x): x is string => Boolean(x)))];
     const variants = svcIds.length
       ? await trx.selectFrom('serviceVariants').select(['id', 'serviceId', 'std', 'sort']).where('serviceId', 'in', svcIds).where('retiredAt', 'is', null).orderBy('sort').execute()
       : [];
-    const noChoiceOf = (serviceId: string | null) => {
-      const vs = variants.filter((v) => v.serviceId === serviceId);
-      return (vs.find((v) => v.std) ?? vs[0])?.id ?? null;
-    };
+    const noChoiceOf = (serviceId: string | null) => variants.find((v) => v.serviceId === serviceId && v.std)?.id ?? null;
     const extras = delivered.reduce(
       (n, l) => n + (l.variantId && l.variantId !== noChoiceOf(l.serviceId) ? 1 : 0) + (l.modifierOptionIds?.length ?? 0),
       0,

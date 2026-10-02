@@ -9,8 +9,8 @@ import { buildServer } from '../../server.js';
 /**
  * Removing a length in the panel (Alex, 2026-10-01): one that was ever
  * booked is retired — gone from the catalog, kept for its visits; one
- * nothing references is deleted. Removing the standard one makes the
- * first left standard.
+ * nothing references is deleted. Removing the standard one leaves none:
+ * the service itself is then the standard.
  */
 const ADMIN_URL = (
   process.env.TEST_ADMIN_DATABASE_URL ??
@@ -59,7 +59,7 @@ describe('removing a service length', () => {
     await closeDb();
   });
 
-  it('a booked length is retired and stays on its visit; an unbooked one is deleted; the first left becomes standard', async () => {
+  it('a booked length is retired and stays on its visit; an unbooked one is deleted; none is promoted to standard', async () => {
     const put = await app.inject({
       method: 'PUT',
       url: `${API_PREFIX}/services/${SVC}`,
@@ -70,7 +70,7 @@ describe('removing a service length', () => {
     const rows = await admin.query(`SELECT id, std, retired_at IS NOT NULL AS retired FROM service_variants WHERE service_id = $1 ORDER BY sort`, [SVC]);
     expect(rows.rows).toEqual(expect.arrayContaining([
       { id: V_STD, std: false, retired: true },
-      { id: V_KEEP, std: true, retired: false },
+      { id: V_KEEP, std: false, retired: false },
     ]));
     expect(rows.rows.some((r) => r.id === V_FREE)).toBe(false);
     // The visit keeps its length; the catalog no longer offers it.

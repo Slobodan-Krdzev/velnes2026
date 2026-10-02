@@ -103,8 +103,11 @@ panel. Now `reconcileNested` **retires** a referenced length
 leaves it out, so the catalog, the booking page and the till no longer
 offer it, while the visits that carry it keep their `variant_id` and
 snapshotted `variant_label`. A length nothing references is deleted as
-before. Removing the standard one hands "standard" to the first left —
-in the panel as you remove it, and at the door whatever the panel sent
-— so a service never has lengths and no standard. And the panel's save
+before. Removing the standard one leaves none standard, and that is a
+state with a meaning (Alex, 2026-10-02): **no choice then means the
+service itself** — `svcChoice` answers the base minutes and price, the
+salon page's Standard card quotes them, and every length is a step
+beyond it. Marking one length standard makes *it* what no-choice
+means; a click on the already-marked radio clears it. The panel's save
 error now sits in the footer beside Save, where the eye is.
 `catalog/catalog.variants.test.ts`, `catalog/Catalog.test.tsx`.

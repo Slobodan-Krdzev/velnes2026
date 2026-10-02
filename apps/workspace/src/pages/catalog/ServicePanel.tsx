@@ -345,21 +345,18 @@ export function ServicePanel({
                     onChange={() =>
                       setVariants((a) => a.map((x, j) => ({ ...x, std: j === i })))
                     }
+                    // A click on the one already standard clears it: with
+                    // none marked, the service itself is the standard.
+                    onClick={() => {
+                      if (v.std) setVariants((a) => a.map((x) => ({ ...x, std: false })));
+                    }}
                   />
                   {t('catalog.standard')}
                 </label>
                 <button
                   className="btn btn-subtle btn-sq"
                   aria-label={t('common.delete')}
-                  onClick={() =>
-                    setVariants((a) => {
-                      // Removing the standard length hands "standard" to
-                      // the first one left — a service never has lengths
-                      // and no standard (Alex, 2026-10-01).
-                      const left = a.filter((_, j) => j !== i);
-                      return left.length && !left.some((x) => x.std) ? left.map((x, j) => ({ ...x, std: j === 0 })) : left;
-                    })
-                  }
+                  onClick={() => setVariants((a) => a.filter((_, j) => j !== i))}
                 >
                   <Icon d={I.trash} size={16} />
                 </button>

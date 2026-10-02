@@ -303,8 +303,8 @@ option groups too ("Hair colour brand" and the like). Rule version 2:
 `LOYALTY_RULES.appointment.extraChoice` and `extraPoints`;
 `appointmentPoints(services, units, extras)` carries it in its
 breakdown. "Standard" is what no-choice means at the door
-(`svcChoice`: the length marked standard, else the first active one;
-the service itself when it has no lengths), so `visitReward` counts, per
+(`svcChoice`: the length marked standard, else the service itself), so
+`visitReward` counts, per
 delivered leg, one for a `variant_id` other than that length and one
 per entry of `modifier_option_ids`. The salon page follows the same
 rule: its Standard card quotes that length's minutes and price (the

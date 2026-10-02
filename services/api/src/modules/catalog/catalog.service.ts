@@ -139,7 +139,12 @@ export async function svcChoice(
   const vs = (await svcVariants(trx, serviceId, locationId)).filter((v) => v.active);
   if (!vs.length)
     return { vid: null, label: null, price: cfg.price, durationMin: cfg.durationMin };
-  const v = vs.find((x) => x.id === variantId) ?? vs.find((x) => x.std) ?? vs[0]!;
+  // No choice means the length marked standard; with none marked, the
+  // service itself — "Standard" on the salon page is then the base
+  // minutes and price, and every length is a step beyond it (Alex,
+  // 2026-10-02). An unknown or retired id lands there too.
+  const v = vs.find((x) => x.id === variantId) ?? vs.find((x) => x.std);
+  if (!v) return { vid: null, label: null, price: cfg.price, durationMin: cfg.durationMin };
   return { vid: v.id, label: v.label, price: v.price, durationMin: v.durationMin };
 }
 

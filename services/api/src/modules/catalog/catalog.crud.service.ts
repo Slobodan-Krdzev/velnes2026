@@ -241,9 +241,6 @@ async function reconcileNested(trx: Trx, tenantId: string, serviceId: string, w:
       if (used) await trx.updateTable('serviceVariants').set({ retiredAt: new Date(), std: false }).where('id', '=', id).execute();
       else await trx.deleteFrom('serviceVariants').where('id', '=', id).execute();
     }
-    // Several lengths, none standard (the standard one was just removed):
-    // the first is what no-choice means.
-    if (w.variants.length && !w.variants.some((v) => v.std)) w.variants[0]!.std = true;
     let sort = 0;
     for (const v of w.variants) {
       if (v.id) {

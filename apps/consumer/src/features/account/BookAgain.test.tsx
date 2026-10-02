@@ -93,13 +93,14 @@ describe('book again', () => {
     await waitFor(() => expect(document.body.textContent).toContain('60 min ·'));
     await waitFor(() => expect(document.querySelector('[data-sum="pro"]')?.textContent).toBe('Maria Petrovska'));
     expect(document.body.textContent).toContain('2.700');
-    // The booking summary says what the visit will earn — one service
-    // and one option: 100 + 20, from the one place the rule lives. The
-    // service's only length is what no-choice means, so it is not an
-    // extra and wears no tag; the option's card says the "+20" itself.
-    expect((await screen.findAllByTestId('loyalty-earn'))[0]!.textContent).toBe('+120 Velnes points with this visit');
+    // The booking summary says what the visit will earn — one service,
+    // a length beyond Standard (no length is marked standard, so the
+    // service itself is) and one option: 100 + 20 + 20, from the one
+    // place the rule lives. Both cards say the "+20" themselves.
+    expect((await screen.findAllByTestId('loyalty-earn'))[0]!.textContent).toBe('+140 Velnes points with this visit');
     const tags = screen.getAllByTestId('pts-badge');
     expect(tags[0]!.textContent).toBe('Earn +20 Loyalty points!');
-    expect(tags.every((el) => el.closest('button')?.textContent?.includes('Hot stones'))).toBe(true);
+    expect(tags.some((el) => el.closest('button')?.textContent?.includes('60 min'))).toBe(true);
+    expect(tags.some((el) => el.closest('button')?.textContent?.includes('Hot stones'))).toBe(true);
   });
 });

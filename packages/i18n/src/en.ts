@@ -421,7 +421,7 @@ export const en = {
   'catalog.online': 'Bookable online',
   'catalog.onTill': 'On the till',
   'catalog.variants': 'Durations & prices',
-  'catalog.variantsHint': 'One service, several lengths. The standard one is what no-choice means.',
+  'catalog.variantsHint': 'One service, several lengths. The standard one is what no-choice means; with none marked, the service itself is.',
   'catalog.variantLabel': 'e.g. 60 minutes',
   'catalog.standard': 'standard',
   'catalog.addVariant': 'Add length',

@@ -414,7 +414,7 @@ export const mk: Record<TranslationKey, string> = {
   'catalog.online': 'Достапно онлајн',
   'catalog.onTill': 'На каса',
   'catalog.variants': 'Времетраења и цени',
-  'catalog.variantsHint': 'Една услуга, повеќе должини. Стандардната важи кога нема избор.',
+  'catalog.variantsHint': 'Една услуга, повеќе должини. Стандардната важи кога нема избор; без означена, важи самата услуга.',
   'catalog.variantLabel': 'на пр. 60 минути',
   'catalog.standard': 'стандардна',
   'catalog.addVariant': 'Додади должина',

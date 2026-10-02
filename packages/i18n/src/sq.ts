@@ -414,7 +414,7 @@ export const sq: Record<TranslationKey, string> = {
   'catalog.online': 'I rezervueshëm online',
   'catalog.onTill': 'Në arkë',
   'catalog.variants': 'Kohëzgjatje dhe çmime',
-  'catalog.variantsHint': 'Një shërbim, disa gjatësi. Standardja vlen kur nuk zgjidhet asgjë.',
+  'catalog.variantsHint': 'Një shërbim, disa gjatësi. Standardja vlen kur nuk zgjidhet asgjë; pa asnjë të shënuar, vlen vetë shërbimi.',
   'catalog.variantLabel': 'p.sh. 60 minuta',
   'catalog.standard': 'standarde',
   'catalog.addVariant': 'Shto gjatësi',

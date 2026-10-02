@@ -275,9 +275,9 @@ function useSalonPage() {
           const svc = services.find((x) => x.id === c.serviceId);
           if (!svc) return null;
           // What no-choice means for a service with lengths: the standard
-          // one, else the first — the door's own rule (svcChoice), so the
-          // Standard card quotes what will be charged.
-          const noChoice = svc.variants.find((v) => v.std) ?? svc.variants[0] ?? null;
+          // one, else the service itself — the door's own rule (svcChoice),
+          // so the Standard card quotes what will be charged.
+          const noChoice = svc.variants.find((v) => v.std) ?? null;
           const variant = svc.variants.find((v) => v.id === c.variantId) ?? (c.variantId === null ? noChoice : null);
           const offer = offerFor(svc.id, variant?.id ?? null);
           // The chosen options add to (or take off) the line's price and

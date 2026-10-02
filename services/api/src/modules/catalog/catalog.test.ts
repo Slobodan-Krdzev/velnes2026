@@ -103,15 +103,16 @@ describe('catalog doors (contract tests vs prototype)', () => {
     });
   });
 
-  it('svcChoice: chosen → std → first active; no variants → the service itself', async () => {
+  it('svcChoice: chosen → std → the service itself; no variants → the service itself', async () => {
     await withTenant(demo.business, async (trx) => {
       const std = await svcChoice(trx, demo.s8, demo.locCentar, null);
       expect(std).toMatchObject({ label: '45 minutes', price: 1900, durationMin: 45 });
       const chosen = await svcChoice(trx, demo.s8, demo.locCentar, v60);
       expect(chosen).toMatchObject({ label: '60 minutes', price: 2400 });
-      // At Aerodrom the std 45-min variant is off → first active (60 min).
+      // At Aerodrom the std 45-min variant is off → the service itself,
+      // never a length nobody chose (Alex, 2026-10-02).
       const fallback = await svcChoice(trx, demo.s8, demo.locAerodrom, null);
-      expect(fallback).toMatchObject({ label: '60 minutes', price: 2400 });
+      expect(fallback).toMatchObject({ vid: null, price: (await svcAt(trx, demo.s8, demo.locAerodrom)).price });
       const plain = await svcChoice(trx, demo.s3, demo.locCentar, null);
       expect(plain).toMatchObject({ vid: null, price: 1200, durationMin: 30 });
     });
