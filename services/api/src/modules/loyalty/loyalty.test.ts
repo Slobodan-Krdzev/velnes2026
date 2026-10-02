@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { API_PREFIX, LOYALTY_RULES, LoyaltyAccountSchema, appointmentPoints, servicePoints } from '@velnes/contracts';
+import { API_PREFIX, LOYALTY_RULES, LoyaltyAccountSchema, appointmentPoints, extraPoints, servicePoints } from '@velnes/contracts';
 import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { closeDb, withHq } from '../../db/index.js';
@@ -209,11 +209,12 @@ describe('Velnes Loyalty — the platform ledger', () => {
       expect(byVisit(v1.first)?.points).toBe(servicePoints(1));
       expect(byVisit(v2.first)?.points).toBe(servicePoints(2));
       expect(byVisit(v3.first)?.points).toBe(servicePoints(3));
-      expect(byVisit(v4.first)?.points).toBe(servicePoints(4));
+      // Rehab training carries its required "Format" option: a choice beyond Standard, +20.
+      expect(byVisit(v4.first)?.points).toBe(servicePoints(4) + extraPoints(1));
       expect(byVisit(v3.first)?.meta).toMatchObject({ serviceCount: 3, productUnits: 0, productPoints: 0, ruleVersion: LOYALTY_RULES.version });
       // One row per visit, never one per leg.
       expect(rows.filter((r) => v4.legs.includes(r.source_id!))).toHaveLength(1);
-      expect(await balance(clientId)).toBe(before + [1, 2, 3, 4].reduce((n, k) => n + servicePoints(k), 0));
+      expect(await balance(clientId)).toBe(before + [1, 2, 3, 4].reduce((n, k) => n + servicePoints(k), 0) + extraPoints(1));
       // Again: nothing new, no second bell.
       const again = await runLoyaltySweep();
       expect(again.settled).toBe(0);
@@ -242,7 +243,7 @@ describe('Velnes Loyalty — the platform ledger', () => {
       expect(row?.meta).toMatchObject({ serviceCount: 2, productUnits: 3, productPoints: pts.productPoints, servicePoints: servicePoints(2) });
     });
 
-    it('a length other than the standard one earns on top, once per such treatment', async () => {
+    it('a choice beyond Standard — a length — earns on top, once per choice', async () => {
       // Manual therapy, spine: "One region" is not the standard length.
       const other = (await admin.query(`SELECT id FROM service_variants WHERE service_id = $1 AND std = false ORDER BY sort LIMIT 1`, [demo.s2])).rows[0].id as string;
       let date = '';
@@ -259,9 +260,9 @@ describe('Velnes Loyalty — the platform ledger', () => {
       await runLoyaltySweep();
       const row = (await ledger(clientId)).find((r) => r.source_id === first);
       const pts = appointmentPoints(1, 0, 1);
-      expect(pts.upgradePoints).toBe(LOYALTY_RULES.appointment.variantUpgrade);
+      expect(pts.extraPoints).toBe(LOYALTY_RULES.appointment.extraChoice);
       expect(row?.points).toBe(pts.total);
-      expect(row?.meta).toMatchObject({ serviceCount: 1, upgrades: 1, upgradePoints: pts.upgradePoints, ruleVersion: LOYALTY_RULES.version });
+      expect(row?.meta).toMatchObject({ serviceCount: 1, extras: 1, extraPoints: pts.extraPoints, ruleVersion: LOYALTY_RULES.version });
     });
 
     it('cancelled and no-show visits earn nothing; a future visit with a pending request earns nothing until it completes, then once', async () => {
