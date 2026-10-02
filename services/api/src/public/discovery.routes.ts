@@ -273,7 +273,22 @@ export interface TextCandidates {
  * is opened once. Remembered for a short while per treatment: a page
  * that refetches on every filter tap must not re-walk every calendar.
  */
-const NOW_TTL_MS = 20_000;
+const NOW_TTL_MS = 45_000;
+/** Salons walked at once. Each opens its own tenant transaction, so this
+ *  is bounded well under the pool (10): a "now" search over dozens of
+ *  salons took seconds in production when they were walked one by one
+ *  (Alex, 2026-10-02, from a phone). */
+const NOW_CONCURRENCY = 4;
+async function eachLimit<T>(items: T[], limit: number, fn: (item: T) => Promise<void>): Promise<void> {
+  let i = 0;
+  const worker = async () => {
+    while (i < items.length) {
+      const item = items[i++]!;
+      await fn(item);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+}
 type NowSlot = { t: string; emp: string | null } | null;
 const nowCache = new Map<string, { at: number; value: NowSlot }>();
 async function availableNowOf(
@@ -288,7 +303,7 @@ async function availableNowOf(
     list.push(c);
     byBiz.set(c.salon.businessId, list);
   }
-  for (const [bizId, list] of byBiz) {
+  await eachLimit([...byBiz], NOW_CONCURRENCY, async ([bizId, list]) => {
     const todo = list.filter((c) => {
       const hit = nowCache.get(`${bizId}:${candKey(c)}:${party}`);
       if (hit && now.getTime() - hit.at < NOW_TTL_MS) {
@@ -297,7 +312,7 @@ async function availableNowOf(
       }
       return true;
     });
-    if (!todo.length) continue;
+    if (!todo.length) return;
     await withTenant(bizId, async (trx) => {
       // The candidate is a treatment AT a location: that location's own
       // first start, never a sibling's.
@@ -313,7 +328,7 @@ async function availableNowOf(
         nowCache.set(`${bizId}:${candKey(c)}:${party}`, { at: now.getTime(), value: at });
       }
     });
-  }
+  });
   return out;
 }
 
@@ -349,7 +364,7 @@ async function availableOnOf(
     byBiz.set(c.salon.businessId, list);
   }
   const key = (bizId: string, c: RankCandidate) => `${bizId}:${candKey(c)}:${when ?? 'any'}:${party}`;
-  for (const [bizId, list] of byBiz) {
+  await eachLimit([...byBiz], NOW_CONCURRENCY, async ([bizId, list]) => {
     const todo = list.filter((c) => {
       const hit = dayCache.get(key(bizId, c));
       if (hit && now.getTime() - hit.at < NOW_TTL_MS) {
@@ -358,7 +373,7 @@ async function availableOnOf(
       }
       return true;
     });
-    if (!todo.length) continue;
+    if (!todo.length) return;
     await withTenant(bizId, async (trx) => {
       const tzOf = new Map<string, string>();
       for (const c of todo) {
@@ -379,7 +394,7 @@ async function availableOnOf(
         dayCache.set(key(bizId, c), { at: now.getTime(), value });
       }
     });
-  }
+  });
   return out;
 }
 

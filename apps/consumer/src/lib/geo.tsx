@@ -171,11 +171,10 @@ export function GeoProvider({ children }: { children: ReactNode }) {
   /**
    * A fresh, precise fix, now.
    *
-   * Two asks before giving up. High accuracy wants GPS, and on a desktop
-   * indoors that often just runs out the clock; the second ask drops the
-   * accuracy requirement and will take a fix a few minutes old, which
-   * the browser can usually answer from wifi at once. A refusal is final
-   * and is not retried: asking again only produces the same no.
+   * Two asks before giving up. The first takes a fix a few minutes old
+   * at any accuracy, which the browser usually answers from wifi at
+   * once; only if that fails is GPS asked for. A refusal is final and is
+   * not retried: asking again only produces the same no.
    */
   const locate = useCallback(() => {
     if (!supported) return setStatus('unsupported');
@@ -185,6 +184,10 @@ export function GeoProvider({ children }: { children: ReactNode }) {
       setStatus('on');
       startWatch();
     };
+    // Coarse first (Alex, 2026-10-02: "Locating…" for ages on a phone):
+    // wifi/cell answers in a moment and is plenty to rank by distance;
+    // the watch that follows refines with GPS. GPS first ran out its
+    // clock indoors before the coarse ask even began.
     navigator.geolocation.getCurrentPosition(
       got,
       (err) => {
@@ -193,10 +196,10 @@ export function GeoProvider({ children }: { children: ReactNode }) {
           got,
           (again) =>
             setStatus(again.code === again.PERMISSION_DENIED ? 'denied' : 'unavailable'),
-          { enableHighAccuracy: false, timeout: 10_000, maximumAge: 300_000 },
+          { enableHighAccuracy: true, timeout: 8_000 },
         );
       },
-      { enableHighAccuracy: true, timeout: 8_000 },
+      { enableHighAccuracy: false, timeout: 6_000, maximumAge: 300_000 },
     );
   }, [supported, take, startWatch]);
 

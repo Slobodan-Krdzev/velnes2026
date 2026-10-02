@@ -1,4 +1,5 @@
-import { useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
+import { useRef } from 'react';
 import type { z } from 'zod';
 import type {
   DiscoveryRecommendedSchema,
@@ -200,9 +201,7 @@ export function useRankedCategoryServices(
   token: string | null,
   filters: SearchFilters = NO_FILTERS,
 ) {
-  const at = position
-    ? { lat: Math.round(position.lat * 1000) / 1000, lng: Math.round(position.lng * 1000) / 1000 }
-    : null;
+  const at = useSettledPosition(position);
   return useQuery({
     // Whether there is a token belongs in the key, because signing in or
     // out changes the order. The token's value does not — a cache key is
@@ -242,6 +241,7 @@ export function useRankedCategoryServices(
         token,
       ),
     enabled: Boolean(categoryId),
+    placeholderData: keepPreviousData,
     staleTime: 60_000,
   });
 }
@@ -316,15 +316,42 @@ export function useAvailability(args: {
  * travels in the body. Only the query reaches the URL, because a search
  * is worth sharing and a location is not.
  */
+/**
+ * The position a search is keyed on (Alex, 2026-10-02, from a phone:
+ * "locating all the time, results so slow"). The live watch nudges the
+ * fix every few seconds, and a key rounded to ~100 m changed with it —
+ * each time a fresh request and an empty list. A search re-keys only
+ * once the person has really moved (`SETTLE_M`); and while it refetches,
+ * the previous list stays on screen (`keepPreviousData`).
+ */
+const SETTLE_M = 250;
+function metres(a: { lat: number; lng: number }, b: { lat: number; lng: number }) {
+  const dLat = (b.lat - a.lat) * 111_320;
+  const dLng = (b.lng - a.lng) * 111_320 * Math.cos((a.lat * Math.PI) / 180);
+  return Math.hypot(dLat, dLng);
+}
+export function settledPosition(
+  last: { lat: number; lng: number } | null,
+  next: { lat: number; lng: number } | null,
+  settleM = SETTLE_M,
+): { lat: number; lng: number } | null {
+  if (!next) return null;
+  if (last && metres(last, next) < settleM) return last;
+  return { lat: Math.round(next.lat * 1000) / 1000, lng: Math.round(next.lng * 1000) / 1000 };
+}
+function useSettledPosition(position: { lat: number; lng: number } | null) {
+  const last = useRef<{ lat: number; lng: number } | null>(null);
+  last.current = settledPosition(last.current, position);
+  return last.current;
+}
+
 export function useSearch(
   q: string | null,
   position: { lat: number; lng: number } | null,
   token: string | null,
   filters: SearchFilters = NO_FILTERS,
 ) {
-  const at = position
-    ? { lat: Math.round(position.lat * 1000) / 1000, lng: Math.round(position.lng * 1000) / 1000 }
-    : null;
+  const at = useSettledPosition(position);
   return useQuery({
     queryKey: [
       'search',
@@ -367,6 +394,7 @@ export function useSearch(
       ),
     enabled: Boolean(q && q.trim().length >= 2),
     staleTime: 60_000,
+    placeholderData: keepPreviousData,
   });
 }
 
