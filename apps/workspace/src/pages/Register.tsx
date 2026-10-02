@@ -255,7 +255,9 @@ export function Register() {
       if (!r.loc.street.trim() || !r.loc.city.trim()) return t('reg.vStreet');
       if (!r.loc.pinned) return t('reg.vPin');
     }
-    if (s === 5 && !r.services.length) return t('reg.vServices');
+    // Services and products are not required to register (Alex,
+    // 2026-10-02): a salon may fill its catalogue later. The location
+    // then waits as approved-not-live until a bookable service exists.
     if (s === 7) {
       const bad = r.team.find((x) => x.email.trim() && !EMAIL.test(x.email.trim()));
       if (bad) return t('reg.vTeam', { email: bad.email });

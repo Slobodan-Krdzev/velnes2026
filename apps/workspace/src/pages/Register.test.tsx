@@ -54,6 +54,33 @@ describe('the salon registration wizard', () => {
     expect(await screen.findByText('Your name is missing')).toBeDefined();
   });
 
+  it('a salon may register with no services and no products — the catalogue can come later', async () => {
+    mockApi([]);
+    render(<App />);
+    await screen.findByText('Create your salon');
+    await fill('Your name', 'Petra Novak');
+    await fill('E-mail', 'petra@studionova.mk');
+    await fill('Password', 'super-secret');
+    await fill('Confirm password', 'super-secret');
+    await userEvent.click(screen.getByRole('button', { name: 'Next' }));
+    await fill('Salon name', 'Studio Nova');
+    await userEvent.click(screen.getByRole('button', { name: 'Next' }));
+    await fill('Legal name', 'Nova Health DOO');
+    await fill('Tax number', 'MK4032011501234');
+    await userEvent.click(screen.getByRole('button', { name: 'Next' }));
+    await fill('Street', 'Partizanska');
+    await fill('City', 'Bitola');
+    await userEvent.click(screen.getByRole('button', { name: 'Place the pin at the city centre' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Next' }));
+    // Services: none added — and Next still advances to the gallery.
+    await screen.findByText(/No services yet/);
+    await userEvent.click(screen.getByRole('button', { name: 'Next' }));
+    expect(screen.queryByText('Tick at least one service to begin with')).toBeNull();
+    // Past the services step: the gallery's own empty state is on screen.
+    expect((await screen.findAllByText(/Gallery/)).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/No services yet/)).toBeNull();
+  });
+
   it('walks all eight steps and posts the whole draft', async () => {
     const calls: { method: string; path: string; body?: unknown }[] = [];
     mockApi(calls);

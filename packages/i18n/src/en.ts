@@ -1306,7 +1306,7 @@ export const en = {
   'reg.svcPrice': 'Price (MKD)',
   'reg.svcAdd': 'Add service',
   'reg.svcRemove': 'Remove',
-  'reg.svcNoneYet': 'No services yet — add your first one above.',
+  'reg.svcNoneYet': 'No services yet — add your first one above, or continue and fill your catalogue later.',
   'reg.productsTitle': 'Products (optional)',
   'reg.createProducts': 'Selling products too? Add them here — name, category and price. Skip this if you only offer services.',
   'reg.prodName': 'Product name',

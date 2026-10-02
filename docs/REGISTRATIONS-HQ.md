@@ -566,3 +566,18 @@ line, 505 with a size read off the name. Deferrals: product pages are
 not opened (the tile's line is the description; the full text would
 cost one fetch per product), and sizes come only from names.
 `shop.service.test.ts`, `registrations.test.ts`, `Onboarding.test.tsx`.
+
+## Registering with an empty catalogue (2026-10-02)
+
+Alex: a salon must be able to register with neither a service nor a
+product; the catalogue can come later. The wizard's step-5 refusal
+("Tick at least one service to begin with") is gone — it was the only
+place that required one; the contract never had a minimum and products
+were always optional. The services step's empty state now says the
+catalogue can be filled later. What happens on approval is unchanged
+and already honest: the salon and its owner are created, and the
+location stays **approved, not yet live** until `locReadiness` is met
+— a bookable service and staff who can deliver it — with the reasons
+listed on the HQ card; adding the first service in the workspace
+catalog is what takes it live. `Register.test.tsx` pins that an empty
+services step advances.

@@ -1299,7 +1299,7 @@ export const sq: Record<TranslationKey, string> = {
   'reg.svcPrice': 'Çmimi (MKD)',
   'reg.svcAdd': 'Shto shërbim',
   'reg.svcRemove': 'Hiq',
-  'reg.svcNoneYet': 'Ende s’ka shërbime — shtoni të parin lart.',
+  'reg.svcNoneYet': 'Ende pa shërbime — shtoni të parin më lart, ose vazhdoni dhe plotësoni katalogun më vonë.',
   'reg.productsTitle': 'Produkte (opsionale)',
   'reg.createProducts': 'Shisni edhe produkte? Shtoni këtu — emri, kategoria dhe çmimi. Anashkalojeni nëse ofroni vetëm shërbime.',
   'reg.prodName': 'Emri i produktit',
