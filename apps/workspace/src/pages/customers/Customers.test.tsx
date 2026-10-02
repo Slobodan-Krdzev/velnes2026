@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from '../../App.js';
@@ -72,7 +72,18 @@ function mockApi(calls: { method: string; path: string; body?: unknown }[]) {
           ],
         });
       if (path.includes(`/customers/${C1}/insights`)) return ok(insights);
-      if (path.includes(`/customers/${C1}/appointments`)) return ok({ upcoming: [], history: [] });
+      if (path.includes(`/customers/${C1}/appointments`))
+        return ok({
+          upcoming: [
+            { id: 'a0000000-0000-4000-8000-000000000001', date: '2030-01-10', start: '10:00', end: '10:30', serviceName: 'Follow-up session', locationName: 'Centar', employeeName: 'Maria Petrovska', status: 'booked', source: 'client', price: 1200, cancelledBy: null },
+          ],
+          history: [
+            { id: 'a0000000-0000-4000-8000-000000000002', date: '2026-09-22', start: '10:00', end: '10:45', serviceName: 'Sports massage', locationName: 'Centar', employeeName: 'Elena Ristova', status: 'cancelled', source: 'client', price: 1900, cancelledBy: 'customer' },
+            { id: 'a0000000-0000-4000-8000-000000000003', date: '2026-09-12', start: '09:00', end: '09:30', serviceName: 'Follow-up session', locationName: 'Centar', employeeName: 'Maria Petrovska', status: 'confirmed', source: 'staff', price: 1200, cancelledBy: null },
+            { id: 'a0000000-0000-4000-8000-000000000004', date: '2026-09-05', start: '09:00', end: '09:30', serviceName: 'Follow-up session', locationName: 'Centar', employeeName: 'Maria Petrovska', status: 'cancelled', source: 'staff', price: 1200, cancelledBy: 'salon' },
+          ],
+          stats: { total: 4, completed: 1, upcoming: 1, cancelledByCustomer: 1, cancelledBySalon: 1, noShows: 0 },
+        });
       if (path.includes(`/customers/${C1}/offers`) && method === 'POST')
         return ok({
           id: 'b1000000-0000-4000-8000-000000000001', customerId: C1, serviceId: S3,
@@ -146,6 +157,20 @@ describe('customers', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Velnes Premium' }));
     expect(await screen.findByText('Member since')).toBeDefined();
     expect(screen.getByText('×1.5')).toBeDefined();
+  });
+
+  it('the appointments tab counts cancellations by actor and names who cancelled each visit', async () => {
+    mockApi([]);
+    await openList();
+    await userEvent.click(screen.getByRole('button', { name: 'View' }));
+    await screen.findByText('Lifetime spend');
+    const stats = await screen.findByTestId('appt-stats');
+    expect(within(stats).getByText('Completed').nextSibling?.textContent).toBe('1');
+    expect(within(stats).getByText('Cancelled by customer').nextSibling?.textContent).toBe('1');
+    expect(within(stats).getByText('1 by the salon')).toBeDefined();
+    expect(within(stats).getByText('No-shows').nextSibling?.textContent).toBe('0');
+    expect(screen.getAllByText('Cancelled by customer', { selector: '.badge' }).length).toBe(1);
+    expect(screen.getAllByText('Cancelled by salon', { selector: '.badge' }).length).toBe(1);
   });
 
   it('creates a personal offer through the Actions menu', async () => {

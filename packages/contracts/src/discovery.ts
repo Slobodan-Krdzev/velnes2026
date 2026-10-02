@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { PublicReviewSummarySchema, RatingSummarySchema } from './reviews.js';
 import { AmenityKeySchema, AmenityListSchema } from './amenities.js';
 import { WeekHoursSchema } from './locations.js';
 import { MoneySchema } from './catalog.js';
@@ -44,6 +45,9 @@ export const DiscoverySalonCardSchema = z.object({
   lng: z.number().nullable(),
   /** A live widget exists, so the booking doors will answer for it. */
   bookable: z.boolean(),
+  /** Verified reviews: the salon's score and count, or null when there
+   *  are none or the salon hides them — never a 0.0. */
+  rating: RatingSummarySchema.nullable().default(null),
 });
 export const DiscoverySalonsSchema = z.object({
   salons: z.array(DiscoverySalonCardSchema),
@@ -88,13 +92,19 @@ export const DiscoveryTeamMemberSchema = z.object({
   name: z.string(),
   role: z.string(),
   avatar: z.string().nullable(),
+  /** This professional's own verified ratings, or null when none. */
+  rating: RatingSummarySchema.nullable().default(null),
 });
 export const DiscoveryProductSchema = z.object({
   id: z.uuid(),
   name: z.string(),
   category: z.string().nullable(),
-  /** Whole MKD denars, as stored. */
+  /** Whole MKD denars, as stored on the product (the salon-wide price). */
   price: z.number().int(),
+  /** Where it is actually sold, and for how much there (2026-10-01):
+   *  the shelf of each live location that sells it. A location missing
+   *  here does not sell it; the app offers products per location. */
+  at: z.array(z.object({ locationId: z.uuid(), price: z.number().int() })).default([]),
 });
 /** A gallery entry: the photograph a salon uploaded, or — when it has
  *  only named the space so far — the colour tile the workspace editor
@@ -139,6 +149,9 @@ export const DiscoverySalonDetailSchema = z.object({
   products: z.array(DiscoveryProductSchema),
   bookable: z.boolean(),
   publishableKey: z.string().nullable(),
+  /** The salon's verified-review summary, or null when there are none
+   *  or the salon hides reviews (its marketplace setting). */
+  reviews: PublicReviewSummarySchema.nullable().default(null),
   locations: z.array(
     z.object({
       id: z.uuid(),
@@ -194,6 +207,7 @@ export const DiscoveryServiceCardSchema = z.object({
     /** The facilities at the location this card stands for, so a filter
      *  on amenities is a filter on keys. */
     amenities: AmenityListSchema.default([]),
+    rating: RatingSummarySchema.nullable().default(null),
   }),
   /**
    * The place (Alex, 2026-09-29): a result is a treatment at ONE of the
@@ -219,6 +233,17 @@ export const DiscoveryServiceCardSchema = z.object({
    * team's hours, existing appointments, holds and rooms.
    */
   availableAt: z.string().nullable().default(null),
+  /** Who can take that start (2026-10-01) — so the card's link lands on
+   *  the salon page with the professional chosen as well as the time. */
+  availableEmployeeId: z.uuid().nullable().default(null),
+  /**
+   * The first free start on the day that was asked for (`when`), or —
+   * for a party with no day — the first day within the horizon that
+   * has one: the salon's own calendar date and "HH:MM" in its clock.
+   * Present on every card when `when` or `party > 1` was asked, since
+   * those are admission; null otherwise, never a guess.
+   */
+  availableOn: z.object({ date: z.string(), at: z.string() }).nullable().default(null),
 });
 
 /** Every published service in one category, across every listed salon.
@@ -298,6 +323,22 @@ export const MostChosenSchema = z.object({
 });
 export type MostChosen = z.infer<typeof MostChosenSchema>;
 
+/**
+ * "When" (Alex, 2026-09-30): a day the treatment must have a free start
+ * on, hard admission. Relative words, not dates, so a shared link stays
+ * true next week and the day is resolved in each salon's own clock
+ * (`locations.tz`), the way *now* is. `weekend` is the coming Saturday
+ * and Sunday — the rest of it, when it has already begun.
+ */
+export const WhenSchema = z.enum(['today', 'tomorrow', 'weekend']);
+export type When = z.infer<typeof WhenSchema>;
+/** How many people must be seen at the same time — "for two". One is
+ *  the ordinary case. Bounded: a group is a different product. */
+export const PARTY_MAX = 4;
+export const PartySchema = z.number().int().min(1).max(PARTY_MAX);
+/** How far ahead "for two" looks when no day was named. */
+export const PARTY_HORIZON_DAYS = 7;
+
 export const DiscoveryViewerSchema = z.object({
   lat: z.number().min(-90).max(90).nullable().default(null),
   lng: z.number().min(-180).max(180).nullable().default(null),
@@ -330,6 +371,15 @@ export const DiscoveryViewerSchema = z.object({
   priceMax: z.number().int().min(0).nullable().default(null),
   /** Amenities the salon's location must all have — keys, never labels. */
   amenities: AmenityListSchema.default([]),
+  /** A day with a free start, or nothing — see `WhenSchema`. Each
+   *  admitted card then carries `availableOn`. */
+  when: WhenSchema.nullable().default(null),
+  /** "For two": only where `party` people can be treated at the same
+   *  time — that many professionals free together, and rooms for them,
+   *  through the same gate a booking goes through. With `when`, on that
+   *  day; alone, within `PARTY_HORIZON_DAYS`. Each seat is still its
+   *  own booking. */
+  party: PartySchema.default(1),
 });
 
 /** The towns salons are actually in — the phone's "Where" list. Only
@@ -514,6 +564,9 @@ export const SearchRequestSchema = z.object({
   priceMin: z.number().int().min(0).nullable().default(null),
   priceMax: z.number().int().min(0).nullable().default(null),
   amenities: AmenityListSchema.default([]),
+  /** See `DiscoveryViewerSchema.when` / `party`. */
+  when: WhenSchema.nullable().default(null),
+  party: PartySchema.default(1),
 });
 
 /**

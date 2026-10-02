@@ -33,7 +33,7 @@ modify anything under `reference/`.
 ## Layout
 `apps/{workspace,employee,booking,supplier,hq,consumer}` · `services/api`
 (Fastify; widget surface is a separate narrow plugin scope) ·
-`packages/{contracts,ui,config,i18n,client}` · `db/migrations` ·
+`packages/{contracts,ui,config,i18n,client,navsearch}` · `db/migrations` ·
 `reference/prototype` · `reference/client-prototype` (consumer app's
 read-only design spec) · `docs/`
 
@@ -51,7 +51,7 @@ loyalty/premium and geo search stay deferred, not faked (see
 `docs/CONSUMER-APP.md`). Per-phase docs live in `docs/`
 (FOUNDATIONS, CATALOG, SCHEDULING, TILL, I18N, WORKSPACE, EMPLOYEE-APP,
 BOOKING-PAGE, REGISTRATIONS-HQ, CUSTOMERS-MARKETING, SUPPLIERS,
-CONSUMER-APP) — each ends with its honest deferrals, which together
+CONSUMER-APP, NAVIGATION-SEARCH, REVIEWS, BOOKING-CHANGES, LOYALTY) — each ends with its honest deferrals, which together
 form the backlog.
 Search/discovery is **built** (2026-09-21): one universal search bar,
 `search_documents` as the cross-tenant matching projection,
@@ -59,6 +59,18 @@ Search/discovery is **built** (2026-09-21): one universal search bar,
 gaining `textRelevance`, server-side filters, a real "Most chosen", a
 zero-result miss log and the HQ Search lab. `docs/SEARCH.md` §12 carries
 what each step settled; §14 its deferrals.
+Booking changes are **built** (2026-09-30): a customer reschedule is a
+request the salon approves or declines (the original stays until
+then), cancellation is policy-governed with the window snapshotted at
+booking, cancelled visits stay on the calendar muted, refunds are an
+intent behind a `PaymentProvider` seam (mock only), and a freed slot
+enters the existing Premium queue once. `docs/BOOKING-CHANGES.md`.
+Velnes Loyalty is **built** (2026-09-30): a platform points ledger per
+consumer account (`client_loyalty_ledger`, one writer, idempotent by
+source, cached balance recomputed in the same transaction), earning on
+verification, completed visits (services + till products) and
+reviews; redemption designed for, not built. `docs/LOYALTY.md`
+(+30 per additional service, confirmed 2026-10-02).
 All apps are trilingual (en/mk/sq, `packages/i18n`, completeness
 tested); MK/SQ dictionaries still need native review.
 Principals: tenant employees, `hq_users`, `supplier_users`,

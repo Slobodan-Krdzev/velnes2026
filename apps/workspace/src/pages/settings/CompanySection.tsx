@@ -7,6 +7,7 @@ import {
   type BusinessProfile,
 } from '@velnes/contracts';
 import { useEffect, useState } from 'react';
+import { useFocusBlock } from './Settings.js';
 import { useTranslation } from 'react-i18next';
 import { patch } from '@velnes/client';
 import { fileToResizedDataURL, PhoneInput } from '@velnes/ui';
@@ -17,8 +18,9 @@ import { Field, useBusiness } from './bits.js';
  *  card, the HQ-managed Legal & payments block (read-only), and the
  *  public gallery. Photos are stored as data URLs — the file is the
  *  storage. */
-export function CompanySection() {
+export function CompanySection({ focus = null }: { focus?: string | null }) {
   const { t, i18n } = useTranslation();
+  useFocusBlock(focus, true);
   const toast = useToast();
   const qc = useQueryClient();
   const business = useBusiness();
@@ -113,6 +115,7 @@ export function CompanySection() {
               onChange={(e) => setF('description', e.target.value)}
             />
           </Field>
+          <div id="focus-socials" className="span2" style={{ height: 0 }} aria-hidden="true" />
           <Field label={t('cset.website')} hint={t('cset.socialsHint')}>
             <input className="input" placeholder="www.yoursalon.mk" value={form.website} onChange={(e) => setF('website', e.target.value)} />
           </Field>
@@ -202,7 +205,7 @@ function GalleryCard({ b }: { b: BusinessProfile }) {
   return (
     <div className="card" style={{ marginTop: 24 }}>
       <div className="card-header">
-        <h2>{t('cset.gallery')}</h2>
+        <h2 id="focus-gallery">{t('cset.gallery')}</h2>
         <span className="badge">{t('cset.photoCount', { n: b.gallery.length })}</span>
       </div>
       <div className="grid2" style={{ padding: 20, gap: 10 }}>

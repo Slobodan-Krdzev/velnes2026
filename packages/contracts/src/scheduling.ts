@@ -98,6 +98,31 @@ export const HoldResponseSchema = z.object({
 export const AppointmentStatusSchema = z.enum(['booked', 'confirmed', 'cancelled', 'no_show', 'requested']);
 export const AppointmentKindSchema = z.enum(['appointment', 'blocked', 'absence', 'chore', 'note']);
 
+/**
+ * Products with a booking (Alex, 2026-10-01). What the customer asks
+ * to take home with the visit; the shelf at the chosen location decides
+ * whether it is sold there and at what price. A reservation against the
+ * visit's first appointment — the money moves on the invoice, online or
+ * at the till, never here.
+ */
+/** The most of one product a booking may carry; the app's stepper stops here. */
+export const PRODUCT_QTY_MAX = 10;
+export const BookProductSchema = z.object({
+  productId: z.uuid(),
+  qty: z.number().int().min(1).max(PRODUCT_QTY_MAX).default(1),
+});
+export type BookProduct = z.infer<typeof BookProductSchema>;
+export const BookProductsSchema = z.array(BookProductSchema).max(12);
+/** A reserved product as every screen after the booking reads it. */
+export const VisitProductSchema = z.object({
+  productId: z.uuid(),
+  name: z.string(),
+  qty: z.number().int(),
+  /** Shelf price when booked, whole MKD. */
+  unitPrice: z.number().int(),
+});
+export type VisitProduct = z.infer<typeof VisitProductSchema>;
+
 export const BookRequestSchema = z.object({
   key: z.string().min(8),
   locationId: z.uuid(),
@@ -143,6 +168,8 @@ export const AppointmentSchema = z.object({
   // True once a live invoice line references this appointment — the
   // till stops offering it, the drawer can say so.
   paid: z.boolean().default(false),
+  /** Products reserved with the visit (on its first treatment only). */
+  products: z.array(VisitProductSchema).default([]),
 });
 export type Appointment = z.infer<typeof AppointmentSchema>;
 
@@ -205,6 +232,18 @@ export const RefusalCodeSchema = z.enum([
   'ALREADY_PAID',
   'CARD_DECLINED',
   'BAD_CODE',
+  // Booking changes (2026-09-30) — docs/BOOKING-CHANGES.md
+  'CANCEL_TOO_LATE',
+  'ALREADY_CANCELLED',
+  'VISIT_STARTED',
+  'REQUEST_ACTIVE',
+  'NO_REQUEST',
+  'SAME_TIME',
+  'SLOT_TAKEN',
+  'NOT_CHANGEABLE',
+  'TIME_PASSED',
+  /** A product asked for with the booking is not sold at that location. */
+  'PRODUCT_UNAVAILABLE',
 ]);
 export type RefusalCode = z.infer<typeof RefusalCodeSchema>;
 
@@ -217,3 +256,133 @@ export const BookingRefusalSchema = z.object({
   params: z.record(z.string(), z.union([z.string(), z.number()])).optional(),
 });
 export type BookingRefusal = z.infer<typeof BookingRefusalSchema>;
+
+/* ── Booking changes (Alex, 2026-09-30) — docs/BOOKING-CHANGES.md ──── */
+
+/** Who cancelled — a fact on the appointment, never inferred later. */
+export const CancelledBySchema = z.enum(['customer', 'salon', 'system', 'hq']);
+export type CancelledBy = z.infer<typeof CancelledBySchema>;
+
+/** A customer's request to move a visit. The appointment itself keeps
+ *  its status and time until the salon approves; a declined request
+ *  waits for the customer's answer (keep or cancel) and is then
+ *  resolved. One active (pending or declined-unanswered) per visit. */
+export const ChangeRequestStatusSchema = z.enum(['pending', 'approved', 'declined', 'withdrawn', 'resolved']);
+export const ChangeRequestSchema = z.object({
+  id: z.uuid(),
+  appointmentId: z.uuid(),
+  status: ChangeRequestStatusSchema,
+  originalDate: z.iso.date(),
+  originalTime: ClockSchema,
+  originalEnd: ClockSchema,
+  requestedDate: z.iso.date(),
+  requestedTime: ClockSchema,
+  requestedEnd: ClockSchema,
+  requestedAt: z.iso.datetime(),
+  resolvedAt: z.iso.datetime().nullable(),
+  resolvedByName: z.string().nullable(),
+  declineReason: z.string().nullable(),
+  customerDecision: z.enum(['keep', 'cancel']).nullable(),
+  decidedAt: z.iso.datetime().nullable(),
+});
+export type ChangeRequest = z.infer<typeof ChangeRequestSchema>;
+
+/** A pending request as the workspace lists it — the visit beside it. */
+export const ChangeRequestRowSchema = ChangeRequestSchema.extend({
+  locationId: z.uuid(),
+  locationName: z.string(),
+  customerName: z.string(),
+  serviceName: z.string(),
+  employeeName: z.string().nullable(),
+});
+export const ChangeRequestListSchema = z.object({ requests: z.array(ChangeRequestRowSchema) });
+
+/**
+ * What customers are waiting on the salon for (Alex, 2026-10-01): the
+ * booking requests not yet accepted or declined, and the reschedule
+ * requests not yet approved or declined — one door, `GET
+ * /requests/pending`, read by the flight deck's card and the Requests
+ * screen alike, so the number and the list can never disagree.
+ */
+export const BookingRequestRowSchema = z.object({
+  id: z.uuid(),
+  locationId: z.uuid(),
+  locationName: z.string(),
+  customerName: z.string(),
+  serviceName: z.string(),
+  employeeName: z.string().nullable(),
+  date: z.iso.date(),
+  time: ClockSchema,
+  end: ClockSchema,
+  price: MoneySchema,
+  source: z.string(),
+  requestedAt: z.iso.datetime(),
+  /** How many product units ride on the visit. */
+  productUnits: z.number().int().default(0),
+});
+export type BookingRequestRow = z.infer<typeof BookingRequestRowSchema>;
+export const PendingRequestsSchema = z.object({
+  bookings: z.array(BookingRequestRowSchema),
+  reschedules: z.array(ChangeRequestRowSchema),
+});
+export type PendingRequests = z.infer<typeof PendingRequestsSchema>;
+export const ChangeRequestDecisionSchema = z.object({ reason: z.string().max(300).optional() });
+
+/** One line of a visit's timeline — the history table with its
+ *  structured detail, for the workspace's drawer and the customer's
+ *  "what happened" section. */
+export const AppointmentHistoryEntrySchema = z.object({
+  at: z.iso.datetime(),
+  what: z.string(),
+  byName: z.string(),
+  source: z.string(),
+  meta: z.record(z.string(), z.unknown()).default({}),
+});
+export const AppointmentHistorySchema = z.object({ entries: z.array(AppointmentHistoryEntrySchema) });
+
+/** The cancellation as a fact. */
+export const CancellationSchema = z.object({
+  at: z.iso.datetime(),
+  by: CancelledBySchema,
+  reason: z.string().nullable(),
+});
+
+/** Payment, derived from the invoice truth; refund, from the intent. */
+export const PaymentSummarySchema = z.object({
+  status: z.enum(['unpaid', 'venue', 'paid']),
+  method: z.string().nullable(),
+  amount: MoneySchema.nullable(),
+});
+export const RefundStatusSchema = z.enum(['pending', 'processing', 'refunded', 'failed']);
+export const RefundSummarySchema = z.object({
+  status: RefundStatusSchema,
+  amount: MoneySchema,
+  requestedAt: z.iso.datetime(),
+  completedAt: z.iso.datetime().nullable(),
+});
+export type PaymentSummary = z.infer<typeof PaymentSummarySchema>;
+export type RefundSummary = z.infer<typeof RefundSummarySchema>;
+export type AppointmentHistoryEntry = z.infer<typeof AppointmentHistoryEntrySchema>;
+
+/** What a customer may do with an upcoming visit — decided by the
+ *  server, so the app never re-derives the cancellation window. */
+export const CancelBlockedReasonSchema = z.enum(['too_late', 'cancelled', 'started', 'requested']);
+export const VisitRightsSchema = z.object({
+  canReschedule: z.boolean(),
+  canCancel: z.boolean(),
+  /** The instant after which cancellation is no longer free — ISO. */
+  cancelDeadline: z.iso.datetime().nullable(),
+  cancelBlockedReason: CancelBlockedReasonSchema.nullable(),
+});
+
+/** The workspace's view of a visit's changes, alongside the appointment. */
+export const AppointmentChangesSchema = z.object({
+  changeRequest: ChangeRequestSchema.nullable(),
+  cancellation: CancellationSchema.nullable(),
+  cancelHours: z.number().int().nullable(),
+  payment: PaymentSummarySchema,
+  refund: RefundSummarySchema.nullable(),
+  history: z.array(AppointmentHistoryEntrySchema),
+});
+export type AppointmentChanges = z.infer<typeof AppointmentChangesSchema>;
+export type ChangeRequestRow = z.infer<typeof ChangeRequestRowSchema>;

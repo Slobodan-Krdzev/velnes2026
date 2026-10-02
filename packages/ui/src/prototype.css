@@ -211,6 +211,9 @@ textarea.input{height:110px;padding:12px 14px;resize:vertical}
 .card-header{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--line)}
 .card-header h2{font-size:20px;line-height:26px;font-weight:700}
 .stat{border:1px solid var(--line);border-radius:var(--r-card);padding:20px;display:flex;flex-direction:column;gap:4px}
+/* A stat that leads somewhere (the flight deck's requests, 2026-10-01). */
+button.stat-link{background:#fff;text-align:left;cursor:pointer;font:inherit;color:inherit}
+button.stat-link:hover{border-color:var(--ink)}
 .stat-label{font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.03em;color:var(--ink-muted)}
 .stat-value{font-size:24px;line-height:30px;font-weight:700;font-variant-numeric:tabular-nums}
 .stat-hint{font-size:12px;font-weight:500;color:var(--ink-muted);display:flex;gap:8px;align-items:center}
@@ -898,6 +901,8 @@ body.till-mode .toolbar{position:static;margin:0;padding:0 0 16px}
   display:grid;place-items:center;overflow:hidden}
 .pos-tile .ptile-img img{width:100%;height:100%;object-fit:contain}
 .pos-tile .ptile-letter{font-size:34px;font-weight:800;color:var(--ink-muted)}
+/* A due visit's day, on its tile (2026-10-01). */
+.pos-tile .ptile-d{position:absolute;top:6px;left:6px;font-size:11px;font-weight:700;color:var(--ink-muted);background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:2px 7px}
 /* Klein en terughoudend: de prijs mag afleesbaar zijn zonder de foto
    te overstemmen. Een matglazen plaatje houdt hem leesbaar op elke tint. */
 .pos-tile .ptile-p{position:absolute;left:6px;bottom:6px;
@@ -1489,6 +1494,9 @@ html:has(body.panel-open),html:has(body.modal-open){overflow:hidden}
 .toolbar .ttab{height:50px;padding:0 18px;border-radius:999px;font-size:16px}
 
 .menu-row{display:flex;align-items:center;gap:10px;width:100%;padding:10px 12px;border-radius:6px;text-align:left}
+/* A notice newer than the last look at the bell (Alex, 2026-10-01). */
+.menu-row.new{background:rgba(62,122,68,.09)}
+.menu-row.new:hover{background:rgba(62,122,68,.15)}
 @media(hover:hover){.menu-row:hover{background:var(--surface-muted)}}
 .menu-row .grow{flex:1;min-width:0}
 .menu-row .mi-s{display:block;font-size:12px;font-weight:500;color:var(--ink-muted);margin-top:2px}
@@ -2435,3 +2443,11 @@ body.ob-src .ob-body{display:flex;align-items:center;justify-content:center;
 .infotip-title{font-weight:800;font-size:13px;margin-bottom:6px}
 .infotip-p{margin:0 0 8px;font-size:13px;line-height:1.45;font-weight:500;color:var(--text)}
 .infotip-p:last-child{margin-bottom:0}
+
+/* Booking changes (Alex, 2026-09-30): a cancelled visit stays on the
+   grid as history — muted and struck, never in the way. */
+.event.ev-cancelled{opacity:.5;border-style:dotted;text-decoration:line-through;pointer-events:auto}
+.timeline{display:grid;gap:6px;margin-top:6px}
+.tl-row{display:grid;grid-template-columns:110px 1fr;gap:10px;align-items:start;font-size:13px}
+.rs-request{border-color:var(--warning)}
+.btn.has-requests{border-color:var(--warning)}

@@ -52,8 +52,10 @@ async function call<T>(path: string, init: RequestInit & { token?: string | null
     },
   });
   if (!res.ok) {
-    const body = (await res.json().catch(() => ({}))) as { error?: string; message?: string };
-    throw new ApiError(res.status, body.error ?? 'ERROR', body.message ?? res.statusText);
+    // A refusal from the booking gate carries its code and params, so
+    // the app can say it in its own language (`refusal.<code>`).
+    const body = (await res.json().catch(() => ({}))) as { error?: string; code?: string; message?: string; params?: Record<string, string | number> };
+    throw new ApiError(res.status, body.code ?? body.error ?? 'ERROR', body.message ?? res.statusText, body.params ?? {});
   }
   return res.json() as Promise<T>;
 }
@@ -139,6 +141,7 @@ export const clientAuth = {
     phone: string;
     dob: string | null;
     lang: 'en' | 'mk' | 'sq';
+    avatar?: string | null;
   }) => call<{ pending: true }>('/register', { method: 'POST', body: JSON.stringify(body) }),
   /**
    * The code that was just "sent", for testing — and only ever in
@@ -216,6 +219,27 @@ export function useMySalons() {
  *  back. One item, this tab only, applied once and then forgotten — not
  *  a second list of favourites living in the browser. */
 const PENDING_KEY = 'velnes.client.pendingFavourite';
+
+/** Where to go once signed in — a review link opened while signed out
+ *  (2026-09-30). This tab only, taken once; only app paths, never a URL. */
+const RETURN_KEY = 'velnes.client.returnTo';
+export function rememberReturnTo(path: string) {
+  if (!path.startsWith('/') || path.startsWith('//')) return;
+  try {
+    sessionStorage.setItem(RETURN_KEY, path);
+  } catch {
+    /* no storage — the link is simply not followed */
+  }
+}
+export function takeReturnTo(): string | null {
+  try {
+    const p = sessionStorage.getItem(RETURN_KEY);
+    if (p) sessionStorage.removeItem(RETURN_KEY);
+    return p && p.startsWith('/') && !p.startsWith('//') ? p : null;
+  } catch {
+    return null;
+  }
+}
 
 export interface PendingFavourite {
   kind: FavouriteKind;

@@ -280,6 +280,51 @@ Two decisions worth recording:
   first location — and, for the demo tenant, a location where the only
   physiotherapist's measured pace exceeds the catalog duration, so the
   engine (correctly) offers nothing.
+- **The draft survives a reload (2026-10-01).** The in-flight booking
+  lived only in React state, so refreshing `/book/review` (or opening it
+  cold) rendered nothing at all. The draft is now mirrored into
+  `sessionStorage` under `velnes.booking.draft` — this tab only, read
+  back when the app starts, cleared by the confirmation screen so a
+  finished visit never resurfaces as a draft. And no booking step is
+  ever blank: reached with nothing to book, it says what belongs there
+  and offers "Find a salon"; signed in with the profile still loading,
+  it shows the summary's skeleton. `features/booking/Review.test.tsx`.
+- **The Book now button names the missing step (2026-10-01).** A grey
+  button with a hint under it left people guessing. `needOf` decides,
+  in one place, the first unmet step in the order the page asks for them
+  — a treatment, each required option group, a time — and the button
+  (desktop cart and phone bar alike) reads "Select a treatment", "Select
+  {group}" or "Select date & time"; a tap scrolls to that step in the
+  button's own layout (`d-`/`m-` anchors, `scroll-margin-top` clears the
+  sticky chrome) and the heading glows once. Complete, it is "Book now"
+  again. `features/salon/BookCta.test.tsx`.
+- **Products with the booking (2026-10-01).** The salon page's products
+  were a picture; now they are the shelf of the chosen location (the
+  discovery detail says per product where it is sold and for how much,
+  from the same `prodAt` the till asks), and a product toggles into the
+  visit like a treatment: a cart row, the total, the points preview
+  (+20 a unit). The booking doors take `products[]`; `confirmChain`
+  reserves them against the visit's first treatment in
+  `appointment_products` (name and shelf price snapshotted; a product
+  the location does not sell is refused `PRODUCT_UNAVAILABLE` and
+  nothing is booked). A reservation, not a sale: the pay quote lists
+  them at the shelf price charged now and the pay door writes them as
+  product lines on the treatment's invoice (stock moves there); unpaid,
+  the workspace till pre-fills the basket with them when the
+  appointment is rung up, and the drawer lists them. Every screen after
+  the salon page shows them: identity, review, confirmation, pay, My
+  Velnes. Not gated on stock — the shelf's count is the salon's own
+  bookkeeping, and the till does not refuse on it either. A stepper
+  under the card and in the cart row sets how many (up to
+  `PRODUCT_QTY_MAX`, named once in the contract); fewer than one takes
+  the product out.
+  `booking/products.test.ts`, `salon/Products.test.tsx`, the till and
+  drawer tests.
+- **The confirmation on desktop is two columns (2026-10-01).** The
+  tick, the word and Back to home on the left, sticky; the visit's card
+  and its map on the right, the pair centred at the identity step's
+  width. Below 1024px the single column keeps its old order (word,
+  card, map, button) through `display: contents` and one `order`.
 
 ## A visit is several treatments
 
@@ -424,6 +469,80 @@ Card images (home, results) use the first real photograph a salon has;
 a salon with none falls back to the prototype's decorative image, which
 is the one place the app still shows a picture that is not the salon's
 own.
+
+## The public pages (2026-09-30)
+
+Every footer link leads to a page of its own under
+`apps/consumer/src/features/public/` (Alex, 2026-09-30): `/treatments`
+(the real category door and "Most chosen", each card opening its results
+page), `/how-it-works`, `/help` (questions answered from what the product
+does — cancellation is the salon's own window, reschedule is cancel and
+rebook, payments run on the mock), `/for-business`, `/business-benefits`,
+`/business-resources`, `/partner-support` (the workspace's Support ticket
+and the inbox), `/about`, `/careers` (an honest empty state — no
+vacancies exist), `/press` (no coverage is claimed), `/contact`, and the
+three legal pages. One small kit (`Public.tsx`: hero, section, card grid,
+numbered steps, disclosure questions, CTA panel, empty state) in one
+tree for every width; `usePageMeta` sets the tab title, description and
+a `noindex` for the not-found page, and `index.html` carries the
+site-wide description. The wildcard route is a real `NotFound` (home
+and search CTAs) instead of the home page in disguise; the HTTP status
+stays 200 because the app is client-rendered on Vercel. Copy ships in
+en/mk/sq (`c.pub.*`, 303 keys; mk/sq need the same native review as the
+rest). **Decisions:** "Membership" keeps linking to the existing, truthful
+`/premium`; "Gift cards" is removed from the footer — a customer can
+redeem a salon's code at payment but nobody can buy or issue one; the
+social icons and the newsletter form are gone (no profiles, no
+destination). **The one contact channel** is `VITE_SUPPORT_EMAIL`, which
+defaults to the HQ inbox the support tickets already go to
+(`lib/support.ts`); no phone, address or company identity is shown
+because none is on record. **Privacy, Terms and Cookies** describe what
+the product verifiably does (data kept, the booking rules, the four
+browser-storage keys, Google Fonts and OpenStreetMap as the only third
+parties, no cookies, no analytics) with a "last updated" date, and claim
+no governing law, controller identity, retention period or compliance
+status — those, and the final legal wording, need Alex's lawyer.
+
+## The footer, under every route (2026-09-30)
+
+The site footer is `app/SiteFooter.tsx`, rendered once in `App` after
+the routes (Alex, 2026-09-30: "visible on all pages"). The markup is
+the home page's, verbatim, in both environments, each wrapper hiding
+itself on the other side of 900px like the pages do; the home no longer
+carries its own. A phone page now ends 24px under its content instead
+of the prototype's 86px (that was room under the home's own footer, and
+would be a hole above this one), and the salon page's fixed Book-now
+bar gets its clearance after the footer rather than before it — the
+`:has()` rule in `overrides.css` — so the bar never covers the
+copyright line.
+
+## The phone home, re-ordered (2026-09-29)
+
+Search is the phone home's hero and nothing competes with it in the
+first screen (Alex, 2026-09-29). The order is now: the sticky search
+pill (the What/Where/When sheet, unchanged) → one compact row of
+ready-made search intents (the chips; only "Available now" is coral) →
+**Recommended** (the recommended door, its existing fallback to every
+salon for a viewer with no history) → **Available now near you**
+(unchanged: starts within 30 minutes, nearest first; hidden when empty)
+→ **Explore treatments** (the same looping treatment rail, moved down
+under its own heading) → **Newest to Velnes** (hidden when none) → the
+trust grid and everything after, untouched. One spacing rhythm, as five
+named distances scoped to `.m-home` in `overrides.css` (the prototype
+has no spacing tokens, so these are the home's own): top → pill 16px,
+pill → chips 8px (they are one block), chips → first heading 48px,
+heading (or its subtitle) → cards 24px, cards → next heading 56px; on
+tablet 20 / 10 / 56 / 28 / 64. The pill loses its underline rule on the
+home so it reads as a hero, not a toolbar; it still sticks. Between 700 and
+899px (tablet) the same tree gets wider gutters, two "available now"
+cards to a row and wider cards. The desktop tree is unchanged, and no
+door is asked twice — every hook was already hoisted to the top of
+`Home`. The recommendation reason "Does X, like you book" now reads
+"Because you book X" in all three languages. The state before this
+change is tagged `home-mobile-before-2026-09-29` for a one-command
+revert. Not done here: the chips are still the six fixed labels rather
+than the suggestions door the sheet uses, and "available now" has no
+per-salon diversification yet — both remain deferrals.
 
 ## A result is a treatment at a place
 
@@ -864,3 +983,45 @@ marker, a marker tap selects and scrolls the card into view. Sort is
 not shown: the ranker has one order and the doors take no sort; a
 truthful Sort later means a `sort` on both doors (distance with a
 position, price low to high, soonest in now-mode).
+
+**The six search chips (2026-09-30, Alex).** Each chip under the search
+box is a whole search, not a word dropped into the field: *Available
+now* → `/search?q=now` (anything that can start within the half hour;
+no longer also near me), *Massage tomorrow* → `q=Massage&when=tomorrow`,
+*Haircut near me* → `q=Haircut&near=1` (the Near-me intent the results
+page resolves — a position never rides in a URL), *Facial this weekend*
+→ `q=Facial&when=weekend`, *Manicure* → `q=Manicure`, *Couple massage*
+→ `q=Massage&party=2`. `when` and `party` are the doors' own filters
+(SEARCH.md §10): a day is hard admission and every card then says its
+first free start that day ("Free Sat 4 Oct at 10:00"); "for two" keeps
+only treatments where two professionals and two rooms are free at once,
+and the page says each person is booked separately. Both show as lit
+chips beside Near me and Available now, and come off with a tap; the
+phone sheet's When? offers Today / Tomorrow / This weekend beside Any
+time and Available now. The words go to the door in English, which its
+synonyms know in every language. Deferred, not faked: a chosen date (the
+doors take words so links stay true), a two-seat booking, and any
+"for two" price.
+
+**Book again (2026-09-30, Alex).** From a visit's card in My Velnes,
+"Book again" opens the salon page on the visit as it was: the location,
+the treatment with its variant and options, and the professional — so
+only the day and time are left to pick. The link is the salon page's
+own arrival parameters (`service`, `location`, `employee`, `variant`,
+`mods`), each honoured only when the catalog there still has it, and
+the client appointments door now carries `variantId` and
+`modifierOptionIds` for it. Nothing is locked: the cart can be added
+to, emptied or changed, and "any professional" is one tap away.
+
+**Booking changes (2026-09-30, Alex).** A visit's card offers
+*Reschedule* and *Cancel appointment* only when the door says so
+(`canReschedule`, `canCancel`, `cancelDeadline`, `cancelBlockedReason`
+on every appointment). A reschedule is a request: the picker shows the
+visit's own free starts, the confirmation says the appointment only
+changes after the salon approves, and the card then reads "Waiting for
+salon approval" with Withdraw. A decline asks keep-or-cancel; cancel is
+offered only while the cancellation window is open. When the window has
+closed the button is gone and the card says why (the salon's hours'
+notice, or that the visit has started) and to contact the salon.
+Cancelling takes a confirmation and, for a visit paid online, shows the
+refund state afterwards. Full story: `docs/BOOKING-CHANGES.md`.

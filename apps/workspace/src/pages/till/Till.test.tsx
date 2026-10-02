@@ -1,7 +1,7 @@
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { App } from '../../App.js';
+import { App, queryClient } from '../../App.js';
 import { setAccessToken } from '@velnes/client';
 
 const LOC = '20000000-0000-4000-8000-000000000001';
@@ -20,7 +20,7 @@ const me = {
   perms: { 'pos.checkout': 'business', 'pos.refund': 'business' },
 };
 
-function mockApi(sales: { body: unknown }[]) {
+function mockApi(sales: { body: unknown }[], appointments: unknown[] = [], due: unknown[] = []) {
   vi.stubGlobal(
     'fetch',
     vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
@@ -69,7 +69,8 @@ function mockApi(sales: { body: unknown }[]) {
             },
           ],
         });
-      if (path.includes('/appointments?')) return ok({ appointments: [] });
+      if (path.includes('/appointments?')) return ok({ appointments });
+      if (path.includes('/till/due')) return ok({ due, total: 0 });
       if (path.endsWith('/sales') && init?.method === 'POST') {
         const body = JSON.parse(String(init.body)) as { method: string };
         sales.push({ body });
@@ -109,11 +110,38 @@ async function openTill() {
 describe('cash register', () => {
   beforeEach(() => {
     localStorage.clear();
+    queryClient.clear();
     setAccessToken(null);
   });
   afterEach(() => {
     cleanup();
     vi.unstubAllGlobals();
+  });
+
+  it('an appointment booked with products brings them into the basket, at the shelf price, removable', async () => {
+    const today = (() => {
+      const d = new Date();
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    })();
+    mockApi([], [
+      {
+        id: 'aaaaaaaa-0000-4000-8000-000000000001', locationId: LOC, date: today, start: '10:00', end: '11:00', kind: 'appointment', status: 'booked',
+        title: 'Katerina Stojanovska', serviceId: SVC, serviceName: 'Rehab training', serviceCategory: 'Rehab', variantId: null, variantLabel: null,
+        modifierNames: [], employeeId: me.id, anyEmp: false, customerId: null, price: 1500, durationMin: 60, prepMin: 0, resetMin: 0, basis: 'catalog',
+        source: 'client', paid: false,
+        // Booked at 500 — the shelf says 550 today, and the shelf is what the sale door charges.
+        products: [{ productId: PROD, name: 'Kinesiology tape roll', qty: 2, unitPrice: 500 }],
+      },
+    ]);
+    await openTill();
+    await userEvent.click(await screen.findByRole('button', { name: /Katerina/ }));
+    const line = await screen.findByText('With the booking');
+    expect(line.closest('.basket-line')?.textContent).toContain('Kinesiology tape roll');
+    // 1.500 for the treatment + 2 × 550 at today's shelf price.
+    expect(screen.getByText(/2\.600/, { selector: 'button' })).toBeDefined();
+    // Tapping the appointment again rings nothing up twice.
+    await userEvent.click(screen.getByRole('button', { name: /Katerina/ }));
+    expect(screen.getAllByText('With the booking')).toHaveLength(1);
   });
 
   it('rings up tiles and totals the receipt like the prototype', async () => {
@@ -146,4 +174,19 @@ describe('cash register', () => {
     const toast = await screen.findByRole('status');
     expect(toast.textContent).toContain('CEN-2026-0414');
   });
+
+  it('the Due tab lists past visits never paid, bucketed by age, and rings one up with its products', async () => {
+    mockApi([], [], [
+      { appointmentId: 'aaaaaaaa-0000-4000-8000-000000000009', locationId: LOC, locationName: 'Centar', customerId: null, customerName: 'Owing Tester', serviceName: 'Rehab training', employeeName: 'Maria Petrovska', date: '2026-09-24', start: '09:00', end: '09:45', price: 1500, deposit: 0, due: 1500, daysAgo: 7, source: 'client', products: [{ productId: PROD, name: 'Kinesiology tape roll', qty: 1, unitPrice: 550 }] },
+    ]);
+    await openTill();
+    // The due door answers after the location is known. A cheap poll:
+    // jsdom's role queries are slow enough to starve the fetch chain.
+    await waitFor(() => expect([...document.querySelectorAll('.ttab')].some((e) => e.textContent === 'Due · 1')).toBe(true), { timeout: 8000, interval: 400 });
+    await userEvent.click(screen.getByRole('button', { name: 'Due · 1' }));
+    expect(screen.getByText('This week')).toBeDefined();
+    await userEvent.click(await screen.findByRole('button', { name: /Owing Tester/ }));
+    expect(screen.getByText('With the booking')).toBeDefined();
+    expect(screen.getByText(/2\.050/, { selector: 'button' })).toBeDefined(); // 1.500 + 550
+  }, 15_000);
 });

@@ -77,7 +77,26 @@ describe('the consumer app', () => {
     await waitFor(() => expect(screen.getAllByText('Zen Rooms').length).toBeGreaterThan(0));
   });
 
-  it('the "Available now" chip asks the search screen for everything now, near me', async () => {
+  it('the phone home reads search, chips, recommended, then the treatments under "Explore treatments"', async () => {
+    render(<App />);
+    await waitFor(() => expect(screen.getAllByText('Zen Rooms').length).toBeGreaterThan(0));
+    const phone = document.querySelector('.m-env')!;
+    const before = (a: Element, b: Element) => Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+    const chips = phone.querySelector('.m-chiprow')!;
+    const reco = phone.querySelector('.m-reco')!;
+    const explore = [...phone.querySelectorAll('h2')].find((h) => h.textContent === 'Explore treatments')!;
+    const rail = phone.querySelector('.catrail')!;
+    // Alex, 2026-09-29: nothing between the chips and Recommended — the
+    // treatment rail moved down under its own heading.
+    expect(before(chips, reco)).toBe(true);
+    expect(before(reco, explore)).toBe(true);
+    expect(before(explore, rail)).toBe(true);
+    expect(phone.querySelector('.m-chiprow + .catrail')).toBeNull();
+    // No section heading for a section with nothing in it.
+    expect([...phone.querySelectorAll('h2')].some((h) => h.textContent === 'Newest to Velnes')).toBe(false);
+  });
+
+  it('the "Available now" chip asks the search screen for anything that can start now', async () => {
     render(<App />);
     await screen.findAllByText('Massage tomorrow');
     // The chip is on both layouts (CSS picks one); the first will do.
@@ -85,11 +104,92 @@ describe('the consumer app', () => {
     await waitFor(() => expect(window.location.pathname).toBe('/search'));
     const q = new URLSearchParams(window.location.search);
     expect(q.get('q')).toBe('now');
+    // Anything, now — not near (Alex, 2026-09-30): no radius, no intent.
+    expect(q.get('near')).toBeNull();
+    expect(q.get('km')).toBeNull();
+    expect(q.get('when')).toBeNull();
+  });
+
+  /** Each chip is a whole search (Alex, 2026-09-30): the word, and the
+   *  day, place or party it names — carried in the URL as the doors'
+   *  own filters, and shown lit on the results page so it can be
+   *  taken off. */
+  it('"Massage tomorrow" searches massage with a day, lit on the results page', async () => {
+    render(<App />);
+    await screen.findAllByText('Massage tomorrow');
+    screen.getAllByRole('button', { name: 'Massage tomorrow' })[0]!.click();
+    await waitFor(() => expect(window.location.pathname).toBe('/search'));
+    const q = new URLSearchParams(window.location.search);
+    expect(q.get('q')).toBe('Massage');
+    expect(q.get('when')).toBe('tomorrow');
+    expect(q.get('party')).toBeNull();
+    const chip = (await screen.findAllByRole('button', { name: 'Tomorrow' }))[0]!;
+    expect(chip.getAttribute('aria-pressed')).toBe('true');
+    // Off again: the day leaves the URL.
+    chip.click();
+    await waitFor(() => expect(new URLSearchParams(window.location.search).get('when')).toBeNull());
+  });
+
+  it('"Facial this weekend" and "Manicure" carry the weekend, and just the word', async () => {
+    render(<App />);
+    await screen.findAllByText('Massage tomorrow');
+    screen.getAllByRole('button', { name: 'Facial this weekend' })[0]!.click();
+    await waitFor(() => expect(window.location.pathname).toBe('/search'));
+    let q = new URLSearchParams(window.location.search);
+    expect(q.get('q')).toBe('Facial');
+    expect(q.get('when')).toBe('weekend');
+    expect((await screen.findAllByRole('button', { name: 'This weekend' })).length).toBeGreaterThan(0);
+    window.history.pushState({}, '', '/');
+    cleanup();
+    render(<App />);
+    await screen.findAllByText('Massage tomorrow');
+    screen.getAllByRole('button', { name: 'Manicure' })[0]!.click();
+    await waitFor(() => expect(window.location.pathname).toBe('/search'));
+    q = new URLSearchParams(window.location.search);
+    expect(q.get('q')).toBe('Manicure');
+    expect([...q.keys()]).toEqual(['q']);
+  });
+
+  it('"Haircut near me" asks for Near me the way the button would; "Couple massage" is massage for two', async () => {
+    render(<App />);
+    await screen.findAllByText('Massage tomorrow');
+    screen.getAllByRole('button', { name: 'Haircut near me' })[0]!.click();
+    await waitFor(() => expect(window.location.pathname).toBe('/search'));
+    expect(new URLSearchParams(window.location.search).get('q')).toBe('Haircut');
     // `near` is an intent the results page consumes at once — with no
     // geolocation in this browser it can only drop it, and no radius
     // is claimed that could not run.
     await waitFor(() => expect(new URLSearchParams(window.location.search).get('near')).toBeNull());
     expect(new URLSearchParams(window.location.search).get('km')).toBeNull();
+    window.history.pushState({}, '', '/');
+    cleanup();
+    render(<App />);
+    await screen.findAllByText('Massage tomorrow');
+    screen.getAllByRole('button', { name: 'Couple massage' })[0]!.click();
+    await waitFor(() => expect(window.location.pathname).toBe('/search'));
+    const q = new URLSearchParams(window.location.search);
+    expect(q.get('q')).toBe('Massage');
+    expect(q.get('party')).toBe('2');
+    const chip = (await screen.findAllByRole('button', { name: 'For two' }))[0]!;
+    expect(chip.getAttribute('aria-pressed')).toBe('true');
+    chip.click();
+    await waitFor(() => expect(new URLSearchParams(window.location.search).get('party')).toBeNull());
+  });
+
+  it('the sheet\'s When? offers the days, and one rides to the category page', async () => {
+    render(<App />);
+    await screen.findAllByText('Massage tomorrow');
+    fireEvent.click(screen.getAllByRole('button', { name: 'Search' })[0]!);
+    const dlg = await screen.findByRole('dialog', { name: 'Search' });
+    fireEvent.change(within(dlg).getByRole('textbox'), { target: { value: 'mass' } });
+    fireEvent.mouseDown(await within(dlg).findByText('Massage'));
+    fireEvent.click(within(dlg).getByText('When?'));
+    fireEvent.click(within(dlg).getByRole('button', { name: /^Tomorrow/ }));
+    fireEvent.click(within(dlg).getByRole('button', { name: 'Search' }));
+    await waitFor(() => expect(window.location.pathname).toBe('/s/massage'));
+    const q = new URLSearchParams(window.location.search);
+    expect(q.get('when')).toBe('tomorrow');
+    expect(q.get('now')).toBeNull();
   });
 
   it('the Search tab opens the sheet; What, Where and When are applied together, on Search', async () => {

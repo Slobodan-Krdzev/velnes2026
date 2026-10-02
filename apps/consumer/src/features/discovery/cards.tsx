@@ -9,6 +9,7 @@ import {
 } from '../../lib/api/queries.js';
 import { fmtMKD, slugify, type CategoryVM, type SalonVM } from '../../lib/api/mappers.js';
 import { useSuggest, type SuggestItem, salonSugKey, salonSugLabel } from './useSuggest.js';
+import { RatingChip } from '../../components/Stars.js';
 import {
   rememberPendingFavourite,
   useFavourites,
@@ -51,6 +52,14 @@ export const IcPin = (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 21s6.5-6 6.5-10.5a6.5 6.5 0 1 0-13 0C5.5 15 12 21 12 21z" /><circle cx="12" cy="10.5" r="2.4" /></svg>
 );
 /** "Available now" — the bolt on the results chip and the home chip. */
+/** A day — the When chip on the results page. */
+export const IcCal = (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15" rx="2.5" /><path d="M3.5 10h17M8 3.5v3M16 3.5v3" /></svg>
+);
+/** Two people — the "For two" chip. */
+export const IcPeople = (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.2" /><path d="M3.5 19c0-3 2.5-5 5.5-5s5.5 2 5.5 5" /><circle cx="16.5" cy="9" r="2.6" /><path d="M15.5 14.2c2.8.2 5 2.2 5 4.8" /></svg>
+);
 export const IcBolt = (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M13 3 4 14h7l-1 7 9-11h-7z" /></svg>
 );
@@ -140,8 +149,8 @@ export function FavHeart({
 }
 
 /** Salon recommendation card — the prototype's rc2 markup, fed real data.
- *  Rating/distance/price rows wait for their subsystems; the city line is
- *  what we can honestly say today. */
+ *  The rating is the salon's verified-review score (2026-09-30); distance
+ *  and price rows still wait for their subsystems. */
 export function SalonCard({ s }: { s: SalonVM }) {
   const nav = useNavigate();
   return (
@@ -161,6 +170,7 @@ export function SalonCard({ s }: { s: SalonVM }) {
         <h3>{s.name}</h3>
         <div className="rrow2">
           <span>{s.city}</span>
+          <RatingChip rating={s.rating} />
         </div>
         {s.reason ? <div className="rwhy">{reasonLbl(s.reason)}</div> : null}
       </div>
@@ -649,9 +659,15 @@ function nowNearBits(n: NowNear) {
     today,
     price,
     at,
-    // The start it can make is at *this* location: the link opens there.
-    href: `/salon/${n.s.salon.slug}?service=${encodeURIComponent(n.s.id)}&location=${encodeURIComponent(n.s.location.id)}`,
-    slotHref: at ? `/salon/${n.s.salon.slug}?service=${encodeURIComponent(n.s.id)}&location=${encodeURIComponent(n.s.location.id)}&date=${today}&time=${at}` : null,
+    // The start it can make is at *this* location: the link opens there,
+    // with the time and the professional who can take it (Alex,
+    // 2026-10-01), so Book is one tap away on the salon page.
+    href: at
+      ? `/salon/${n.s.salon.slug}?service=${encodeURIComponent(n.s.id)}&location=${encodeURIComponent(n.s.location.id)}&date=${today}&time=${at}${n.s.availableEmployeeId ? `&employee=${encodeURIComponent(n.s.availableEmployeeId)}` : ''}`
+      : `/salon/${n.s.salon.slug}?service=${encodeURIComponent(n.s.id)}&location=${encodeURIComponent(n.s.location.id)}`,
+    slotHref: at
+      ? `/salon/${n.s.salon.slug}?service=${encodeURIComponent(n.s.id)}&location=${encodeURIComponent(n.s.location.id)}&date=${today}&time=${at}${n.s.availableEmployeeId ? `&employee=${encodeURIComponent(n.s.availableEmployeeId)}` : ''}`
+      : null,
     away: n.km == null ? null : t('c.res.fromYou', { d: distanceLbl(n.km) }),
   };
 }
@@ -713,20 +729,21 @@ export function NowNearM({ n }: { n: NowNear }) {
             </span>
           ) : null}
         </div>
-        <div className="slotrow" style={{ marginTop: '7px' }}>
+        {/* One row (Alex, 2026-10-01): the start it can make, and Book. */}
+        <div className="slotrow nn-row" style={{ marginTop: '7px' }}>
           {b.slotHref ? (
             <button className="slot-s" onClick={() => nav(b.slotHref!)}>
               {t('c.home.nowAt', { t: b.at })}
             </button>
           ) : null}
+          <button
+            className="btn btn-g nn-book"
+            style={{ minHeight: '36px', padding: '6px 14px', fontSize: '13.5px' }}
+            onClick={() => nav(b.href)}
+          >
+            {t('c.cards.book')} {IcArr}
+          </button>
         </div>
-        <button
-          className="btn btn-g"
-          style={{ minHeight: '38px', padding: '6px 14px', fontSize: '13.5px', marginTop: '8px' }}
-          onClick={() => nav(b.href)}
-        >
-          {t('c.res.viewBook')} {IcArr}
-        </button>
       </div>
     </article>
   );

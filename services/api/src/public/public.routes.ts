@@ -29,6 +29,7 @@ import {
   confirmChain,
   createHold,
   empsFor,
+  productsOf,
 } from '../modules/booking/booking.service.js';
 import { afterBooked, guestPayToken } from '../modules/booking/requests.service.js';
 import { payAppointment, quotePayment } from '../modules/payments/payments.service.js';
@@ -508,6 +509,7 @@ export async function publicRoutes(app: FastifyInstance) {
             time: req.body.time,
             employeeId: req.body.employeeId,
             items,
+            products: req.body.products ?? [],
             name: req.body.name,
             phone: req.body.phone,
             ...(req.body.email ? { email: req.body.email } : {}),
@@ -639,6 +641,7 @@ export async function visitPayload(
   const nameOf = (id: string | null) => (id ? (emps.find((e) => e.id === id)?.name ?? '') : '');
   return {
     ref: first.id,
+    products: await productsOf(trx, first.id),
     date: first.date,
     time: first.start,
     end: last.end,

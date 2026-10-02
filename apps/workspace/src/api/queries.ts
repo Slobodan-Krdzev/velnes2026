@@ -2,6 +2,11 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
   LineQuoteRequestSchema} from '@velnes/contracts';
 import {
+  AppointmentChangesSchema,
+  ChangeRequestListSchema,
+  ChangeRequestSchema,
+  PendingRequestsSchema,
+  DuePaymentsSchema,
   AppointmentListResponseSchema,
   AvailabilityResponseSchema,
   BookResponseSchema,
@@ -103,7 +108,48 @@ export const useDecideRequest = () => {
         decision: v.decision,
         ...(v.reason ? { reason: v.reason } : {}),
       }),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ['appointments'] }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['appointments'] });
+      void qc.invalidateQueries({ queryKey: ['pending-requests'] });
+    },
+  });
+};
+
+/** Everything waiting for the salon's answer (Alex, 2026-10-01): the
+ *  flight deck's card and the Requests screen read this one door. */
+export const usePendingRequests = () =>
+  useQuery({
+    queryKey: ['pending-requests'],
+    queryFn: () => get(PendingRequestsSchema, '/requests/pending'),
+    refetchInterval: 60_000,
+  });
+
+/** Booking changes (2026-09-30): what a visit went through, the
+ *  requests waiting for the salon, and the two decisions. */
+export const useAppointmentChanges = (id: string | null) =>
+  useQuery({
+    queryKey: ['appointment-changes', id],
+    queryFn: () => get(AppointmentChangesSchema, `/appointments/${id}/changes`),
+    enabled: !!id,
+    staleTime: 10_000,
+  });
+export const useChangeRequests = (status: 'pending' | 'declined' | 'approved' | 'withdrawn' | 'resolved' = 'pending') =>
+  useQuery({
+    queryKey: ['change-requests', status],
+    queryFn: () => get(ChangeRequestListSchema, `/change-requests?status=${status}`),
+    refetchInterval: 60_000,
+  });
+export const useDecideChange = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (v: { id: string; action: 'approve' | 'decline'; reason?: string | undefined }) =>
+      post(ChangeRequestSchema, `/change-requests/${v.id}/${v.action}`, v.reason ? { reason: v.reason } : {}),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['appointments'] });
+      void qc.invalidateQueries({ queryKey: ['appointment-changes'] });
+      void qc.invalidateQueries({ queryKey: ['change-requests'] });
+      void qc.invalidateQueries({ queryKey: ['pending-requests'] });
+    },
   });
 };
 
@@ -115,3 +161,13 @@ export const useCancelAppointment = () => {
     onSuccess: () => void qc.invalidateQueries({ queryKey: ['appointments'] }),
   });
 };
+
+/** Due payments (Alex, 2026-10-01): past visits never paid, for the
+ *  till's Due tab — one door, the till reads it per location. */
+export const useDuePayments = (locationId: string | null) =>
+  useQuery({
+    queryKey: ['till-due', locationId],
+    queryFn: () => get(DuePaymentsSchema, `/till/due?locationId=${locationId}`),
+    enabled: !!locationId,
+    refetchInterval: 60_000,
+  });

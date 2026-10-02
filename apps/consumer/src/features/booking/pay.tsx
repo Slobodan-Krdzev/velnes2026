@@ -28,6 +28,8 @@ export interface PayQuote {
   salonName: string;
   locationName: string;
   items: { id: string; serviceName: string; date: string; time: string; end: string; price: number }[];
+  /** Products reserved with the visit, at the shelf price charged now. */
+  products: { productId: string; name: string; qty: number; unitPrice: number; total: number }[];
   subtotal: number;
   promo: { code: string; label: string; amount: number } | null;
   gift: { code: string; amount: number; remaining: number } | null;
@@ -248,6 +250,12 @@ export function BookPay() {
               <div className="r" key={'id' in i ? i.id : i.ref}>
                 <span className="k">{i.time}–{i.end}</span>
                 <span className="v">{i.serviceName} · {fmtMKD(i.price)}</span>
+              </div>
+            ))}
+            {(quote?.products ?? (entry.visit.products ?? []).map((p) => ({ ...p, total: p.unitPrice * p.qty }))).map((p) => (
+              <div className="r" key={p.productId} data-testid="pay-product">
+                <span className="k">{t('c.bk.product')}</span>
+                <span className="v">{p.qty > 1 ? `${p.qty} × ` : ''}{p.name} · {fmtMKD(p.total)}</span>
               </div>
             ))}
             <div className="r"><span className="k">{t('c.bk.dateTime')}</span><span className="v">{when}</span></div>

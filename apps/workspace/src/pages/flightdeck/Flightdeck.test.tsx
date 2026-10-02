@@ -68,6 +68,7 @@ function mockApi() {
       if (path.endsWith('/auth/me')) return ok(me);
       if (path.includes('/flightdeck')) return ok(payload);
       if (path.includes('/timings/suggestions')) return ok({ suggestions: [] });
+      if (path.includes('/requests/pending')) return ok(pendingRequests);
       if (path.includes('/locations'))
         return ok({
           locations: [
@@ -82,6 +83,16 @@ function mockApi() {
     }),
   );
 }
+/** What waits for the salon (2026-10-01): two bookings, one reschedule. */
+const pendingRequests = {
+  bookings: [
+    { id: 'aaaaaaaa-0000-4000-8000-000000000001', locationId: LOC, locationName: 'Centar', customerName: 'Slobodan Krdzev', serviceName: 'Mans Haircut', employeeName: 'Maria Petrovska', date: '2026-10-01', time: '17:30', end: '18:00', price: 500, source: 'client', requestedAt: '2026-10-01T10:00:00.000Z', productUnits: 0 },
+    { id: 'aaaaaaaa-0000-4000-8000-000000000002', locationId: LOC, locationName: 'Centar', customerName: 'Ana D', serviceName: 'Beard trim', employeeName: null, date: '2026-10-02', time: '09:00', end: '09:20', price: 300, source: 'client', requestedAt: '2026-10-01T11:00:00.000Z', productUnits: 2 },
+  ],
+  reschedules: [
+    { id: 'bbbbbbbb-0000-4000-8000-000000000001', appointmentId: 'aaaaaaaa-0000-4000-8000-000000000003', status: 'pending', originalDate: '2026-10-01', originalTime: '13:30', originalEnd: '14:00', requestedDate: '2026-10-01', requestedTime: '17:30', requestedEnd: '18:00', requestedAt: '2026-09-30T10:00:00.000Z', resolvedAt: null, resolvedByName: null, declineReason: null, customerDecision: null, decidedAt: null, locationId: LOC, locationName: 'Centar', customerName: 'Slobodan Krdzev', serviceName: 'Фарбање Мажи', employeeName: 'Maria Petrovska' },
+  ],
+};
 
 async function openHome() {
   window.history.pushState({}, '', '/');
@@ -106,9 +117,15 @@ describe('flightdeck', () => {
   it('renders the pulse, the priority hero, opportunities and the fold', async () => {
     mockApi();
     await openHome();
-    // Pulse
+    // Pulse — the requests waiting take the average spend's place, and
+    // lead to the Requests screen.
     expect(screen.getByText('62%')).toBeDefined();
     expect(screen.getByText('Capacity today')).toBeDefined();
+    expect(screen.queryByText('Average spend')).toBeNull();
+    const rq = await screen.findByTestId('fd-requests');
+    await waitFor(() => expect(rq.textContent).toContain('3'));
+    expect(rq.textContent).toContain('Requests waiting');
+    expect(rq.textContent).toContain('2 booking · 1 reschedule');
     // Member-rec hero + priority hero
     expect(screen.getByText('2 member opportunities are waiting')).toBeDefined();
     expect(screen.getByText("Fill tomorrow's remaining capacity")).toBeDefined();
@@ -122,6 +139,8 @@ describe('flightdeck', () => {
     expect(screen.getByText('Today at a glance')).toBeDefined();
     expect(screen.getByText('Retail and upsell per person')).toBeDefined();
     expect(screen.getByText('Insight from Kumo')).toBeDefined();
+    rq.click();
+    await waitFor(() => expect(window.location.pathname).toBe('/requests'));
   });
 
   it('shows the quiet hero when nothing is on fire', async () => {

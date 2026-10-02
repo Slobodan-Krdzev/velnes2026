@@ -67,3 +67,31 @@ declines) until one is chosen, exactly like the mail transport.
 **Seed.** The prototype's gift cards, four promo codes across their
 lifecycle states, loyalty config + reconciling ledger, the recipes,
 historical invoices CEN-2026-0409..0412 and the counter at 413.
+
+## Products reserved with an app booking (2026-10-01)
+
+A consumer can add products to a visit when booking in the Velnes app
+(`appointment_products`, see `docs/CONSUMER-APP.md`). The till treats
+them as what they are — a reservation: when such an appointment is rung
+up (tapped on Today's, or sent from the drawer's Take payment), its
+products follow into the basket as ordinary product lines at this
+location's shelf price, marked "With the booking", removable and
+re-countable like any line. The sale door is unchanged; the same lines
+would have been typed by hand. Paid online, the app's pay door already
+wrote those lines, and the appointment leaves the till as before.
+
+## Due payments (2026-10-01)
+
+The till's second tab, **Due**, lists the visits that happened and were
+never paid — booked or confirmed, their end already passed in the
+location's clock, and no line on a non-refunded invoice referencing
+them (the same test `toContract`'s `paid` makes). Cancelled, no-show
+and still-requested visits owe nothing. One door, `GET /till/due`
+(`DuePaymentsSchema`, `listDue`), per location, oldest first, bucketed
+on the tab by age (earlier today, yesterday, this week, older); the tab
+carries the count. A tile rings up exactly like a Today's appointment —
+the appointment line and the products reserved with it — and the sale
+takes it off the list. **Deferred:** a deposit taken at booking is shown
+on the row (`deposit`, `due = price − deposit`) but the sale door still
+charges the appointment's price; netting a deposit at the till is not
+built. `till/till.due.test.ts`, `till/Till.test.tsx`.

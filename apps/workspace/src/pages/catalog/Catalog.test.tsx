@@ -183,6 +183,19 @@ describe('catalog', () => {
     expect(body.modifiers[0]!.options).toHaveLength(1);
   });
 
+  it('removing the standard length hands "standard" to the one left, and saves', async () => {
+    const calls: { method: string; path: string; body?: unknown }[] = [];
+    mockApi(calls);
+    await openCatalog();
+    await userEvent.click(screen.getByRole('button', { name: 'Edit' }));
+    await screen.findByDisplayValue('45 minutes');
+    await userEvent.click(screen.getAllByRole('button', { name: 'Delete' })[0]!);
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(calls.some((c) => c.method === 'PUT' && c.path.includes(`/services/${SVC}`))).toBe(true));
+    const body = calls.find((c) => c.method === 'PUT')!.body as { variants: { label: string; std: boolean }[] };
+    expect(body.variants).toEqual([expect.objectContaining({ label: '60 minutes', std: true })]);
+  });
+
   it('adjusts product stock as a ledger movement', async () => {
     const calls: { method: string; path: string; body?: unknown }[] = [];
     mockApi(calls);

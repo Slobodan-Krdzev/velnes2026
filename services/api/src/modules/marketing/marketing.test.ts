@@ -56,6 +56,11 @@ describe('last-minute offers and the Premium pipeline', () => {
       payload: { email: 'maria@velnes.mk', password: 'velnes-demo' },
     });
     ownerToken = res.json().accessToken;
+    // The queue starts empty: other suites' cancellations release slots
+    // into it (docs/BOOKING-CHANGES.md), and this suite pins its own
+    // precondition rather than inherit theirs.
+    await admin.query(`DELETE FROM premium_offers WHERE tenant_id=$1`, [demo.business]);
+    await admin.query(`DELETE FROM member_recs WHERE tenant_id=$1`, [demo.business]);
   });
   afterAll(async () => {
     await admin.query(`DELETE FROM premium_offers WHERE tenant_id=$1`, [demo.business]);

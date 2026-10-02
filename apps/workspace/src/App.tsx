@@ -9,6 +9,7 @@ import { CatalogPage } from './pages/catalog/Catalog.js';
 import { CustomersPage } from './pages/customers/Customers.js';
 import { HomePage } from './pages/flightdeck/Flightdeck.js';
 import { ReportsPage } from './pages/reports/Reports.js';
+import { RequestsPage } from './pages/requests/Requests.js';
 import { MarketingPage } from './pages/marketing/Marketing.js';
 import { SettingsPage } from './pages/settings/Settings.js';
 import { SuppliersPage } from './pages/suppliers/Suppliers.js';
@@ -56,6 +57,7 @@ export function App() {
               >
                 <Route path="/" element={<HomePage />} />
                 <Route path="/calendar" element={<CalendarPage />} />
+                <Route path="/requests" element={<RequestsPage />} />
                 <Route path="/till" element={<TillPage />} />
                 <Route path="/till/invoices" element={<InvoicesPage />} />
                 <Route path="/catalog" element={<CatalogPage />} />

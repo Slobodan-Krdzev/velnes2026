@@ -22,7 +22,9 @@ import {
 } from '@velnes/contracts';
 import type { Lang } from '@velnes/i18n';
 import { I, Icon, VelnesMark } from '@velnes/ui';
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { NavSearch, useNavSearchHotkey, type NavTarget } from '@velnes/navsearch';
+import { SUPPLIER_INDEX, type PoCtx } from './navsearch.js';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { z } from 'zod';
@@ -53,6 +55,7 @@ type Tab =
   | 'reports'
   | 'support'
   | 'settings';
+const TAB_IDS: Tab[] = ['dashboard', 'orders', 'salons', 'catalog', 'promotions', 'academy', 'reports', 'support', 'settings'];
 
 // The prototype's PORTAL_NAV order (Orders sits second); Settings is
 // in the sidebar foot, like the salon workspace.
@@ -77,7 +80,30 @@ export function Portal({
   signOut: () => void;
 }) {
   const { t, i18n } = useTranslation();
-  const [tab, setTab] = useState<Tab>('dashboard');
+  // The tab can arrive in the URL (`?tab=orders`) — the navigation
+  // search writes it there, so a chosen destination survives a reload.
+  const [tab, setTab] = useState<Tab>(() => {
+    const asked = new URLSearchParams(window.location.search).get('tab');
+    return TAB_IDS.includes(asked as Tab) ? (asked as Tab) : 'dashboard';
+  });
+  // An action the search asked for inside the tab (open the add-product panel).
+  const [askedAction, setAskedAction] = useState<string | null>(null);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const searchBtn = useRef<HTMLButtonElement>(null);
+  const openSearch = useCallback(() => setSearchOpen(true), []);
+  useNavSearchHotkey(openSearch);
+  const searchCtx = useMemo<PoCtx>(() => ({ role: user.role }), [user.role]);
+  const goTo = useCallback((target: NavTarget) => {
+    if (target.tab) {
+      setTab(target.tab as Tab);
+      window.history.replaceState(null, '', `?tab=${target.tab}`);
+    }
+    setAskedAction(target.sub ?? null);
+    if (target.sub?.startsWith('po-')) {
+      const id = target.sub;
+      requestAnimationFrame(() => document.getElementById(id)?.scrollIntoView?.({ block: 'start', behavior: 'smooth' }));
+    }
+  }, []);
   const [toast, setToast] = useState<string | null>(null);
   const [menu, setMenu] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
@@ -172,6 +198,18 @@ export function Portal({
           </div>
           <div className="topbar-mid" id="topbar-mid" />
           <div className="topbar-right">
+            <button
+              ref={searchBtn}
+              className="iconbtn"
+              aria-label={t('common.search')}
+              aria-haspopup="dialog"
+              aria-expanded={searchOpen}
+              aria-keyshortcuts="Meta+K Control+K"
+              onClick={openSearch}
+            >
+              <Icon d={I.search} size={24} w={2} />
+            </button>
+            <NavSearch<PoCtx> open={searchOpen} onClose={() => setSearchOpen(false)} index={SUPPLIER_INDEX} ctx={searchCtx} onGo={goTo} returnFocusTo={searchBtn} />
             <div className="pop" ref={notifRef}>
               <button
                 className="iconbtn"
@@ -292,8 +330,8 @@ export function Portal({
           {tab === 'dashboard' ? <Dashboard user={user} say={say} goto={setTab} /> : null}
           {tab === 'orders' ? <Orders say={say} focusOrderId={focusOrder} clearFocus={clearFocus} /> : null}
           {tab === 'salons' ? <Salons user={user} say={say} /> : null}
-          {tab === 'catalog' ? <Catalog user={user} say={say} /> : null}
-          {tab === 'promotions' ? <Promotions user={user} say={say} /> : null}
+          {tab === 'catalog' ? <Catalog user={user} say={say} asked={askedAction} onAsked={() => setAskedAction(null)} /> : null}
+          {tab === 'promotions' ? <Promotions user={user} say={say} asked={askedAction} onAsked={() => setAskedAction(null)} /> : null}
           {tab === 'academy' ? <Academy say={say} user={user} /> : null}
           {tab === 'reports' ? <Reports /> : null}
           {tab === 'support' ? (
@@ -674,12 +712,29 @@ const USE_LABEL: Record<string, string> = { pro: 'po.usePro', retail: 'po.useRet
 
 type CatProduct = z.infer<typeof SupplierProductListSchema>['products'][number];
 
-function Catalog({ user, say }: { user: PortalUser; say: (m: string) => void }) {
+function Catalog({
+  user,
+  say,
+  asked = null,
+  onAsked,
+}: {
+  user: PortalUser;
+  say: (m: string) => void;
+  /** The navigation search's action: `add-product` or `bulk-prices`. */
+  asked?: string | null;
+  onAsked?: () => void;
+}) {
   const { t } = useTranslation();
   const [rows, setRows] = useState<CatProduct[]>([]);
   const [edit, setEdit] = useState<'new' | CatProduct | null>(null);
   const [bulk, setBulk] = useState(false);
   const canEdit = user.role === 'sr_owner' || user.role === 'sr_catalog';
+  useEffect(() => {
+    if (!asked || !canEdit) return;
+    if (asked === 'add-product') setEdit('new');
+    if (asked === 'bulk-prices') setBulk(true);
+    onAsked?.();
+  }, [asked, canEdit, onAsked]);
   const reload = useCallback(() => {
     void pGet(SupplierProductListSchema, '/portal/catalog').then((r) => setRows(r.products));
   }, []);
@@ -1563,12 +1618,28 @@ function OrderDetail({
 }
 
 // ── Promotions ───────────────────────────────────────────────────
-function Promotions({ user, say }: { user: PortalUser; say: (m: string) => void }) {
+function Promotions({
+  user,
+  say,
+  asked = null,
+  onAsked,
+}: {
+  user: PortalUser;
+  say: (m: string) => void;
+  /** The navigation search's action: `add-promotion`. */
+  asked?: string | null;
+  onAsked?: () => void;
+}) {
   const { t } = useTranslation();
   const [rows, setRows] = useState<z.infer<typeof SupplierPromotionListSchema>['promotions']>([]);
   const [products, setProducts] = useState<z.infer<typeof SupplierProductListSchema>['products']>([]);
   const [adding, setAdding] = useState(false);
   const canAdd = user.role === 'sr_owner' || user.role === 'sr_account';
+  useEffect(() => {
+    if (asked !== 'add-promotion' || !canAdd) return;
+    setAdding(true);
+    onAsked?.();
+  }, [asked, canAdd, onAsked]);
   const reload = useCallback(() => {
     void pGet(SupplierPromotionListSchema, '/portal/promotions')
       .then((r) => setRows(r.promotions))
@@ -2138,7 +2209,7 @@ function Settings({ user, say }: { user: PortalUser; say: (m: string) => void })
       <div className="stacked">
         <div className="card">
           <div className="card-header">
-            <h2>{t('po.company')}</h2>
+            <h2 id="po-company">{t('po.company')}</h2>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '20px 20px 0' }}>
             <span className="mark" style={{ width: 64, height: 64, fontSize: 22, padding: 0, overflow: 'hidden' }}>
@@ -2211,7 +2282,7 @@ function Settings({ user, say }: { user: PortalUser; say: (m: string) => void })
 
         <div className="card">
           <div className="card-header">
-            <h2>{t('po.roles')}</h2>
+            <h2 id="po-roles">{t('po.roles')}</h2>
             <span className="muted" style={{ fontWeight: 500 }}>
               {t('po.rolesHint')}
             </span>
@@ -2292,7 +2363,7 @@ function Settings({ user, say }: { user: PortalUser; say: (m: string) => void })
 
         <div className="card">
           <div className="card-header">
-            <h2>{t('po.people')}</h2>
+            <h2 id="po-people">{t('po.people')}</h2>
           </div>
           <table>
             <thead>

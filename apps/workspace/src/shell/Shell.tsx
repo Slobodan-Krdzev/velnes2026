@@ -4,7 +4,9 @@ import { get } from '@velnes/client';
 import { LANGS, type Lang } from '@velnes/i18n';
 import type { PermKey } from '@velnes/contracts';
 import { Badge, I, Icon, VelnesMark } from '@velnes/ui';
-import { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { NavSearch, useNavSearchHotkey } from '@velnes/navsearch';
+import { WORKSPACE_INDEX, type WsCtx } from './navsearch.js';
 import { useTranslation } from 'react-i18next';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useLocations } from '../api/queries.js';
@@ -70,6 +72,12 @@ export function Shell() {
   const [waOpen, setWaOpen] = useState(false);
   // The account menu's "Employee app": my own sign-in link, any role.
   const [linkOpen, setLinkOpen] = useState(false);
+  // Navigation search (Alex, 2026-09-30): the top bar's search icon and
+  // ⌘K / Ctrl+K open the same surface; a chosen destination is a URL.
+  const [searchOpen, setSearchOpen] = useState(false);
+  const searchBtn = useRef<HTMLButtonElement>(null);
+  const openSearch = useCallback(() => setSearchOpen(true), []);
+  useNavSearchHotkey(openSearch);
   const notifRef = useOutsideClose(notifOpen, () => setNotifOpen(false));
   // Platform notices — HQ speaks, the bell listens. Seen-state is a
   // per-browser convenience, not business truth.
@@ -87,6 +95,11 @@ export function Shell() {
     }
   })();
   const unseen = !!latest && latest > seen;
+  // What counts as NEW while the list is open (Alex, 2026-10-01): the
+  // notices since the last look. Captured as the list opens — the seen
+  // marker moves on at the same moment, so the rows stay green until
+  // the next time the bell is opened, not just until the next render.
+  const [freshSince, setFreshSince] = useState<string | null>(null);
   const scopeRef = useOutsideClose(scopeMenu, () => setScopeMenu(false));
   const envRef = useOutsideClose(envMenu, () => setEnvMenu(false));
   const scopeValue = useMemo(() => ({ scope, setScope }), [scope]);
@@ -117,6 +130,8 @@ export function Shell() {
     (l) => !me.locationIds.length || me.locationIds.includes(l.id),
   );
   const onDeck = routerLoc.pathname === '/';
+
+  const searchCtx = useMemo<WsCtx>(() => ({ can, locations: myLocs }), [can, myLocs]);
   const current = [...NAV, ...FOOT].find((n) => routerLoc.pathname.startsWith(n.to));
   // The flightdeck has no tile now — the logo is its door — but it still
   // owns the page title when the deck is showing.
@@ -237,7 +252,15 @@ export function Shell() {
           </div>
           <div className="topbar-mid" id="topbar-mid" />
           <div className="topbar-right">
-            <button className="iconbtn" aria-label={t('common.search')}>
+            <button
+              ref={searchBtn}
+              className="iconbtn"
+              aria-label={t('common.search')}
+              aria-haspopup="dialog"
+              aria-expanded={searchOpen}
+              aria-keyshortcuts="Meta+K Control+K"
+              onClick={openSearch}
+            >
               <Icon d={I.search} size={24} w={2} />
             </button>
             <div className="pop" ref={notifRef}>
@@ -248,6 +271,7 @@ export function Shell() {
                 aria-haspopup="menu"
                 aria-expanded={notifOpen}
                 onClick={() => {
+                  if (!notifOpen) setFreshSince(seen);
                   setNotifOpen((v) => !v);
                   if (latest) {
                     try {
@@ -272,7 +296,8 @@ export function Shell() {
                     (notices.data?.notices ?? []).map((n) => (
                       <button
                         key={n.id}
-                        className="menu-row"
+                        className={`menu-row${freshSince != null && n.createdAt > freshSince ? ' new' : ''}`}
+                        data-new={freshSince != null && n.createdAt > freshSince ? '1' : undefined}
                         onClick={() => {
                           setNotifOpen(false);
                           // A notice knows its screen: category news opens
@@ -283,6 +308,8 @@ export function Shell() {
                             navigate('/catalog', { state: { tab: 'categories' } });
                           else if (n.kind.startsWith('booking') && n.refId)
                             navigate('/calendar', { state: { appointment: n.refId } });
+                          else if (n.kind === 'review')
+                            navigate(`/marketing?tab=reviews${n.refId ? `&review=${n.refId}` : ''}`);
                         }}
                       >
                         <span className="grow" style={{ textAlign: 'left' }}>
@@ -424,6 +451,26 @@ export function Shell() {
       <WhatsAppPopup
         open={waOpen && routerLoc.pathname.startsWith('/support')}
         onClose={() => setWaOpen(false)}
+      />
+
+      <NavSearch<WsCtx>
+
+        open={searchOpen}
+
+        onClose={() => setSearchOpen(false)}
+
+        index={WORKSPACE_INDEX}
+
+        ctx={searchCtx}
+
+        onGo={(target) => {
+
+          if (target.path) navigate(target.path);
+
+        }}
+
+        returnFocusTo={searchBtn}
+
       />
 
       <Assistant />

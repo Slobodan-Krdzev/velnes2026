@@ -35,6 +35,8 @@ interface ClientRow {
   createdAt: Date;
   personalisedResults: boolean;
   locationAllowed: boolean | null;
+  /** Velnes Loyalty's cached balance (docs/LOYALTY.md). */
+  loyaltyPoints?: number;
 }
 
 export function toProfile(c: ClientRow): ClientProfile {
@@ -51,6 +53,7 @@ export function toProfile(c: ClientRow): ClientProfile {
     since: isoDate(c.createdAt)!,
     personalisedResults: c.personalisedResults,
     locationAllowed: c.locationAllowed,
+    loyaltyPoints: c.loyaltyPoints ?? 0,
   };
 }
 
@@ -84,6 +87,7 @@ export async function registerClient(input: {
   phone: string;
   dob: string | null;
   lang: 'en' | 'mk' | 'sq';
+  avatar?: string | null;
 }): Promise<void> {
   const email = norm(input.email);
   const passwordHash = await argon2.hash(input.password);
@@ -116,6 +120,7 @@ export async function registerClient(input: {
         phone: input.phone.trim() || null,
         dob: input.dob,
         lang: input.lang,
+        avatar: input.avatar ?? null,
         emailCode: code,
         emailCodeSentAt: new Date(),
       })

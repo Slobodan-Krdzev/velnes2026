@@ -1,24 +1,31 @@
-import { useEffect } from 'react';
+import { useEffect, type ReactNode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { BrowserRouter, Route, Routes, useLocation } from 'react-router-dom';
+import { BrowserRouter, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { Login, Register } from './features/account/Auth.js';
 import { MyVelnes } from './features/account/MyVelnes.js';
 import { BookingProvider } from './features/booking/store.js';
 import { BookConfirmed, BookIdentity, BookProfile, BookReview } from './features/booking/steps.js';
 import { BookPay } from './features/booking/pay.js';
 import { MobileChrome } from './app/MobileChrome.js';
+import { SiteFooter } from './app/SiteFooter.js';
 import { Premium } from './features/premium/Premium.js';
 import { DHeader } from './app/chrome.js';
 import { Home } from './features/discovery/Home.js';
 import { Results } from './features/discovery/Results.js';
 import { SearchSheetProvider } from './features/discovery/SearchSheet.js';
 import { Salon } from './features/salon/Salon.js';
-import { SessionProvider, useFavourites, useSession } from './lib/api/session.js';
+import { HelpCenter, HowItWorks, Treatments } from './features/public/visitor.js';
+import { BusinessBenefits, BusinessResources, ForBusiness, PartnerSupport } from './features/public/business.js';
+import { About, Careers, Contact, Press } from './features/public/company.js';
+import { Cookies, Privacy, Terms } from './features/public/legal.js';
+import { NotFound } from './features/public/NotFound.js';
+import { SessionProvider, takeReturnTo, useFavourites, useSession } from './lib/api/session.js';
 import { GeoProvider } from './lib/geo.js';
 import { I18nextProvider } from 'react-i18next';
 import { LangSync, i18n } from './lib/i18n.js';
 
-const qc = new QueryClient({
+/** Exported for tests, which clear it between renders. */
+export const qc = new QueryClient({
   defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false } },
 });
 
@@ -39,6 +46,20 @@ function PendingFavourite() {
   return null;
 }
 
+/** A page asked for while signed out (a review link from a mail or a
+ *  notification) is opened once a session appears. Inside the router,
+ *  unlike its sibling above, because it navigates. */
+function PendingReturn() {
+  const { signedIn } = useSession();
+  const nav = useNavigate();
+  useEffect(() => {
+    if (!signedIn) return;
+    const to = takeReturnTo();
+    if (to) nav(to, { replace: true });
+  }, [signedIn, nav]);
+  return null;
+}
+
 /**
  * Every route starts at the top.
  *
@@ -51,6 +72,22 @@ function PendingFavourite() {
  * filter — which writes `?price=low` into the URL — does not throw the
  * reader back to the top of the list they were reading.
  */
+/**
+ * Screens enter (Alex, 2026-10-01): the route's content fades and
+ * lifts in on every path change — a key on the frame remounts it, so
+ * the one animation serves every screen and every account section.
+ * Query-only changes (a tab, `?review=1`) stay put. Reduced motion
+ * turns it off in CSS.
+ */
+function PageFrame({ children }: { children: ReactNode }) {
+  const { pathname } = useLocation();
+  return (
+    <div className="page-enter" key={pathname}>
+      {children}
+    </div>
+  );
+}
+
 function ScrollToTop() {
   const { pathname } = useLocation();
   useEffect(() => {
@@ -73,11 +110,13 @@ export function App() {
           <BrowserRouter>
           <SearchSheetProvider>
             <ScrollToTop />
+            <PendingReturn />
             {/* The desktop header, once, sticky above every route — and the
                 phone chrome likewise. Each hides itself on the other's side
                 of 900px. */}
             <DHeader />
             <MobileChrome />
+            <PageFrame>
             <Routes>
               <Route path="/" element={<Home />} />
               <Route path="/s/:category" element={<Results />} />
@@ -100,9 +139,29 @@ export function App() {
               <Route path="/account/favs" element={<MyVelnes section="favs" />} />
               <Route path="/account/notifs" element={<MyVelnes section="notifs" />} />
               <Route path="/account/cards" element={<MyVelnes section="cards" />} />
+              <Route path="/account/loyalty" element={<MyVelnes section="loyalty" />} />
               <Route path="/account/appointments/:id" element={<MyVelnes section="appts" />} />
-              <Route path="*" element={<Home />} />
+              {/* The public information pages (2026-09-30), and a real
+                  not-found page where the wildcard used to show the home. */}
+              <Route path="/treatments" element={<Treatments />} />
+              <Route path="/how-it-works" element={<HowItWorks />} />
+              <Route path="/help" element={<HelpCenter />} />
+              <Route path="/for-business" element={<ForBusiness />} />
+              <Route path="/business-benefits" element={<BusinessBenefits />} />
+              <Route path="/business-resources" element={<BusinessResources />} />
+              <Route path="/partner-support" element={<PartnerSupport />} />
+              <Route path="/about" element={<About />} />
+              <Route path="/careers" element={<Careers />} />
+              <Route path="/press" element={<Press />} />
+              <Route path="/contact" element={<Contact />} />
+              <Route path="/privacy" element={<Privacy />} />
+              <Route path="/terms" element={<Terms />} />
+              <Route path="/cookies" element={<Cookies />} />
+              <Route path="*" element={<NotFound />} />
             </Routes>
+            </PageFrame>
+            {/* The footer, once, under every route. */}
+            <SiteFooter />
           </SearchSheetProvider>
           </BrowserRouter>
           </BookingProvider>

@@ -1,7 +1,8 @@
 import { z } from 'zod';
 import { MoneySchema } from './catalog.js';
 import { AVATAR_MAX_CHARS } from './auth.js';
-import { ClockSchema } from './scheduling.js';
+import { ClockSchema, AppointmentHistoryEntrySchema, BookProductsSchema, CancelBlockedReasonSchema, CancellationSchema, ChangeRequestSchema, PaymentSummarySchema, RefundSummarySchema, VisitProductSchema } from './scheduling.js';
+import { ClientReviewSchema } from './reviews.js';
 
 /** Client users: the ordinary people who book through the consumer
  *  app. The platform's fourth principal — one account, one email, every
@@ -28,6 +29,8 @@ export const ClientRegisterSchema = z.object({
   // ISO date; the prototype's calendar step is optional.
   dob: z.iso.date().nullable().default(null),
   lang: z.enum(['en', 'mk', 'sq']).default('en'),
+  /** A profile photo as a small data URL, optional at sign-up (2026-10-01). */
+  avatar: z.string().max(AVATAR_MAX_CHARS).nullable().default(null),
 });
 
 export const ClientVerifySchema = z.object({
@@ -65,6 +68,9 @@ export const ClientProfileSchema = z.object({
    * once.
    */
   locationAllowed: z.boolean().nullable(),
+  /** Velnes Loyalty (2026-09-30): the cached balance of the platform
+   *  ledger — docs/LOYALTY.md. Whole points. */
+  loyaltyPoints: z.number().int().default(0),
 });
 export type ClientProfile = z.infer<typeof ClientProfileSchema>;
 
@@ -117,6 +123,48 @@ export const ClientAppointmentSchema = z.object({
   paid: z.boolean().default(false),
   /** Free cancellation window the salon set for that location. */
   cancelHours: z.number().int(),
+  /**
+   * Reviews (2026-09-30). `completed` is the platform's definition —
+   * booked or confirmed, the end already passed in the salon's clock —
+   * decided here, so the app never re-derives it from a browser clock.
+   * `review` is the one this visit carries, or null; `canReview` is
+   * completed and not yet reviewed. The submit door re-checks everything.
+   */
+  completed: z.boolean().default(false),
+  canReview: z.boolean().default(false),
+  review: ClientReviewSchema.nullable().default(null),
+  serviceId: z.uuid().nullable().default(null),
+  employeeId: z.uuid().nullable().default(null),
+  locationId: z.uuid().nullable().default(null),
+  /** "Book again" (Alex, 2026-09-30) carries the visit as it was —
+   *  the variant and the options too — so the salon page opens with
+   *  the same treatment and professional chosen, and only the day and
+   *  time left to pick. */
+  variantId: z.uuid().nullable().default(null),
+  modifierOptionIds: z.array(z.uuid()).default([]),
+  /**
+   * Booking changes (2026-09-30) — docs/BOOKING-CHANGES.md. Rights are
+   * the server's decision; the window is the one accepted at booking
+   * (`cancelHours` above is that snapshot); the active or last change
+   * request, the cancellation as a fact, the payment and refund state
+   * and the visit's timeline.
+   */
+  canReschedule: z.boolean().default(false),
+  canCancel: z.boolean().default(false),
+  cancelDeadline: z.iso.datetime().nullable().default(null),
+  cancelBlockedReason: CancelBlockedReasonSchema.nullable().default(null),
+  changeRequest: ChangeRequestSchema.nullable().default(null),
+  cancellation: CancellationSchema.nullable().default(null),
+  payment: PaymentSummarySchema.default({ status: 'unpaid', method: null, amount: null }),
+  refund: RefundSummarySchema.nullable().default(null),
+  history: z.array(AppointmentHistoryEntrySchema).default([]),
+  /** Products reserved with the visit (2026-10-01), on its first treatment. */
+  products: z.array(VisitProductSchema).default([]),
+});
+/** A new time for the visit — the whole visit moves by its own geometry. */
+export const ClientRescheduleRequestSchema = z.object({
+  date: z.iso.date(),
+  time: ClockSchema,
 });
 export const ClientAppointmentsSchema = z.object({
   appointments: z.array(ClientAppointmentSchema),
@@ -162,6 +210,8 @@ export const ClientBookRequestSchema = z.object({
     .min(1)
     .max(8)
     .optional(),
+  /** Products to take home with the visit (2026-10-01). */
+  products: BookProductsSchema.optional(),
 });
 
 /** The salons a client is a customer of — the bridge, from their side. */

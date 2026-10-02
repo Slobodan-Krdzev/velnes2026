@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { EmployeeSchema, EmployeeTimingsSchema, type Employee, type WeekHours } from '@velnes/contracts';
 import { EMP_COLORS, empColorOf, I, Icon, PhoneInput } from '@velnes/ui';
 import { useRef, useState } from 'react';
+import { WsStars, useReviewSummary } from '../reviews/Reviews.js';
 import { useTranslation } from 'react-i18next';
 import { get, patch, post, useSession } from '@velnes/client';
 import { fileToAvatarDataUrl } from '../../lib/image.js';
@@ -21,6 +22,10 @@ const ACCESS_KEYS = ['owner', 'manager', 'desk', 'staff'] as const;
 
 export function EmployeesSection() {
   const { t } = useTranslation();
+  // Each professional's verified score, when the viewer may see reviews.
+  const { can } = useSession();
+  const ratings = useReviewSummary(can('reviews.view'));
+  const ratingOf = (id: string) => ratings.data?.employees.find((x) => x.id === id) ?? null;
   const toast = useToast();
   const qc = useQueryClient();
   const employees = useEmployees();
@@ -101,6 +106,14 @@ export function EmployeesSection() {
                     <div className="muted" style={{ fontWeight: 500, fontSize: 12 }}>
                       {e.email || t('eset.noEmail')}
                     </div>
+                    {ratingOf(e.id) ? (
+                      <div className="muted" style={{ fontWeight: 500, fontSize: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <WsStars value={ratingOf(e.id)!.avg} size={12} />
+                        {ratingOf(e.id)!.count === 1
+                          ? t('rvw.employeeLineOne', { avg: ratingOf(e.id)!.avg.toFixed(1) })
+                          : t('rvw.employeeLine', { avg: ratingOf(e.id)!.avg.toFixed(1), n: ratingOf(e.id)!.count })}
+                      </div>
+                    ) : null}
                   </td>
                   <td>
                     <RoleTitleCell e={e} save={save} />

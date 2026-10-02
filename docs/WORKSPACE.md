@@ -425,3 +425,30 @@ Icons are one shared path map (`@velnes/ui`'s `AMENITY_ICONS`), a
 different shape per amenity, always the brand colour. Fixture salons
 carry realistic sets for their kind. Search will filter on the keys
 later; nothing here is built for that yet beyond the keys being stable.
+
+## Velnes news: what is new is green (2026-10-01)
+
+The bell's list marks the notices newer than the last look with a light
+green row. The last look is the per-browser `velnes.noticesSeen` marker
+the dot already used; the shell captures it as the list opens and moves
+it on at the same moment, so the rows stay green for the whole look and
+are plain on the next one. Nothing is stored server-side — the same
+convenience as the dot, not read state. `shell/Notices.test.tsx`.
+
+## Requests, on the flight deck and on their own screen (2026-10-01)
+
+A booking request from the app used to be visible only as a bell entry
+and in the calendar. Now the flight deck's fourth pulse card is
+**Requests waiting** — the booking requests not yet accepted or
+declined plus the reschedule requests not yet approved or declined — in
+place of the average spend, which the reports keep (the flightdeck door
+still computes it; only the card went). The card is a button to
+`/requests`, the Requests screen: two lists, each row answered through
+the same doors the drawer uses (`POST /appointments/:id/decide`,
+`POST /change-requests/:id/{approve|decline}`, with the optional note)
+or opened in the calendar on its day. Both read one new door,
+`GET /requests/pending` (`PendingRequestsSchema`), so the number and
+the list cannot disagree; a `view_own` user sees only their own. The
+navigation search's "requests" entry now leads here.
+`booking/requests-pending.test.ts`, `requests/Requests.test.tsx`,
+`flightdeck/Flightdeck.test.tsx`.

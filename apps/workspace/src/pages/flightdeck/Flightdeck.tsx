@@ -10,6 +10,7 @@ import { money } from '../../lib/money.js';
 import { useToast } from '../../lib/toast.js';
 import { useSession } from '@velnes/client';
 import { useScope } from '../../shell/Shell.js';
+import { usePendingRequests } from '../../api/queries.js';
 
 const OPP_ICON: Record<string, string> = { users: I.users, pulse: I.pulse, bottle: I.bottle };
 const OB_ICON: Record<string, string> = {
@@ -90,6 +91,7 @@ export function FlightdeckPage() {
     const key = h < 12 ? 'fd.greetMorning' : h < 18 ? 'fd.greetAfternoon' : 'fd.greetEvening';
     return t(key, { name: fd.data?.greetingName || (me?.name ?? '').split(' ')[0] });
   };
+  const pendingReq = usePendingRequests();
   const delta = (base: string, pct: number | null) => {
     if (pct === null) return t(`${base}Flat`);
     return t(pct >= 0 ? `${base}Up` : `${base}Down`, { pct: Math.abs(pct) });
@@ -198,11 +200,26 @@ export function FlightdeckPage() {
                 <span className="stat-value">{d.pulse.newCustomers}</span>
                 <span className="stat-hint">{delta('fd.thisMonth', d.pulse.newCustomersDeltaPct)}</span>
               </div>
-              <div className="stat">
-                <span className="stat-label">{t('fd.avgSpend')}</span>
-                <span className="stat-value">{money(d.pulse.avgSpend)}</span>
-                <span className="stat-hint">{delta('fd.perVisit', d.pulse.avgSpendDeltaPct)}</span>
-              </div>
+              {/* What customers are waiting on (Alex, 2026-10-01): the
+                  booking and reschedule requests not yet answered, from
+                  the same door the Requests screen reads. In place of the
+                  average spend, which the reports keep. */}
+              <button className="stat stat-link" data-testid="fd-requests" onClick={() => navigate('/requests')}>
+                <span className="stat-label">{t('fd.requests')}</span>
+                <span className="stat-value">{pendingReq.data ? pendingReq.data.bookings.length + pendingReq.data.reschedules.length : '—'}</span>
+                <span className="stat-hint">
+                  {!pendingReq.data
+                    ? '…'
+                    : pendingReq.data.bookings.length + pendingReq.data.reschedules.length === 0
+                      ? t('fd.requestsNone')
+                      : [
+                          pendingReq.data.bookings.length ? t('fd.requestsBookings', { n: pendingReq.data.bookings.length }) : null,
+                          pendingReq.data.reschedules.length ? t('fd.requestsReschedules', { n: pendingReq.data.reschedules.length }) : null,
+                        ]
+                          .filter(Boolean)
+                          .join(' · ')}
+                </span>
+              </button>
             </div>
 
             {d.memberRecs.count > 0 ? (

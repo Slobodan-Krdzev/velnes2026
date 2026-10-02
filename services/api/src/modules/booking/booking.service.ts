@@ -1,8 +1,8 @@
-import type { AccessClaims, Appointment, BookRequest, RefusalCode } from '@velnes/contracts';
+import type { AccessClaims, Appointment, BookProduct, BookRequest, RefusalCode, VisitProduct } from '@velnes/contracts';
 import type { Trx } from '../../db/index.js';
 import { logAudit } from '../audit/audit.service.js';
 import { autoConfirmOn } from './requests.service.js';
-import { priceFor, svcAt, svcChoice, svcLine } from '../catalog/catalog.service.js';
+import { priceFor, prodAt, svcAt, svcChoice, svcLine } from '../catalog/catalog.service.js';
 import { locLive } from '../locations/locations.service.js';
 import type { DaySchedule } from '@velnes/contracts';
 import {
@@ -68,6 +68,8 @@ interface CheckReq {
   custId?: string | null | undefined;
   key?: string | undefined; // your own hold does not block you
   ignoreId?: string | undefined; // editing yourself
+  /** Every leg of the visit being moved: none of them is in its own way. */
+  ignoreIds?: readonly string[] | undefined;
   prepMin?: number | undefined;
   resetMin?: number | undefined;
 }
@@ -279,6 +281,7 @@ export async function bookingCheck(trx: Trx, req: CheckReq): Promise<Refusal | n
   const clash = others.find(
     (a) =>
       a.id !== req.ignoreId &&
+      !req.ignoreIds?.includes(a.id) &&
       a.startMin - a.prepMin < endM &&
       startM < a.startMin + a.durationMin + a.resetMin,
   );
@@ -292,23 +295,38 @@ export async function bookingCheck(trx: Trx, req: CheckReq): Promise<Refusal | n
     return refuse('SLOT_HELD', {}, 'Somebody is paying for that time right now');
   // The room is taken exactly as long as the employee.
   const rooms = loc.rooms || 2;
-  const roomRows = await trx
-    .selectFrom('appointments')
-    .select(['id', 'startMin', 'durationMin', 'prepMin', 'resetMin'])
-    .where('locationId', '=', req.locationId)
-    .where('date', '=', new Date(req.date))
-    .where('kind', '=', 'appointment')
-    .where('status', '!=', 'cancelled')
-    .execute();
-  const busyRooms = roomRows.filter(
-    (a) =>
-      a.id !== req.ignoreId &&
-      a.startMin - a.prepMin < endM &&
-      startM < a.startMin + a.durationMin + a.resetMin,
-  ).length;
+  const busyRooms = await busyRoomsAt(trx, req.locationId, req.date, startM, endM, req.ignoreId, req.ignoreIds);
   if (busyRooms >= rooms)
     return refuse('ROOMS_FULL', { rooms, loc: loc.name }, `All ${rooms} rooms at ${loc.name} are taken then`);
   return null;
+}
+
+/** How many rooms are taken across [startM, endM) — prep and reset
+ *  included, since a room is busy exactly as long as its employee. */
+async function busyRoomsAt(
+  trx: Trx,
+  locationId: string,
+  date: string,
+  startM: number,
+  endM: number,
+  ignoreId?: string | undefined,
+  ignoreIds?: readonly string[] | undefined,
+): Promise<number> {
+  const roomRows = await trx
+    .selectFrom('appointments')
+    .select(['id', 'startMin', 'durationMin', 'prepMin', 'resetMin'])
+    .where('locationId', '=', locationId)
+    .where('date', '=', new Date(date))
+    .where('kind', '=', 'appointment')
+    .where('status', '!=', 'cancelled')
+    .execute();
+  return roomRows.filter(
+    (a) =>
+      a.id !== ignoreId &&
+      !ignoreIds?.includes(a.id) &&
+      a.startMin - a.prepMin < endM &&
+      startM < a.startMin + a.durationMin + a.resetMin,
+  ).length;
 }
 
 /**
@@ -341,8 +359,16 @@ async function pastCutoff(trx: Trx, locationId: string, date: string, now?: Date
  */
 export async function firstStartWithin(
   trx: Trx,
-  q: { locationId: string; serviceId: string; windowMin: number; now?: Date | undefined },
+  q: { locationId: string; serviceId: string; windowMin: number; now?: Date | undefined; party?: number | undefined },
 ): Promise<string | null> {
+  return (await firstFreeWithin(trx, q))?.t ?? null;
+}
+
+/** The same, with who can take it — the card's link chooses them. */
+export async function firstFreeWithin(
+  trx: Trx,
+  q: { locationId: string; serviceId: string; windowMin: number; now?: Date | undefined; party?: number | undefined },
+): Promise<{ t: string; emp: string | null } | null> {
   const loc = await trx
     .selectFrom('locations')
     .select('tz')
@@ -357,6 +383,41 @@ export async function firstStartWithin(
     date: today,
     now: q.now,
     windowMin: q.windowMin,
+    party: q.party,
+    firstOnly: true,
+  });
+  const s = slots.find((x) => x.free);
+  return s ? { t: s.t, emp: s.emp } : null;
+}
+
+/**
+ * The first free start on a day — "HH:MM" in the salon's clock, or
+ * null. The search door asks this for every result when a customer
+ * names a day ("massage tomorrow", "facial this weekend"), and with a
+ * `party` when they ask for two: the same walk the booking page's
+ * slots come from, stopped at the first free one, so a day's answer
+ * costs one slot's worth of calendar questions when the day is open.
+ */
+export async function firstStartOn(
+  trx: Trx,
+  q: {
+    locationId: string;
+    serviceId: string;
+    date: string;
+    now?: Date | undefined;
+    windowMin?: number | undefined;
+    party?: number | undefined;
+  },
+): Promise<string | null> {
+  const slots = await availableSlots(trx, {
+    locationId: q.locationId,
+    serviceId: q.serviceId,
+    employeeId: 'any',
+    date: q.date,
+    now: q.now,
+    windowMin: q.windowMin,
+    party: q.party,
+    firstOnly: true,
   });
   return slots.find((s) => s.free)?.t ?? null;
 }
@@ -376,6 +437,16 @@ export async function availableSlots(
     /** Only starts within this many minutes of now — "available now"
      *  asks for the next half hour, not the whole day. */
     windowMin?: number | undefined;
+    /**
+     * "For two" (Alex, 2026-09-30): a start is free only when this many
+     * professionals are free for it at once — and the location has a
+     * room for each of them, which `bookingCheck` cannot see because it
+     * judges one booking at a time. `emp` on such a slot is the first
+     * of them; each seat is still its own booking. Only with "any".
+     */
+    party?: number | undefined;
+    /** Stop at the first free start — the search door's question. */
+    firstOnly?: boolean | undefined;
   },
 ) {
   if (!(await locLive(trx, q.locationId))) return []; // non-live locations do not exist here
@@ -383,10 +454,18 @@ export async function availableSlots(
   const until = q.windowMin != null ? cut + q.windowMin : Number.POSITIVE_INFINITY;
   const cfg = await svcAt(trx, q.serviceId, q.locationId).catch(() => null);
   if (!cfg?.active) return [];
+  const party = Math.max(1, q.employeeId === 'any' ? (q.party ?? 1) : 1);
   const pool =
     q.employeeId === 'any'
       ? (await empsFor(trx, q.locationId, q.serviceId)).map((e) => e.id)
       : [q.employeeId];
+  // Fewer hands than seats: no start on any day can seat the party.
+  if (pool.length < party) return [];
+  const rooms =
+    party > 1
+      ? ((await trx.selectFrom('locations').select('rooms').where('id', '=', q.locationId).executeTakeFirst())?.rooms || 2)
+      : Number.POSITIVE_INFINITY;
+  if (rooms < party) return [];
   const lineFor = async (empId: string | null) =>
     svcLine(trx, {
       serviceId: q.serviceId,
@@ -410,7 +489,7 @@ export async function availableSlots(
     if (m <= cut) continue;
     if (m > until) break;
     if (m - clipPrep(quotedLine.prepMin, m, sch) < DAY_START) continue;
-    let who: string | null = null;
+    const free: string[] = [];
     for (const id of pool) {
       const dur = q.employeeId === 'any' ? await durFor(id) : quoted;
       // Whoever takes longer than what is offered does not fit the slot.
@@ -425,11 +504,25 @@ export async function availableSlots(
         key: q.key,
       });
       if (!refusal) {
-        who = id;
-        break;
+        free.push(id);
+        if (free.length >= party) break;
       }
     }
-    out.push({ t: hhmm(m), emp: who, free: !!who });
+    let seated = free.length >= party;
+    // Two people need two rooms at once; each check above only proved
+    // there was one left for its own booking.
+    if (seated && party > 1) {
+      const busy = await busyRoomsAt(
+        trx,
+        q.locationId,
+        q.date,
+        m - clipPrep(quotedLine.prepMin, m, sch),
+        m + quoted + quotedLine.resetMin,
+      );
+      seated = busy + party <= rooms;
+    }
+    out.push({ t: hhmm(m), emp: seated ? free[0]! : null, free: seated });
+    if (seated && q.firstOnly) break;
   }
   return out;
 }
@@ -491,7 +584,75 @@ export async function createHold(
   return { holdId: row.id, until: until.toISOString() };
 }
 
-async function toContract(trx: Trx, id: string): Promise<Appointment> {
+/**
+ * Products with a booking (Alex, 2026-10-01) — the reservation rows of
+ * one appointment (the visit's first), as every screen reads them.
+ */
+export async function productsOf(trx: Trx, appointmentId: string): Promise<VisitProduct[]> {
+  const rows = await trx
+    .selectFrom('appointmentProducts')
+    .select(['productId', 'name', 'qty', 'unitPrice'])
+    .where('appointmentId', '=', appointmentId)
+    .orderBy('createdAt')
+    .execute();
+  return rows.map((r) => ({ productId: r.productId, name: r.name, qty: r.qty, unitPrice: r.unitPrice }));
+}
+
+/** The same, for many appointments in one query. */
+export async function productsFor(trx: Trx, ids: string[]): Promise<Map<string, VisitProduct[]>> {
+  const out = new Map<string, VisitProduct[]>();
+  if (!ids.length) return out;
+  const rows = await trx
+    .selectFrom('appointmentProducts')
+    .select(['appointmentId', 'productId', 'name', 'qty', 'unitPrice'])
+    .where('appointmentId', 'in', ids)
+    .orderBy('createdAt')
+    .execute();
+  for (const r of rows) {
+    const list = out.get(r.appointmentId) ?? [];
+    list.push({ productId: r.productId, name: r.name, qty: r.qty, unitPrice: r.unitPrice });
+    out.set(r.appointmentId, list);
+  }
+  return out;
+}
+
+/**
+ * Reserve products against a visit. The shelf at the chosen location is
+ * the judge — the same `prodAt` the till asks — so nothing is promised
+ * that the till would refuse: not sold here, not active, own-use. The
+ * price snapshot is the shelf's at this moment; the invoice, written
+ * later, charges the shelf's then (the pay quote says which).
+ */
+async function reserveProducts(
+  trx: Trx,
+  ctx: { tenantId: string; appointmentId: string; locationId: string },
+  products: BookProduct[],
+): Promise<VisitProduct[]> {
+  if (!products.length) return [];
+  // The same product twice is one line with the quantities added.
+  const merged = new Map<string, number>();
+  for (const p of products) merged.set(p.productId, (merged.get(p.productId) ?? 0) + p.qty);
+  const out: VisitProduct[] = [];
+  for (const [productId, qty] of merged) {
+    const p = await trx
+      .selectFrom('products')
+      .select(['id', 'name', 'own', 'active'])
+      .where('id', '=', productId)
+      .executeTakeFirst();
+    if (!p) throw new BookingRefused(refuse('PRODUCT_UNAVAILABLE', { name: '' }, 'That product is not sold here'));
+    const cfg = await prodAt(trx, productId, ctx.locationId);
+    if (p.own || !p.active || !cfg.active || !cfg.pos)
+      throw new BookingRefused(refuse('PRODUCT_UNAVAILABLE', { name: p.name }, `${p.name} is not sold at this location`));
+    await trx
+      .insertInto('appointmentProducts')
+      .values({ tenantId: ctx.tenantId, appointmentId: ctx.appointmentId, productId, name: p.name, qty, unitPrice: cfg.price })
+      .execute();
+    out.push({ productId, name: p.name, qty, unitPrice: cfg.price });
+  }
+  return out;
+}
+
+async function toContract(trx: Trx, id: string, products?: VisitProduct[]): Promise<Appointment> {
   const a = await trx
     .selectFrom('appointments as a')
     .leftJoin('services as s', 's.id', 'a.serviceId')
@@ -512,6 +673,7 @@ async function toContract(trx: Trx, id: string): Promise<Appointment> {
     .executeTakeFirst();
   return {
     paid: !!paidLine,
+    products: products ?? (await productsOf(trx, id)),
     id: a.id,
     locationId: a.locationId,
     date: localIso(a.date),
@@ -558,7 +720,7 @@ export async function confirmBooking(
 
   const loc = await trx
     .selectFrom('locations')
-    .select(['tenantId', 'name'])
+    .select(['tenantId', 'name', 'cancelHours'])
     .where('id', '=', req.locationId)
     .executeTakeFirst();
   if (!loc) throw new BookingError('NOT_FOUND', 'Unknown location');
@@ -714,6 +876,9 @@ export async function confirmBooking(
       deposit: req.deposit,
       paid: req.deposit ? 'deposit' : 'unpaid',
       idempotencyKey: req.key,
+      // The cancellation window as promised at booking — the terms
+      // accepted then govern this visit (docs/BOOKING-CHANGES.md §2.4).
+      cancelHours: loc.cancelHours,
     })
     .returning('id')
     .executeTakeFirstOrThrow();
@@ -764,7 +929,11 @@ export async function listAppointments(trx: Trx, q: { locationId: string; from: 
     .orderBy('startMin')
     .execute();
   const out = [];
-  for (const r of rows) out.push(await toContract(trx, r.id));
+  const products = await productsFor(
+    trx,
+    rows.map((r) => r.id),
+  );
+  for (const r of rows) out.push(await toContract(trx, r.id, products.get(r.id) ?? []));
   return out;
 }
 
@@ -813,6 +982,20 @@ export async function patchAppointment(
       .insertInto('appointmentHistory')
       .values({ tenantId: a.tenantId, appointmentId: id, what: 'Moved', byName: '', source: 'staff' })
       .execute();
+  }
+  if (patch.status === 'cancelled' && a.status !== 'cancelled') {
+    // One door for every cancellation (Alex, 2026-09-30): the facts
+    // (when, by whom, why), the whole visit, the refund intent, the
+    // released slot and the customer's word all live in changes.service.
+    const { cancelVisit } = await import('./changes.service.js');
+    const actor = await trx.selectFrom('employees').select('name').where('id', '=', claims.sub).executeTakeFirst();
+    await cancelVisit(trx, {
+      appointmentId: id,
+      by: 'salon',
+      actor: { employeeId: claims.sub, name: actor?.name ?? '' },
+      reason: patch.reason ?? null,
+    });
+    return toContract(trx, id);
   }
   if (patch.status && patch.status !== a.status) {
     await trx
@@ -989,6 +1172,8 @@ async function freeFor(
     pool: string[];
     anyEmployee: boolean;
     key?: string | undefined;
+    /** The visit being moved, if any — its own legs never block it. */
+    ignoreIds?: readonly string[] | undefined;
     /** Why candidates fell away, for the door to explain a blank day. */
     stats?: PaceStats | undefined;
   },
@@ -1018,6 +1203,7 @@ async function freeFor(
       emp,
       sid: q.leg.serviceId,
       key: q.key,
+      ignoreIds: q.ignoreIds,
       prepMin: q.leg.prepMin,
       resetMin: q.leg.resetMin,
     });
@@ -1027,7 +1213,7 @@ async function freeFor(
 }
 
 /** When each treatment starts, given when the visit starts. */
-function legStarts(startMin: number, legs: ChainLeg[]): number[] {
+export function legStarts(startMin: number, legs: { treatmentMin: number; prepMin: number; resetMin: number }[]): number[] {
   const out: number[] = [];
   let t = startMin;
   legs.forEach((leg, i) => {
@@ -1081,6 +1267,8 @@ export async function chainAvailability(
     employeeId: string | 'any';
     date: string;
     key?: string | undefined;
+    /** The visit being moved (a reschedule): its own legs are not in the way. */
+    ignoreIds?: readonly string[] | undefined;
     /** The clock, for tests; the wall clock otherwise. */
     now?: Date | undefined;
   },
@@ -1122,6 +1310,7 @@ export async function chainAvailability(
         pool: pools[i]!,
         anyEmployee: q.employeeId === 'any',
         key: q.key,
+        ignoreIds: q.ignoreIds,
         stats,
       });
       if (!who) {
@@ -1161,7 +1350,7 @@ export async function availableChainSlots(
 export async function confirmChain(
   trx: Trx,
   claims: AccessClaims | null,
-  req: Omit<BookRequest, 'serviceId' | 'variantId' | 'modifierOptionIds'> & { items: ChainItem[] },
+  req: Omit<BookRequest, 'serviceId' | 'variantId' | 'modifierOptionIds'> & { items: ChainItem[]; products?: BookProduct[] },
 ): Promise<Appointment[]> {
   if (!req.items.length) throw new BookingError('NOT_FOUND', 'Nothing to book');
   // Idempotency first, exactly as confirmBooking does it: a retried
@@ -1223,6 +1412,12 @@ export async function confirmChain(
       ...(out[0]?.customerId ? { customerId: out[0].customerId } : {}),
     });
     out.push(a);
+  }
+  // Products ride on the visit's first treatment (Alex, 2026-10-01).
+  if (req.products?.length) {
+    const first = out[0]!;
+    const loc = await trx.selectFrom('locations').select('tenantId').where('id', '=', req.locationId).executeTakeFirstOrThrow();
+    first.products = await reserveProducts(trx, { tenantId: loc.tenantId, appointmentId: first.id, locationId: req.locationId }, req.products);
   }
   return out;
 }

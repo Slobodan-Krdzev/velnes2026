@@ -25,6 +25,7 @@ export const PERM_GROUPS = [
       ['customers.view_business', 'See every customer of the business'],
       ['customers.edit', 'Edit customer details'],
       ['customers.export', 'Export customer data'],
+      ['reviews.view', 'See customer reviews and ratings'],
     ],
   },
   {

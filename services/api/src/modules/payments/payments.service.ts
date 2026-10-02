@@ -2,7 +2,8 @@ import { env } from '../../env.js';
 import { randomBytes } from 'node:crypto';
 import type { PayQuote, PayRequest, PayResult } from '@velnes/contracts';
 import type { Trx } from '../../db/index.js';
-import { BookingRefused, refuse } from '../booking/booking.service.js';
+import { BookingRefused, productsOf, refuse } from '../booking/booking.service.js';
+import { prodAt } from '../catalog/catalog.service.js';
 import { notifySalon } from '../clients/clients.service.js';
 import { queueMail } from '../mail/mail.service.js';
 import { settleSale, validateCode } from '../till/till.service.js';
@@ -78,7 +79,15 @@ export async function quotePayment(
     end: hhmm(a.startMin + a.durationMin),
     price: a.price,
   }));
-  const subtotal = items.reduce((s, i) => s + i.price, 0);
+  // Products reserved with the visit, at the shelf price the till will
+  // charge when this is paid — quoted from the same place, so the quote
+  // equals the charge (Alex, 2026-10-01).
+  const products: PayQuote['products'] = [];
+  for (const p of await productsOf(trx, first.id)) {
+    const cfg = await prodAt(trx, p.productId, first.locationId);
+    products.push({ ...p, unitPrice: cfg.price, total: cfg.price * p.qty });
+  }
+  const subtotal = items.reduce((s, i) => s + i.price, 0) + products.reduce((s, p) => s + p.total, 0);
 
   let status: PayQuote['status'] = 'payable';
   if (visit.some((a) => a.status === 'cancelled')) status = 'cancelled';
@@ -105,6 +114,7 @@ export async function quotePayment(
     salonName: biz.name,
     locationName: loc?.name ?? '',
     items,
+    products,
     subtotal,
     promo,
     gift,
@@ -207,7 +217,11 @@ export async function payAppointment(
     {
       key: `pay:${first.id}`,
       locationId: first.locationId,
-      lines: visit.map((a) => ({ kind: 'appointment' as const, appointmentId: a.id, lineDiscount: 0 })),
+      lines: [
+        ...visit.map((a) => ({ kind: 'appointment' as const, appointmentId: a.id, lineDiscount: 0 })),
+        // The reserved products, on the same invoice as the treatment.
+        ...quote.products.map((p) => ({ kind: 'product' as const, productId: p.productId, qty: p.qty, lineDiscount: 0 })),
+      ],
       method,
       customerId: first.customerId,
       employeeId: first.employeeId,

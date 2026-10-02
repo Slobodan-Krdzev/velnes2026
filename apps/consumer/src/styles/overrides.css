@@ -133,8 +133,10 @@
 
 /* On a treatment row, between the name and the tick. Static rather than
    absolute: the row is a flex line and the heart is one of its items. */
-.tr-card .fav-inline {
-  position: static;
+.tr-wrap .fav-inline {
+  position: absolute;
+  top: 9px;
+  right: 9px;
   display: grid;
   place-items: center;
   width: 30px;
@@ -146,9 +148,23 @@
   color: var(--muted);
   cursor: pointer;
 }
-.tr-card .fav-inline:hover,
-.tr-card .fav-inline.on {
+.tr-wrap .fav-inline:hover,
+.tr-wrap .fav-inline.on {
   color: var(--brand);
+}
+/* The heart is the card button's sibling, not its child (a button in a
+   button is not HTML): the wrapper is the grid item and positions it,
+   the card fills the wrapper, and the name keeps clear of the heart. */
+.tr-wrap {
+  position: relative;
+  display: grid;
+  min-width: 0;
+}
+.tr-wrap .tr-card {
+  width: 100%;
+}
+.tr-wrap .tr-card .row1 {
+  padding-right: 30px;
 }
 /* The tick already sits at the end of the row; with a heart there too,
    only the heart should be pushed out. */
@@ -582,8 +598,8 @@ a.pop-go:hover {
 .tr-card .row1 {
   align-items: flex-start;
 }
-.tr-card .row1 .fav-inline {
-  margin-top: -2px;
+.tr-wrap .fav-inline {
+  margin-top: 0;
 }
 
 /* ── A chosen treatment is coloured, not ticked ─────────────────────
@@ -970,6 +986,23 @@ a.pop-go:hover {
   .authwrap-split .auth-form>.fld:first-child{margin-top:0}
 }
 
+/* ── Confirmation, desktop: two columns (Alex, 2026-10-01) ──────────
+   The tick, the word and Back home on the left; the visit's card and
+   its map on the right, the pair centred like the identity step. On a
+   phone the single column keeps the old order: word, card, map, button. */
+@media (max-width:1023px){
+  .confirm-split .confirm-actions{order:3}
+  .confirm-split .confirm-lead{display:contents}
+  .confirm-split .confirm-detail{display:contents}
+  .confirm-split{display:flex;flex-direction:column}
+}
+@media (min-width:1024px){
+  .confirm-wrap.confirm-split{max-width:980px;display:grid;grid-template-columns:1fr 1fr;
+    column-gap:56px;align-items:center;min-height:calc(100vh - 90px);padding-top:24px}
+  .confirm-split .confirm-lead{position:sticky;top:110px;align-self:start}
+  .confirm-split .confirm-detail{min-width:0}
+}
+
 /* ── Payment section ──────────────────────────────────────────────── */
 .pay-code{display:flex;gap:8px}
 .pay-code .tin{flex:1;min-width:0}
@@ -1326,3 +1359,453 @@ a.pop-go:hover {
 /* About, folded to five lines until "Read more" (Alex, 2026-09-29). */
 .about-p.fold{display:-webkit-box;-webkit-line-clamp:5;-webkit-box-orient:vertical;overflow:hidden}
 .about-more{display:inline-block;margin-top:8px;padding:0;border:0;background:none;font:inherit;font-weight:700;color:var(--brand-hover);cursor:pointer;text-decoration:underline;text-underline-offset:3px}
+
+/* ── The phone home, re-ordered (Alex, 2026-09-29) ───────────────
+   Search is the hero and nothing competes with it. The rhythm is one
+   set of named distances, scoped to the home (the prototype has no
+   spacing tokens — its gutters are literal 16px — so these are the
+   home's own, and the tablet block below is the only other place
+   they are set):
+     --home-top       top safe area → search pill
+     --home-chip-gap  search pill → the chip row (they belong together)
+     --home-hero-gap  chip row → the first section heading
+     --home-h-gap     a section heading (or its subtitle) → its cards
+     --home-sec-gap   the end of a section's cards → the next heading */
+@media (max-width: 899.98px) {
+  .m-home {
+    --home-top: 16px;
+    --home-chip-gap: 8px;
+    --home-hero-gap: 48px;
+    --home-h-gap: 24px;
+    --home-sec-gap: 56px;
+  }
+  /* The pill is a hero, not a toolbar control: room above it, and no
+     rule under it. It still sticks, on the page's own background. */
+  .m-home .m-topbar {
+    padding-top: var(--home-top);
+    padding-bottom: 8px;
+    border-bottom-color: transparent;
+  }
+  .m-home .m-chiprow {
+    padding: var(--home-chip-gap) 16px 0;
+  }
+  .m-home .m-chiprow .qchip {
+    padding: 7px 12px;
+    font-size: 12.5px;
+    min-height: 36px;
+  }
+  .m-home .home-sec {
+    padding-top: var(--home-sec-gap);
+    padding-bottom: var(--home-h-gap);
+  }
+  .m-home .home-sec.first {
+    padding-top: var(--home-hero-gap);
+  }
+  .m-home .home-sec .h {
+    margin-bottom: 0;
+  }
+  /* A heading with a subtitle: the subtitle sits under the heading, and
+     the section's gap to its cards comes after the subtitle. */
+  .m-home .home-sec.has-sub {
+    padding-bottom: 0;
+  }
+  .m-home .home-sub {
+    margin: 6px 16px var(--home-h-gap);
+  }
+  /* Rows end flush, so the gap to the next heading is one number. */
+  .m-home .m-reco,
+  .m-home .m-avail {
+    padding-bottom: 0;
+  }
+  .m-env .m-home .catrail-track {
+    padding-top: 0;
+    padding-bottom: 0;
+  }
+  /* After the last section, the trust grid is a different kind of
+     block and gets a section's distance too. */
+  .m-home .m-trust {
+    margin-top: var(--home-sec-gap);
+  }
+}
+/* Tablet: the same hierarchy with room to breathe — the distances a
+   step larger, wider gutters, two "available now" cards to a row, wider
+   salon and treatment cards. */
+@media (min-width: 700px) and (max-width: 899.98px) {
+  .m-home {
+    --home-top: 20px;
+    --home-chip-gap: 10px;
+    --home-hero-gap: 56px;
+    --home-h-gap: 28px;
+    --home-sec-gap: 64px;
+  }
+  .m-home .m-topbar,
+  .m-home .m-chiprow,
+  .m-home .m-sec,
+  .m-home .m-reco,
+  .m-home .m-avail,
+  .m-home .catrail-track {
+    padding-left: 24px;
+    padding-right: 24px;
+  }
+  .m-home .home-sub {
+    margin-left: 24px;
+    margin-right: 24px;
+  }
+  .m-home .m-sec .h h2 {
+    font-size: 22px;
+  }
+  .m-home .m-reco .rc2 {
+    flex-basis: 268px;
+  }
+  .m-home .m-avail {
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+  .m-env .m-home .catrail-track > .catcard {
+    flex-basis: 200px;
+    width: 200px;
+  }
+  .m-home .m-trust,
+  .m-home .m-band,
+  .m-home .m-why,
+  .m-home .m-proban {
+    margin-left: 24px;
+    margin-right: 24px;
+  }
+}
+
+/* ── The site footer under every route (Alex, 2026-09-30) ─────────
+   It lives outside the pages, in wrappers of its own, so it must not
+   claim a screen's height; and a page ends where its content ends —
+   the 86px the prototype's home page kept under its own footer would
+   now be a hole above it. The salon page's fixed Book-now bar needs
+   its clearance *after* the footer, or the bar covers the footer's
+   last lines. */
+.d-env.site-foot,
+.m-env.site-foot {
+  min-height: 0;
+}
+@media (max-width: 899.98px) {
+  .m-page {
+    padding-bottom: 24px;
+  }
+  .m-page.has-bar {
+    padding-bottom: 24px;
+  }
+  /* The bar with its booking card is ~150px above the tab bar. */
+  .m-env:has(.m-page.has-bar) ~ .m-env.site-foot .m-foot {
+    padding-bottom: calc(20px + 156px);
+  }
+}
+
+/* A saved favourite is a full heart, not a coloured outline (Alex,
+   2026-09-30). Every heart is a `.fav` (card, treatment row, team
+   card), so one rule; hover keeps the outline — only a saved one fills. */
+.fav.on svg {
+  fill: currentColor;
+}
+
+/* ── Public information pages (Alex, 2026-09-30) ──────────────────
+   One kit for the sixteen pages: a centred column at reading width
+   (narrower for legal and help), the serif headings, the warm cards,
+   coral accents — the Premium page's family, generalised. One tree for
+   every width; the grids fold at 700 and 1024. */
+.pub{padding:26px 18px 64px}
+.pub-wrap{max-width:960px;margin-inline:auto}
+.pub-narrow .pub-wrap{max-width:760px}
+.pub-hero{text-align:center;padding:22px 0 10px}
+.pub-eyebrow{display:inline-block;font-size:11.5px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--brand-hover);margin-bottom:10px}
+.pub-hero h1{font-size:clamp(28px,5vw,40px);line-height:1.12;margin:0 0 12px;color:var(--ink)}
+.pub-lead{max-width:62ch;margin:0 auto;font-size:16px;line-height:1.55;color:var(--muted)}
+.pub-sec{margin-top:36px}
+.pub-sec > h2{font-size:clamp(20px,3vw,26px);margin:0 0 8px;color:var(--ink)}
+.pub-sub{margin:0 0 16px;font-size:14.5px;line-height:1.55;color:var(--muted);max-width:70ch}
+.pub-p{margin:0;font-size:15px;line-height:1.6;max-width:70ch}
+.pub-grid{display:grid;grid-template-columns:1fr;gap:12px}
+@media (min-width:700px){.pub-grid{grid-template-columns:1fr 1fr}}
+@media (min-width:1024px){.pub-grid.cols-3{grid-template-columns:1fr 1fr 1fr}}
+.pub-card{background:#fff;border:1px solid var(--line-soft);border-radius:16px;padding:18px;box-shadow:var(--shadow);min-width:0}
+.pub-card .pub-ic{display:inline-grid;place-items:center;width:42px;height:42px;border-radius:12px;background:var(--warm);color:var(--brand);margin-bottom:10px}
+.pub-card h3{margin:0 0 4px;font-size:16px;font-weight:700;color:var(--ink)}
+.pub-card p{margin:0;font-size:14px;line-height:1.5;color:var(--muted)}
+.pub-steps{list-style:none;margin:0;padding:0;display:grid;gap:12px}
+.pub-steps li{display:flex;gap:14px;align-items:flex-start;background:var(--warm);border-radius:16px;padding:16px 18px}
+.pub-steps .pub-n{flex:0 0 auto;display:grid;place-items:center;width:32px;height:32px;border-radius:50%;background:var(--brand);color:#fff;font-weight:800;font-size:14px}
+.pub-steps h3{margin:2px 0 4px;font-size:16px;color:var(--ink)}
+.pub-steps p{margin:0;font-size:14.5px;line-height:1.55;color:var(--text)}
+.pub-faq{display:grid;gap:8px}
+.pub-faq details{background:#fff;border:1px solid var(--line-soft);border-radius:14px;padding:0 16px;box-shadow:var(--shadow)}
+.pub-faq summary{cursor:pointer;list-style:none;display:flex;justify-content:space-between;align-items:center;gap:12px;padding:14px 0;font-weight:700;font-size:15px;color:var(--ink)}
+.pub-faq summary::-webkit-details-marker{display:none}
+.pub-faq summary::after{content:"+";flex:0 0 auto;width:26px;height:26px;display:grid;place-items:center;border-radius:50%;background:var(--warm);color:var(--brand-hover);font-weight:800}
+.pub-faq details[open] summary::after{content:"–"}
+.pub-faq details p{margin:0;padding:0 0 16px;font-size:14.5px;line-height:1.6;color:var(--text);max-width:70ch}
+.pub-list{margin:0;padding:0;list-style:none;display:grid;grid-template-columns:1fr;gap:8px}
+@media (min-width:700px){.pub-list{grid-template-columns:1fr 1fr}}
+.pub-list li{background:#fff;border:1px solid var(--line-soft);border-radius:12px;padding:12px 14px;font-size:14.5px;color:var(--ink);display:flex;gap:10px;align-items:center}
+.pub-list li::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--brand);flex:0 0 auto}
+.pub-cta{margin-top:36px;text-align:center;background:#fff;border:1px solid var(--line);border-radius:16px;padding:24px 20px}
+.pub-cta b{display:block;font-family:var(--fd);font-weight:400;font-size:22px;color:var(--ink)}
+.pub-cta p{margin:8px auto 16px;max-width:56ch;font-size:14.5px;color:var(--muted);line-height:1.55}
+.pub-cta .pub-actions{margin-top:16px}
+.pub-actions{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+.pub-actions .btn{max-width:100%}
+.pub-empty{text-align:center;background:var(--warm);border-radius:16px;padding:32px 20px}
+.pub-empty b{display:block;font-family:var(--fd);font-weight:400;font-size:20px;color:var(--ink)}
+.pub-empty p{margin:8px auto 0;max-width:48ch;font-size:14.5px;color:var(--muted)}
+.pub-updated{margin:14px 0 0;font-size:12.5px;color:var(--muted)}
+.pub-legal{display:grid;gap:22px;margin-top:28px}
+.pub-legal section h2{font-size:19px;margin:0 0 6px;color:var(--ink)}
+.pub-legal section p{margin:0;font-size:15px;line-height:1.65;color:var(--text)}
+.pub-dl{margin:0;display:grid;gap:10px}
+.pub-dl div{background:#fff;border:1px solid var(--line-soft);border-radius:12px;padding:12px 14px}
+.pub-dl dt{font-weight:700;font-size:14.5px;color:var(--ink)}
+.pub-dl dd{margin:2px 0 0;font-size:14px;color:var(--muted);line-height:1.5}
+.pub-catgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+@media (min-width:700px){.pub-catgrid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media (min-width:1024px){.pub-catgrid{grid-template-columns:repeat(4,minmax(0,1fr))}}
+.pub-catgrid .catcard{width:auto}
+.pub-brand{display:inline-flex;align-items:center;gap:12px;background:#fff;border:1px solid var(--line-soft);border-radius:16px;padding:18px 24px;margin:6px 0 14px;color:var(--brand)}
+.pub-brand-mark svg{height:34px}
+.pub-brand-name{font-size:30px;color:var(--ink)}
+.pub-contact{display:grid;grid-template-columns:1fr;gap:12px}
+@media (min-width:700px){.pub-contact{grid-template-columns:1fr 1fr 1fr}}
+.pub-mail{display:inline-block;margin-top:10px;font-weight:700;color:var(--brand-hover);word-break:break-all}
+.pub-mail:hover{text-decoration:underline}
+.pub-nf{text-align:center;padding:36px 0 20px}
+.pub-nf-mark{display:inline-grid;place-items:center;width:72px;height:72px;border-radius:50%;background:var(--warm);color:var(--brand);margin-bottom:16px}
+.pub-nf-mark svg{height:34px}
+.pub-nf h1{font-size:clamp(26px,5vw,36px);margin:0 0 10px;color:var(--ink)}
+.pub-nf .pub-lead{margin-bottom:22px}
+.pub-chips{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
+@media (max-width:899.98px){.pub{padding:18px 16px 40px}}
+/* The footer without its newsletter column: four link columns beside the brand. */
+.d-foot .foot-g{grid-template-columns:1.4fr repeat(4,1fr)}
+@media (max-width:1100px){.d-foot .foot-g{grid-template-columns:1fr 1fr 1fr;row-gap:22px}.d-foot .fb{grid-column:1 / -1}}
+
+/* ── Verified reviews (Alex, 2026-09-30) ──────────────────────────
+   Stars in coral, as the prototype's .rating already decided; the
+   form and the salon page's Reviews card in the app's own cards. */
+.stars{display:inline-flex;gap:1px;vertical-align:middle}
+.star{position:relative;display:inline-block;width:var(--star,16px);height:var(--star,16px)}
+.star svg{position:absolute;inset:0;width:100%;height:100%}
+.star .off svg{fill:#E9E1DC}
+.star .on{position:absolute;inset:0;overflow:hidden;width:var(--fill,0%)}
+.star .on svg{fill:var(--brand);width:var(--star,16px)}
+.rating .s svg{width:13px;height:13px;fill:var(--brand);vertical-align:-2px}
+.trow .ti .rating{margin-top:2px;font-size:12px}
+.stars-in{display:inline-flex;gap:4px}
+.star-btn{position:relative;display:inline-grid;place-items:center;width:40px;height:40px;border-radius:10px;cursor:pointer;color:#E9E1DC;transition:color .1s,background .1s}
+.star-btn svg{width:28px;height:28px;fill:currentColor}
+.star-btn.on{color:var(--brand)}
+.star-btn:hover{background:var(--warm)}
+.star-btn input{position:absolute;inset:0;opacity:0;width:100%;height:100%;margin:0;cursor:pointer}
+.star-btn:has(input:focus-visible){outline:2px solid var(--brand-hover);outline-offset:2px}
+.rv-form h3{font-size:22px;margin:0 0 6px}
+.rv-form .rv-ctx{margin-bottom:8px}
+.rv-form .rv-ctx b{color:var(--ink)}
+.rv-q{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 0;border-top:1px solid var(--line-soft)}
+.rv-q .rv-qt{display:grid;gap:2px;min-width:0}
+.rv-q .stars-in{display:inline-flex;flex-direction:row;flex:0 0 auto}
+.rv-q b{color:var(--ink);font-size:15px}
+.rv-body{display:grid;gap:6px;margin-top:8px}
+.rv-body > span{font-weight:700;color:var(--ink);font-size:14px}
+.rv-body textarea{min-height:96px;resize:vertical}
+.rv-count{text-align:right}
+.rv-form .btn{margin-top:12px}
+.rv-done{text-align:center}
+.rv-done b{display:block;font-size:17px;color:var(--ink);margin-bottom:4px}
+.rv-given .rv-text{margin:10px 0 8px;font-size:15px;line-height:1.5;color:var(--ink)}
+.rv-mini{display:inline-flex;align-items:center}
+.rv-empty b{display:block;color:var(--ink);font-size:15px}
+.rv-head{display:grid;grid-template-columns:auto 1fr;gap:18px;align-items:center;margin-bottom:12px}
+.rv-score{display:grid;gap:4px;justify-items:start}
+.rv-score b{font-size:34px;line-height:1;color:var(--ink);font-family:var(--fd);font-weight:400}
+.rv-dist{display:grid;gap:4px;max-width:260px;width:100%}
+.rv-bar{display:grid;grid-template-columns:14px 1fr 26px;align-items:center;gap:8px;font-size:12px;color:var(--ink)}
+.rv-bar i{display:block;height:7px;border-radius:4px;background:var(--warm);overflow:hidden}
+.rv-bar i b{display:block;height:100%;background:var(--brand)}
+.rv-dims{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px}
+.rv-dims > div{display:grid;gap:2px;background:var(--warm);border-radius:12px;padding:10px 12px}
+.rv-dims b{font-size:17px;color:var(--ink)}
+.rv-list{display:grid;gap:10px}
+.rv-item{border-top:1px solid var(--line-soft);padding-top:12px}
+.rv-item-h{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.rv-item-h b{color:var(--ink)}
+.rv-item p{margin:8px 0 6px;font-size:14.5px;line-height:1.55;color:var(--text)}
+.rv-item-f .vok,.rv-given .vok{color:var(--ok);font-weight:800}
+@media (max-width:480px){.rv-head{grid-template-columns:1fr}.rv-dims{grid-template-columns:1fr 1fr 1fr;gap:6px}.rv-dims b{font-size:15px}}
+
+/* The past visit's actions, in its own card (Alex, 2026-09-30). */
+.acc-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}
+.acc-actions .btn{flex:1 1 160px}
+
+/* The results page's chip row on a phone scrolls sideways like the
+   home's; a third chip (a day, "For two" — Alex, 2026-09-30) must slide
+   in, not squeeze "Near me" onto two lines. */
+.m-chiprow .chip {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+/* Booking changes (Alex, 2026-09-30): the request cards, the blocked
+   window, the cancel confirmation. */
+.acc-blocked{background:#FBEFE9;color:#7A3A1E;border-radius:12px;padding:10px 12px;line-height:1.45}
+.acc-blocked b{display:block;margin-bottom:2px}
+.acc-blocked .muted{margin-top:4px}
+.rs-note{background:var(--warm);border-radius:12px;padding:10px 12px;line-height:1.45;margin-top:10px}
+.rs-pick .dayrow{margin-top:12px}
+.btn-danger{background:#B4531F;border-color:#B4531F;color:#fff}
+.btn-danger:hover{background:#9A4418;border-color:#9A4418}
+
+.rs-pick .btn:disabled,.rs-confirm .btn:disabled,.cx-confirm .btn:disabled{opacity:.55;cursor:not-allowed}
+
+/* Velnes Loyalty (Alex, 2026-09-30): the flower in the brand colour, a
+   balance that reads like a balance, a ledger that reads like a story. */
+.loy-ic{display:inline-grid;place-items:center;width:40px;height:40px;border-radius:12px;background:var(--warm);color:var(--brand);flex:0 0 auto}
+.loy-ic.big{width:56px;height:56px;border-radius:16px;margin:0 auto 8px}
+.loy-ic.big svg{width:30px;height:30px}
+.loy-balance{font-weight:800;color:var(--brand-hover);font-size:16px}
+.loy-hero{text-align:center;padding-top:22px}
+.loy-big{font-family:var(--serif,inherit);font-size:44px;font-weight:800;line-height:1;color:var(--ink);letter-spacing:-.5px}
+.loy-row .loy-what{display:block}
+.loy-delta{color:#3E5A34;white-space:nowrap}
+.loy-delta.neg{color:#B4531F}
+.loy-earned{margin-top:8px;display:inline-block;padding:4px 12px;border-radius:999px;background:var(--warm);color:var(--brand-hover);font-weight:800}
+
+.loy-row > span:first-child{flex:1;text-align:left}
+.loy-row .loy-what{text-align:left;color:var(--ink)}
+
+/* The points a visit will earn, in the booking summary (both trees). */
+.loy-earn{display:flex;align-items:center;gap:8px;margin:8px 0 10px;padding:8px 12px;border-radius:12px;background:var(--warm);color:var(--brand-hover);font-weight:700;font-size:13px}
+.loy-earn-ic{display:inline-grid;place-items:center;color:var(--brand)}
+.loy-earn-ic svg{width:16px;height:16px}
+.loy-earn.m{margin:0 0 8px}
+
+/* "Available now" card on the phone: the slot and Book share a row. */
+.nn-row{align-items:center;justify-content:space-between}
+.nn-row .nn-book{margin-left:auto;flex:0 0 auto}
+
+/* The trust block on the phone (Alex, 2026-10-01): the line under the
+   title is its own row, never run on. */
+.m-trust .t4 b,.trust4 .t4 b{display:block}
+.m-trust .t4 small,.trust4 .t4 small{display:block;margin-top:2px}
+
+/* The profile photo picker (Alex, 2026-10-01): the round avatar beside
+   its two actions, in the account and at sign-up. */
+.avpick{display:flex;align-items:center;gap:14px;margin:4px 0 12px}
+.avpick-dot{flex:0 0 auto;font-weight:800;background:var(--warm);color:var(--brand-hover)}
+.avpick-actions{display:flex;flex-direction:column;align-items:flex-start;gap:6px}
+.avpick-actions .btn{min-height:36px;padding:6px 14px;font-size:13px}
+
+/* Notifications open in place (Alex, 2026-10-01). */
+.acc-notif + .acc-notif{border-top:1px solid var(--line-soft)}
+.acc-notif .acc-row{border-top:0}
+.acc-notif-chev{display:inline-block;transition:transform .15s}
+.acc-notif-chev.on{transform:rotate(90deg)}
+.acc-notif-detail{display:grid;gap:10px;padding:2px 0 14px 20px;justify-items:start}
+.acc-notif-appt{display:grid;gap:3px;padding:10px 12px;border-radius:12px;background:var(--warm);width:100%;box-sizing:border-box;justify-items:start}
+
+/* ── Motion (Alex, 2026-10-01) ────────────────────────────────────────
+   Skeletons where lists load, an entrance for every screen, a slide
+   for the booking bar, a reveal for every panel that opens in place.
+   All of it off under prefers-reduced-motion. */
+.skel-rows{display:grid;gap:10px}
+.skel-rail{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.skel-rail.m{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;padding:0 16px}
+.skel-rail .skel-card.best .skel-ph{height:120px}
+.skel-salon{display:grid;gap:12px}
+.skel-salon .skel-ph.hero{height:220px;border-radius:18px}
+.skel-salon .skel-line.title{height:22px;border-radius:8px;margin-top:6px}
+.skel-tiles{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:8px}
+.skel-tiles .skel-card{grid-template-columns:1fr;padding:14px}
+/* Opacity only: a transform on the route frame would make every fixed
+   element inside it (the booking card, the map button) scroll with the
+   page — a transformed ancestor is a containing block for `fixed`. */
+.page-enter{animation:page-in .22s ease-out}
+@keyframes page-in{from{opacity:0}to{opacity:1}}
+.m-bookbar{animation:bar-up .3s cubic-bezier(.22,.68,.35,1) both}
+@keyframes bar-up{from{transform:translateY(100%)}to{transform:none}}
+@keyframes reveal{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.acc-notif-detail,.rs-pick,.rs-confirm,.rs-pending,.rs-declined,.rs-approved,.cx-confirm,.rv-form,.rv-done,.acc-blocked,
+.loy-earn,.pro-grid,.dcart .dcart-row,.dcart .dcart-when,.dcart .dcart-tot,.dcart-mini,.acc-card.loy-hero{animation:reveal .2s ease-out both}
+.m-bookbar .btn,.dcart .btn{transition:transform .12s ease,filter .12s ease}
+.m-bookbar .btn:active,.dcart .btn:active{transform:scale(.98)}
+@media (prefers-reduced-motion:reduce){
+  .page-enter,.m-bookbar,.acc-notif-detail,.rs-pick,.rs-confirm,.rs-pending,.rs-declined,.rs-approved,.cx-confirm,.rv-form,.rv-done,
+  .acc-blocked,.loy-earn,.pro-grid,.dcart .dcart-row,.dcart .dcart-when,.dcart .dcart-tot,.dcart-mini,.acc-card.loy-hero,.dcart{animation:none}
+}
+
+/* The Book now button as a pointer (Alex, 2026-10-01): short of a step
+   it names the step and scrolls there. The anchor keeps clear of the
+   sticky chrome, then glows once so the eye lands on it. */
+.bk-anchor{scroll-margin-top:96px;border-radius:8px}
+@keyframes bk-flash{0%{background:transparent}25%{background:var(--warm)}100%{background:transparent}}
+.bk-flash{animation:bk-flash 1.5s ease-out}
+.btn.bk-need{background:var(--ink);border-color:var(--ink)}
+.btn.bk-need:hover{filter:brightness(1.15)}
+@media (prefers-reduced-motion:reduce){.bk-flash{animation:none}}
+
+/* Products in the visit (Alex, 2026-10-01): a product row in the cart
+   reads like a treatment row; its card toggles like a treatment card. */
+.dcart-row.dcart-prod .nm2 {
+  font-weight: 600;
+}
+
+/* How many of a product (Alex, 2026-10-01): under the card once it is in
+   the visit, and in the cart row, compact. Sibling buttons, never nested. */
+.qty {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+}
+.tr-wrap > .qty {
+  margin-top: 6px;
+  justify-self: start;
+}
+.qty-lbl {
+  color: var(--muted);
+  font-weight: 600;
+  margin-right: 4px;
+}
+.qty-b {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 1.5px solid var(--line);
+  background: #fff;
+  color: var(--ink);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+}
+.qty-b:hover:not(:disabled) {
+  border-color: var(--ink);
+}
+.qty-b:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.qty-n {
+  min-width: 14px;
+  text-align: center;
+  color: var(--ink);
+}
+.qty.compact {
+  gap: 4px;
+  margin-right: 6px;
+}
+.qty.compact .qty-b {
+  width: 22px;
+  height: 22px;
+  font-size: 13px;
+}
+.dcart-row .sub2-qty {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 3px;
+}

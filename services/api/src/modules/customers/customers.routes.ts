@@ -304,13 +304,29 @@ export function customersRoutes(app: FastifyInstance) {
           status: a.status,
           source: a.source,
           price: a.price,
+          cancelledBy: (a.cancelledBy as 'customer' | 'salon' | 'system' | 'hq' | null) ?? null,
         });
+        // Factual counts from the statuses (Alex, 2026-09-30): a
+        // reschedule, a declined request or a kept original is not a
+        // cancellation, and the salon's cancellations are not the
+        // customer's. Never a score.
+        const live = rows.filter((a) => a.status !== 'cancelled');
+        const past = (a: (typeof rows)[number]) => a.date.getTime() < today.getTime();
+        const stats = {
+          total: rows.length,
+          completed: live.filter((a) => past(a) && a.status !== 'no_show' && a.status !== 'requested').length,
+          upcoming: live.filter((a) => !past(a)).length,
+          cancelledByCustomer: rows.filter((a) => a.status === 'cancelled' && a.cancelledBy === 'customer').length,
+          cancelledBySalon: rows.filter((a) => a.status === 'cancelled' && a.cancelledBy === 'salon').length,
+          noShows: rows.filter((a) => a.status === 'no_show').length,
+        };
         return {
           upcoming: rows
             .filter((a) => a.date.getTime() >= today.getTime())
             .sort((a, b) => a.date.getTime() - b.date.getTime())
             .map(map),
           history: rows.filter((a) => a.date.getTime() < today.getTime()).map(map),
+          stats,
         };
       }),
   });

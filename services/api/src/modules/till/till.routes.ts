@@ -10,6 +10,8 @@ import {
   SaleResponseSchema,
   ValidateCodeRequestSchema,
   ValidateCodeResponseSchema,
+  DuePaymentsSchema,
+  DueQuerySchema,
 } from '@velnes/contracts';
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
@@ -26,6 +28,7 @@ import {
   retryTransaction,
   TillError,
   validateCode,
+  listDue,
 } from './till.service.js';
 
 const ErrorSchema = z.object({ error: z.string(), message: z.string() });
@@ -196,6 +199,21 @@ export function tillRoutes(app: FastifyInstance) {
     },
     handler: async (req) =>
       withTenant(req.claims.ten, (trx) => validateCode(trx, req.body.code, req.body.subtotal)),
+  });
+
+  /** Due payments (2026-10-01): what past visits still owe — the till's Due tab. */
+  r.route({
+    method: 'GET',
+    url: '/till/due',
+    preHandler: [app.authenticate],
+    schema: { querystring: DueQuerySchema, response: { 200: DuePaymentsSchema, 403: ErrorSchema } },
+    handler: async (req, reply) =>
+      withTenant(req.claims.ten, async (trx) => {
+        const perms = await permsFor(trx, req.claims);
+        if (!can(perms, 'pos.checkout'))
+          return reply.code(403).send({ error: 'FORBIDDEN', message: 'Missing permission: pos.checkout' });
+        return listDue(trx, req.query);
+      }),
   });
 
   r.route({

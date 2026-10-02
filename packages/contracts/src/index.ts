@@ -28,5 +28,7 @@ export * from './flightdeck.js';
 export * from './ranking.js';
 export * from './business-categories.js';
 export * from './discovery.js';
+export * from './loyalty.js';
 export * from './clients.js';
 export * from './search.js';
+export * from './reviews.js';

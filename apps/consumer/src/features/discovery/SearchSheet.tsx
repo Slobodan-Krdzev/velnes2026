@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import type { DiscoverySuggestion, PriceBand, SearchFacets } from '@velnes/contracts';
+import { WhenSchema, type DiscoverySuggestion, type PriceBand, type SearchFacets, type When } from '@velnes/contracts';
 import { fmtMKD, slugify } from '../../lib/api/mappers.js';
 import { t } from '../../lib/i18n-core.js';
 import { useCategories, useMostChosen, useSuggestions, useTowns } from '../../lib/api/queries.js';
@@ -54,25 +54,29 @@ interface SheetState {
   radiusKm: number | null;
   city: string | null;
   now: boolean;
+  /** A day with a free start — exclusive with `now`. */
+  when: When | null;
   priceBand: PriceBand | null;
 }
-const EMPTY: SheetState = { what: null, nearby: false, radiusKm: null, city: null, now: false, priceBand: null };
+const EMPTY: SheetState = { what: null, nearby: false, radiusKm: null, city: null, now: false, when: null, priceBand: null };
 
 type Section = 'what' | 'where' | 'when' | 'price';
 
 /**
- * When? — the model has three answers; the sheet renders two. "Any
- * time" and "Available now" (a bookable start no more than 30 minutes
- * away, soonest first) are what the search door can answer today.
- * `date` — "Choose date & time" — is named here so the row slots in
- * beside them once the door has a day-wide availability mode (its own
- * phase); it is not rendered until then, because a control that cannot
- * do what it says is worse than none.
+ * When? — "Any time", "Available now" (a bookable start no more than 30
+ * minutes away, soonest first), and since 2026-09-30 (Alex) the days
+ * the door admits on: today, tomorrow, this weekend — only what has a
+ * free start that day, in the salon's own clock. A chosen date is
+ * still not here: the door takes words, not dates, so a shared link
+ * stays true next week; a date picker means a `date` on both doors.
  */
-export type WhenKind = 'any' | 'now' | 'date';
+export type WhenKind = 'any' | 'now' | When;
 const WHEN_OPTIONS: { kind: WhenKind; icon: keyof typeof SUGGEST_ICONS; title: string; sub: string | null }[] = [
   { kind: 'any', icon: 'calendar', title: 'c.ss.anyTime', sub: null },
   { kind: 'now', icon: 'bolt', title: 'c.now', sub: 'c.nowTitle' },
+  { kind: 'today', icon: 'calendar', title: 'c.when.today', sub: 'c.when.sub' },
+  { kind: 'tomorrow', icon: 'calendar', title: 'c.when.tomorrow', sub: 'c.when.sub' },
+  { kind: 'weekend', icon: 'calendar', title: 'c.when.weekend', sub: 'c.when.sub' },
 ];
 
 interface OpenOptions {
@@ -132,6 +136,7 @@ function fromUrl(params: URLSearchParams, pathname: string, catName: string | nu
     radiusKm: Number.isFinite(km) && km > 0 ? km : null,
     city: params.get('city'),
     now: params.get('now') === '1',
+    when: WhenSchema.safeParse(params.get('when')).data ?? null,
     priceBand: band === 'low' || band === 'mid' || band === 'high' ? band : null,
   };
 }
@@ -315,7 +320,10 @@ function SearchSheet({ opts, onClose }: { opts: OpenOptions; onClose: () => void
       next.radiusKm = NEAR_KM;
       askForPosition();
     }
-    if (it.now) next.now = true;
+    if (it.now) {
+      next.now = true;
+      next.when = null;
+    }
     setSt(next);
     setSection(nextSection(next));
   };
@@ -325,7 +333,7 @@ function SearchSheet({ opts, onClose }: { opts: OpenOptions; onClose: () => void
   const whereLabel = st.nearby
     ? st.radiusKm ? t('c.ss.nearbyKm', { km: st.radiusKm }) : t('c.ss.nearby')
     : (st.city ?? null);
-  const whenLabel = st.now ? t('c.now') : null;
+  const whenLabel = st.now ? t('c.now') : st.when ? t(`c.when.${st.when}`) : null;
   const priceLabel =
     facets?.price && st.priceBand
       ? st.priceBand === 'low'
@@ -339,7 +347,7 @@ function SearchSheet({ opts, onClose }: { opts: OpenOptions; onClose: () => void
    *  is the whole-catalogue question on its own. A town or a price
    *  alone is a narrowing of nothing. */
   const asks = Boolean(whatLabel && (st.what?.kind === 'category' || whatText.length >= 2 || st.what?.kind === 'text')) || st.now;
-  const anything = Boolean(whatLabel || st.nearby || st.city || st.now || st.priceBand);
+  const anything = Boolean(whatLabel || st.nearby || st.city || st.now || st.when || st.priceBand);
 
   const search = () => {
     if (!asks) return;
@@ -350,6 +358,7 @@ function SearchSheet({ opts, onClose }: { opts: OpenOptions; onClose: () => void
     else if (what?.kind === 'text') p.set('q', what.text);
     else p.set('q', t('c.home.nowQuery')); // "now" alone: anything, now
     if (st.now) p.set('now', '1');
+    else if (st.when) p.set('when', st.when);
     if (st.city && !st.nearby) p.set('city', st.city);
     if (st.nearby) {
       // A position never rides in a URL (SEARCH.md §9): the results page
@@ -508,9 +517,10 @@ function SearchSheet({ opts, onClose }: { opts: OpenOptions; onClose: () => void
           <section className="ss-card open">
             <h2 className="ss-h">{t('c.ss.when')}</h2>
             {WHEN_OPTIONS.map((o) => {
-              const on = o.kind === 'now' ? st.now : !st.now;
+              const on = o.kind === 'now' ? st.now : o.kind === 'any' ? !st.now && !st.when : st.when === o.kind;
+              const pick = () => patch({ now: o.kind === 'now', when: o.kind === 'now' || o.kind === 'any' ? null : o.kind });
               return (
-                <button key={o.kind} type="button" className={`ss-opt${on ? ' on' : ''}`} onClick={() => patch({ now: o.kind === 'now' })} aria-pressed={on}>
+                <button key={o.kind} type="button" className={`ss-opt${on ? ' on' : ''}`} onClick={pick} aria-pressed={on}>
                   <span className="ss-opt-ic">{SUGGEST_ICONS[o.icon]}</span>
                   <span>
                     <b>{t(o.title)}</b>

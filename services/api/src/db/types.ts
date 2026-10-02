@@ -76,13 +76,66 @@ export interface AppointmentHistory {
   at: Generated<Timestamp>;
   byName: Generated<string>;
   id: Generated<string>;
+  meta: Json | null;
   source: Generated<string>;
   tenantId: string;
   what: string;
 }
+export interface AppointmentProducts {
+  appointmentId: string;
+  createdAt: Generated<Timestamp>;
+  id: Generated<string>;
+  name: string;
+  productId: string;
+  qty: number;
+  tenantId: string;
+  unitPrice: number;
+}
+export interface BookingChangeRequests {
+  appointmentId: string;
+  createdAt: Generated<Timestamp>;
+  customerDecision: string | null;
+  decidedAt: Timestamp | null;
+  declineReason: string | null;
+  id: Generated<string>;
+  kind: Generated<string>;
+  originalDate: Timestamp;
+  originalDurationMin: number;
+  originalEmployeeId: string | null;
+  originalStartMin: number;
+  requestedAt: Generated<Timestamp>;
+  requestedByClientUserId: string | null;
+  requestedDate: Timestamp;
+  requestedEmployeeId: string | null;
+  requestedStartMin: number;
+  resolvedAt: Timestamp | null;
+  resolvedByEmployeeId: string | null;
+  status: Generated<string>;
+  tenantId: string;
+}
+export interface Refunds {
+  amount: number;
+  appointmentId: string;
+  attempts: Generated<number>;
+  chargeRef: string | null;
+  completedAt: Timestamp | null;
+  failureReason: string | null;
+  id: Generated<string>;
+  invoiceId: string;
+  method: string;
+  provider: string;
+  providerRef: string | null;
+  requestedAt: Generated<Timestamp>;
+  status: Generated<string>;
+  tenantId: string;
+}
 
 export interface Appointments {
   anyEmp: Generated<boolean>;
+  cancelHours: number | null;
+  cancelledAt: Timestamp | null;
+  cancelledBy: string | null;
+  cancelReason: string | null;
   clientUserId: string | null;
   createdAt: Generated<Timestamp>;
   customerId: string | null;
@@ -272,8 +325,22 @@ export interface ClientNotifications {
   title: string;
 }
 
+export interface ClientLoyaltyLedger {
+  clientUserId: string;
+  createdAt: Generated<Timestamp>;
+  createdBy: Generated<string>;
+  id: Generated<string>;
+  meta: Generated<Json>;
+  note: string | null;
+  points: number;
+  sourceId: string | null;
+  sourceType: string | null;
+  tenantId: string | null;
+  type: string;
+}
 export interface ClientUsers {
   avatar: string | null;
+  loyaltyPoints: Generated<number>;
   createdAt: Generated<Timestamp>;
   dob: Timestamp | null;
   email: string;
@@ -598,6 +665,8 @@ export interface LocationCatalogProducts {
 
 export interface LocationCatalogServices {
   active: Generated<boolean>;
+  customDuration: Generated<boolean>;
+  customPrice: Generated<boolean>;
   durationMin: number;
   locationId: string;
   online: Generated<boolean>;
@@ -693,6 +762,7 @@ export interface MailOutbox {
 }
 
 export interface MemberRecs {
+  slotKey: string | null;
   candidates: Json;
   createdAt: Generated<Timestamp>;
   date: Timestamp;
@@ -852,6 +922,38 @@ export interface RefreshTokens {
   tokenHash: string;
 }
 
+export interface PlatformFeatures {
+  key: string;
+  since: Generated<Timestamp>;
+}
+
+export interface ReviewReminders {
+  appointmentId: string;
+  clientUserId: string;
+  sentAt: Generated<Timestamp>;
+  tenantId: string;
+}
+
+export interface Reviews {
+  appointmentDate: Timestamp;
+  appointmentId: string;
+  body: string | null;
+  bodyStatus: Generated<string>;
+  cleanlinessRating: number;
+  clientUserId: string;
+  createdAt: Generated<Timestamp>;
+  customerId: string | null;
+  employeeId: string | null;
+  id: Generated<string>;
+  locationId: string;
+  professionalRating: number;
+  ratingStatus: Generated<string>;
+  serviceId: string | null;
+  serviceRating: number;
+  tenantId: string;
+  timingRating: number;
+}
+
 export interface Registrations {
   businessId: string | null;
   draft: Json;
@@ -1002,6 +1104,7 @@ export interface ServiceVariants {
   id: Generated<string>;
   label: string;
   price: number;
+  retiredAt: Timestamp | null;
   serviceId: string;
   sort: Generated<number>;
   std: Generated<boolean>;
@@ -1179,7 +1282,9 @@ export interface Widgets {
 
 export interface DB {
   appointmentHistory: AppointmentHistory;
+  appointmentProducts: AppointmentProducts;
   appointments: Appointments;
+  bookingChangeRequests: BookingChangeRequests;
   assistantActions: AssistantActions;
   assistantDrafts: AssistantDrafts;
   auditLog: AuditLog;
@@ -1191,6 +1296,7 @@ export interface DB {
   checkouts: Checkouts;
   clientCustomerLinks: ClientCustomerLinks;
   clientFavourites: ClientFavourites;
+  clientLoyaltyLedger: ClientLoyaltyLedger;
   clientNotifications: ClientNotifications;
   clientPaymentMethods: ClientPaymentMethods;
   clientUsers: ClientUsers;
@@ -1229,6 +1335,7 @@ export interface DB {
   merchantTransactions: MerchantTransactions;
   paymentAccounts: PaymentAccounts;
   personalOffers: PersonalOffers;
+  platformFeatures: PlatformFeatures;
   platformNotices: PlatformNotices;
   premiumOffers: PremiumOffers;
   productCategories: ProductCategories;
@@ -1236,7 +1343,10 @@ export interface DB {
   purchaseOrderLines: PurchaseOrderLines;
   purchaseOrders: PurchaseOrders;
   refreshTokens: RefreshTokens;
+  refunds: Refunds;
   registrations: Registrations;
+  reviewReminders: ReviewReminders;
+  reviews: Reviews;
   roles: Roles;
   scheduleExceptions: ScheduleExceptions;
   schemaMigrations: SchemaMigrations;

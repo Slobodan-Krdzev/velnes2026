@@ -16,6 +16,8 @@ import type {
   AmenityKey,
   PriceBand,
   PublicServicesResponseSchema,
+  PublicReviewsPageSchema,
+  When,
 } from '@velnes/contracts';
 import { pub, pubGet, pubPost } from './client.js';
 
@@ -24,6 +26,7 @@ type Salons = z.infer<typeof DiscoverySalonsSchema>;
 type Recommended = z.infer<typeof DiscoveryRecommendedSchema>;
 type Newest = z.infer<typeof DiscoveryNewestSchema>;
 type SalonDetail = z.infer<typeof DiscoverySalonDetailSchema>;
+type PublicReviewsPage = z.infer<typeof PublicReviewsPageSchema>;
 type Services = z.infer<typeof PublicServicesResponseSchema>;
 type CategoryServices = z.infer<typeof DiscoveryCategoryServicesSchema>;
 type RankedServices = z.infer<typeof DiscoveryRankedServicesSchema>;
@@ -50,9 +53,14 @@ export interface SearchFilters {
   priceMax: number | null;
   /** Amenities the salon's location must all have — keys. */
   amenities: AmenityKey[];
+  /** A day with a free start — today, tomorrow, this weekend — hard
+   *  admission on the doors; each card then carries `availableOn`. */
+  when: When | null;
+  /** "For two": only where this many can be seen at the same time. */
+  party: number;
 }
 export const NO_FILTERS: SearchFilters = {
-  priceBand: null, categoryId: null, radiusKm: null, now: false, city: null, priceMin: null, priceMax: null, amenities: [],
+  priceBand: null, categoryId: null, radiusKm: null, now: false, city: null, priceMin: null, priceMax: null, amenities: [], when: null, party: 1,
 };
 type Towns = z.infer<typeof DiscoveryTownsSchema>;
 type Suggestions = z.infer<typeof DiscoverySuggestionsSchema>;
@@ -145,6 +153,16 @@ export function useNewest() {
   });
 }
 
+/** A salon's verified reviews, newest first, `limit` at a time. */
+export function useSalonReviews(slug: string | undefined, limit: number) {
+  return useQuery({
+    queryKey: ['salon-reviews', slug, limit],
+    queryFn: () => pub<PublicReviewsPage>(`/discovery/salons/${slug}/reviews?limit=${limit}`),
+    enabled: Boolean(slug),
+    staleTime: 60_000,
+  });
+}
+
 export function useSalonDetail(slug: string | undefined) {
   return useQuery({
     queryKey: ['salon', slug],
@@ -202,6 +220,8 @@ export function useRankedCategoryServices(
       filters.priceMin,
       filters.priceMax,
       filters.amenities.join(','),
+      filters.when,
+      filters.party,
     ],
     queryFn: () =>
       pubPost<RankedServices>(
@@ -216,6 +236,8 @@ export function useRankedCategoryServices(
           priceMin: filters.priceMin,
           priceMax: filters.priceMax,
           amenities: filters.amenities,
+          when: filters.when,
+          party: filters.party,
         },
         token,
       ),
@@ -318,6 +340,8 @@ export function useSearch(
       filters.priceMin,
       filters.priceMax,
       filters.amenities.join(','),
+      filters.when,
+      filters.party,
     ],
     queryFn: () =>
       pubPost<SearchResults>(
@@ -336,6 +360,8 @@ export function useSearch(
           priceMin: filters.priceMin,
           priceMax: filters.priceMax,
           amenities: filters.amenities,
+          when: filters.when,
+          party: filters.party,
         },
         token,
       ),

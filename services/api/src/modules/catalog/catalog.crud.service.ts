@@ -127,6 +127,24 @@ export async function updateService(
     .execute();
   await reconcileNested(trx, tenantId, serviceId, w);
   await applyPerformers(trx, tenantId, serviceId, w.performerIds);
+  // The location rows are what the list, the booking engine and the
+  // till read (Alex, 2026-10-01: "the price is not saved"). A row
+  // follows the salon-wide price unless someone set a price for that
+  // location (`custom_price`) — likewise the duration.
+  if (before.price !== w.price)
+    await trx
+      .updateTable('locationCatalogServices')
+      .set({ price: w.price })
+      .where('serviceId', '=', serviceId)
+      .where('customPrice', '=', false)
+      .execute();
+  if (before.durationMin !== w.durationMin)
+    await trx
+      .updateTable('locationCatalogServices')
+      .set({ durationMin: w.durationMin })
+      .where('serviceId', '=', serviceId)
+      .where('customDuration', '=', false)
+      .execute();
   if (before.price !== w.price)
     await logAudit(trx, tenantId, {
       actorEmployeeId: claims.sub,
@@ -208,11 +226,24 @@ async function reconcileNested(trx: Trx, tenantId: string, serviceId: string, w:
       .selectFrom('serviceVariants')
       .select('id')
       .where('serviceId', '=', serviceId)
+      .where('retiredAt', 'is', null)
       .execute();
     const keep = new Set(w.variants.map((v) => v.id).filter(Boolean) as string[]);
     const drop = existing.filter((e) => !keep.has(e.id)).map((e) => e.id);
-    if (drop.length)
-      await trx.deleteFrom('serviceVariants').where('id', 'in', drop).execute();
+    // A duration someone booked, was offered, or was timed on cannot go:
+    // it is retired — out of every catalog, kept for its visits. One
+    // nothing references is deleted (Alex, 2026-10-01).
+    for (const id of drop) {
+      const used =
+        (await trx.selectFrom('appointments').select('id').where('variantId', '=', id).limit(1).executeTakeFirst()) ??
+        (await trx.selectFrom('personalOffers').select('id').where('variantId', '=', id).limit(1).executeTakeFirst()) ??
+        (await trx.selectFrom('empTimings').select('id').where('variantId', '=', id).limit(1).executeTakeFirst());
+      if (used) await trx.updateTable('serviceVariants').set({ retiredAt: new Date(), std: false }).where('id', '=', id).execute();
+      else await trx.deleteFrom('serviceVariants').where('id', '=', id).execute();
+    }
+    // Several lengths, none standard (the standard one was just removed):
+    // the first is what no-choice means.
+    if (w.variants.length && !w.variants.some((v) => v.std)) w.variants[0]!.std = true;
     let sort = 0;
     for (const v of w.variants) {
       if (v.id) {
@@ -325,6 +356,10 @@ export async function patchServiceOverride(
     pos: patch.pos ?? current?.pos ?? s.pos,
     prepMin: patch.prepMin === undefined ? (current?.prepMin ?? null) : patch.prepMin,
     resetMin: patch.resetMin === undefined ? (current?.resetMin ?? null) : patch.resetMin,
+    // Set here, for this location: the row is this location's own from
+    // now on and no longer follows the salon-wide value.
+    customPrice: patch.price !== undefined ? true : (current?.customPrice ?? false),
+    customDuration: patch.durationMin !== undefined ? true : (current?.customDuration ?? false),
   };
   await trx
     .insertInto('locationCatalogServices')
@@ -448,6 +483,23 @@ export async function updateProduct(
     })
     .where('id', '=', productId)
     .execute();
+  // The shelf rows are what the list, the app and the till read. A
+  // product has no per-location price of its own anywhere in the
+  // workspace, so every shelf row follows the salon-wide price — unlike
+  // a service, whose locations may price it differently on purpose.
+  if (w.price !== undefined && w.price !== before.price)
+    await trx
+      .updateTable('locationCatalogProducts')
+      .set({ price: w.price })
+      .where('productId', '=', productId)
+      .execute();
+  if (w.active !== undefined && w.active !== before.active)
+    await trx
+      .updateTable('locationCatalogProducts')
+      .set({ active: w.active })
+      .where('productId', '=', productId)
+      .where('active', '=', before.active)
+      .execute();
   if (w.price !== undefined && w.price !== before.price)
     await logAudit(trx, before.tenantId, {
       actorEmployeeId: claims.sub,

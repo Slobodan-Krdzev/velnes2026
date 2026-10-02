@@ -71,6 +71,24 @@ export function nowAt(tz: string, now = new Date()): { date: string; min: number
   };
 }
 
+/**
+ * The instant a local wall time is, in a zone — the inverse of `nowAt`.
+ * Two passes through Intl, so the answer holds across a DST change
+ * (the second pass corrects a guess made with the wrong offset). A wall
+ * time that does not exist (the spring-forward hour) lands an hour
+ * later, never throws. Booking changes use it for the cancellation
+ * deadline: `start − window` must be compared as instants, in the
+ * location's own zone, never the server's.
+ */
+export function instantAt(tz: string, date: string, min: number): Date {
+  const settle = (guess: Date) => {
+    const at = nowAt(tz, guess);
+    const dayShift = at.date === date ? 0 : at.date < date ? 1 : -1;
+    return new Date(guess.getTime() + (min - at.min + dayShift * 1440) * 60_000);
+  };
+  return settle(settle(new Date(`${date}T00:00:00Z`)));
+}
+
 export const todayIso = () => {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;

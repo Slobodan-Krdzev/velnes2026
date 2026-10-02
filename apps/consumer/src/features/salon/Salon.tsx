@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactElement } from 'react';
 import { useTranslation } from 'react-i18next';
 import { t } from '../../lib/i18n-core.js';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import type { z } from 'zod';
-import type { PublicServiceSchema } from '@velnes/contracts';
+import { PRODUCT_QTY_MAX, type PublicServiceSchema } from '@velnes/contracts';
 import { fmtMKD, minutesLbl } from '../../lib/api/mappers.js';
 import { useSalonDetail, useSalonServices, useVisitSlots } from '../../lib/api/queries.js';
 import { useMyOffers } from '../../lib/api/session.js';
@@ -13,9 +13,13 @@ import { useSearchBox } from '../discovery/useSearchBox.js';
 import { useWheelScroll } from '../../lib/useWheelScroll.js';
 import { SalonMap } from '../../components/SalonMap.js';
 import { SalonAmenities } from './SalonAmenities.js';
+import { SalonReviews } from './SalonReviews.js';
+import { RatingChip } from '../../components/Stars.js';
 import { LocationHours } from './LocationHours.js';
 import { IcArr, IcClock, IcPin, IcSpark, IcVok } from '../discovery/cards.js';
 import { useBooking } from '../booking/store.js';
+import { LoyaltyEarn } from '../account/Loyalty.js';
+import { SalonSkeleton } from '../../components/Skeleton.js';
 import { distanceKm, distanceLbl, useUserLocation } from '../../lib/geo.js';
 
 type PublicService = z.infer<typeof PublicServiceSchema>;
@@ -123,17 +127,17 @@ function TrCard({
         : s.variants.length
           ? t('c.from', { p: fmtMKD(Math.min(s.price, s.priceFrom ?? s.price)) })
           : fmtMKD(s.price);
+  // The heart is a button of its own, so it sits BESIDE the card button
+  // in a wrapper that positions it — a button inside a button is not
+  // HTML, and the browser said so on every salon page (Alex, 2026-10-01).
   return (
-    <button className={`tr-card${desktop ? ' dtr' : ''}${on ? ' on' : ''}`} onClick={onToggle}>
+    <div className="tr-wrap">
+    <button className={`tr-card${desktop ? ' dtr' : ''}${on ? ' on' : ''}`} aria-pressed={on} onClick={onToggle}>
       <span className="row1">
         <span className="nm">
           {IcScissors}
           <span className="t">{s.name}</span>
         </span>
-        {/* A departure from the prototype, and a necessary one: the
-            prototype's Favourites section lists saved services but gives
-            nowhere to save one. See docs/FAVOURITES.md. */}
-        <FavHeart kind="service" id={s.id} label={s.name} className="fav fav-inline" />
       </span>
       <span className="in2">
         <span>
@@ -146,6 +150,11 @@ function TrCard({
         </b>
       </span>
     </button>
+    {/* A departure from the prototype, and a necessary one: the
+        prototype's Favourites section lists saved services but gives
+        nowhere to save one. See docs/FAVOURITES.md. */}
+    <FavHeart kind="service" id={s.id} label={s.name} className="fav fav-inline" />
+    </div>
   );
 }
 
@@ -210,6 +219,10 @@ function useSalonPage() {
   // prototype's desktop cart is multi-select, and a salon visit really
   // is "haircut then colour" — so the cart is the state, not one id.
   const [cart, setCart] = useState<{ serviceId: string; variantId: string | null; mods: string[] }[]>([]);
+  // Products to take home with the visit (Alex, 2026-10-01): a toggle
+  // per product, like the treatments; the shelf of the chosen location
+  // decides what is offered and at what price.
+  const [prods, setProds] = useState<{ productId: string; qty: number }[]>([]);
   const [empId, setEmpId] = useState('any');
   const [locOpen, setLocOpen] = useState(false);
   const [openVariantFor, setOpenVariantFor] = useState<string | null>(null);
@@ -220,15 +233,32 @@ function useSalonPage() {
   const [prodOpen, setProdOpen] = useState(false);
   const [cartMin, setCartMin] = useState(false);
   // A slot tapped on the home screen arrives as a link: start the visit
-  // with that treatment already in the cart.
+  // with that treatment already in the cart. "Book again" (Alex,
+  // 2026-09-30) arrives the same way with more of the visit — the
+  // variant, the options and the professional — each taken only when
+  // the catalog here still has it, so a link never chooses what the
+  // salon no longer offers. The cart stays a cart: anything can be
+  // added, removed or changed after.
   useEffect(() => {
     const qsSvc = params.get('service');
     if (!services.length || cart.length || !qsSvc) return;
     const match = services.find((s) => s.id === qsSvc);
     if (!match) return;
-    setCart([{ serviceId: match.id, variantId: null, mods: [] }]);
+    const qv = params.get('variant');
+    const variantId = qv && match.variants.some((v) => v.id === qv) ? qv : null;
+    const known = new Set(match.modifiers.flatMap((g) => g.options.map((o) => o.id)));
+    const mods = (params.get('mods') ?? '').split(',').filter((id) => known.has(id));
     const qd = params.get('date');
     const qt = params.get('time');
+    // Arriving with a time is arriving to book (Alex, 2026-10-01): a
+    // required choice the link did not make is made with its first
+    // option, so Book is one tap away — and still one tap to change.
+    if (qt)
+      for (const g of match.modifiers)
+        if (g.required && g.options[0] && !g.options.some((o) => mods.includes(o.id))) mods.push(g.options[0].id);
+    setCart([{ serviceId: match.id, variantId, mods }]);
+    const qe = params.get('employee');
+    if (qe && match.employees.some((e) => e.id === qe)) setEmpId(qe);
     if (qd && days.some((d) => d.iso === qd)) setDate(qd);
     if (qt) setTime(qt);
   }, [services, cart.length, params, days]);
@@ -278,7 +308,7 @@ function useSalonPage() {
   });
   // Required groups nobody has answered yet: the visit cannot be booked
   // until they are, and the button says which one.
-  const missing = lines.flatMap((l) => l.missing.map((g) => ({ service: l.svc.name, group: g.name })));
+  const missing = lines.flatMap((l) => l.missing.map((g) => ({ service: l.svc.name, group: g.name, serviceId: l.serviceId, groupId: g.id })));
   const free = useMemo(() => (availQ.data?.slots ?? []).filter((s) => s.free).map((s) => s.t), [availQ.data]);
   // The time is the person's to pick — nothing is chosen for them, so
   // "Date & time" is ticked only once they have tapped one (Alex,
@@ -298,7 +328,26 @@ function useSalonPage() {
   }, [date, lines.length, availQ.data]);
   // What the door will actually charge for the visit: every line at the
   // price its own option carries. Never a "from" price.
-  const price = lines.reduce((n, l) => n + l.price, 0);
+  // The shelf at this location: what the salon sells here, priced here.
+  const shelf = useMemo(
+    () =>
+      (detail?.products ?? []).flatMap((pr) => {
+        const here = (pr.at ?? []).find((a) => a.locationId === locationId);
+        return here ? [{ id: pr.id, name: pr.name, category: pr.category, price: here.price }] : [];
+      }),
+    [detail?.products, locationId],
+  );
+  const plines = useMemo(
+    () =>
+      prods.flatMap((x) => {
+        const pr = shelf.find((s) => s.id === x.productId);
+        return pr ? [{ productId: pr.id, name: pr.name, qty: x.qty, unitPrice: pr.price, price: pr.price * x.qty }] : [];
+      }),
+    [prods, shelf],
+  );
+  const productUnits = plines.reduce((n, l) => n + l.qty, 0);
+  // What the visit costs: treatments plus the products taken home.
+  const price = lines.reduce((n, l) => n + l.price, 0) + plines.reduce((n, l) => n + l.price, 0);
   const durationMin = lines.reduce((n, l) => n + l.durationMin, 0);
   const dayLbl = days.find((d) => d.iso === date)?.lbl ?? date;
   /**
@@ -340,6 +389,20 @@ function useSalonPage() {
     prevDays: () => setDayOffset(Math.max(0, dayOffset - 4)),
     lines,
     cart,
+    shelf,
+    plines,
+    productUnits,
+    inProds: (id: string) => prods.some((x) => x.productId === id),
+    toggleProd: (id: string) =>
+      setProds((c) => (c.some((x) => x.productId === id) ? c.filter((x) => x.productId !== id) : [...c, { productId: id, qty: 1 }])),
+    removeProd: (id: string) => setProds((c) => c.filter((x) => x.productId !== id)),
+    /** One more or one fewer of a product (Alex, 2026-10-01); fewer than
+     *  one takes it out, more than the door accepts stays at the ceiling. */
+    stepProd: (id: string, d: 1 | -1) =>
+      setProds((c) =>
+        c.flatMap((x) => (x.productId !== id ? [x] : x.qty + d < 1 ? [] : [{ ...x, qty: Math.min(PRODUCT_QTY_MAX, x.qty + d) }])),
+      ),
+    prodQty: (id: string) => prods.find((x) => x.productId === id)?.qty ?? 0,
     inCart: (id: string) => cart.some((c) => c.serviceId === id),
     /** The promised price for a treatment here, if this person holds one. */
     offerPrice: (id: string) => offerFor(id, null)?.specialPrice ?? null,
@@ -386,8 +449,9 @@ function useSalonPage() {
     locIdx,
     pickLoc: (i: number) => {
       setLocIdx(i);
-      // A different location is a different catalog and a different team.
+      // A different location is a different catalog, shelf and team.
       setCart([]);
+      setProds([]);
       setEmpId('any');
       setLocOpen(false);
     },
@@ -419,6 +483,91 @@ type Page = ReturnType<typeof useSalonPage>;
 function chosenOf(p: Page, serviceId: string) {
   const l = p.lines.find((x) => x.serviceId === serviceId);
   return l ? { durationMin: l.durationMin, price: l.price, label: l.variant?.label ?? null } : null;
+}
+
+/**
+ * What still stands between the visit and Book now (Alex, 2026-10-01):
+ * the first unmet step, in the order the page asks for them — a
+ * treatment, every required option, then a time. One place decides it
+ * so the desktop card and the phone bar never disagree.
+ */
+type Need = { kind: 'service' } | { kind: 'option'; group: string; service: string; serviceId: string; groupId: string } | { kind: 'time' } | null;
+function needOf(p: Page): Need {
+  if (!p.lines.length) return { kind: 'service' };
+  const m = p.missing[0];
+  if (m) return { kind: 'option', ...m };
+  if (!p.time) return { kind: 'time' };
+  return null;
+}
+
+/** Each layout has its own copy of the booking card (CSS shows one), so
+ *  the anchors are prefixed by layout and the bar scrolls to its own. */
+const anchorOf = (need: NonNullable<Need>, desktop: boolean) => {
+  const pfx = desktop ? 'd-' : 'm-';
+  if (need.kind === 'service') return `${pfx}bk-treat`;
+  if (need.kind === 'time') return `${pfx}bk-when`;
+  return `${pfx}bk-opt-${need.serviceId}-${need.groupId}`;
+};
+
+/** Bring the step into view and let it glow for a moment, so the eye
+ *  lands where the hand is needed. Honours reduced motion. */
+export function revealStep(id: string) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const still = typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  el.scrollIntoView?.({ behavior: still ? 'auto' : 'smooth', block: 'start' });
+  el.classList.remove('bk-flash');
+  void el.offsetWidth; // restart the animation when tapped twice
+  el.classList.add('bk-flash');
+  window.setTimeout(() => el.classList.remove('bk-flash'), 1600);
+}
+
+/**
+ * The one button under the summary. Complete, it books; short of a
+ * step, it names that step ("Select a treatment", "Select date &
+ * time", "Select Pressure") and a tap scrolls there — never a dead,
+ * grey button that leaves the person guessing what it wants.
+ */
+function BookButton({ p, desktop, onBook, style, arrow }: { p: Page; desktop: boolean; onBook: () => void; style?: CSSProperties; arrow?: boolean }) {
+  const need = needOf(p);
+  const label = !need
+    ? t('c.sal.bookNow')
+    : need.kind === 'service'
+      ? t('c.sal.needService')
+      : need.kind === 'time'
+        ? t('c.sal.needTime')
+        : t('c.sal.needOption', { group: need.group });
+  return (
+    <button
+      className={`btn btn-p${need ? ' bk-need' : ''}`}
+      style={style}
+      data-need={need?.kind ?? 'none'}
+      onClick={need ? () => revealStep(anchorOf(need, desktop)) : onBook}
+    >
+      {label} {arrow || need ? IcArr : null}
+    </button>
+  );
+}
+
+/**
+ * How many of a product (Alex, 2026-10-01): a minus, the count, a plus.
+ * Minus below one takes the product out; plus stops at the door's
+ * ceiling. Lives beside the card and in the cart row, never inside
+ * another button.
+ */
+function QtyStepper({ name, qty, onStep, compact = false }: { name: string; qty: number; onStep: (d: 1 | -1) => void; compact?: boolean }) {
+  return (
+    <span className={`qty${compact ? ' compact' : ''}`} data-testid="qty" data-qty={qty}>
+      {compact ? null : <span className="qty-lbl">{t('c.sal.qty')}</span>}
+      <button type="button" className="qty-b" aria-label={t('c.sal.fewer', { name })} onClick={() => onStep(-1)}>
+        −
+      </button>
+      <b className="qty-n" aria-live="polite">{qty}</b>
+      <button type="button" className="qty-b" aria-label={t('c.sal.more', { name })} disabled={qty >= PRODUCT_QTY_MAX} onClick={() => onStep(1)}>
+        +
+      </button>
+    </span>
+  );
 }
 
 /** The book card core — identical structure in both environments (the
@@ -473,7 +622,7 @@ function BookCard({ p, desktop }: { p: Page; desktop: boolean }) {
           ) : null}
         </>
       ) : null}
-      <div className="bk-h" style={desktop ? undefined : { marginTop: '4px' }}>{t('c.sal.step1')}</div>
+      <div className="bk-h bk-anchor" id={desktop ? 'd-bk-treat' : 'm-bk-treat'} style={desktop ? undefined : { marginTop: '4px' }}>{t('c.sal.step1')}</div>
       <div className="bk-sub spark">
         {IcSpark}
         <span className="muted">{t('c.sal.mostBooked')}</span>
@@ -557,7 +706,7 @@ function BookCard({ p, desktop }: { p: Page; desktop: boolean }) {
               const unmet = g.required && !g.options.some((o) => l.mods.includes(o.id));
               return (
                 <div key={g.id}>
-                  <div className="bk-sub" style={{ marginTop: '14px' }}>
+                  <div className="bk-sub bk-anchor" id={`${desktop ? 'd-' : 'm-'}bk-opt-${l.serviceId}-${g.id}`} style={{ marginTop: '14px' }}>
                     <span className="muted">
                       {g.name} · {l.svc.name}
                       <small className={unmet ? 'mod-req unmet' : 'mod-req'}>
@@ -629,7 +778,7 @@ function BookCard({ p, desktop }: { p: Page; desktop: boolean }) {
           ))}
         </div>
       ) : null}
-      {d.products.length ? (
+      {p.shelf.length ? (
         <>
           <div
             className="bk-h prod-tg"
@@ -646,7 +795,7 @@ function BookCard({ p, desktop }: { p: Page; desktop: boolean }) {
             }}
           >
             {d.name} products
-            <span className="tiny-tag" style={{ marginLeft: '9px' }}>{t('c.sal.productsN', { n: d.products.length })}</span>
+            <span className="tiny-tag" style={{ marginLeft: '9px' }}>{t('c.sal.productsN', { n: p.shelf.length })}</span>
             <span className="chv">{IcChevD}</span>
           </div>
           {p.prodOpen ? (
@@ -655,20 +804,36 @@ function BookCard({ p, desktop }: { p: Page; desktop: boolean }) {
                 <span className="muted">{t('c.sal.products')}</span>
               </div>
               <div className="tr-grid">
-                {d.products.map((pr) => (
-                  <button key={pr.id} className={`tr-card${desktop ? ' dtr' : ''}`} style={{ cursor: 'default' }}>
-                    <span className="row1">
-                      <span className="nm">
-                        {IcBottle}
-                        <span className="t">{pr.name}</span>
-                      </span>
-                    </span>
-                    <span className="in2">
-                      <span>{t('c.sal.product')}</span>
-                      <b>{fmtMKD(pr.price)}</b>
-                    </span>
-                  </button>
-                ))}
+                {p.shelf.map((pr) => {
+                  const on = p.inProds(pr.id);
+                  const qty = p.prodQty(pr.id);
+                  return (
+                    <div key={pr.id} className={`tr-wrap${on ? ' on' : ''}`}>
+                      <button
+                        className={`tr-card${desktop ? ' dtr' : ''}${on ? ' on' : ''}`}
+                        aria-pressed={on}
+                        data-product={pr.id}
+                        onClick={() => p.toggleProd(pr.id)}
+                      >
+                        <span className="row1">
+                          <span className="nm">
+                            {IcBottle}
+                            <span className="t">{pr.name}</span>
+                          </span>
+                        </span>
+                        <span className="in2">
+                          <span>{on ? (qty > 1 ? t('c.sal.inVisitN', { n: qty }) : t('c.sal.inVisit')) : t('c.sal.product')}</span>
+                          <b>{fmtMKD(pr.price)}</b>
+                        </span>
+                      </button>
+                      {/* More than one of it: the stepper is the card's
+                          sibling, so the card stays one button. */}
+                      {on ? (
+                        <QtyStepper name={pr.name} qty={qty} onStep={(d) => p.stepProd(pr.id, d)} />
+                      ) : null}
+                    </div>
+                  );
+                })}
               </div>
             </div>
           ) : null}
@@ -677,7 +842,7 @@ function BookCard({ p, desktop }: { p: Page; desktop: boolean }) {
       {/* Nothing to schedule yet: the section is there, and inert, until
           a treatment is in the visit — a day and time for no treatment
           is not a step anyone can complete. Alex, 2026-09-21. */}
-      <div className="bk-h" style={{ marginTop: '20px' }}>
+      <div className="bk-h bk-anchor" id={desktop ? 'd-bk-when' : 'm-bk-when'} style={{ marginTop: '20px' }}>
         {t('c.sal.step2')}
         {!p.lines.length ? <span className="sm muted bk-hint">{t('c.sal.chooseFirst')}</span> : null}
       </div>
@@ -744,6 +909,7 @@ function goBook(p: Page, nav: (to: string) => void, setDraft: ReturnType<typeof 
       durationMin: l.durationMin,
       price: l.price,
     })),
+    products: p.plines.map((l) => ({ productId: l.productId, name: l.name, qty: l.qty, price: l.price })),
     // The first treatment names the visit for doors that take one.
     serviceId: first.serviceId,
     serviceName: p.lines.map((l) => l.name).join(' + '),
@@ -787,7 +953,13 @@ export function Salon() {
     seeded.current = name;
     setBoxQ(name);
   }, [d?.name, setBoxQ]);
-  if (!d) return null;
+  if (!d)
+    return (
+      <>
+        <div className="d-env"><section className="d-wrap" style={{ paddingTop: 24 }}><SalonSkeleton /></section></div>
+        <div className="m-env"><section className="m-page" style={{ padding: 16 }}><SalonSkeleton /></section></div>
+      </>
+    );
   const photo = d.gallery[0]?.img ? `url("${d.gallery[0].img}")` : 'var(--ih)';
   const photo2 = d.gallery[1]?.img ? `url("${d.gallery[1].img}")` : 'var(--if)';
   const printedAddress = [d.address, d.city].filter(Boolean).join(', ');
@@ -814,6 +986,7 @@ export function Salon() {
           <span className="ti">
             <b>{t.name}</b>
             <span>{t.role}</span>
+            <RatingChip rating={t.rating} />
           </span>
           {IcChevR}
         </button>
@@ -968,6 +1141,7 @@ export function Salon() {
               </div>
               {d.bookable ? null : notBookableCard}
               {aboutCard}
+              <SalonReviews d={d} idPrefix="d" />
               {d.team.length ? teamCard('d') : null}
               {locationCard('d')}
               <SalonAmenities keys={p.location?.amenities ?? []} idPrefix="d" />
@@ -984,7 +1158,7 @@ export function Salon() {
               </div>
               {p.cartMin ? (
                 <div className="dcart-mini">
-                  {p.lines.length} {p.lines.length === 1 ? 'item' : 'items'} · {showPrice}
+                  {p.lines.length + p.plines.length} {p.lines.length + p.plines.length === 1 ? 'item' : 'items'} · {showPrice}
                 </div>
               ) : (
                 <div>
@@ -1008,6 +1182,21 @@ export function Salon() {
                         </button>
                       </div>
                     ))}
+                    {p.plines.map((l) => (
+                      <div className="dcart-row dcart-prod" key={l.productId} data-testid="cart-product">
+                        <span className="nm2">
+                          {l.name}
+                          <span className="sub2 sub2-qty">
+                            <QtyStepper name={l.name} qty={l.qty} onStep={(d) => p.stepProd(l.productId, d)} compact />
+                            {l.qty > 1 ? `${l.qty} × ${fmtMKD(l.unitPrice)}` : t('c.sal.product')}
+                          </span>
+                        </span>
+                        <b style={{ color: 'var(--ink)' }}>{fmtMKD(l.price)}</b>
+                        <button className="x" aria-label={t('c.sal.remove', { name: l.name })} onClick={() => p.removeProd(l.productId)}>
+                          ✕
+                        </button>
+                      </div>
+                    ))}
                   </div>
                   <div className="dcart-when sm muted">
                     {p.dayLbl} · {p.time || '—'} · {minutesLbl(p.durationMin)} · {p.empName}
@@ -1016,18 +1205,8 @@ export function Salon() {
                     <span>{t('c.sal.total')}</span>
                     <b>{showPrice}</b>
                   </div>
-                  <button className="btn btn-p" style={{ width: '100%' }} disabled={!p.lines.length || !p.time || p.missing.length > 0} onClick={book}>
-                    {t('c.sal.bookNow')}
-                  </button>
-                  {!p.lines.length || !p.time || p.missing.length ? (
-                    <div className="sm muted" style={{ textAlign: 'center', marginTop: '7px' }}>
-                      {!p.lines.length
-                        ? t('c.sal.chooseFirstDot')
-                        : p.missing.length
-                          ? t('c.sal.chooseGroup', { group: p.missing[0]!.group, service: p.missing[0]!.service })
-                          : t('c.sal.pickTime')}
-                    </div>
-                  ) : null}
+                  <LoyaltyEarn serviceCount={p.lines.length} productUnits={p.productUnits} />
+                  <BookButton p={p} desktop onBook={book} style={{ width: '100%' }} />
                 </div>
               )}
             </div>
@@ -1080,6 +1259,7 @@ export function Salon() {
             </div>
             {d.bookable ? <BookCard p={p} desktop={false} /> : notBookableCard}
             {aboutCard}
+            <SalonReviews d={d} idPrefix="m" />
             {locationCard('m')}
             <SalonAmenities keys={p.location?.amenities ?? []} idPrefix="m" />
             {d.team.length ? teamCard('m') : null}
@@ -1105,12 +1285,8 @@ export function Salon() {
                     <b data-sum="price">{showPrice}</b>
                   </span>
                 </div>
-                <button className="btn btn-p" disabled={!p.lines.length || !p.time || p.missing.length > 0} onClick={book}>
-                  {t('c.sal.bookNow')} {IcArr}
-                </button>
-                {p.missing.length ? (
-                  <span className="sm muted">{t('c.sal.chooseGroup', { group: p.missing[0]!.group, service: p.missing[0]!.service })}</span>
-                ) : null}
+                <LoyaltyEarn serviceCount={p.lines.length} productUnits={p.productUnits} className="m" />
+                <BookButton p={p} desktop={false} onBook={book} arrow />
                 <span className="safe">{IcVok} {t('c.sal.safe')}</span>
               </div>
             ) : null}

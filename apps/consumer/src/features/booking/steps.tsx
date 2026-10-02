@@ -12,6 +12,7 @@ import { useSession } from '../../lib/api/session.js';
 import { IcArr } from '../discovery/cards.js';
 import { SalonMap } from '../../components/SalonMap.js';
 import { useBooking } from './store.js';
+import { SkelLines, SkelRows } from '../../components/Skeleton.js';
 
 /** Guest identity steps — prototype markup, wired to the real booking
  *  door. The email verification-code step waits for the SMTP phase; the
@@ -26,8 +27,11 @@ export interface BookedVisit {
   end: string;
   serviceName: string;
   items: { ref: string; serviceName: string; time: string; end: string; price: number; employeeName: string }[];
+  /** Products reserved with the visit (2026-10-01). */
+  products?: { productId: string; name: string; qty: number; unitPrice: number }[];
   locationName: string;
   employeeName: string;
+  /** The treatments' total; products are listed beside it. */
   price: number;
   /** `requested` at a salon that confirms by hand: no payment yet. */
   status?: 'booked' | 'requested';
@@ -49,6 +53,35 @@ const IcCheck = (
   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>
 );
 
+/** A booking step reached with nothing to book — a reload after the
+ *  visit was confirmed, a link opened cold. Never a blank page: say what
+ *  belongs here and offer the way back. */
+/** The products in the draft, as one summary row — or nothing. */
+function ProductsRow({ products }: { products: { name: string; qty: number }[] }) {
+  if (!products.length) return null;
+  return (
+    <div className="r" data-testid="draft-products">
+      <span className="k">{t('c.bk.products')}</span>
+      <span className="v">{products.map((p) => (p.qty > 1 ? `${p.qty} × ${p.name}` : p.name)).join(', ')}</span>
+    </div>
+  );
+}
+
+export function NoDraft() {
+  const nav = useNavigate();
+  return (
+    <section className="acc" data-screen="email" data-testid="no-draft">
+      <div className="authwrap">
+        <h1>{t('c.bk.confirm')}</h1>
+        <div className="sub">{t('c.bk.pickFirst')}</div>
+        <button className="btn btn-p" style={{ width: '100%', marginTop: '18px', minHeight: '50px' }} onClick={() => nav('/')}>
+          {t('c.bk.findSalon')} {IcArr}
+        </button>
+      </div>
+    </section>
+  );
+}
+
 export function BookIdentity() {
   useTranslation();
   const nav = useNavigate();
@@ -62,19 +95,7 @@ export function BookIdentity() {
   const [fw, setFw] = useState<'self' | 'other'>(draft?.forWhom ?? 'self');
   const [guest, setGuest] = useState(draft?.guestName ?? '');
   const [err, setErr] = useState('');
-  if (!draft) {
-    return (
-      <section className="acc" data-screen="email">
-        <div className="authwrap">
-          <h1>{t('c.bk.confirm')}</h1>
-          <div className="sub">{t('c.bk.pickFirst')}</div>
-          <button className="btn btn-p" style={{ width: '100%', marginTop: '18px', minHeight: '50px' }} onClick={() => nav('/')}>
-            Find a salon {IcArr}
-          </button>
-        </div>
-      </section>
-    );
-  }
+  if (!draft) return <NoDraft />;
   const next = () => {
     if (!/.+@.+\..+/.test(email)) {
       setErr(t('c.bk.validEmail'));
@@ -104,6 +125,7 @@ export function BookIdentity() {
               {draft.items.map((i) => i.name).join(' + ')} · {minutesLbl(draft.durationMin)}
             </span>
           </div>
+          <ProductsRow products={draft.products} />
           <div className="r"><span className="k">{t('c.bk.dateTime')}</span><span className="v">{draft.dayLbl} · {draft.time}</span></div>
           <div className="r"><span className="k">{t('c.bk.total')}</span><span className="v">{fmtMKD(draft.price)}</span></div>
         </div>
@@ -189,6 +211,7 @@ export function BookProfile() {
         date: draft.date,
         time: draft.time,
         employeeId: draft.employeeId,
+        products: draft.products.map((p) => ({ productId: p.productId, qty: p.qty })),
         name,
         phone: phone.trim(),
         email: draft.email,
@@ -251,7 +274,11 @@ export function BookConfirmed() {
   };
   return (
     <section data-screen="confirm">
-      <div className="confirm-wrap">
+      {/* Desktop (Alex, 2026-10-01): two columns — the word and the way
+          on, on the left; the visit and its map on the right. Phones and
+          tablets keep the single column in the same order as before. */}
+      <div className="confirm-wrap confirm-split">
+        <div className="confirm-lead">
         <div className="okring">
           <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>
         </div>
@@ -273,6 +300,11 @@ export function BookConfirmed() {
                 ? t('c.pay.venueDone', { amount: fmtMKD(payment.amount), loc: state.locationName })
                 : t('c.bk.confirmedAt', { loc: state.locationName })}
         </p>
+        <div className="confirm-actions" style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginTop: '18px' }}>
+          <button className="btn btn-p" onClick={done}>{t('c.bk.backHome')}</button>
+        </div>
+        </div>
+        <div className="confirm-detail">
         <div className="sumcard">
           <div className="row"><span className="k">{t('c.bk.salon')}</span><span className="v">{draft?.salonName ?? state.locationName}</span></div>
           <div className="row"><span className="k">{t('c.bk.for')}</span><span className="v">{draft?.forWhom === 'other' ? draft.guestName : 'Myself'}</span></div>
@@ -294,10 +326,19 @@ export function BookConfirmed() {
               <div className="row"><span className="k">{t('c.bk.professional')}</span><span className="v">{state.employeeName || 'Any available professional'}</span></div>
             </>
           )}
+          {(state.products ?? []).map((p) => (
+            <div className="row" key={p.productId} data-testid="confirmed-product">
+              <span className="k">{t('c.bk.product')}</span>
+              <span className="v">{p.qty > 1 ? `${p.qty} × ` : ''}{p.name} · {fmtMKD(p.unitPrice * p.qty)}</span>
+            </div>
+          ))}
           <div className="row"><span className="k">{t('c.bk.email')}</span><span className="v">{draft?.email ?? '—'}</span></div>
           <div className="row"><span className="k">{t('c.bk.dateTime')}</span><span className="v">{state.date} · {state.time} – {state.end}</span></div>
           <div className="row"><span className="k">{t('c.bk.reference')}</span><span className="v">{state.ref.slice(0, 8).toUpperCase()}</span></div>
-          <div className="row tot"><span className="k" style={{ color: 'var(--ink)', fontWeight: '700' }}>{t('c.bk.total')}</span><span className="v">{fmtMKD(state.price)}</span></div>
+          <div className="row tot">
+            <span className="k" style={{ color: 'var(--ink)', fontWeight: '700' }}>{t('c.bk.total')}</span>
+            <span className="v">{fmtMKD(payment?.amount ?? state.price + (state.products ?? []).reduce((n, p) => n + p.unitPrice * p.qty, 0))}</span>
+          </div>
           {payment ? (
             <div className="row"><span className="k">{t('c.pay.line')}</span><span className="v">{payment.status === 'paid' ? t('c.pay.paidWith', { card: cardLbl }) : t('c.pay.atVenue')}</span></div>
           ) : null}
@@ -313,8 +354,6 @@ export function BookConfirmed() {
             />
           </div>
         ) : null}
-        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginTop: '18px' }}>
-          <button className="btn btn-p" onClick={done}>{t('c.bk.backHome')}</button>
         </div>
       </div>
     </section>
@@ -335,7 +374,19 @@ export function BookReview() {
   useEffect(() => {
     if (!signedIn) nav('/book/identity', { replace: true });
   }, [signedIn, nav]);
-  if (!draft || !profile) return null;
+  if (!draft) return <NoDraft />;
+  // Signed in, profile still on its way: the summary's shape, not a blank.
+  if (!profile) {
+    return (
+      <section data-screen="email">
+        <div className="authwrap" data-testid="review-loading">
+          <h1>{t('c.bk.confirm')}</h1>
+          <SkelLines n={2} widths={['w60', 'w40']} />
+          <div className="minisum"><SkelRows n={5} /></div>
+        </div>
+      </section>
+    );
+  }
   const book = async () => {
     setBusy(true);
     setErr('');
@@ -356,6 +407,7 @@ export function BookReview() {
           date: draft.date,
           time: draft.time,
           employeeId: draft.employeeId,
+          products: draft.products.map((p) => ({ productId: p.productId, qty: p.qty })),
         }),
       });
       await Promise.all([
@@ -385,6 +437,7 @@ export function BookReview() {
               {draft.items.map((i) => i.name).join(' + ')} · {minutesLbl(draft.durationMin)}
             </span>
           </div>
+          <ProductsRow products={draft.products} />
           <div className="r"><span className="k">{t('c.bk.professional')}</span><span className="v">{draft.employeeName}</span></div>
           <div className="r"><span className="k">{t('c.bk.dateTime')}</span><span className="v">{draft.dayLbl} · {draft.time}</span></div>
           <div className="r"><span className="k">{t('c.bk.total')}</span><span className="v">{fmtMKD(draft.price)}</span></div>

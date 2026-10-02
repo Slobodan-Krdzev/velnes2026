@@ -1,11 +1,11 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { SaleResponseSchema, ValidateCodeResponseSchema, type SaleLine } from '@velnes/contracts';
+import { SaleResponseSchema, ValidateCodeResponseSchema, type SaleLine, type VisitProduct } from '@velnes/contracts';
 import { I, Icon } from '@velnes/ui';
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { post } from '@velnes/client';
-import { useAppointments, useLocationCatalog, useLocations } from '../../api/queries.js';
+import { useAppointments, useDuePayments, useLocationCatalog, useLocations } from '../../api/queries.js';
 import { money } from '../../lib/money.js';
 import { useToast } from '../../lib/toast.js';
 import { refusalText } from '@velnes/client';
@@ -19,6 +19,8 @@ const uuid = () =>
 /** The prototype's POS_TYPES bar, verbatim. */
 const POS_TYPES: [string, string][] = [
   ['appointments', "Today's"],
+  // Due payments (Alex, 2026-10-01): past visits never paid.
+  ['due', 'Due'],
   ['services', 'Services'],
   ['products', 'Products'],
   ['combos', 'Packages'],
@@ -40,6 +42,7 @@ const TYPE_ICON: Record<string, string> = {
   combos: I.package,
   giftcards: I.giftcard,
   appointments: I.calendar,
+  due: I.clock,
 };
 
 interface BasketLine {
@@ -91,8 +94,16 @@ export function TillPage() {
   const catalog = useLocationCatalog(here);
   const today = localIso(new Date());
   const appts = useAppointments(here, today, today);
+  // What past visits still owe (Alex, 2026-10-01) — the Due tab.
+  const dueQ = useDuePayments(here);
+  const dueRows = dueQ.data?.due ?? [];
+  const dueBucket = (daysAgo: number) =>
+    daysAgo === 0 ? t('till.dueToday') : daysAgo === 1 ? t('till.dueYesterday') : daysAgo <= 7 ? t('till.dueWeek') : t('till.dueOlder');
 
-  const [posType, setPosType] = useState('appointments');
+  // `?type=giftcards` from the navigation search names the tab to open.
+  const [params] = useSearchParams();
+  const urlType = params.get('type');
+  const [posType, setPosType] = useState(urlType && POS_TYPES.some(([id]) => id === urlType) ? urlType : 'appointments');
   const [posCategory, setPosCategory] = useState('all');
   const [basket, setBasket] = useState<BasketLine[]>([]);
   const [extras, setExtras] = useState<Extras>(noExtras);
@@ -129,7 +140,9 @@ export function TillPage() {
         ? [...new Set(products.map((p) => p.category ?? ''))].filter(Boolean)
         : posType === 'appointments'
           ? [...new Set(todaysAppts.map((a) => hourOf(a.start)))].sort()
-          : [];
+          : posType === 'due'
+            ? [t('till.dueToday'), t('till.dueYesterday'), t('till.dueWeek'), t('till.dueOlder')].filter((b) => dueRows.some((d) => dueBucket(d.daysAgo) === b))
+            : [];
 
   interface Tile {
     id: string;
@@ -140,6 +153,8 @@ export function TillPage() {
     price: number;
     letter: string;
     img?: string | null | undefined;
+    /** Products the customer reserved with the booking (Alex, 2026-10-01). */
+    products?: VisitProduct[] | undefined;
   }
   const inCat = (c: string | null) => posCategory === 'all' || c === posCategory;
   let tiles: Tile[] = [];
@@ -178,7 +193,43 @@ export function TillPage() {
         meta: `${a.start} · ${a.serviceName ?? ''}`,
         price: a.price,
         letter: a.title[0] ?? '?',
+        products: a.products,
       }));
+  if (posType === 'due')
+    tiles = dueRows
+      .filter((d) => inCat(dueBucket(d.daysAgo)))
+      .map((d) => ({
+        id: d.appointmentId,
+        kind: 'appointment' as const,
+        name: d.customerName,
+        sub: d.serviceName,
+        // The day it happened, on the tile; the tile's height is the grid's.
+        meta: `${d.date.slice(8, 10)}.${d.date.slice(5, 7)}`,
+        // The sale door charges the appointment's price; a deposit is
+        // shown on the tile, not yet netted (docs/TILL.md).
+        price: d.price,
+        letter: d.customerName[0] ?? '?',
+        products: d.products,
+      }));
+
+  /**
+   * Products reserved with a booking ring up with it (Alex, 2026-10-01):
+   * when the appointment lands in the basket, its products follow as
+   * ordinary product lines — at this location's shelf price, the one
+   * the sale door will charge — removable like any other line. They
+   * come along once, with the appointment, never again on a re-tap.
+   */
+  const bookedProductLines = (items: VisitProduct[] | undefined): BasketLine[] =>
+    (items ?? []).map((p) => ({
+      key: uuid(),
+      kind: 'product' as const,
+      refId: p.productId,
+      name: p.name,
+      sub: t('till.withBooking'),
+      price: products.find((x) => x.id === p.productId)?.config.price ?? p.unitPrice,
+      qty: p.qty,
+      disc: 0,
+    }));
 
   const tillQty = (id: string) => basket.reduce((n, l) => n + (l.refId === id ? l.qty : 0), 0);
 
@@ -208,6 +259,7 @@ export function TillPage() {
               qty: 1,
               disc: 0,
             },
+            ...bookedProductLines(a.products),
           ],
     );
     toast(t('till.onTill', { name: a.title }));
@@ -231,6 +283,7 @@ export function TillPage() {
           qty: 1,
           disc: 0,
         },
+        ...(tile.kind === 'appointment' ? bookedProductLines(tile.products) : []),
       ];
     });
   const setQty = (key: string, d: number) =>
@@ -311,6 +364,7 @@ export function TillPage() {
       setSaleKey(uuid());
       // The sold appointment is paid now — the tiles must say so.
       void qc.invalidateQueries({ queryKey: ['appointments'] });
+      void qc.invalidateQueries({ queryKey: ['till-due'] });
       void qc.invalidateQueries({ queryKey: ['catalog'] });
       toast(
         `${money(res.total)} ${t('till.paidBy')} ${method.toLowerCase()} · ${res.invoice.number}`,
@@ -381,7 +435,7 @@ export function TillPage() {
                     setPosCategory('all');
                   }}
                 >
-                  {l}
+                  {k === 'due' && dueRows.length ? `${l} · ${dueRows.length}` : l}
                 </button>
               ))}
             </div>
@@ -403,7 +457,9 @@ export function TillPage() {
             {cats.map((c) =>
               posType === 'appointments'
                 ? catTile(c, I.clock, c, posCategory === c, inHour(c))
-                : catTile(c, CAT_ICON[c] ?? I.tag, c, posCategory === c),
+                : posType === 'due'
+                  ? catTile(c, I.clock, c, posCategory === c, dueRows.filter((d) => dueBucket(d.daysAgo) === c).length)
+                  : catTile(c, CAT_ICON[c] ?? I.tag, c, posCategory === c),
             )}
           </aside>
         ) : null}
@@ -411,8 +467,8 @@ export function TillPage() {
         <div className="pos-items">
           {tiles.length === 0 ? (
             <div className="empty">
-              <h3>{t('till.nothingHere')}</h3>
-              <p>{t('till.nothingHereSub')}</p>
+              <h3>{posType === 'due' ? t('till.dueEmpty') : t('till.nothingHere')}</h3>
+              <p>{posType === 'due' ? t('till.dueEmptySub') : t('till.nothingHereSub')}</p>
             </div>
           ) : (
             <div className="pos-grid">
@@ -431,6 +487,7 @@ export function TillPage() {
                         <span className="ptile-letter">{tile.letter.toUpperCase()}</span>
                       )}
                       <span className="ptile-p">{money(tile.price)}</span>
+                      {posType === 'due' ? <span className="ptile-d">{tile.meta}</span> : null}
                       {q ? (
                         <span className="ptile-q" aria-label={`${q} on the receipt`}>
                           ×&nbsp;{q}

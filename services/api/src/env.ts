@@ -78,11 +78,17 @@ export const env = {
   /** Set when INSIGHT_PROVIDER or ONBOARDING_PROVIDER = 'claude'. Absent
    *  → the claude providers degrade to rules, never fake an answer. */
   anthropicApiKey: process.env.ANTHROPIC_API_KEY ?? '',
+  /** The payment provider behind refunds (and, one day, charges).
+   *  'mock' is the only one today and says so; anything else is
+   *  refused at start-up rather than faked — see payments.provider. */
+  paymentProvider: process.env.PAYMENT_PROVIDER ?? 'mock',
   accessTtl: '15m',
   refreshTtlDays: 30,
 };
 
 if (env.mailTransport === 'smtp' && !env.smtp.host)
   throw new Error('SMTP_HOST must be set when MAIL_TRANSPORT=smtp');
+if (env.paymentProvider !== 'mock')
+  throw new Error(`PAYMENT_PROVIDER must be 'mock' until a real provider is integrated, got '${env.paymentProvider}'`);
 if (env.mailTransport !== 'smtp' && env.mailTransport !== 'mock')
   throw new Error(`MAIL_TRANSPORT must be 'smtp' or 'mock', got '${env.mailTransport}'`);

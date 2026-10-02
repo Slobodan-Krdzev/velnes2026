@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { MoneySchema } from './catalog.js';
+import { VisitProductSchema } from './scheduling.js';
 
 /**
  * Paying for a booking from the Velnes app — Alex, 2026-09-22.
@@ -55,6 +56,9 @@ export const PayQuoteSchema = z.object({
       price: MoneySchema,
     }),
   ),
+  /** Products reserved with the visit, at the shelf price the till will
+   *  charge now — so the quote equals the charge. Counted in subtotal. */
+  products: z.array(VisitProductSchema.extend({ total: MoneySchema })).default([]),
   subtotal: MoneySchema,
   promo: z.object({ code: z.string(), label: z.string(), amount: MoneySchema }).nullable(),
   gift: z.object({ code: z.string(), amount: MoneySchema, remaining: MoneySchema }).nullable(),

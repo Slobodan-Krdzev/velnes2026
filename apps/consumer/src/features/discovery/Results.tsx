@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { categoryVM, type CategoryVM, minutesLbl, placeLine, priceLbl, rowKey, serviceVM, type ServiceVM } from '../../lib/api/mappers.js';
+import { categoryVM, type CategoryVM, dayLbl, minutesLbl, placeLine, priceLbl, rowKey, serviceVM, type ServiceVM } from '../../lib/api/mappers.js';
+import { RatingChip } from '../../components/Stars.js';
 import {
   useCategories,
   useMostChosen,
@@ -21,6 +22,8 @@ import {
   IcClock,
   IcMark,
   IcBolt,
+  IcCal,
+  IcPeople,
   IcPin,
   IcSpark,
   IcVok,
@@ -30,7 +33,7 @@ import { useSearchBox } from './useSearchBox.js';
 import { useSearchSheet } from './SearchSheet.js';
 import { FiltersSheet } from './FiltersSheet.js';
 import { MapResults, type MapResult } from './MapResults.js';
-import { AmenityKeySchema } from '@velnes/contracts';
+import { AmenityKeySchema, PARTY_MAX, WhenSchema } from '@velnes/contracts';
 
 /** What "near me" means, in kilometres. The distance chips can widen
  *  or narrow it afterwards; this is where the button starts. */
@@ -139,7 +142,11 @@ function useLiveLine(s: ServiceVM) {
       ? distanceKm(position, { lat: s.salon.lat, lng: s.salon.lng })
       : null;
   return {
-    av: s.availableAt ? t('c.availNow', { t: s.availableAt }) : null,
+    av: s.availableAt
+      ? t('c.availNow', { t: s.availableAt })
+      : s.availableOn
+        ? t('c.availOn', { d: dayLbl(s.availableOn.date), t: s.availableOn.at })
+        : null,
     // The price of this treatment, not the salon's cheapest anything.
     pr: priceLbl(s),
     away: km === null ? null : t('c.res.fromYou', { d: distanceLbl(km) }),
@@ -150,8 +157,13 @@ function useLiveLine(s: ServiceVM) {
  *  already named so the salon page can open on it. */
 function salonHref(s: ServiceVM) {
   // The place too: a two-location salon opens at the location this
-  // result was for, not at its first.
-  return `/salon/${s.salon.slug}?service=${encodeURIComponent(s.id)}&location=${encodeURIComponent(s.location.id)}`;
+  // result was for, not at its first. A card that can start now carries
+  // its start and its professional, so the salon page is ready to book.
+  const base = `/salon/${s.salon.slug}?service=${encodeURIComponent(s.id)}&location=${encodeURIComponent(s.location.id)}`;
+  if (!s.availableAt) return base;
+  const today = new Date();
+  const iso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+  return `${base}&date=${iso}&time=${s.availableAt}${s.availableEmployeeId ? `&employee=${encodeURIComponent(s.availableEmployeeId)}` : ''}`;
 }
 
 /**
@@ -316,7 +328,7 @@ function BestD({ s, on = false, onSelect }: { s: ServiceVM; on?: boolean; onSele
             {av ? <span className="tiny-tag" style={{ background: '#EAF2E4', color: '#3E5A34' }}>{t('c.now')}</span> : null}
           </div>
           <div className="sm muted">
-            {IcPin} {whereLine(s, away)} <span className="vok">{IcVok}</span>
+            {IcPin} {whereLine(s, away)} <span className="vok">{IcVok}</span> <RatingChip rating={s.salon.rating} />
           </div>
           <p style={{ margin: '2px 0', fontSize: '14px' }}>{minutesLbl(s.durationMin)}</p>
           {av ? <span className="avail">{IcClock} {av}</span> : null}
@@ -346,7 +358,7 @@ function AltD({ s, on = false, onSelect }: { s: ServiceVM; on?: boolean; onSelec
       <div>
         <h4>{s.name}</h4>
         <div className="sm muted">
-          {IcPin} {whereLine(s, away)} <span className="vok">{IcVok}</span>
+          {IcPin} {whereLine(s, away)} <span className="vok">{IcVok}</span> <RatingChip rating={s.salon.rating} />
         </div>
         {av ? <span className="avail">{IcClock} {av}</span> : null}
       </div>
@@ -377,7 +389,7 @@ function BestM({ s }: { s: ServiceVM }) {
       <div className="bd">
         <h3>{s.name}</h3>
         <div className="sm muted">
-          {IcPin} {whereLine(s, away)} <span className="vok">{IcVok}</span>
+          {IcPin} {whereLine(s, away)} <span className="vok">{IcVok}</span> <RatingChip rating={s.salon.rating} />
         </div>
         <div style={{ fontSize: '13.5px' }}>{minutesLbl(s.durationMin)}</div>
         {av ? <span className="avail">{IcClock} {av}</span> : null}
@@ -405,7 +417,7 @@ function AltM({ s }: { s: ServiceVM }) {
       <div>
         <h4>{s.name}</h4>
         <div className="sm muted">
-          {IcPin} {whereLine(s, away)}
+          {IcPin} {whereLine(s, away)} <RatingChip rating={s.salon.rating} />
           {av ? (
             <>
               {' · '}
@@ -475,6 +487,9 @@ export function Results() {
         .split(',')
         .map((k) => AmenityKeySchema.safeParse(k))
         .flatMap((r) => (r.success ? [r.data] : [])),
+      // A word the door knows, or nothing — a link cannot invent a day.
+      when: WhenSchema.safeParse(params.get('when')).data ?? null,
+      party: Math.min(PARTY_MAX, Math.max(1, Math.round(Number(params.get('party')) || 1))),
     };
   }, [params]);
   const setFilters = useCallback(
@@ -492,6 +507,8 @@ export function Results() {
       if ('priceMin' in patch) put('pmin', patch.priceMin ?? null);
       if ('priceMax' in patch) put('pmax', patch.priceMax ?? null);
       if ('amenities' in patch) put('am', patch.amenities?.length ? patch.amenities.join(',') : null);
+      if ('when' in patch) put('when', patch.when ?? null);
+      if ('party' in patch) put('party', patch.party && patch.party > 1 ? patch.party : null);
       // `near` is an intent, never a filter (see below): any write of
       // the real filters consumes it.
       next.delete('near');
@@ -760,6 +777,20 @@ export function Results() {
    */
   const nowOn = filters.now || nowRequested;
   const toggleNow = useCallback(() => setFilters({ now: !filters.now }), [filters.now, setFilters]);
+  /**
+   * When, as a day (Alex, 2026-09-30): the home page's "Massage
+   * tomorrow" and "Facial this weekend" chips, and the sheet's When.
+   * Hard admission on the door — only what has a free start that day,
+   * each card saying which. Shown as a lit chip that takes it off, so
+   * a link never carries a day the page hides.
+   */
+  const whenLabel = filters.when ? t(`c.when.${filters.when}`) : null;
+  const clearWhen = useCallback(() => setFilters({ when: null }), [setFilters]);
+  /** "For two": only where two can be seen at once; each seat is its
+   *  own booking, and the page says so rather than implying a double. */
+  const partyOn = filters.party > 1;
+  const clearParty = useCallback(() => setFilters({ party: 1 }), [setFilters]);
+  const partyNote = partyOn && loaded && rows.length > 0 ? t('c.party.note') : null;
   const nowNote =
     nowRequested && loaded && rows.length > 0 && availableNow === 0
       ? t('c.nowNone')
@@ -816,13 +847,16 @@ export function Results() {
         lng: s.salon.lng!,
         label: s.salon.name,
         sub: placeSub(s),
-        sub2: s.availableAt ? t('c.availNow', { t: s.availableAt }) : null,
+        sub2: s.availableAt
+          ? t('c.availNow', { t: s.availableAt })
+          : s.availableOn
+            ? t('c.availOn', { d: dayLbl(s.availableOn.date), t: s.availableOn.at })
+            : null,
         here: i === 0,
         // The card the pin opens. Everything on it is something the
         // platform actually knows — the salon's own photograph, whether
         // it can be booked, and what this treatment costs there. No
-        // rating: there are no reviews yet, and a star nobody earned is
-        // worse than no star at all.
+        // The salon's verified score, when it has one (2026-09-30).
         photo: s.salon.hasPhoto ? s.salon.photo : null,
         badge: s.salon.bookable ? t('c.res.instant') : null,
         price: priceLbl(s),
@@ -908,10 +942,27 @@ export function Results() {
                 {IcBolt}
                 {t('c.now')}
               </button>
+              {whenLabel ? (
+                <button className="chip on" onClick={clearWhen} aria-pressed="true" title={t('c.when.title')}>
+                  {IcCal}
+                  {whenLabel}
+                </button>
+              ) : null}
+              {partyOn ? (
+                <button className="chip on" onClick={clearParty} aria-pressed="true" title={t('c.party.twoTitle')}>
+                  {IcPeople}
+                  {t('c.party.two')}
+                </button>
+              ) : null}
             </div>
             {nowNote ? (
               <div className="d-wrap">
                 <GeoNotice icon="clock">{nowNote}</GeoNotice>
+              </div>
+            ) : null}
+            {partyNote ? (
+              <div className="d-wrap">
+                <GeoNotice icon="clock">{partyNote}</GeoNotice>
               </div>
             ) : null}
             {geoNote ? (
@@ -1124,10 +1175,27 @@ export function Results() {
                 {IcBolt}
                 {t('c.now')}
               </button>
+              {whenLabel ? (
+                <button className="chip on" onClick={clearWhen} aria-pressed="true" title={t('c.when.title')}>
+                  {IcCal}
+                  {whenLabel}
+                </button>
+              ) : null}
+              {partyOn ? (
+                <button className="chip on" onClick={clearParty} aria-pressed="true" title={t('c.party.twoTitle')}>
+                  {IcPeople}
+                  {t('c.party.two')}
+                </button>
+              ) : null}
             </div>
             {nowNote ? (
               <div style={{ padding: '4px 16px 0' }}>
                 <GeoNotice icon="clock">{nowNote}</GeoNotice>
+              </div>
+            ) : null}
+            {partyNote ? (
+              <div style={{ padding: '4px 16px 0' }}>
+                <GeoNotice icon="clock">{partyNote}</GeoNotice>
               </div>
             ) : null}
             {rows.length ? (

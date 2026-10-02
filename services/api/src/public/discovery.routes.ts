@@ -23,10 +23,13 @@ import {
   DiscoveryRecommendedSchema,
   DiscoveryNewestSchema,
   NEWEST_SALON_DAYS,
+  PARTY_HORIZON_DAYS,
   DiscoveryViewerSchema,
+  PublicReviewsPageSchema,
+  PublicReviewsQuerySchema,
 } from '@velnes/contracts';
 import { amenitiesByLocation } from '../modules/locations/locations.service.js';
-import type { DiscoveryServiceCard } from '@velnes/contracts';
+import type { DiscoveryServiceCard, When } from '@velnes/contracts';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { sql } from 'kysely';
@@ -48,8 +51,11 @@ import {
 } from '../modules/search/interpret.js';
 import { priceOf, applyFilters, priceTercilesOf } from '../modules/search/filters.js';
 import { NOW_WINDOW_MIN, readNow } from '../modules/search/now-intent.js';
-import { empsFor, firstStartWithin } from '../modules/booking/booking.service.js';
+import { daysFor } from '../modules/search/when.js';
+import { nowAt } from '../modules/scheduling/scheduling.service.js';
+import { empsFor, firstFreeWithin, firstStartOn } from '../modules/booking/booking.service.js';
 import { db, withClient, withTenant } from '../db/index.js';
+import { employeeRatings, publicReviews, ratingsForBusinesses, reviewSummary } from '../modules/reviews/reviews.service.js';
 
 const ErrorSchema = z.object({ error: z.string(), message: z.string() });
 
@@ -268,12 +274,14 @@ export interface TextCandidates {
  * that refetches on every filter tap must not re-walk every calendar.
  */
 const NOW_TTL_MS = 20_000;
-const nowCache = new Map<string, { at: number; value: string | null }>();
+type NowSlot = { t: string; emp: string | null } | null;
+const nowCache = new Map<string, { at: number; value: NowSlot }>();
 async function availableNowOf(
   candidates: RankCandidate[],
   now: Date,
-): Promise<Map<string, string | null>> {
-  const out = new Map<string, string | null>();
+  party = 1,
+): Promise<Map<string, NowSlot>> {
+  const out = new Map<string, NowSlot>();
   const byBiz = new Map<string, RankCandidate[]>();
   for (const c of candidates) {
     const list = byBiz.get(c.salon.businessId) ?? [];
@@ -282,7 +290,7 @@ async function availableNowOf(
   }
   for (const [bizId, list] of byBiz) {
     const todo = list.filter((c) => {
-      const hit = nowCache.get(`${bizId}:${candKey(c)}`);
+      const hit = nowCache.get(`${bizId}:${candKey(c)}:${party}`);
       if (hit && now.getTime() - hit.at < NOW_TTL_MS) {
         out.set(candKey(c), hit.value);
         return false;
@@ -294,18 +302,95 @@ async function availableNowOf(
       // The candidate is a treatment AT a location: that location's own
       // first start, never a sibling's.
       for (const c of todo) {
-        const at = await firstStartWithin(trx, {
+        const at = await firstFreeWithin(trx, {
           locationId: c.locationId,
           serviceId: c.id,
           windowMin: NOW_WINDOW_MIN,
           now,
+          party,
         });
         out.set(candKey(c), at);
-        nowCache.set(`${bizId}:${candKey(c)}`, { at: now.getTime(), value: at });
+        nowCache.set(`${bizId}:${candKey(c)}:${party}`, { at: now.getTime(), value: at });
       }
     });
   }
   return out;
+}
+
+/**
+ * "When", and "for two" (Alex, 2026-09-30) — the day each candidate
+ * can first be booked on, if it can.
+ *
+ * Asked only when the customer named a day (`when`) or a party. The
+ * days are the word's own — today, tomorrow, the coming weekend — in
+ * the *location's* clock, so "tomorrow" is the salon's tomorrow; a
+ * party with no day looks `PARTY_HORIZON_DAYS` ahead. Each day is one
+ * calendar question stopped at the first free start (`firstStartOn`,
+ * with the party), in the day's order, so the answer is the earliest.
+ * Null means no start on any of those days: the doors treat that as
+ * admission, since a day is a filter — a card that says "tomorrow" and
+ * has no tomorrow is the claim this surface must never make.
+ * Remembered twenty seconds per treatment, place, word and party, like
+ * *now*.
+ */
+type Day = { date: string; at: string };
+const dayCache = new Map<string, { at: number; value: Day | null }>();
+async function availableOnOf(
+  candidates: RankCandidate[],
+  when: When | null,
+  party: number,
+  now: Date,
+): Promise<Map<string, Day | null>> {
+  const out = new Map<string, Day | null>();
+  const byBiz = new Map<string, RankCandidate[]>();
+  for (const c of candidates) {
+    const list = byBiz.get(c.salon.businessId) ?? [];
+    list.push(c);
+    byBiz.set(c.salon.businessId, list);
+  }
+  const key = (bizId: string, c: RankCandidate) => `${bizId}:${candKey(c)}:${when ?? 'any'}:${party}`;
+  for (const [bizId, list] of byBiz) {
+    const todo = list.filter((c) => {
+      const hit = dayCache.get(key(bizId, c));
+      if (hit && now.getTime() - hit.at < NOW_TTL_MS) {
+        out.set(candKey(c), hit.value);
+        return false;
+      }
+      return true;
+    });
+    if (!todo.length) continue;
+    await withTenant(bizId, async (trx) => {
+      const tzOf = new Map<string, string>();
+      for (const c of todo) {
+        if (!tzOf.has(c.locationId)) {
+          const loc = await trx.selectFrom('locations').select('tz').where('id', '=', c.locationId).executeTakeFirst();
+          tzOf.set(c.locationId, loc?.tz ?? 'Europe/Skopje');
+        }
+        const today = nowAt(tzOf.get(c.locationId)!, now).date;
+        let value: Day | null = null;
+        for (const date of daysFor(when, today, PARTY_HORIZON_DAYS)) {
+          const at = await firstStartOn(trx, { locationId: c.locationId, serviceId: c.id, date, now, party });
+          if (at) {
+            value = { date, at };
+            break;
+          }
+        }
+        out.set(candKey(c), value);
+        dayCache.set(key(bizId, c), { at: now.getTime(), value });
+      }
+    });
+  }
+  return out;
+}
+
+/** Admission on a day or a party: only what has a start, each carrying it. */
+async function admitOnDay(candidates: RankCandidate[], when: When | null, party: number, now: Date): Promise<RankCandidate[]> {
+  if (!when && party <= 1) return candidates;
+  const days = await availableOnOf(candidates, when, party, now);
+  return candidates.flatMap((c) => {
+    const d = days.get(candKey(c)) ?? null;
+    return d ? [{ ...c, availableOn: d }] : [];
+  });
 }
 
 /** Every category with something on offer, as candidates — what "now"
@@ -562,12 +647,16 @@ export async function gatherCategory(categoryId: string): Promise<
       })
     : [];
   const createdAt = new Map(created.map((b) => [b.id, b.createdAt]));
+  // Every salon's verified-review score, one query for the whole page.
+  const ratings = await ratingsForBusinesses();
 
   const services: DiscoveryServiceCard[] = [];
   const meta = new Map<string, CandidateMeta>();
   for (const b of listed) {
     const photo = cardPhoto(b.gallery);
     const show = b.marketplace.showPrices;
+    // The salon's score, unless it hides reviews; never a 0.0.
+    const rating = b.marketplace.showReviews ? (ratings.get(b.id) ?? null) : null;
     // Every ACTIVE location, and for each the treatments really offered
     // there (Alex, 2026-09-29): active and online at that location, with
     // somebody there who does it — the same rule the salon page's
@@ -621,10 +710,13 @@ export async function gatherCategory(categoryId: string): Promise<
               bookable: true,
               showPrices: show,
               amenities: amenities.get(place.id) ?? [],
+              rating,
             },
             location: { id: place.id, name: place.name, city: place.city, address: place.address, lat: place.lat, lng: place.lng },
             // Learned only when a request asks for *now*; see the doors.
             availableAt: null,
+            availableEmployeeId: null,
+            availableOn: null,
           });
         }
       }
@@ -809,6 +901,7 @@ export async function discoveryRoutes(app: FastifyInstance) {
       const now = new Date();
       const position = req.query.lat != null && req.query.lng != null ? { lat: req.query.lat, lng: req.query.lng } : null;
       const listed = await listedBusinesses();
+      const ratings = await ratingsForBusinesses();
       // Candidates: open salons, each with the categories it really serves.
       const cards = [];
       for (const b of listed) {
@@ -838,6 +931,7 @@ export async function discoveryRoutes(app: FastifyInstance) {
             lat: pin.lat,
             lng: pin.lng,
             bookable: true,
+            rating: b.marketplace.showReviews ? (ratings.get(b.id) ?? null) : null,
           },
           catIds: cats,
           km: position && pin.lat != null && pin.lng != null ? haversineKm(position, { lat: pin.lat, lng: pin.lng }) : null,
@@ -920,6 +1014,7 @@ export async function discoveryRoutes(app: FastifyInstance) {
     url: '/discovery/newest',
     schema: { response: { 200: DiscoveryNewestSchema } },
     handler: async () => {
+      const newestRatings = await ratingsForBusinesses();
       const since = Date.now() - NEWEST_SALON_DAYS * 86_400_000;
       const fresh = (await listedBusinesses())
         .filter((b) => b.createdAt.getTime() >= since)
@@ -951,6 +1046,7 @@ export async function discoveryRoutes(app: FastifyInstance) {
           lat: pin.lat,
           lng: pin.lng,
           bookable: true,
+          rating: b.marketplace.showReviews ? (newestRatings.get(b.id) ?? null) : null,
           joinedAt: b.createdAt.toISOString(),
         });
         if (salons.length === 8) break;
@@ -1147,6 +1243,7 @@ export async function discoveryRoutes(app: FastifyInstance) {
     schema: { response: { 200: DiscoverySalonsSchema } },
     handler: async () => {
       const listed = await listedBusinesses();
+      const ratings = await ratingsForBusinesses();
       const salons = [];
       for (const b of listed) {
         const photo = cardPhoto(b.gallery);
@@ -1174,6 +1271,7 @@ export async function discoveryRoutes(app: FastifyInstance) {
           lat: pin.lat,
           lng: pin.lng,
           bookable: open,
+          rating: b.marketplace.showReviews ? (ratings.get(b.id) ?? null) : null,
         });
       }
       return { salons };
@@ -1446,12 +1544,15 @@ export async function discoveryRoutes(app: FastifyInstance) {
       )
         widened = 'category';
 
+      // A day, or a party: admission through the calendar, each survivor
+      // carrying the start that admitted it.
+      const onDay = await admitOnDay(cut.admitted, req.body.when, req.body.party, now);
       // Asked for now: every admitted candidate learns when it could
       // start, and that becomes its availability — and the order.
-      const soon = wantNow ? await availableNowOf(cut.admitted, now) : null;
+      const soon = wantNow ? await availableNowOf(onDay, now, req.body.party) : null;
       const admitted = soon
-        ? cut.admitted.map((c) => ({ ...c, availableAt: soon.get(candKey(c)) ?? null }))
-        : cut.admitted;
+        ? onDay.map((c) => ({ ...c, availableAt: soon.get(candKey(c))?.t ?? null, availableEmployeeId: soon.get(candKey(c))?.emp ?? null }))
+        : onDay;
       const ranked = rank(admitted, { position, history }, cfg.payload, { now });
       // A page with almost nothing on it is a miss the customer feels,
       // even though the query technically worked. Only recorded when
@@ -1460,7 +1561,8 @@ export async function discoveryRoutes(app: FastifyInstance) {
       // what the platform sells. "now" on its own names no gap either.
       const narrowed = Boolean(
         req.body.priceBand || req.body.categoryId || req.body.radiusKm || req.body.city ||
-        req.body.priceMin != null || req.body.priceMax != null || req.body.amenities.length,
+        req.body.priceMin != null || req.body.priceMax != null || req.body.amenities.length ||
+        req.body.when || req.body.party > 1,
       );
       if (!narrowed && !nowOnly) await noteMiss(q, ranked.length, read.how);
       // Keyed by treatment *and* place: the same service at two locations
@@ -1471,6 +1573,8 @@ export async function discoveryRoutes(app: FastifyInstance) {
         services: ranked.map((x) => ({
           ...byKey.get(candKey(x.candidate))!,
           availableAt: x.candidate.availableAt ?? null,
+          availableEmployeeId: x.candidate.availableEmployeeId ?? null,
+          availableOn: x.candidate.availableOn ?? null,
         })),
         salons: nearMisses,
         rankVersion: cfg.version,
@@ -1577,10 +1681,11 @@ export async function discoveryRoutes(app: FastifyInstance) {
         true,
       );
 
-      const soon = req.body.now ? await availableNowOf(cut.admitted, now) : null;
+      const onDay = await admitOnDay(cut.admitted, req.body.when, req.body.party, now);
+      const soon = req.body.now ? await availableNowOf(onDay, now, req.body.party) : null;
       const admitted = soon
-        ? cut.admitted.map((c) => ({ ...c, availableAt: soon.get(candKey(c)) ?? null }))
-        : cut.admitted;
+        ? onDay.map((c) => ({ ...c, availableAt: soon.get(candKey(c))?.t ?? null, availableEmployeeId: soon.get(candKey(c))?.emp ?? null }))
+        : onDay;
       const ranked = rank(admitted, { position, history }, cfg.payload, { now });
       const byKey = new Map(services.map((s) => [cardKey(s), s]));
       return {
@@ -1588,6 +1693,8 @@ export async function discoveryRoutes(app: FastifyInstance) {
         services: ranked.map((r) => ({
           ...byKey.get(candKey(r.candidate))!,
           availableAt: r.candidate.availableAt ?? null,
+          availableEmployeeId: r.candidate.availableEmployeeId ?? null,
+          availableOn: r.candidate.availableOn ?? null,
         })),
         rankVersion: cfg.version,
         personalised,
@@ -1613,7 +1720,10 @@ export async function discoveryRoutes(app: FastifyInstance) {
       if (!biz)
         return reply.code(404).send({ error: 'UNKNOWN_SALON', message: 'No salon here' });
       const pin = await firstPin(biz.id);
-      const { team, products, locations, addr } = await withTenant(biz.id, async (trx) => {
+      const { team, products, locations, addr, reviews, teamRatings } = await withTenant(biz.id, async (trx) => {
+        // Verified reviews, unless the salon hides them.
+        const reviews = biz.marketplace.showReviews ? await reviewSummary(trx, biz.id) : null;
+        const teamRatings = biz.marketplace.showReviews ? await employeeRatings(trx, biz.id) : new Map<string, { avg: number; count: number }>();
         const team = biz.marketplace.showTeam
           ? await trx
               .selectFrom('employees')
@@ -1623,7 +1733,7 @@ export async function discoveryRoutes(app: FastifyInstance) {
               .orderBy('name')
               .execute()
           : [];
-        const products = await trx
+        const shelf = await trx
           .selectFrom('products as p')
           .leftJoin('productCategories as c', 'c.id', 'p.categoryId')
           .select(['p.id', 'p.name', 'p.price'])
@@ -1666,7 +1776,34 @@ export async function discoveryRoutes(app: FastifyInstance) {
           address: biz.address ?? any?.address ?? null,
           city: biz.city ?? any?.city ?? null,
         };
-        return { team, products, locations, addr };
+        // Where each product is actually sold, and for how much there —
+        // the location's shelf row when it has one, else the product's
+        // own terms, exactly as the till's `prodAt` decides (2026-10-01).
+        const rows =
+          shelf.length && locations.length
+            ? await trx
+                .selectFrom('locationCatalogProducts')
+                .select(['locationId', 'productId', 'price', 'active', 'pos'])
+                .where(
+                  'productId',
+                  'in',
+                  shelf.map((p) => p.id),
+                )
+                .where(
+                  'locationId',
+                  'in',
+                  locations.map((l) => l.id),
+                )
+                .execute()
+            : [];
+        const products = shelf.map((p) => ({
+          ...p,
+          at: locations.flatMap((l) => {
+            const c = rows.find((r) => r.productId === p.id && r.locationId === l.id);
+            return (c?.active ?? true) && (c?.pos ?? true) ? [{ locationId: l.id, price: c?.price ?? p.price }] : [];
+          }),
+        }));
+        return { team, products, locations, addr, reviews, teamRatings };
       });
       return {
         id: biz.id,
@@ -1683,12 +1820,35 @@ export async function discoveryRoutes(app: FastifyInstance) {
         gallery: galleryOf(biz.gallery),
         socials: biz.socials,
         showPrices: biz.marketplace.showPrices,
-        team: team.map((e) => ({ id: e.id, name: e.name, role: e.roleTitle, avatar: e.avatar })),
+        team: team.map((e) => ({ id: e.id, name: e.name, role: e.roleTitle, avatar: e.avatar, rating: teamRatings.get(e.id) ?? null })),
         products,
         bookable: locations.length > 0,
         publishableKey: locations.length ? consumerKey(biz.slug) : null,
         locations,
+        reviews,
       };
+    },
+  });
+
+  /**
+   * A page of a salon's verified reviews, newest first — its own door
+   * so the salon page stays light and the list can grow. The public
+   * shape carries a first name and an initial, never more.
+   */
+  r.route({
+    method: 'GET',
+    url: '/discovery/salons/:slug/reviews',
+    schema: {
+      params: z.object({ slug: z.string().min(1) }),
+      querystring: PublicReviewsQuerySchema,
+      response: { 200: PublicReviewsPageSchema, 404: ErrorSchema },
+    },
+    handler: async (req, reply) => {
+      const listed = await listedBusinesses();
+      const biz = listed.find((b) => b.slug === req.params.slug);
+      if (!biz) return reply.code(404).send({ error: 'UNKNOWN_SALON', message: 'No salon here' });
+      if (!biz.marketplace.showReviews) return { reviews: [], total: 0, offset: req.query.offset, limit: req.query.limit };
+      return publicReviews(biz.id, req.query.offset, req.query.limit);
     },
   });
 }

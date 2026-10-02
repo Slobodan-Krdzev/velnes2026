@@ -25,6 +25,7 @@ import { DateField } from '../../lib/DateField.js';
 import { useOutsideClose } from '../../lib/pop.js';
 import { money } from '../../lib/money.js';
 import { useToast } from '../../lib/toast.js';
+import { ChangesPanel } from './Changes.js';
 
 /** The prototype's appointment drawer (PANELS.appointment): the save
  *  group sits top-right in the panel head, the body runs mode rows →
@@ -867,10 +868,25 @@ function EditBody({ appointment: a, onClose }: { appointment: Appointment; onClo
             <span className="hint">{t('drawer.optionsHint')}</span>
           </div>
         ) : null}
+        {a.products.length ? (
+          <div className="field" data-testid="booked-products">
+            <span>{t('drawer.products')}</span>
+            <div className="chips">
+              {a.products.map((p) => (
+                <span key={p.productId} className="chip">
+                  {p.qty > 1 ? `${p.qty} × ` : ''}
+                  {p.name} · {money(p.unitPrice * p.qty)}
+                </span>
+              ))}
+            </div>
+            <span className="hint">{t('drawer.productsHint')}</span>
+          </div>
+        ) : null}
         {a.source === 'marketplace' && !requested ? <div className="note">{t('drawer.marketplaceNote')}</div> : null}
         {requested ? (
           <div className="note">{t('drawer.requestNote')}</div>
         ) : null}
+        {a.kind === 'appointment' ? <ChangesPanel a={a} onClose={onClose} /> : null}
         {requested ? (
           <div style={{ display: 'grid', gap: 8 }}>
             <button

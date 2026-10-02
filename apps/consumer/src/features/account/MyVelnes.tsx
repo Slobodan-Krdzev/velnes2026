@@ -4,7 +4,7 @@ import { t } from '../../lib/i18n-core.js';
 import { LangMenu } from '../../app/LangMenu.js';
 import { useLang } from '../../lib/i18n.js';
 import { useMemo, useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import type { z } from 'zod';
 import type { ClientAppointmentSchema } from '@velnes/contracts';
 import { SalonMap } from '../../components/SalonMap.js';
@@ -12,6 +12,12 @@ import { useWheelScroll } from '../../lib/useWheelScroll.js';
 import { useUserLocation } from '../../lib/geo.js';
 import { ApiError } from '../../lib/api/client.js';
 import { fmtMKD, minutesLbl } from '../../lib/api/mappers.js';
+import { ReviewForm, ReviewGiven } from './ReviewForm.js';
+import { CancelConfirm, PaymentLines, PolicyCard, RequestCard, ReschedulePicker, VisitHistory } from './Changes.js';
+import { LoyaltyCard, LoyaltySection, useMyLoyalty } from './Loyalty.js';
+import { AvatarPicker } from '../../components/AvatarPicker.js';
+import { SkelRows } from '../../components/Skeleton.js';
+import { Stars } from '../../components/Stars.js';
 import {
   useFavourites,
   useMyAppointments,
@@ -19,6 +25,7 @@ import {
   useMyOffers,
   useMySalons,
   useSession,
+  rememberReturnTo,
 } from '../../lib/api/session.js';
 
 type Appt = z.infer<typeof ClientAppointmentSchema>;
@@ -32,6 +39,9 @@ type Appt = z.infer<typeof ClientAppointmentSchema>;
 const BELL = (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M18 9a6 6 0 1 0-12 0c0 6-2 7-2 7h16s-2-1-2-7" /><path d="M10.2 20a2 2 0 0 0 3.6 0" /></svg>
 );
+const IcArrSmall = (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M5 12h13M13 6l6 6-6 6" /></svg>
+);
 const BACK = (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14.5 6 8.5 12l6 6" /></svg>
 );
@@ -43,10 +53,12 @@ const secs = () => [
   { id: 'appts' as const, t: t('c.acc.appts'), sub: t('c.acc.apptsSub') },
   // Third, where the prototype puts it.
   { id: 'favs' as const, t: t('c.acc.favs'), sub: t('c.acc.favsSub') },
+  // Velnes Loyalty (2026-09-30): the platform points, docs/LOYALTY.md.
+  { id: 'loyalty' as const, t: t('c.loy.title'), sub: t('c.loy.cardSub') },
   { id: 'cards' as const, t: t('c.acc.cards'), sub: t('c.acc.cardsSub') },
   { id: 'notifs' as const, t: t('c.acc.notifs'), sub: '' },
 ];
-type SecId = 'general' | 'appts' | 'favs' | 'notifs' | 'cards' | 'over' | 'appt';
+type SecId = 'general' | 'appts' | 'favs' | 'notifs' | 'cards' | 'over' | 'appt' | 'loyalty';
 
 const titles = (): Record<string, string> => ({
   over: t('c.acc.title'),
@@ -56,7 +68,35 @@ const titles = (): Record<string, string> => ({
   favs: t('c.acc.favs'),
   cards: t('c.acc.cards'),
   notifs: t('c.acc.notifs'),
+  loyalty: t('c.loy.title'),
 });
+
+
+/**
+ * "Book again" (Alex, 2026-09-30): the salon page, opened on the visit
+ * as it was — its location, treatment, variant, options and
+ * professional — so only the day and time are left to choose. Nothing
+ * is locked: the cart there can still be added to, emptied or changed.
+ * Only what the visit really had rides along; a visit with "any
+ * professional" opens with any.
+ */
+export function bookAgainHref(a: {
+  salonSlug: string | null;
+  serviceId?: string | null;
+  locationId?: string | null;
+  employeeId?: string | null;
+  variantId?: string | null;
+  modifierOptionIds?: string[];
+}): string {
+  const p = new URLSearchParams();
+  if (a.serviceId) p.set('service', a.serviceId);
+  if (a.locationId) p.set('location', a.locationId);
+  if (a.employeeId) p.set('employee', a.employeeId);
+  if (a.variantId) p.set('variant', a.variantId);
+  if (a.modifierOptionIds?.length) p.set('mods', a.modifierOptionIds.join(','));
+  const qs = p.toString();
+  return `/salon/${a.salonSlug ?? ''}${qs ? `?${qs}` : ''}`;
+}
 
 function initials(p: { first: string; last: string; email: string }) {
   return ((p.first[0] ?? p.email[0] ?? 'V') + (p.last[0] ?? '')).toUpperCase();
@@ -90,6 +130,9 @@ function StatusBadge({ a }: { a: Appt }) {
   const b = bucketOf(a);
   if (b === 'canc') return <span className="acc-badge off">{t('c.acc.cancelled')}</span>;
   if (a.status === 'requested' && b === 'up') return <span className="acc-badge warn">{t('c.acc.awaiting')}</span>;
+  // A change request in flight shows on the visit, never as its status.
+  if (b === 'up' && a.changeRequest?.status === 'pending') return <span className="acc-badge warn">{t('c.acc.rsWaitingShort')}</span>;
+  if (b === 'up' && a.changeRequest?.status === 'declined' && !a.changeRequest.customerDecision) return <span className="acc-badge off">{t('c.acc.rsDeclinedShort')}</span>;
   if (b === 'past') return <span className="acc-badge mut">{t('c.acc.completed')}</span>;
   return <span className="acc-badge ok">{t('c.acc.confirmed')}</span>;
 }
@@ -109,6 +152,11 @@ function ApptRow({ a, onOpen }: { a: Appt; onOpen: () => void }) {
           </div>
           <div style={{ marginTop: '7px', display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
             <StatusBadge a={a} />
+            {a.review ? (
+              <span className="rv-mini"><Stars value={(a.review.service + a.review.timing + a.review.cleanliness) / 3} size={12} /></span>
+            ) : a.canReview ? (
+              <span className="acc-badge warn">{t('c.rv.write')}</span>
+            ) : null}
             <b style={{ marginLeft: 'auto', color: 'var(--ink)' }}>{fmtMKD(a.price)}</b>
           </div>
         </div>
@@ -129,12 +177,28 @@ export function MyVelnes({ section = 'over' }: { section?: SecId }) {
   const appts = useMyAppointments();
   const notifs = useMyNotifications();
   const salons = useMySalons();
+  const loyalty = useMyLoyalty();
   const [tab, setTab] = useState<'up' | 'past' | 'canc'>('up');
   // The section chips are a rail too: the wheel slides them.
   const chipsRef = useRef<HTMLDivElement | null>(null);
   useWheelScroll(chipsRef);
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState('');
+  // The change cards own their own busy/error state now.
+  const busy = false;
+  const err = '';
+  // The review form: opened by its button, or by `?review=1` (a mail or
+  // notification link) — the door still decides whether it may be sent.
+  const [search] = useSearchParams();
+  const wantReview = search.get('review') === '1';
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const [reviewDone, setReviewDone] = useState(false);
+  // Booking changes: the picker and the cancel confirmation are sheets
+  // over the detail; the server's rights decide what is offered.
+  const [rescheduleOpen, setRescheduleOpen] = useState(false);
+  const [cancelOpen, setCancelOpen] = useState(false);
+  const [rsSent, setRsSent] = useState(false);
+  // A notification opens in place (Alex, 2026-10-01): the details first,
+  // then a button that leads on — never a tap that carries you away.
+  const [openNotif, setOpenNotif] = useState<string | null>(null);
 
   const unread = notifs.data?.unread ?? 0;
   const list = useMemo(() => appts.data?.appointments ?? [], [appts.data]);
@@ -148,7 +212,14 @@ export function MyVelnes({ section = 'over' }: { section?: SecId }) {
             <div className="auth-wrap">
             <div className="acc-empty">
               <b>{t('c.acc.signIn')}</b>{t('c.acc.signInSub')}<br />
-              <button className="btn btn-p" onClick={() => nav('/login')}>{t('c.acc.login')}</button>
+              <button
+                className="btn btn-p"
+                onClick={() => {
+                  // A review link opened signed out: come back here after.
+                  rememberReturnTo(`${window.location.pathname}${window.location.search}`);
+                  nav('/login');
+                }}
+              >{t('c.acc.login')}</button>
               </div>
             </div>
           </section>
@@ -158,21 +229,6 @@ export function MyVelnes({ section = 'over' }: { section?: SecId }) {
   }
 
   const go = (s: SecId) => nav(s === 'over' ? '/account' : `/account/${s}`);
-
-  const cancel = async (id: string) => {
-    setBusy(true);
-    setErr('');
-    try {
-      await api(`/me/appointments/${id}/cancel`, { method: 'POST' });
-      await Promise.all([
-        qc.invalidateQueries({ queryKey: ['my-appointments'] }),
-        qc.invalidateQueries({ queryKey: ['my-notifications'] }),
-      ]);
-    } catch (e) {
-      setErr(e instanceof ApiError ? e.message : t('c.acc.cancelFailed'));
-    }
-    setBusy(false);
-  };
 
   const markRead = async (id: string | null) => {
     await api('/me/notifications/read', { method: 'POST', body: JSON.stringify({ id }) });
@@ -323,6 +379,9 @@ export function MyVelnes({ section = 'over' }: { section?: SecId }) {
                       <button className="btn btn-p" onClick={() => nav('/')}>{t('c.acc.findSalon')}</button>
                     </div>
                   )}
+                  {/* Velnes Loyalty: the balance from the ledger, and the way
+                      to the whole story. */}
+                  <LoyaltyCard balance={loyalty.data?.balance ?? profile.loyaltyPoints ?? 0} onOpen={() => go('loyalty')} />
                   {/* Velnes Premium, in a sentence, with the page that says
                       the rest — membership itself is not open yet. */}
                   <div className="acc-card acc-prem">
@@ -444,7 +503,7 @@ export function MyVelnes({ section = 'over' }: { section?: SecId }) {
                       </button>
                     ))}
                   </div>
-                  {appts.isLoading ? null : list.filter((a) => bucketOf(a) === tab).length ? (
+                  {appts.isLoading ? <SkelRows n={3} /> : list.filter((a) => bucketOf(a) === tab).length ? (
                     list
                       .filter((a) => bucketOf(a) === tab)
                       .map((a) => (
@@ -510,10 +569,42 @@ export function MyVelnes({ section = 'over' }: { section?: SecId }) {
                       <span>{t('c.acc.price')}</span>
                       <b>{fmtMKD(current.price)}</b>
                     </div>
+                    {(current.products ?? []).map((p) => (
+                      <div className="acc-kv" key={p.productId} data-testid="appt-product">
+                        <span>{t('c.bk.product')}</span>
+                        <b>{p.qty > 1 ? `${p.qty} × ` : ''}{p.name} · {fmtMKD(p.unitPrice * p.qty)}</b>
+                      </div>
+                    ))}
                     <div className="acc-kv">
                       <span>{t('c.acc.reference')}</span>
                       <b>{current.ref}</b>
                     </div>
+                    <PaymentLines a={current} />
+                    {current.cancellation ? (
+                      <div className="acc-kv">
+                        <span>{t('c.acc.cancelledOn')}</span>
+                        <b>
+                          {new Date(current.cancellation.at).toLocaleString(lang, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                          <span className="muted" style={{ display: 'block', fontWeight: 500 }}>
+                            {current.cancellation.by === 'customer' ? t('c.acc.h.byYou') : current.cancellation.by === 'salon' ? t('c.acc.h.bySalon') : ''}
+                          </span>
+                        </b>
+                      </div>
+                    ) : null}
+                    {bucketOf(current) !== 'up' ? (
+                      <div className="acc-actions">
+                        {current.canReview && !(reviewOpen || wantReview) ? (
+                          <button className="btn btn-p" onClick={() => setReviewOpen(true)}>
+                            {t('c.rv.write')}
+                          </button>
+                        ) : null}
+                        {current.salonSlug ? (
+                          <button className={`btn ${current.canReview && !(reviewOpen || wantReview) ? 'btn-g' : 'btn-p'}`} onClick={() => nav(bookAgainHref(current))}>
+                            {t('c.acc.bookAgain')}
+                          </button>
+                        ) : null}
+                      </div>
+                    ) : null}
                   </div>
                   {current.locationAddress || current.lat != null ? (
                     <div className="acc-card">
@@ -542,52 +633,76 @@ export function MyVelnes({ section = 'over' }: { section?: SecId }) {
                   ) : null}
                   {bucketOf(current) === 'up' ? (
                     <>
-                      <div className="acc-card">
-                        <div className="acc-lbl">{t('c.acc.policy')}</div>
-                        <div className="sm" style={{ color: 'var(--ink)' }}>
-                          Free cancellation up to {current.cancelHours} hours before your appointment.
+                      {rsSent ? (
+                        <div className="acc-card rv-done" role="status">
+                          <b>{t('c.acc.rsSentTitle')}</b>
+                          <div className="sm muted">{t('c.acc.rsSentSub')}</div>
                         </div>
-                      </div>
+                      ) : null}
+                      <RequestCard a={current} onCancelInstead={() => setCancelOpen(true)} />
+                      {rescheduleOpen ? (
+                        <ReschedulePicker
+                          a={current}
+                          onClose={() => setRescheduleOpen(false)}
+                          onSent={() => {
+                            setRescheduleOpen(false);
+                            setRsSent(true);
+                          }}
+                        />
+                      ) : null}
+                      {cancelOpen ? (
+                        <CancelConfirm a={current} onClose={() => setCancelOpen(false)} onDone={() => setCancelOpen(false)} />
+                      ) : null}
+                      {!rescheduleOpen && !cancelOpen ? <PolicyCard a={current} /> : null}
                       {err ? <div className="acc-err">{err}</div> : null}
-                      <div style={{ display: 'grid', gap: '10px' }}>
-                        {current.status === 'booked' && !current.paid ? (
-                          <>
-                            <button className="btn btn-p" style={{ width: '100%' }} onClick={() => nav(`/pay/${current.id}`)}>
-                              {t('c.acc.payNow', { amount: fmtMKD(current.price) })}
+                      {!rescheduleOpen && !cancelOpen ? (
+                        <div style={{ display: 'grid', gap: '10px' }}>
+                          {current.status === 'booked' && !current.paid ? (
+                            <>
+                              <button className="btn btn-p" style={{ width: '100%' }} onClick={() => nav(`/pay/${current.id}`)}>
+                                {t('c.acc.payNow', { amount: fmtMKD(current.price) })}
+                              </button>
+                              <div className="muted" style={{ fontSize: 13, marginTop: -4 }}>{t('c.acc.payNote')}</div>
+                            </>
+                          ) : null}
+                          {current.paid ? <div className="acc-badge ok" style={{ justifySelf: 'start' }}>{t('c.acc.paidOnline')}</div> : null}
+                          {current.canReschedule ? (
+                            <button className="btn btn-p" style={{ width: '100%' }} onClick={() => { setRsSent(false); setRescheduleOpen(true); }}>
+                              {t('c.acc.reschedule')}
                             </button>
-                            <div className="muted" style={{ fontSize: 13, marginTop: -4 }}>{t('c.acc.payNote')}</div>
-                          </>
-                        ) : null}
-                        {current.paid ? <div className="acc-badge ok" style={{ justifySelf: 'start' }}>{t('c.acc.paidOnline')}</div> : null}
-                        {current.salonSlug ? (
-                          <button
-                            className="btn btn-p"
-                            style={{ width: '100%' }}
-                            onClick={() => nav(`/salon/${current.salonSlug}`)}
-                          >{t('c.acc.bookAgain')}</button>
-                        ) : null}
-                        <button
-                          className="btn btn-g"
-                          style={{ width: '100%' }}
-                          disabled={busy}
-                          onClick={() => void cancel(current.id)}
-                        >
-                          {busy ? 'Cancelling…' : t('c.acc.cancelAppt')}
-                        </button>
-                      </div>
+                          ) : null}
+                          {current.canCancel && !(current.changeRequest?.status === 'declined' && !current.changeRequest.customerDecision) ? (
+                            <button className="btn btn-g" style={{ width: '100%' }} disabled={busy} onClick={() => setCancelOpen(true)}>
+                              {t('c.acc.cancelAppt')}
+                            </button>
+                          ) : null}
+                        </div>
+                      ) : null}
+                      <VisitHistory a={current} />
                     </>
-                  ) : current.salonSlug ? (
-                    <button
-                      className="btn btn-p"
-                      style={{ width: '100%' }}
-                      onClick={() => nav(`/salon/${current.salonSlug}`)}
-                    >{t('c.acc.bookAgain')}</button>
-                  ) : null}
+                  ) : (
+                    <>
+                      {reviewDone ? (
+                        <div className="acc-card rv-done" role="status">
+                          <b>{t('c.rv.thanks')}</b>
+                          <div className="sm muted">{t('c.rv.thanksSub')}</div>
+                        </div>
+                      ) : null}
+                      {current.review ? <ReviewGiven r={current.review} /> : null}
+                      {current.canReview && (reviewOpen || wantReview) ? (
+                        <ReviewForm a={current} onDone={() => { setReviewOpen(false); setReviewDone(true); }} />
+                      ) : null}
+                      <VisitHistory a={current} />
+                    </>
+                  )}
                 </>
               ) : null}
 
               {/* ---- favourites ---- */}
               {sec === 'favs' ? <Favourites /> : null}
+
+              {/* ---- Velnes Loyalty ---- */}
+              {sec === 'loyalty' ? <LoyaltySection /> : null}
 
               {/* ---- notifications ---- */}
               {sec === 'notifs' ? (
@@ -595,35 +710,70 @@ export function MyVelnes({ section = 'over' }: { section?: SecId }) {
                   <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '8px' }}>
                     <button className="acc-link" onClick={() => void markRead(null)}>{t('c.acc.markRead')}</button>
                   </div>
-                  {notifs.data?.notifications.length ? (
+                  {notifs.isLoading ? <SkelRows n={4} /> : notifs.data?.notifications.length ? (
                     <div className="acc-card">
-                      {notifs.data.notifications.map((n) => (
-                        <div
-                          key={n.id}
-                          className="acc-row"
-                          style={{ cursor: 'pointer' }}
-                          onClick={() => {
-                            void markRead(n.id);
-                            if (n.refType === 'appointment' && n.refId)
-                              nav(`/account/appointments/${n.refId}`);
-                          }}
-                        >
-                          <span
-                            style={{
-                              width: '8px',
-                              height: '8px',
-                              borderRadius: '50%',
-                              background: n.read ? 'transparent' : 'var(--brand)',
-                              flex: '0 0 auto',
-                            }}
-                          ></span>
-                          <div className="bd">
-                            <b style={{ fontWeight: n.read ? 600 : 800 }}>{n.title}</b>
-                            <div className="sm muted">{n.body}</div>
+                      {notifs.data.notifications.map((n) => {
+                        const open = openNotif === n.id;
+                        const appt = n.refType === 'appointment' && n.refId ? list.find((a) => a.id === n.refId) : undefined;
+                        const target =
+                          n.refType === 'appointment' && n.refId
+                            ? { label: n.kind === 'review' && appt?.canReview ? t('c.rv.write') : t('c.acc.nViewAppt'), go: () => nav(`/account/appointments/${n.refId}${n.kind === 'review' ? '?review=1' : ''}`) }
+                            : n.refType === 'loyalty'
+                              ? { label: t('c.loy.view'), go: () => go('loyalty') }
+                              : null;
+                        return (
+                          <div key={n.id} className={`acc-notif${open ? ' open' : ''}`}>
+                            <div
+                              className="acc-row"
+                              role="button"
+                              aria-expanded={open}
+                              style={{ cursor: 'pointer' }}
+                              onClick={() => {
+                                if (!n.read) void markRead(n.id);
+                                setOpenNotif(open ? null : n.id);
+                              }}
+                            >
+                              <span
+                                style={{
+                                  width: '8px',
+                                  height: '8px',
+                                  borderRadius: '50%',
+                                  background: n.read ? 'transparent' : 'var(--brand)',
+                                  flex: '0 0 auto',
+                                }}
+                              ></span>
+                              <div className="bd">
+                                <b style={{ fontWeight: n.read ? 600 : 800 }}>{n.title}</b>
+                                <div className="sm muted">{n.body}</div>
+                              </div>
+                              <span className={`muted acc-notif-chev${open ? ' on' : ''}`} aria-hidden="true">›</span>
+                            </div>
+                            {open ? (
+                              <div className="acc-notif-detail" data-testid="notif-detail">
+                                <div className="sm muted">{new Date(n.at).toLocaleString(lang, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</div>
+                                {appt ? (
+                                  <div className="acc-notif-appt">
+                                    <b>{appt.serviceName}</b>
+                                    <div className="sm muted">
+                                      {appt.salonName} · {appt.locationName}
+                                      {appt.employeeName ? ` · ${appt.employeeName}` : ''}
+                                    </div>
+                                    <div className="sm" style={{ color: 'var(--ink)', fontWeight: 700 }}>
+                                      {appt.date} · {appt.time}–{appt.end}
+                                    </div>
+                                    <StatusBadge a={appt} />
+                                  </div>
+                                ) : null}
+                                {target ? (
+                                  <button className="btn btn-p" style={{ minHeight: '38px', padding: '6px 16px', fontSize: '13.5px' }} onClick={target.go}>
+                                    {target.label} {IcArrSmall}
+                                  </button>
+                                ) : null}
+                              </div>
+                            ) : null}
                           </div>
-                          <span className="muted">›</span>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   ) : (
                     <div className="acc-empty">
@@ -654,8 +804,7 @@ function Favourites() {
   const nav = useNavigate();
   const { data, isLoading, isError, toggle } = useFavourites();
 
-  if (isLoading)
-    return <div className="sm muted" style={{ padding: '18px 4px' }}>{t('c.acc.favsLoading')}</div>;
+  if (isLoading) return <SkelRows n={3} />;
   if (isError || !data)
     return (
       <div className="acc-err">{t('c.acc.favsError')}</div>
@@ -818,7 +967,24 @@ function General() {
   });
   const [pw, setPw] = useState({ current: '', next: '' });
   const [savingPers, setSavingPers] = useState(false);
+  const [savingPhoto, setSavingPhoto] = useState(false);
   if (!profile) return null;
+
+  /** The photo saves on the spot, like the personalisation switch. */
+  const setPhoto = async (avatar: string | null) => {
+    setErr('');
+    setMsg('');
+    setSavingPhoto(true);
+    try {
+      await api('/me', { method: 'PATCH', body: JSON.stringify({ avatar }) });
+      await qc.invalidateQueries({ queryKey: ['me'] });
+      setMsg(avatar ? t('c.acc.photoSaved') : t('c.acc.photoRemoved'));
+    } catch (e) {
+      setErr(e instanceof ApiError ? e.message : t('c.acc.saveFailed'));
+    } finally {
+      setSavingPhoto(false);
+    }
+  };
 
   /** The personalisation switch saves on the spot — a toggle that needs
    *  an Edit button and a Save button is a toggle nobody trusts. */
@@ -876,6 +1042,10 @@ function General() {
 
   return (
     <>
+      <div className="acc-card">
+        <div className="acc-lbl">{t('c.acc.photo')}</div>
+        <AvatarPicker value={profile.avatar} initials={initials(profile)} onChange={(v) => void setPhoto(v)} busy={savingPhoto} />
+      </div>
       <div className="acc-card">
         <div className="acc-lbl">{t('c.acc.info')}</div>
         {edit ? (

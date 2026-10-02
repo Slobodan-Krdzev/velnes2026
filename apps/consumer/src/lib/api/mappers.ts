@@ -57,6 +57,8 @@ export interface SalonVM {
   /** The salon's own map pin; null until it drops one. */
   lat: number | null;
   lng: number | null;
+  /** Verified reviews: score and count, or null (none, or hidden by the salon). */
+  rating: { avg: number; count: number } | null;
   /** Why it is recommended — only on the home page's recommended row. */
   reason?:
     | { kind: 'booked' }
@@ -70,6 +72,7 @@ export interface SalonVM {
 
 export function salonVM(s: DiscoverySalonCard & { reason?: SalonVM['reason'] }): SalonVM {
   return {
+    rating: s.rating ?? null,
     ...(s.reason !== undefined ? { reason: s.reason } : {}),
     id: s.id,
     slug: s.slug,
@@ -105,6 +108,11 @@ export interface ServiceVM {
   /** "HH:MM" when the door was asked for *now* and this can start within
    *  the next half hour; null otherwise. Never computed here. */
   availableAt: string | null;
+  /** Who can take that start, when the door said. */
+  availableEmployeeId: string | null;
+  /** The first free start on the day asked for, when a day (or a party)
+   *  was asked: the salon's date and "HH:MM". Never computed here. */
+  availableOn: { date: string; at: string } | null;
   salon: {
     slug: string;
     name: string;
@@ -120,6 +128,7 @@ export interface ServiceVM {
     lng: number | null;
     bookable: boolean;
     showPrices: boolean;
+    rating: { avg: number; count: number } | null;
   };
   /** The place this result is at. A salon with two locations answers
    *  twice — the same treatment at each — and this is what tells the
@@ -162,6 +171,8 @@ export function serviceVM(s: DiscoveryServiceCard): ServiceVM {
     price: s.price,
     priceFrom: s.priceFrom,
     availableAt: s.availableAt ?? null,
+    availableEmployeeId: s.availableEmployeeId ?? null,
+    availableOn: s.availableOn ?? null,
     salon: {
       slug: s.salon.slug,
       name: s.salon.name,
@@ -172,6 +183,7 @@ export function serviceVM(s: DiscoveryServiceCard): ServiceVM {
       lng: s.salon.lng,
       bookable: s.salon.bookable,
       showPrices: s.salon.showPrices,
+      rating: s.salon.rating ?? null,
     },
     location: {
       id: s.location.id,
@@ -191,4 +203,14 @@ export function priceLbl(s: ServiceVM): string | null {
     return i18n.t('c.from', { p: fmtMKD(s.priceFrom) });
   if (s.price != null) return fmtMKD(s.price);
   return null;
+}
+
+/** A calendar day as a person reads it — "Sat 4 Oct" — in their own
+ *  language. For the door's `availableOn`, which is a date, not a clock. */
+export function dayLbl(iso: string, lang = i18n.language): string {
+  try {
+    return new Intl.DateTimeFormat(lang, { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' }).format(new Date(`${iso}T00:00:00Z`));
+  } catch {
+    return iso;
+  }
 }
