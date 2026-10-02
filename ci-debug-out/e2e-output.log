@@ -1,0 +1,229 @@
+$ playwright test
+Applying: 20260824120001_tenant_plumbing.sql
+Applied: 20260824120001_tenant_plumbing.sql in 6.649211ms
+Applying: 20260824120002_tenancy_core.sql
+Applied: 20260824120002_tenancy_core.sql in 30.347466ms
+Applying: 20260824120003_auth_audit.sql
+Applied: 20260824120003_auth_audit.sql in 10.988208ms
+Applying: 20260824150004_catalog.sql
+Applied: 20260824150004_catalog.sql in 36.666288ms
+Applying: 20260824150005_products_stock.sql
+Applied: 20260824150005_products_stock.sql in 15.572408ms
+Applying: 20260824180006_scheduling.sql
+Applied: 20260824180006_scheduling.sql in 27.948797ms
+Applying: 20260824180007_timing.sql
+Applied: 20260824180007_timing.sql in 7.136732ms
+Applying: 20260824180008_employee_hours.sql
+Applied: 20260824180008_employee_hours.sql in 1.764629ms
+Applying: 20260824210009_till.sql
+Applied: 20260824210009_till.sql in 37.727209ms
+Applying: 20260825090010_employee_lang.sql
+Applied: 20260825090010_employee_lang.sql in 2.058973ms
+Applying: 20260825170011_widgets.sql
+Applied: 20260825170011_widgets.sql in 9.698506ms
+Applying: 20260825190012_widget_attribution.sql
+Applied: 20260825190012_widget_attribution.sql in 3.331648ms
+Applying: 20260826090013_hq_registrations.sql
+Applied: 20260826090013_hq_registrations.sql in 10.406909ms
+Applying: 20260826100014_hq_read_links.sql
+Applied: 20260826100014_hq_read_links.sql in 1.865326ms
+Applying: 20260826110015_location_address.sql
+Applied: 20260826110015_location_address.sql in 2.051279ms
+Applying: 20260826130016_customers_ci.sql
+Applied: 20260826130016_customers_ci.sql in 9.956707ms
+Applying: 20260826150017_marketing_offers.sql
+Applied: 20260826150017_marketing_offers.sql in 10.861564ms
+Applying: 20260826170018_suppliers.sql
+Applied: 20260826170018_suppliers.sql in 23.491265ms
+Applying: 20260826200019_business_settings.sql
+Applied: 20260826200019_business_settings.sql in 2.907409ms
+Applying: 20260903120020_hq_categories.sql
+Applied: 20260903120020_hq_categories.sql in 7.728518ms
+Applying: 20260903160021_customer_email_verified.sql
+Applied: 20260903160021_customer_email_verified.sql in 2.012584ms
+Applying: 20260903170022_product_img.sql
+Applied: 20260903170022_product_img.sql in 1.732313ms
+Applying: 20260903190023_category_requests.sql
+Applied: 20260903190023_category_requests.sql in 7.241835ms
+Applying: 20260903200024_notice_audience.sql
+Applied: 20260903200024_notice_audience.sql in 2.136229ms
+Applying: 20260903210025_notice_target.sql
+Applied: 20260903210025_notice_target.sql in 2.358518ms
+Applying: 20260903220026_mail_outbox_hq_suppliers.sql
+Applied: 20260903220026_mail_outbox_hq_suppliers.sql in 5.45311ms
+Applying: 20260903230027_hq_invited.sql
+Applied: 20260903230027_hq_invited.sql in 1.863786ms
+Applying: 20260903240028_brands_hq_roles.sql
+Applied: 20260903240028_brands_hq_roles.sql in 9.235095ms
+Applying: 20260904090029_supplier_login_lookup.sql
+Applied: 20260904090029_supplier_login_lookup.sql in 1.739022ms
+Applying: 20260904100030_hq_onboarding_read.sql
+Applied: 20260904100030_hq_onboarding_read.sql in 2.026771ms
+Applying: 20260904110031_hq_role_perms.sql
+Applied: 20260904110031_hq_role_perms.sql in 2.383356ms
+Applying: 20260904120032_portal_payments_read.sql
+Applied: 20260904120032_portal_payments_read.sql in 2.390524ms
+Applying: 20260904130033_supplier_roles.sql
+Applied: 20260904130033_supplier_roles.sql in 5.179094ms
+Applying: 20260904140034_portal_invite_mail.sql
+Applied: 20260904140034_portal_invite_mail.sql in 1.815415ms
+Applying: 20260904150035_supplier_product_delete.sql
+Applied: 20260904150035_supplier_product_delete.sql in 2.650105ms
+Applying: 20260904160036_supplier_notifications.sql
+Applied: 20260904160036_supplier_notifications.sql in 4.748399ms
+Applying: 20260904170037_order_supplier_note.sql
+Applied: 20260904170037_order_supplier_note.sql in 1.908666ms
+Applying: 20260904180038_supplier_users_hq_invite.sql
+Applied: 20260904180038_supplier_users_hq_invite.sql in 1.888357ms
+Applying: 20260904190039_combos.sql
+Applied: 20260904190039_combos.sql in 8.113283ms
+Applying: 20260904200040_support_tickets.sql
+Applied: 20260904200040_support_tickets.sql in 7.275215ms
+Applying: 20260905090041_notice_ref.sql
+Applied: 20260905090041_notice_ref.sql in 1.7888ms
+Applying: 20260906120042_business_categories.sql
+Applied: 20260906120042_business_categories.sql in 4.689722ms
+Applying: 20260914120050_ai_assistant.sql
+Applied: 20260914120050_ai_assistant.sql in 8.024947ms
+Applying: 20260915120100_assistant_entitlement.sql
+Applied: 20260915120100_assistant_entitlement.sql in 2.190223ms
+Applying: 20260916150200_service_category_media.sql
+Applied: 20260916150200_service_category_media.sql in 1.863275ms
+Applying: 20260916170300_avatars.sql
+Applied: 20260916170300_avatars.sql in 1.962492ms
+Applying: 20260916180400_supplier_self_update.sql
+Applied: 20260916180400_supplier_self_update.sql in 1.931951ms
+Applying: 20260918120500_location_geo.sql
+Applied: 20260918120500_location_geo.sql in 2.500559ms
+Applying: 20260918140600_client_users.sql
+Applied: 20260918140600_client_users.sql in 12.670278ms
+Applying: 20260919090700_location_geo_placeholders.sql
+Applied: 20260919090700_location_geo_placeholders.sql in 2.47242ms
+Applying: 20260920120800_search_config.sql
+Applied: 20260920120800_search_config.sql in 6.066081ms
+Applying: 20260920140900_client_personalised_results.sql
+Applied: 20260920140900_client_personalised_results.sql in 1.981828ms
+Applying: 20260920160000_activate_imported_locations.sql
+Applied: 20260920160000_activate_imported_locations.sql in 2.600335ms
+Applying: 20260920180000_client_favourites.sql
+Applied: 20260920180000_client_favourites.sql in 6.199884ms
+Applying: 20260921090000_search_documents.sql
+Applied: 20260921090000_search_documents.sql in 14.612131ms
+Applying: 20260921100000_service_category_terms.sql
+Applied: 20260921100000_service_category_terms.sql in 8.752662ms
+Applying: 20260921120000_search_config_text_relevance.sql
+Applied: 20260921120000_search_config_text_relevance.sql in 2.800994ms
+Applying: 20260921140000_search_misses.sql
+Applied: 20260921140000_search_misses.sql in 5.221509ms
+Applying: 20260921160000_client_location_consent.sql
+Applied: 20260921160000_client_location_consent.sql in 1.94298ms
+Applying: 20260922120000_employee_role.sql
+Applied: 20260922120000_employee_role.sql in 3.652366ms
+Applying: 20260922150000_booking_requests.sql
+Applied: 20260922150000_booking_requests.sql in 1.798336ms
+Applying: 20260922170000_client_payment_methods.sql
+Applied: 20260922170000_client_payment_methods.sql in 5.35905ms
+Applying: 20260922180000_business_socials.sql
+Applied: 20260922180000_business_socials.sql in 2.037578ms
+Applying: 20260922190000_discount_code_active.sql
+Applied: 20260922190000_discount_code_active.sql in 2.010557ms
+Applying: 20260923120000_employee_sign_in_links.sql
+Applied: 20260923120000_employee_sign_in_links.sql in 6.314816ms
+Applying: 20260923140000_mail_outbox_delivery.sql
+Applied: 20260923140000_mail_outbox_delivery.sql in 6.595713ms
+Applying: 20260925100000_registration_mail.sql
+Applied: 20260925100000_registration_mail.sql in 2.19292ms
+Applying: 20260928100000_fixture_batch.sql
+Applied: 20260928100000_fixture_batch.sql in 2.899575ms
+Applying: 20260929100000_location_amenities.sql
+Applied: 20260929100000_location_amenities.sql in 5.078064ms
+Applying: 20260930100000_reviews.sql
+Applied: 20260930100000_reviews.sql in 14.938084ms
+Applying: 20260930101000_reviews_view_perm.sql
+Applied: 20260930101000_reviews_view_perm.sql in 1.934455ms
+Applying: 20260930120000_booking_changes.sql
+Applied: 20260930120000_booking_changes.sql in 15.014197ms
+Applying: 20260930140000_loyalty.sql
+Applied: 20260930140000_loyalty.sql in 6.11764ms
+Applying: 20261001120000_appointment_products.sql
+Applied: 20261001120000_appointment_products.sql in 6.243721ms
+Applying: 20261001150000_location_price_custom.sql
+Applied: 20261001150000_location_price_custom.sql in 1.984904ms
+Applying: 20261001160000_variant_retired.sql
+Applied: 20261001160000_variant_retired.sql in 1.83088ms
+Seeded the demo world into velnes.
+Demo login: maria@velnes.mk (and colleagues) · password: velnes-demo
+
+Running 8 tests using 2 workers
+··×···F··
+
+  1) e2e/booking.spec.ts:9:5 › a visitor books through the hosted page ─────────────────────────────
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByText('Your details')
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" with timeout 5000ms
+      - waiting for getByText('Your details')
+
+
+      32 |
+      33 |   // Details — the hold countdown is running now.
+    > 34 |   await expect(page.getByText('Your details')).toBeVisible();
+         |                                                ^
+      35 |   await expect(page.getByText(/This time is held for you/)).toBeVisible();
+      36 |   await page.getByPlaceholder('Marija Stojanovska').fill('E2E Visitor');
+      37 |   // The phone is a country picker (+389 by default) and a national
+        at /home/runner/work/velnes2026/velnes2026/e2e/booking.spec.ts:34:48
+
+    Error Context: test-results/booking-a-visitor-books-through-the-hosted-page/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/booking-a-visitor-books-through-the-hosted-page/trace.zip
+    Usage:
+
+        pnpm exec playwright show-trace test-results/booking-a-visitor-books-through-the-hosted-page/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Retry #1 ───────────────────────────────────────────────────────────────────────────────────────
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByText('Your details')
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" with timeout 5000ms
+      - waiting for getByText('Your details')
+
+
+      32 |
+      33 |   // Details — the hold countdown is running now.
+    > 34 |   await expect(page.getByText('Your details')).toBeVisible();
+         |                                                ^
+      35 |   await expect(page.getByText(/This time is held for you/)).toBeVisible();
+      36 |   await page.getByPlaceholder('Marija Stojanovska').fill('E2E Visitor');
+      37 |   // The phone is a country picker (+389 by default) and a national
+        at /home/runner/work/velnes2026/velnes2026/e2e/booking.spec.ts:34:48
+
+    Error Context: test-results/booking-a-visitor-books-through-the-hosted-page-retry1/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/booking-a-visitor-books-through-the-hosted-page-retry1/trace.zip
+    Usage:
+
+        pnpm exec playwright show-trace test-results/booking-a-visitor-books-through-the-hosted-page-retry1/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  1 failed
+    e2e/booking.spec.ts:9:5 › a visitor books through the hosted page ──────────────────────────────
+  7 passed (26.8s)
+[ELIFECYCLE] Command failed with exit code 1.
