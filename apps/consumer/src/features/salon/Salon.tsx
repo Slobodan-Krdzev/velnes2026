@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { t } from '../../lib/i18n-core.js';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import type { z } from 'zod';
-import { PRODUCT_QTY_MAX, type PublicServiceSchema } from '@velnes/contracts';
+import { LOYALTY_RULES, PRODUCT_QTY_MAX, type PublicServiceSchema } from '@velnes/contracts';
 import { fmtMKD, minutesLbl } from '../../lib/api/mappers.js';
 import { useSalonDetail, useSalonServices, useVisitSlots } from '../../lib/api/queries.js';
 import { useMyOffers } from '../../lib/api/session.js';
@@ -346,6 +346,9 @@ function useSalonPage() {
     [prods, shelf],
   );
   const productUnits = plines.reduce((n, l) => n + l.qty, 0);
+  // Treatments taken at a length other than the standard one (Alex,
+  // 2026-10-02): each earns loyalty points on top.
+  const upgrades = lines.filter((l) => l.variant && !l.variant.std).length;
   // What the visit costs: treatments plus the products taken home.
   const price = lines.reduce((n, l) => n + l.price, 0) + plines.reduce((n, l) => n + l.price, 0);
   const durationMin = lines.reduce((n, l) => n + l.durationMin, 0);
@@ -392,6 +395,7 @@ function useSalonPage() {
     shelf,
     plines,
     productUnits,
+    upgrades,
     inProds: (id: string) => prods.some((x) => x.productId === id),
     toggleProd: (id: string) =>
       setProds((c) => (c.some((x) => x.productId === id) ? c.filter((x) => x.productId !== id) : [...c, { productId: id, qty: 1 }])),
@@ -693,6 +697,9 @@ function BookCard({ p, desktop }: { p: Page; desktop: boolean }) {
                       {minutesLbl(v.durationMin)} · {fmtMKD(v.price)}
                     </span>
                   </span>
+                  {/* A length other than the standard one earns on top —
+                      said on the card, like the count on the profile tab. */}
+                  {!v.std ? <span className="pts-badge" data-testid="pts-badge">{t('c.sal.ptsBadge', { n: LOYALTY_RULES.appointment.variantUpgrade })}</span> : null}
                 </button>
               ))}
             </div>
@@ -1205,7 +1212,7 @@ export function Salon() {
                     <span>{t('c.sal.total')}</span>
                     <b>{showPrice}</b>
                   </div>
-                  <LoyaltyEarn serviceCount={p.lines.length} productUnits={p.productUnits} />
+                  <LoyaltyEarn serviceCount={p.lines.length} productUnits={p.productUnits} upgrades={p.upgrades} />
                   <BookButton p={p} desktop onBook={book} style={{ width: '100%' }} />
                 </div>
               )}
@@ -1285,7 +1292,7 @@ export function Salon() {
                     <b data-sum="price">{showPrice}</b>
                   </span>
                 </div>
-                <LoyaltyEarn serviceCount={p.lines.length} productUnits={p.productUnits} className="m" />
+                <LoyaltyEarn serviceCount={p.lines.length} productUnits={p.productUnits} upgrades={p.upgrades} className="m" />
                 <BookButton p={p} desktop={false} onBook={book} arrow />
                 <span className="safe">{IcVok} {t('c.sal.safe')}</span>
               </div>

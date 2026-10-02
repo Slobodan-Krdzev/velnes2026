@@ -27,7 +27,7 @@ function mockApi() {
       if (url.includes('/client/me/offers')) return ok({ offers: [] });
       if (url.includes('/client/me/salons')) return ok({ salons: [] });
       if (url.includes('/client/me/favourites')) return ok({ salons: [], services: [], pros: [] });
-      if (url.includes('/client/me/loyalty')) return ok({ balance: 0, rules: { version: 1, registration: 100, firstService: 100, additionalService: 30, productUnit: 20, review: 50 }, entries: [] });
+      if (url.includes('/client/me/loyalty')) return ok({ balance: 0, rules: { version: 1, registration: 100, firstService: 100, additionalService: 30, productUnit: 20, variantUpgrade: 20, review: 50 }, entries: [] });
       if (url.includes('/client/me')) return ok(profile);
       return ok({ categories: [], salons: [], services: [], towns: [], suggestions: [], how: 'default' });
     }),

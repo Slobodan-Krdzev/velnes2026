@@ -242,6 +242,28 @@ describe('Velnes Loyalty — the platform ledger', () => {
       expect(row?.meta).toMatchObject({ serviceCount: 2, productUnits: 3, productPoints: pts.productPoints, servicePoints: servicePoints(2) });
     });
 
+    it('a length other than the standard one earns on top, once per such treatment', async () => {
+      // Manual therapy, spine: "One region" is not the standard length.
+      const other = (await admin.query(`SELECT id FROM service_variants WHERE service_id = $1 AND std = false ORDER BY sort LIMIT 1`, [demo.s2])).rows[0].id as string;
+      let date = '';
+      let time: string | null = null;
+      for (let n = 7; n < 10 && !time; n++) {
+        date = daysAgo(n);
+        time = await freeStart(date, [demo.s2]);
+      }
+      expect(time).toBeTruthy();
+      const res = await client('POST', '/book', { slug: 'velnes-fizio', key: randomUUID(), locationId: demo.locAerodrom, serviceId: demo.s2, variantId: other, date, time, employeeId: demo.empMaria, items: [{ serviceId: demo.s2, variantId: other }] });
+      expect(res.statusCode, res.body).toBe(200);
+      const first = res.json().ref as string;
+      made.push(first);
+      await runLoyaltySweep();
+      const row = (await ledger(clientId)).find((r) => r.source_id === first);
+      const pts = appointmentPoints(1, 0, 1);
+      expect(pts.upgradePoints).toBe(LOYALTY_RULES.appointment.variantUpgrade);
+      expect(row?.points).toBe(pts.total);
+      expect(row?.meta).toMatchObject({ serviceCount: 1, upgrades: 1, upgradePoints: pts.upgradePoints, ruleVersion: LOYALTY_RULES.version });
+    });
+
     it('cancelled and no-show visits earn nothing; a future visit with a pending request earns nothing until it completes, then once', async () => {
       const c = await bookVisit(2, [demo.s3]);
       const n = await bookVisit(2, [demo.s3]);

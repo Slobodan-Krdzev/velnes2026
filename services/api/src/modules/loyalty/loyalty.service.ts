@@ -145,12 +145,21 @@ export async function visitReward(tenantId: string, anchorId: string) {
       ? (await trx.selectFrom('services').select(['id', 'name']).where('id', 'in', serviceIds).execute())
       : [];
     const biz = await trx.selectFrom('businesses').select('name').where('id', '=', tenantId).executeTakeFirst();
-    const pts = appointmentPoints(delivered.length, productUnits);
+    // Lengths other than the standard one (Alex, 2026-10-02): one per
+    // such treatment, read from the variant the leg carries — a retired
+    // length still counts for the visit that took it.
+    const variantIds = delivered.map((l) => l.variantId).filter((x): x is string => Boolean(x));
+    const upgraded = variantIds.length
+      ? await trx.selectFrom('serviceVariants').select('id').where('id', 'in', variantIds).where('std', '=', false).execute()
+      : [];
+    const upgrades = variantIds.filter((id) => upgraded.some((u) => u.id === id)).length;
+    const pts = appointmentPoints(delivered.length, productUnits, upgrades);
     return {
       first: legs[0]!,
       clientUserId: legs[0]!.clientUserId,
       serviceCount: delivered.length,
       productUnits,
+      upgrades,
       ...pts,
       salonName: biz?.name ?? '',
       serviceNames: delivered.map((l) => names.find((n) => n.id === l.serviceId)?.name ?? l.title),
@@ -211,6 +220,8 @@ export async function settleVisit(tenantId: string, anchorId: string): Promise<n
         servicePoints: reward.servicePoints,
         productUnits: reward.productUnits,
         productPoints: reward.productPoints,
+        upgrades: reward.upgrades,
+        upgradePoints: reward.upgradePoints,
         total: reward.total,
         salonName: reward.salonName,
         serviceNames: reward.serviceNames,

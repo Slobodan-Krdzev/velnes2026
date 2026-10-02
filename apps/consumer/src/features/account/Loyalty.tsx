@@ -37,12 +37,13 @@ export function useMyLoyalty() {
  * products taken home with the visit; a guest is told what signing in
  * would earn, since a guest has no wallet.
  */
-export function LoyaltyEarn({ serviceCount, productUnits = 0, className = '' }: { serviceCount: number; productUnits?: number; className?: string }) {
+export function LoyaltyEarn({ serviceCount, productUnits = 0, upgrades = 0, className = '' }: { serviceCount: number; productUnits?: number; upgrades?: number; className?: string }) {
   const { signedIn } = useSession();
   if (serviceCount < 1) return null;
   // Products booked with the visit (2026-10-01) count like products
-  // sold with it — the same rule, from the same place.
-  const n = fmtPoints(appointmentPoints(serviceCount, productUnits).total);
+  // sold with it, and a length other than the standard one earns on
+  // top (2026-10-02) — the same rule, from the same place.
+  const n = fmtPoints(appointmentPoints(serviceCount, productUnits, upgrades).total);
   return (
     <div className={`loy-earn${className ? ` ${className}` : ''}`} data-testid="loyalty-earn">
       <span className="loy-earn-ic" aria-hidden="true">{IcFlower}</span>
@@ -133,6 +134,15 @@ export function LoyaltySection() {
             </span>
             <b>+{fmtPoints(rules.firstService)}</b>
           </div>
+          {rules.variantUpgrade ? (
+            <div className="acc-kv">
+              <span>
+                {t('c.loy.howUpgrade')}
+                <span className="sm muted" style={{ display: 'block' }}>{t('c.loy.howUpgradeSub')}</span>
+              </span>
+              <b>+{fmtPoints(rules.variantUpgrade)}</b>
+            </div>
+          ) : null}
           <div className="acc-kv">
             <span>
               {t('c.loy.howProduct')}

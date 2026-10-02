@@ -16,13 +16,17 @@ import { z } from 'zod';
  * Everything derived reads the constant from here.
  */
 export const LOYALTY_RULES = {
-  version: 1,
+  /** 2 (2026-10-02): a length other than the standard one earns on top. */
+  version: 2,
   /** On the first email verification of an account. */
   registration: 100,
   appointment: {
     firstService: 100,
     additionalService: 30,
     productUnit: 20,
+    /** Choosing a length other than the standard one (Alex, 2026-10-02):
+     *  on top of the service's own points, once per such treatment. */
+    variantUpgrade: 20,
     /** Hours after the visit's end before it is settled — so a checkout
      *  at the till, with its products, is already on the invoice. */
     settleHours: 2,
@@ -41,10 +45,15 @@ export function servicePoints(n: number, rules = LOYALTY_RULES): number {
 export function productPoints(units: number, rules = LOYALTY_RULES): number {
   return Math.max(0, Math.floor(units)) * rules.appointment.productUnit;
 }
-export function appointmentPoints(serviceCount: number, productUnits: number, rules = LOYALTY_RULES) {
+/** Points for treatments taken at a length other than the standard one. */
+export function upgradePoints(upgrades: number, rules = LOYALTY_RULES): number {
+  return Math.max(0, Math.floor(upgrades)) * rules.appointment.variantUpgrade;
+}
+export function appointmentPoints(serviceCount: number, productUnits: number, upgrades = 0, rules = LOYALTY_RULES) {
   const s = servicePoints(serviceCount, rules);
   const p = productPoints(productUnits, rules);
-  return { servicePoints: s, productPoints: p, total: s + p };
+  const u = upgradePoints(upgrades, rules);
+  return { servicePoints: s, productPoints: p, upgradePoints: u, total: s + p + u };
 }
 
 /** Stable typed reasons. The last six have no writer yet; the ledger
@@ -83,6 +92,7 @@ export const LoyaltyRulesSchema = z.object({
   firstService: z.number().int(),
   additionalService: z.number().int(),
   productUnit: z.number().int(),
+  variantUpgrade: z.number().int().default(0),
   review: z.number().int(),
 });
 
@@ -106,5 +116,6 @@ export const rulesForClients = () => ({
   firstService: LOYALTY_RULES.appointment.firstService,
   additionalService: LOYALTY_RULES.appointment.additionalService,
   productUnit: LOYALTY_RULES.appointment.productUnit,
+  variantUpgrade: LOYALTY_RULES.appointment.variantUpgrade,
   review: LOYALTY_RULES.review,
 });

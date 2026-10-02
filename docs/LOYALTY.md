@@ -117,11 +117,12 @@ number (tests, fixtures, the "how to earn" copy) reads the constant.
 | Email verified (first time) | 100 | the account |
 | Visit completed, first service | 100 | the visit's first leg |
 | each additional delivered service | 30 | — |
+| each treatment taken at a length other than the standard one (2026-10-02) | 20 | the leg's `variant_id`, `std = false` |
 | each product unit sold with the visit | 20 | — |
 | Verified review submitted | 50 | the review |
 
 `LOYALTY_RULES = { version: 1, registration: 100, appointment: {
-firstService: 100, additionalService: 30, productUnit: 20,
+firstService: 100, additionalService: 30, productUnit: 20, variantUpgrade: 20,
 settleHours: 2 }, review: 50 }` in `packages/contracts/src/loyalty.ts`;
 `servicePoints(n)`, `productPoints(units)` and `appointmentPoints`
 live beside it and nowhere else.
@@ -293,3 +294,17 @@ returns), guest claims, a back-fill of existing accounts or history
 (explicit decisions, §2.9), the consumer app's navigation search (it
 has none; the universal search bar is for salons), and plural forms
 beyond the hand-rolled ones the dictionaries use today.
+
+## Lengths other than the standard one (2026-10-02)
+
+Alex: choosing an option other than **Standard** for a treatment earns
+20 points on top. Rule version 2: `LOYALTY_RULES.appointment.variantUpgrade`
+and `upgradePoints`; `appointmentPoints(services, units, upgrades)`
+carries it in its breakdown and `visitReward` counts one upgrade per
+delivered leg whose `variant_id` names a non-standard length (a retired
+length still counts for the visit that took it). The salon page says
+"+20 pts" on every non-standard length's card — a count badge, like the
+profile tab's — and the booking summary's preview counts it; the
+loyalty screen's "How to earn" has the row. Option groups (hair colour
+brand and the like) are not lengths and earn nothing on their own.
+`loyalty.test.ts`, `BookAgain.test.tsx`, `Loyalty.test.tsx`.
