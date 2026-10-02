@@ -69,9 +69,8 @@ Velnes Loyalty is **built** (2026-09-30): a platform points ledger per
 consumer account (`client_loyalty_ledger`, one writer, idempotent by
 source, cached balance recomputed in the same transaction), earning on
 verification, completed visits (services + till products) and
-reviews; redemption designed for, not built. `docs/LOYALTY.md`. The
-additional-service constant awaits Alex's answer on the brief's
-discrepancy.
+reviews; redemption designed for, not built. `docs/LOYALTY.md`
+(+30 per additional service, confirmed 2026-10-02).
 All apps are trilingual (en/mk/sq, `packages/i18n`, completeness
 tested); MK/SQ dictionaries still need native review.
 Principals: tenant employees, `hq_users`, `supplier_users`,

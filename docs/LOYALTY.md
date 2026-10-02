@@ -100,24 +100,23 @@ Numbered as in the brief.
 24. **Consumer surfaces** — §2.7.
 25–27. Migrations, contracts, tests — §2.10, §3.
 
-**The discrepancy, reported as instructed.** The stated rule (first
+**The discrepancy, reported and settled.** The stated rule (first
 service 100, each additional +30) gives 1 → 100, 2 → 130, 3 → 160,
-4 → 190. The brief's example says 3 services → 190, which would fit
-+45 per additional service, or +30 with a 60-point second service.
-Not chosen here: `LOYALTY_RULES.appointment.additionalService` is set
-to the stated rule (30) and marked provisional; every derived number
-(tests, fixtures, the "how to earn" copy) reads the constant, so the
-confirmed value is a one-line change.
+4 → 190, while the brief's example said 3 services → 190. Alex
+confirmed on 2026-10-02 that the rule stands and the example was a
+mistake: three services earn 160.
+`LOYALTY_RULES.appointment.additionalService` is 30; every derived
+number (tests, fixtures, the "how to earn" copy) reads the constant.
 
 ## 2. Design
 
-### 2.1 Rules (provisional where marked)
+### 2.1 Rules
 
 | Event | Points | Source |
 | --- | --- | --- |
 | Email verified (first time) | 100 | the account |
 | Visit completed, first service | 100 | the visit's first leg |
-| each additional delivered service | **30 (provisional)** | — |
+| each additional delivered service | 30 | — |
 | each product unit sold with the visit | 20 | — |
 | Verified review submitted | 50 | the review |
 
@@ -233,8 +232,7 @@ from the navigation search. No adjustment UI in V1.
 5. **Balance may go negative** (auditable). No debt rules.
 6. **Awards settle two hours after the visit's end**, so till checkouts
    count. A product sale rung up later than that is not counted.
-7. **The additional-service constant is provisional** until Alex
-   answers the discrepancy.
+7. **The additional-service constant is 30**, confirmed 2026-10-02.
 
 ### 2.10 Doors and contracts
 
@@ -250,8 +248,8 @@ from the navigation search. No adjustment UI in V1.
   to dev; the test database migrates on every run.
 - **Rules** `packages/contracts/src/loyalty.ts` — `LOYALTY_RULES`
   (version 1), `servicePoints`, `productPoints`, `appointmentPoints`,
-  the ledger types and the account shape. **`additionalService: 30` is
-  provisional** until the discrepancy in §1 is answered.
+  the ledger types and the account shape. `additionalService: 30`,
+  confirmed (§1).
 - **Service** `services/api/src/modules/loyalty/loyalty.service.ts` —
   `award` (the one writer), `awardRegistration`, `awardReview`,
   `visitReward` / `settleVisit`, the sweep (`runLoyaltySweep`: due

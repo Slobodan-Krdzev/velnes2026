@@ -11,10 +11,9 @@ import { z } from 'zod';
  * The rules, versioned. Every ledger row records the version and its
  * own breakdown, so changing a number here never rewrites history.
  *
- * PROVISIONAL (2026-09-30): the brief states "+30 per additional
- * service" and also gives an example where 3 services = 190, which
- * that rule does not produce. `additionalService` holds the stated
- * rule until Alex confirms; everything derived reads it from here.
+ * Confirmed by Alex (2026-10-02): +30 per additional service — three
+ * services earn 160; the brief's "190" example was a mistake.
+ * Everything derived reads the constant from here.
  */
 export const LOYALTY_RULES = {
   version: 1,
