@@ -33,7 +33,11 @@ const draft = (email: string, salon = 'Studio Nova') => ({
     { name: 'Physiotherapy session', category: 'Manual therapy', durationMin: 45, price: 1800 },
     { name: 'Sports massage', category: 'Recovery', durationMin: 45, price: 1900 },
   ],
-  products: [{ name: 'Kinesiology tape', category: 'Recovery aids', price: 550 }],
+  products: [
+    { name: 'Kinesiology tape', category: 'Recovery aids', price: 550 },
+    // Read off a web shop (2026-10-02): a picture and a line come along.
+    { name: 'Arnica oil 200ml', category: 'Recovery aids', price: 850, sizeMl: 200, img: 'data:image/png;base64,AAAA', description: 'Warming massage oil.' },
+  ],
   gallery: [{ name: 'Front room', img: 'data:image/png;base64,AAAA' }],
   team: [
     { name: 'Ana Trajkovska', email: 'ana@studionova.test' },
@@ -385,6 +389,9 @@ describe('registrations and the HQ intake table', () => {
       headers: { authorization: `Bearer ${login.json().accessToken}` },
     });
     expect(locs.json().locations).toHaveLength(1);
+    // The shop's product arrived whole: picture, line, size.
+    const shopProd = await admin.query(`SELECT img, description, size_amount, size_unit FROM products WHERE tenant_id = $1 AND name = 'Arnica oil 200ml'`, [newBusinessId]);
+    expect(shopProd.rows[0]).toEqual({ img: 'data:image/png;base64,AAAA', description: 'Warming massage oil.', size_amount: 200, size_unit: 'ml' });
     expect(locs.json().locations[0].lifecycle).toBe('ACTIVE');
     expect(locs.json().locations[0].online).toBe(true);
     const step = await admin.query(

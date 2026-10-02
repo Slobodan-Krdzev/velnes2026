@@ -1751,7 +1751,7 @@ export async function discoveryRoutes(app: FastifyInstance) {
         const shelf = await trx
           .selectFrom('products as p')
           .leftJoin('productCategories as c', 'c.id', 'p.categoryId')
-          .select(['p.id', 'p.name', 'p.price'])
+          .select(['p.id', 'p.name', 'p.price', 'p.img', 'p.description'])
           .select('c.name as category')
           .where('p.active', '=', true)
           .where('p.own', '=', false)

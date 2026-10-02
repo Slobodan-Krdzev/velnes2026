@@ -31,6 +31,7 @@ export function ProductPanel({
   const [price, setPrice] = useState(product?.config.price ?? 0);
   const [active, setActive] = useState(product?.config.active ?? true);
   const [img, setImg] = useState<string | null>(product?.img ?? null);
+  const [description, setDescription] = useState(product?.description ?? '');
   const [adjustQty, setAdjustQty] = useState('');
   const [transferQty, setTransferQty] = useState('');
   const [fromLoc, setFromLoc] = useState(locations[0]?.id ?? '');
@@ -47,7 +48,7 @@ export function ProductPanel({
     setBusy(true);
     setError(null);
     try {
-      const body = { name, category: category || null, sku: sku || null, price, active, img };
+      const body = { name, category: category || null, sku: sku || null, price, active, img, description: description.trim() || null };
       if (editing && product)
         await api(OkSchema, `/products/${product.id}`, {
           method: 'PUT',
@@ -129,6 +130,10 @@ export function ProductPanel({
             <label className="field">
               <span>SKU</span>
               <input className="input" value={sku ?? ''} onChange={(e) => setSku(e.target.value)} />
+            </label>
+            <label className="field" style={{ gridColumn: '1 / -1' }}>
+              <span>{t('catalog.description')}</span>
+              <textarea className="ta" rows={3} maxLength={1000} value={description} onChange={(e) => setDescription(e.target.value)} />
             </label>
             <label className="field">
               <span>{t('catalog.price')}</span>

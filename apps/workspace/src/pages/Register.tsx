@@ -164,6 +164,8 @@ export function Register() {
           sizeMl: prod.sizeMl.trim() ? Math.max(1, Math.round(Number(prod.sizeMl) || 0)) || null : null,
           stock: Math.max(0, Math.round(Number(prod.stock) || 0)),
           cost: prod.cost.trim() ? Math.max(0, Math.round(Number(prod.cost) || 0)) : null,
+          img: null,
+          description: null,
         },
       ],
     }));
@@ -253,7 +255,9 @@ export function Register() {
       if (!r.loc.street.trim() || !r.loc.city.trim()) return t('reg.vStreet');
       if (!r.loc.pinned) return t('reg.vPin');
     }
-    if (s === 5 && !r.services.length) return t('reg.vServices');
+    // Services and products are not required to register (Alex,
+    // 2026-10-02): a salon may fill its catalogue later. The location
+    // then waits as approved-not-live until a bookable service exists.
     if (s === 7) {
       const bad = r.team.find((x) => x.email.trim() && !EMAIL.test(x.email.trim()));
       if (bad) return t('reg.vTeam', { email: bad.email });
@@ -756,7 +760,11 @@ export function Register() {
                     {r.products.map((p, i) => (
                       <tr key={i}>
                         <td>
+                          <span style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                            {p.img ? <img src={p.img} alt="" width={40} height={40} style={{ borderRadius: 6, objectFit: 'cover', flex: '0 0 auto' }} /> : null}
+                            <span style={{ minWidth: 0 }}>
                           <span className="bold">{p.name}</span>
+                          {p.description ? <span className="muted" style={{ display: 'block', fontSize: 12 }}>{p.description.length > 140 ? `${p.description.slice(0, 140)}…` : p.description}</span> : null}
                           <span className="muted" style={{ display: 'block', fontSize: 12 }}>
                             {p.category}
                             {' · '}
@@ -765,6 +773,8 @@ export function Register() {
                               stock: p.stock,
                               cost: p.cost != null ? money(p.cost) : '—',
                             })}
+                          </span>
+                            </span>
                           </span>
                         </td>
                         <td className="right bold tnum">{money(p.price)}</td>

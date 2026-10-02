@@ -23,8 +23,8 @@ import { env } from '../../env.js';
 
 const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
 const MAX_TEXT = 14_000; // chars of page text sent to the model
-const TIMEOUT_MS = 75_000; // a full price list → dozens of services → longer generation
-const MAX_TOKENS = 6000; // headroom for ~40 services + products + hours
+const TIMEOUT_MS = 120_000; // a full price list → a hundred services → longer generation
+const MAX_TOKENS = 16_000; // headroom for ~150 services + products + hours (2026-10-02)
 
 /** Strip a page to its visible text: drop script/style/head noise,
  *  turn tags into spaces, collapse whitespace, and truncate. */
@@ -113,7 +113,7 @@ type AiExtract = z.infer<typeof AiExtractSchema>;
  *  (case-insensitive) match wins; otherwise the first category, so the
  *  service still lands somewhere the owner can re-file in review — the
  *  extractor never invents a new global taxonomy row. */
-function snapCategory(raw: string | undefined, allowed: string[]): string {
+export function snapCategory(raw: string | undefined, allowed: string[]): string {
   const fallback = allowed[0] ?? 'Other';
   if (!raw) return fallback;
   const hit = allowed.find((c) => c.toLowerCase() === raw.trim().toLowerCase());
@@ -148,7 +148,7 @@ const MKD_PER: Record<string, number> = {
   RON: 12.4, // Romanian leu
 };
 /** Normalise a symbol or code the model returned to an ISO code. */
-function normCurrency(raw: string | undefined): string {
+export function normCurrency(raw: string | undefined): string {
   if (!raw) return 'MKD';
   const s = raw.trim().toUpperCase();
   const map: Record<string, string> = {
@@ -162,7 +162,7 @@ function normCurrency(raw: string | undefined): string {
   return map[s] ?? (/^[A-Z]{3}$/.test(s) ? s : 'MKD');
 }
 /** Convert a page price + its currency into whole, non-negative MKD. */
-function toMkd(amount: number | undefined, currency: string | undefined): number {
+export function toMkd(amount: number | undefined, currency: string | undefined): number {
   if (!amount || amount <= 0) return 0;
   const rate = MKD_PER[normCurrency(currency)] ?? 1; // unknown → assume MKD
   return Math.max(0, Math.round(amount * rate));
@@ -257,9 +257,9 @@ const SYSTEM = [
   'MKD for ден/денари). A bare number with no currency symbol on a price list is the',
   "salon's local currency — MKD for a North Macedonian (.mk) salon.",
   'Use price 0 and an empty currency only when no price is stated anywhere.',
-  'Extract at most 40 services and 20 products; if the list is longer, pick the most',
-  'representative ones spread across the categories — never return an empty list when',
-  'the text clearly contains a price list.',
+  'Extract EVERY individual service the text lists, up to 150; products up to 60 — the',
+  'shop itself is read separately. Never return an empty list when the text clearly',
+  'contains a price list.',
   'Return your answer only through the salon_profile tool.',
 ].join(' ');
 
@@ -297,7 +297,7 @@ function snap(ai: AiExtract, serviceCats: string[], productCats: string[]): Extr
       })),
     products: ai.products
       .filter((p) => p.name.trim())
-      .slice(0, 40)
+      .slice(0, 60)
       .map((p) => ({
         name: p.name.trim().slice(0, 80),
         category: snapCategory(p.category, productCats),
@@ -306,6 +306,8 @@ function snap(ai: AiExtract, serviceCats: string[], productCats: string[]): Extr
         sizeMl: null,
         stock: 0,
         cost: null,
+        img: null,
+        description: null,
       })),
     hours: ai.hours.map((h) => ({
       day: h.day,
@@ -364,4 +366,68 @@ export async function claudeExtract(input: ExtractInput): Promise<ExtractOutput 
   } finally {
     clearTimeout(timer);
   }
+}
+
+/**
+ * Categories for products read off the shop (2026-10-02): names only,
+ * in batches, into the HQ taxonomy — the model's one job here. Any
+ * miss (no key, timeout, parse) leaves the caller to the name heuristic.
+ */
+export async function claudeCategoriseProducts(
+  names: string[],
+  productCategories: string[],
+): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  if (!env.anthropicApiKey || !names.length || !productCategories.length) return out;
+  const BATCH = 120;
+  const DEADLINE_MS = 45_000; // all batches at once; what has not answered falls to the name heuristic
+  const batches: string[][] = [];
+  for (let i = 0; i < names.length; i += BATCH) batches.push(names.slice(i, i + BATCH));
+  const one = async (batch: string[]) => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), DEADLINE_MS);
+    try {
+      const res = await fetch(ANTHROPIC_URL, {
+        method: 'POST',
+        signal: controller.signal,
+        headers: { 'content-type': 'application/json', 'x-api-key': env.anthropicApiKey, 'anthropic-version': '2023-06-01' },
+        body: JSON.stringify({
+          model: env.onboardingModel,
+          max_tokens: 8000,
+          system: 'You file retail products sold by a beauty/wellness salon into the given categories. Answer only through the tool, one entry per product, in the given order.',
+          tools: [
+            {
+              name: 'product_categories',
+              description: 'The category of each product',
+              input_schema: {
+                type: 'object',
+                required: ['items'],
+                properties: {
+                  items: {
+                    type: 'array',
+                    items: {
+                      type: 'object',
+                      required: ['name', 'category'],
+                      properties: { name: { type: 'string' }, category: { type: 'string', enum: productCategories } },
+                    },
+                  },
+                },
+              },
+            },
+          ],
+          tool_choice: { type: 'tool', name: 'product_categories' },
+          messages: [{ role: 'user', content: batch.map((n, k) => `${k + 1}. ${n}`).join('\n') }],
+        }),
+      });
+      if (!res.ok) return;
+      const input = toolInput(await res.json()) as { items?: { name?: string; category?: string }[] } | null;
+      for (const it of input?.items ?? []) if (it?.name && it.category) out.set(it.name.toLowerCase().trim(), snapCategory(it.category, productCategories));
+    } catch {
+      /* heuristic fallback */
+    } finally {
+      clearTimeout(timer);
+    }
+  };
+  await Promise.allSettled(batches.map(one));
+  return out;
 }

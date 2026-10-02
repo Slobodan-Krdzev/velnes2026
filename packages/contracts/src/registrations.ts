@@ -83,6 +83,10 @@ export const RegProductSchema = z.object({
   stock: z.number().int().nonnegative().default(0),
   /** What one unit cost the salon (bought in, or made); null when unknown. */
   cost: z.number().int().nonnegative().nullable().default(null),
+  /** Read off the salon's web shop (2026-10-02): the product's picture
+   *  (a link while in review; downloaded on approval) and its line. */
+  img: z.string().max(4000).nullable().default(null),
+  description: z.string().max(1000).nullable().default(null),
 });
 export type RegProduct = z.infer<typeof RegProductSchema>;
 

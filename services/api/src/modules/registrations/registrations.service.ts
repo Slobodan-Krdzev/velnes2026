@@ -14,6 +14,8 @@ import { locReadiness, locTransition } from '../locations/locations.service.js';
 import { queueMail } from '../mail/mail.service.js';
 import { standardRoles } from '../team/role-kits.js';
 import { mintSignInLink } from '../auth/sign-in-link.service.js';
+import { safeFetchImage } from './import.service.js';
+import { PRODUCT_IMG_MAX_CHARS } from '@velnes/contracts';
 
 export class RegistrationError extends Error {
   constructor(
@@ -483,6 +485,9 @@ export async function approveRegistration(id: string, reviewer: string) {
       );
     }
     for (const p of draft.products) {
+      // A picture read off the shop is a link until now; approval
+      // downloads it (guarded, size-capped) so the catalog owns it.
+      const img = p.img?.startsWith('data:') ? p.img : p.img ? await safeFetchImage(p.img) : null;
       const prod = await trx
         .insertInto('products')
         .values({
@@ -494,6 +499,8 @@ export async function approveRegistration(id: string, reviewer: string) {
           ...(p.sizeMl != null ? { sizeAmount: p.sizeMl, sizeUnit: 'ml' } : {}),
           vat: 18,
           active: true,
+          img: img && img.length <= PRODUCT_IMG_MAX_CHARS ? img : null,
+          description: p.description ?? null,
         })
         .returning('id')
         .executeTakeFirstOrThrow();

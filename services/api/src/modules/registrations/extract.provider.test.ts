@@ -64,6 +64,8 @@ describe('the Claude onboarding extractor', () => {
       name: 'Face serum',
       category: 'Retail',
       price: 800,
+      img: null,
+      description: null,
       sizeMl: null,
       stock: 0,
       cost: null,

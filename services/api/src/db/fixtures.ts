@@ -324,7 +324,7 @@ export async function addFixtureBatch(opts: AddOptions): Promise<FixtureSalon[]>
           lat: place.lat + ((i % 5) - 2) * 0.0021, lng: place.lng + ((i % 7) - 3) * 0.0017,
         },
         services: kind.services.map((s) => ({ ...s, category: snap(s.category, svcCats) })),
-        products: prodCats.length ? kind.products.map((p) => ({ ...p, category: snap(p.category, prodCats), sizeMl: null, stock: 0, cost: null })) : [],
+        products: prodCats.length ? kind.products.map((p) => ({ ...p, category: snap(p.category, prodCats), sizeMl: null, stock: 0, cost: null, img: null, description: null })) : [],
         gallery: [0, 1, 2].map((g) => ({ name: g === 0 ? 'Front' : g === 1 ? 'Treatment room' : 'Reception', img: placeholderImage(base, hue, g), card: g === 0 })),
         team: [], // staff are made below, active and bookable — an invite is not a colleague you can book
         hours: hoursFor(offset + i),

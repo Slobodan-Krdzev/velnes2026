@@ -862,6 +862,7 @@ export interface ProductCategories {
 }
 
 export interface Products {
+  description: string | null;
   active: Generated<boolean>;
   categoryId: string | null;
   cost: number | null;
