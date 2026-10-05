@@ -1086,7 +1086,8 @@ a.pop-go:hover {
   /* One pixel lower than the tab bar's top edge: the Book-now bar (z 70)
      covers the tab bar's own top border (z 60), which otherwise showed
      as a hairline at the seam. */
-  .m-bookbar{bottom:calc(var(--m-tab) + env(safe-area-inset-bottom) - 1px);padding-bottom:10px}
+  /* Under the tab bar (60), so the slide-away passes behind it, never over it. */
+  .m-bookbar{bottom:calc(var(--m-tab) + env(safe-area-inset-bottom) - 1px);padding-bottom:10px;z-index:55}
   .m-page.has-bar{padding-bottom:180px}
   /* Full-screen sheets and modals cover the chrome as before. */
   .m-sheet,.mapsheet,.gps-modal{top:0;bottom:0}
@@ -1763,7 +1764,7 @@ a.pop-go:hover {
 .page-enter{animation:page-in .22s ease-out}
 @keyframes page-in{from{opacity:0}to{opacity:1}}
 .m-bookbar{animation:bar-up .3s cubic-bezier(.22,.68,.35,1);
-  transition:transform .26s cubic-bezier(.22,.68,.35,1),opacity .2s ease}
+  transition:transform .45s cubic-bezier(.22,.68,.35,1),opacity .35s ease}
 @keyframes bar-up{from{transform:translateY(100%)}to{transform:none}}
 /* While the page scrolls the bar slides down out of the way and eases
    back once the page is still (Alex, 2026-10-05) — `useScrolling`. No
