@@ -1230,6 +1230,22 @@ a.pop-go:hover {
 .m-mapfab:active{background:#3a1f16}
 @media (min-width:900px){.m-mapfab{display:none}}
 
+/* ── "Velnes for Business" on the phone home (Alex, 2026-10-05): the
+   desktop header's link as a floating button centred just above the
+   tab bar, in the ink with white text. It slides away while the page
+   scrolls and eases back once the page is still (BizFab.tsx). Hidden
+   from 900px up, where the header carries the link. */
+.m-bizfab{position:fixed;left:50%;bottom:calc(var(--m-tab) + env(safe-area-inset-bottom) + 14px);z-index:55;
+  display:inline-flex;align-items:center;gap:8px;border:0;border-radius:999px;padding:12px 18px;white-space:nowrap;
+  background:var(--ink);color:#fff;font-weight:700;font-size:13.5px;text-decoration:none;
+  box-shadow:0 10px 26px rgba(45,26,18,.28);
+  transform:translateX(-50%);opacity:1;
+  transition:opacity .22s ease,transform .26s cubic-bezier(.22,.68,.35,1)}
+.m-bizfab:active{background:#3a1f16}
+.m-bizfab.hid{opacity:0;transform:translate(-50%,18px) scale(.96);pointer-events:none}
+@media (min-width:900px){.m-bizfab{display:none}}
+@media (prefers-reduced-motion:reduce){.m-bizfab{transition:none}}
+
 /* ── Amenities on the salon page (Alex, 2026-09-29): rows of one-colour
    icons on the warm tile, the vocabulary's order; the full grouped
    list in the page's sheet. */
