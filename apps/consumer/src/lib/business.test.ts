@@ -13,4 +13,9 @@ describe('where "Velnes for Business" goes', () => {
     vi.stubGlobal('location', { protocol: 'http:', hostname: 'localhost' });
     expect(businessOnboardingUrl()).toBe('http://localhost:5173/onboarding');
   });
+
+  it('keeps the machine IP a phone on the LAN uses, with the workspace port (not workspace.168.0.25)', () => {
+    vi.stubGlobal('location', { protocol: 'http:', hostname: '192.168.0.25' });
+    expect(businessOnboardingUrl()).toBe('http://192.168.0.25:5173/onboarding');
+  });
 });
