@@ -517,8 +517,11 @@ a.pop-go:hover {
 .pro-card > span {
   min-width: 0;
 }
-/* And the name stops before the heart rather than running under it. */
-.pro-card {
+/* And the name stops before the heart rather than running under it —
+   only on the professional cards, which are the ones that carry one.
+   On the length and option cards the same 34px stole the room
+   "Standard" needs and split it in half (Alex, 2026-10-05). */
+.pro-wrap .pro-card {
   padding-right: 34px;
 }
 
@@ -590,7 +593,11 @@ a.pop-go:hover {
   -webkit-line-clamp: 2;
   overflow: hidden;
   white-space: normal;
-  overflow-wrap: anywhere;
+  /* break-word, not anywhere (Alex, 2026-10-05): `anywhere` lets the
+     column's min-content shrink to a letter, so the grid gave the text
+     less room than "Standard" needs and split it in half. `break-word`
+     keeps the word whole wherever it can fit at all. */
+  overflow-wrap: break-word;
 }
 /* The name is no longer a single line, so the row that holds it lines
    its pieces up from the top rather than centring the heart against two
