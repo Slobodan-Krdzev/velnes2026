@@ -128,6 +128,11 @@ export function ReschedulePicker({ a, onClose, onSent }: { a: Appt; onClose: () 
         <p className="sm rs-note">
           <b>{t('c.acc.rsOnlyAfter')}</b> {t('c.acc.rsOnlyAfterSub')}
         </p>
+        {a.quietBonus ? (
+          <p className="sm rs-note" data-testid="rs-quiet-note">
+            <b>{t('c.acc.rsQuietNote', { n: a.quietBonus })}</b>
+          </p>
+        ) : null}
         {err ? <div className="acc-err">{err}</div> : null}
         <div className="acc-actions">
           <button className="btn btn-p" disabled={busy} onClick={() => void send()}>

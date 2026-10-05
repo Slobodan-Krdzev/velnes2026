@@ -9,6 +9,7 @@ import {
   DuePaymentsSchema,
   AppointmentListResponseSchema,
   AvailabilityResponseSchema,
+  QuietSlotsResponseSchema,
   BookResponseSchema,
   AppointmentSchema,
   CustomerListResponseSchema,
@@ -45,6 +46,15 @@ export const useDaySchedule = (locationId: string | null, date: string) =>
   useQuery({
     queryKey: ['schedule', locationId, date],
     queryFn: () => get(DayScheduleSchema, `/locations/${locationId}/schedule?date=${date}`),
+    enabled: !!locationId,
+  });
+
+/** The quiet starts of a location over a range (Alex, 2026-10-05): the
+ *  calendar's markers, read from the nightly table. */
+export const useQuietSlots = (locationId: string | null, from: string, to: string) =>
+  useQuery({
+    queryKey: ['quiet-slots', locationId, from, to],
+    queryFn: () => get(QuietSlotsResponseSchema, `/quiet-slots?locationId=${locationId}&from=${from}&to=${to}`),
     enabled: !!locationId,
   });
 

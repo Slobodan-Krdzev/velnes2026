@@ -1,4 +1,6 @@
 import type { AccessClaims, Appointment, BookProduct, BookRequest, RefusalCode, VisitProduct } from '@velnes/contracts';
+import { LOYALTY_RULES } from '@velnes/contracts';
+import { quietTimesFor, withQuietBonus } from '../loyalty/quiet-slots.service.js';
 import type { Trx } from '../../db/index.js';
 import { logAudit } from '../audit/audit.service.js';
 import { autoConfirmOn } from './requests.service.js';
@@ -528,7 +530,9 @@ export async function availableSlots(
     out.push({ t: hhmm(m), emp: seated ? free[0]! : null, free: seated });
     if (seated && q.firstOnly) break;
   }
-  return out;
+  // The quiet-time bonus rides on the free starts the location's
+  // history marks quiet (Alex, 2026-10-05) — read, never computed here.
+  return withQuietBonus(trx, q.locationId, q.date, out);
 }
 
 export async function createHold(
@@ -847,6 +851,15 @@ export async function confirmBooking(
   // widget bookings are the salon's own and land booked as before.
   const fromApp = req.source === 'marketplace' || req.source === 'client';
   const status = fromApp && !(await autoConfirmOn(trx)) ? 'requested' : 'booked';
+  // The quiet-time bonus (Alex, 2026-10-05): promised here, on the
+  // visit's first treatment, when a Velnes-app booking takes a start
+  // the location's published quiet pairs name. Paid at settlement if
+  // the visit is delivered and never moved.
+  const anchorLeg = !/:\d+$/.test(req.key) || req.key.endsWith(':1');
+  const quietBonus =
+    fromApp && anchorLeg && (await quietTimesFor(trx, req.locationId, req.date)).has(mins(req.time))
+      ? LOYALTY_RULES.appointment.quietSlot
+      : 0;
   const inserted = await trx
     .insertInto('appointments')
     .values({
@@ -883,6 +896,7 @@ export async function confirmBooking(
       // The cancellation window as promised at booking — the terms
       // accepted then govern this visit (docs/BOOKING-CHANGES.md §2.4).
       cancelHours: loc.cancelHours,
+      quietBonus,
     })
     .returning('id')
     .executeTakeFirstOrThrow();
@@ -979,7 +993,14 @@ export async function patchAppointment(
     if (refusal) throw new BookingRefused(refusal);
     await trx
       .updateTable('appointments')
-      .set({ date: new Date(date), startMin: mins(time), employeeId: emp })
+      // Moved to another day or time: the quiet-time bonus is gone
+      // (Alex, 2026-10-05) — a change of hands alone keeps it.
+      .set({
+        date: new Date(date),
+        startMin: mins(time),
+        employeeId: emp,
+        ...(date !== localIso(a.date) || mins(time) !== a.startMin ? { quietBonus: 0 } : {}),
+      })
       .where('id', '=', id)
       .execute();
     await trx
@@ -1333,7 +1354,8 @@ export async function chainAvailability(
     !out.some((s) => s.free) &&
     stats.checked === 0 &&
     stats.slowerThanOffer.size > 0;
-  return nobodyAtPace ? { slots: out, reason: 'NOBODY_AT_PACE' } : { slots: out };
+  const slots = await withQuietBonus(trx, q.locationId, q.date, out);
+  return nobodyAtPace ? { slots, reason: 'NOBODY_AT_PACE' } : { slots };
 }
 
 /** The slots alone — what most callers and tests want. */

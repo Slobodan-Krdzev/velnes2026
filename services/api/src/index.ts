@@ -2,6 +2,7 @@ import { startMailLoop } from './modules/mail/mail.sender.js';
 import { startReviewReminderLoop } from './modules/reviews/reviews.service.js';
 import { startRefundLoop } from './modules/payments/refunds.service.js';
 import { startLoyaltyLoop } from './modules/loyalty/loyalty.service.js';
+import { startQuietSlotsLoop } from './modules/loyalty/quiet-slots.service.js';
 import { buildServer } from './server.js';
 
 const app = await buildServer();
@@ -15,6 +16,9 @@ startRefundLoop();
 // Velnes Loyalty: settle completed visits, reverse undone ones, repair
 // what a door missed — every award idempotent by its source.
 startLoyaltyLoop();
+// Quiet slots: each location rejudged once a day from its own history;
+// the availability doors only read what the pass wrote.
+startQuietSlotsLoop();
 
 const port = Number(process.env.PORT ?? 3001);
 // Production sits behind a reverse proxy on the same box: bind to

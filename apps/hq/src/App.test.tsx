@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from './App.js';
@@ -21,6 +21,21 @@ function mockApi(calls: { method: string; path: string; body?: unknown }[]) {
       if (path.includes('/hq/auth/login'))
         return ok({ accessToken: 'hq-token', user: me });
       if (path.includes('/hq/me')) return ok(me);
+      if (path.includes('/hq/quiet-slots'))
+        return ok({
+          rule: { windowWeeks: 6, minOpenWeeks: 4, maxFill: 0.2, minCompleted: 40, maxShare: 0.3, bonus: 20 },
+          locations: [
+            {
+              locationId: '20000000-0000-4000-8000-000000000001', tenantId: '10000000-0000-4000-8000-000000000001', locationName: 'Centar', salonName: 'Velnes Fizio',
+              computedAt: '2026-10-05T02:00:00.000Z', completed: 123, qualified: true, openPairs: 224, locationFill: 0.0432, quietCount: 1,
+              slots: [{ weekday: 1, t: '17:00', openWeeks: 6, bookedWeeks: 0, fill: 0 }],
+            },
+            {
+              locationId: '20000000-0000-4000-8000-000000000002', tenantId: '10000000-0000-4000-8000-000000000002', locationName: 'Main', salonName: 'Afrodita S',
+              computedAt: '2026-10-05T02:00:00.000Z', completed: 9, qualified: false, openPairs: 0, locationFill: 0, quietCount: 0, slots: [],
+            },
+          ],
+        });
       if (path.includes('/hq/registrations') && method === 'GET')
         return ok({
           registrations: [
@@ -126,6 +141,18 @@ describe('Revelapps HQ', () => {
     expect(screen.getByText('6 of 6 steps')).toBeDefined();
     expect(screen.getByText('Monthly revenue')).toBeDefined();
     expect(screen.getAllByText('Live').length).toBeGreaterThan(0);
+  });
+
+  it('lists every location\'s quiet-slot judgement under the customers, with the times on request', async () => {
+    mockApi([]);
+    await signIn();
+    const panel = await screen.findByTestId('quiet-slots');
+    expect(within(panel).getByText('Velnes Fizio')).toBeDefined();
+    expect(within(panel).getByText('123')).toBeDefined();
+    expect(within(panel).getByText('4%')).toBeDefined();
+    expect(within(panel).getByText(/too young/)).toBeDefined();
+    await userEvent.click(within(panel).getByRole('button', { name: 'Show times' }));
+    expect(within(panel).getByText(/17:00 \(0\/6\)/)).toBeDefined();
   });
 
   it('creates a business account behind the Add door', async () => {

@@ -23,6 +23,8 @@ import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { sql } from 'kysely';
 import { z } from 'zod';
 import { withTenant } from '../../db/index.js';
+import { LOYALTY_RULES, QuietSlotsResponseSchema } from '@velnes/contracts';
+import { quietSlotsBetween } from '../loyalty/quiet-slots.service.js';
 import { can, permsFor } from '../auth/authz.service.js';
 import {
   appointmentEvent,
@@ -82,6 +84,23 @@ export function bookingRoutes(app: FastifyInstance) {
           key: req.query.key,
         }),
       ),
+    }),
+  });
+
+  // The quiet starts of a location over a range (Alex, 2026-10-05):
+  // the calendar's markers, so staff know why a customer asked about
+  // points. Read from the nightly table, like the availability doors.
+  r.route({
+    method: 'GET',
+    url: '/quiet-slots',
+    preHandler: [app.authenticate],
+    schema: {
+      querystring: z.object({ locationId: z.uuid(), from: z.iso.date(), to: z.iso.date() }),
+      response: { 200: QuietSlotsResponseSchema },
+    },
+    handler: async (req) => ({
+      slots: await withTenant(req.claims.ten, (trx) => quietSlotsBetween(trx, req.query.locationId, req.query.from, req.query.to)),
+      bonus: LOYALTY_RULES.appointment.quietSlot,
     }),
   });
 

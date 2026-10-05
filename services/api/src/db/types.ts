@@ -154,6 +154,7 @@ export interface Appointments {
   poId: string | null;
   prepMin: Generated<number>;
   price: Generated<number>;
+  quietBonus: Generated<number>;
   quoted: Json | null;
   resetMin: Generated<number>;
   serviceId: string | null;
@@ -165,6 +166,27 @@ export interface Appointments {
   variantId: string | null;
   variantLabel: string | null;
   widgetId: string | null;
+}
+
+export interface LocationQuietRuns {
+  completed: number;
+  computedAt: Generated<Timestamp>;
+  locationFill: Numeric;
+  locationId: string;
+  openPairs: number;
+  qualified: boolean;
+  quietCount: number;
+  tenantId: string;
+}
+
+export interface LocationQuietSlots {
+  bookedWeeks: number;
+  fill: Numeric;
+  locationId: string;
+  openWeeks: number;
+  startMin: number;
+  tenantId: string;
+  weekday: number;
 }
 
 export interface AssistantActions {
@@ -1328,6 +1350,8 @@ export interface DB {
   locationCatalogServices: LocationCatalogServices;
   locationCatalogVariants: LocationCatalogVariants;
   locationLifecycleLog: LocationLifecycleLog;
+  locationQuietRuns: LocationQuietRuns;
+  locationQuietSlots: LocationQuietSlots;
   locations: Locations;
   loyaltyConfig: LoyaltyConfig;
   loyaltyLedger: LoyaltyLedger;

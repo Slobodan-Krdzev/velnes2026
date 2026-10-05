@@ -313,6 +313,12 @@ function useSalonPage() {
   // until they are, and the button says which one.
   const missing = lines.flatMap((l) => l.missing.map((g) => ({ service: l.svc.name, group: g.name, serviceId: l.serviceId, groupId: g.id })));
   const free = useMemo(() => (availQ.data?.slots ?? []).filter((s) => s.free).map((s) => s.t), [availQ.data]);
+  // The quiet-time bonus (Alex, 2026-10-05): the door marks the free
+  // starts it pays extra for; the chip wears the tag, nothing is derived.
+  const bonusAt = useMemo(
+    () => Object.fromEntries((availQ.data?.slots ?? []).filter((s) => s.free && s.bonus).map((s) => [s.t, s.bonus!])) as Record<string, number>,
+    [availQ.data],
+  );
   // The time is the person's to pick — nothing is chosen for them, so
   // "Date & time" is ticked only once they have tapped one (Alex,
   // 2026-09-21). A pick that stopped being free — another day, a hold
@@ -470,6 +476,7 @@ function useSalonPage() {
     time,
     setTime,
     free,
+    bonusAt,
     /** The door's own account of a blank day, when it has one. */
     slotsReason: availQ.data?.reason ?? null,
     slotsAnswered: availQ.data !== undefined,
@@ -877,11 +884,15 @@ function BookCard({ p, desktop }: { p: Page; desktop: boolean }) {
         </button>
       </div>
       <div className="timegrid">
-        {p.free.map((t) => (
-          <button key={t} className={`slot${p.time === t ? ' on' : ''}`} onClick={() => p.setTime(t)}>
-            {t}
+        {p.free.map((tm) => (
+          <button key={tm} className={`slot${p.time === tm ? ' on' : ''}${p.bonusAt[tm] ? ' has-pts' : ''}`} onClick={() => p.setTime(tm)}>
+            {tm}
+            {p.bonusAt[tm] ? <span className="pts-badge pts-mini" data-testid="slot-pts">{t('c.sal.ptsShort', { n: p.bonusAt[tm] })}</span> : null}
           </button>
         ))}
+        {Object.keys(p.bonusAt).length ? (
+          <p className="sm muted quiet-hint" style={{ gridColumn: '1/-1', margin: '2px 0 0' }}>{t('c.sal.quietHint', { n: Object.values(p.bonusAt)[0] })}</p>
+        ) : null}
         {!p.free.length && p.lines.length ? (
           p.slotsReason === 'NOBODY_AT_PACE' ? (
             /* Not a full day — a day nobody fits. The prototype only had

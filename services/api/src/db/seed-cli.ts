@@ -1,4 +1,6 @@
 import { DEMO_PASSWORD, seedDemo } from './seed-demo.js';
+import { closeDb } from './index.js';
+import { recomputeAllQuietSlots } from '../modules/loyalty/quiet-slots.service.js';
 
 if (process.env.NODE_ENV === 'production') {
   console.error('Refusing to seed a production database.');
@@ -14,4 +16,13 @@ const url =
 
 await seedDemo(url);
 console.log(`Seeded the demo world into ${new URL(url).pathname.slice(1)}.`);
+// Quiet slots (2026-10-05): judge the seeded history now, so the tags
+// are on the calendar before the hourly pass gets to them.
+try {
+  const n = await recomputeAllQuietSlots();
+  console.log(`Judged quiet slots for ${n} locations.`);
+} catch (e) {
+  console.warn('Quiet slots not judged:', (e as Error).message);
+}
+await closeDb();
 console.log(`Demo login: maria@velnes.mk (and colleagues) · password: ${DEMO_PASSWORD}`);
