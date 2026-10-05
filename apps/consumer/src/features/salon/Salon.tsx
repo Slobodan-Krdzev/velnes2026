@@ -1011,7 +1011,11 @@ export function Salon() {
   const pin = p.location?.lat != null && p.location.lng != null ? p.location : d;
   const mapPins =
     pin.lat != null && pin.lng != null
-      ? [{ lat: pin.lat, lng: pin.lng, label: d.name, sub: printedAddress, here: true }]
+      ? [{
+          lat: pin.lat, lng: pin.lng, label: d.name, sub: printedAddress, here: true,
+          pitch: d.pitch,
+          rating: d.reviews ? { avg: d.reviews.avg, count: d.reviews.count } : null,
+        }]
       : [];
   const away =
     geo.position && pin.lat != null && pin.lng != null

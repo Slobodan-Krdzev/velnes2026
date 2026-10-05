@@ -270,8 +270,8 @@
    One tap to look, one to go. Leaflet's own popup chrome is replaced
    rather than themed: its default is a white box with a serif-ish link,
    and this has to read as the same product as the result cards beside
-   it. There is no rating line, and that is deliberate — reviews do not
-   exist yet, so there is nothing true to put there. */
+   it. Since 2026-10-05 it also says the salon's public line and its
+   verified score (`ratingHtml`) — nothing when nobody has reviewed it. */
 .velnes-pop .leaflet-popup-content-wrapper {
   border-radius: 14px;
   box-shadow: 0 18px 40px rgba(45, 26, 18, 0.22);

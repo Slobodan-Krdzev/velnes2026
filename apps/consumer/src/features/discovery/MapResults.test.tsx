@@ -19,6 +19,8 @@ const r = (i: number): MapResult => ({
   city: 'Skopje',
   photo: 'none',
   hasPhoto: false,
+  pitch: 'Deep, honest massage',
+  rating: null,
   bookable: true,
   treatment: 'Sports massage',
   price: '1.900 MKD',

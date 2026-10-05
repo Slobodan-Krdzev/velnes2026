@@ -411,6 +411,7 @@ describe('the consumer discovery surface', () => {
       // Not shipped and then hidden by the app — never sent at all.
       for (const s of hidden) {
         expect(s.salon.showPrices).toBe(false);
+        expect(typeof s.salon.pitch).toBe('string');
         expect(s.price).toBeNull();
         expect(s.priceFrom).toBeNull();
       }

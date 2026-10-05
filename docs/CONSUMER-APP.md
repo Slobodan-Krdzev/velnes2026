@@ -841,6 +841,17 @@ card cut at the right, the fixed tab bar under Chrome's toolbar. Below
 900px every field is now at least 16px (`max(16px, 1em)` keeps the
 ones that are larger); desktop is untouched.
 
+**The Velnes pin (2026-10-05).** Every salon on every map is the same
+pin: a white circle ringed in the brand colour with the Velnes mark in
+the middle (`velnesPinHtml` in `SalonMap.tsx`); the salon a page is
+about, or the selected result, is the larger one with the stronger ring
+and a pill beside it. Leaflet's blue marker is gone. The pin's words —
+the pill on a results map, the permanent label on a desktop map, the
+popup card — are the name, the salon's public line (`pitch`, now also
+on a result's `salon` so the results maps can say it) and its verified
+score as the cards print it (a star, the average, the count); no star
+when nobody has reviewed it. A person's own position stays the blue dot.
+
 **The phone's search sheet (2026-09-28).** One place a phone searches
 and filters: a full-screen sheet (`SearchSheet.tsx`, mounted once above
 the routes) opened by the home pill, the results pill and the Search

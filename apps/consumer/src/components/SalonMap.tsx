@@ -2,9 +2,6 @@ import L from 'leaflet';
 import { t } from '../lib/i18n-core.js';
 import 'leaflet/dist/leaflet.css';
 import './map.css';
-import markerIcon from 'leaflet/dist/images/marker-icon.png';
-import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png';
-import markerShadow from 'leaflet/dist/images/marker-shadow.png';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 /** Real OpenStreetMap, same Leaflet setup the registration wizard uses.
@@ -14,49 +11,53 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 /** Somewhere to look when nothing else is known yet. */
 const SKOPJE: [number, number] = [41.9981, 21.4254];
 
-const PIN = L.icon({
-  iconUrl: markerIcon,
-  iconRetinaUrl: markerIcon2x,
-  shadowUrl: markerShadow,
-  iconSize: [25, 41],
-  iconAnchor: [12, 41],
-  shadowSize: [41, 41],
-});
+/** The Velnes mark, as the pins carry it (the same path as `IcMark`). */
+const MARK =
+  '<svg class="vpin-mark" viewBox="0 0 30 29" fill="currentColor" aria-hidden="true"><path d="M29.7675 10.7637C28.8761 8.0534 25.9691 6.58211 23.2947 7.47263C20.0389 8.51802 18.7598 13.3965 15.7753 14.4806C15.8528 11.3057 20.1164 8.55674 20.1164 5.14953C20.1164 2.28438 17.8296 0 15.0001 0C12.1706 0 9.88382 2.28438 9.88382 5.11081C9.88382 8.55674 14.1861 11.267 14.2249 14.4419C11.2404 13.3965 9.96134 8.51802 6.70552 7.47263C4.03111 6.58211 1.12413 8.0534 0.271416 10.7637C-0.620057 13.4352 0.852811 16.3391 3.56599 17.2296C6.78304 18.275 10.659 15.1389 13.721 15.9519C11.7443 18.4299 6.78304 18.1589 4.8063 20.9466C3.13963 23.231 3.68227 26.4446 5.96909 28.1095C8.25591 29.7744 11.473 29.2323 13.1396 26.9479C15.1551 24.1602 13.2559 19.4753 15.0389 16.8425C16.8218 19.4753 14.9613 24.1602 16.9381 26.9479C18.6047 29.2323 21.783 29.7744 24.1086 28.1095C26.3954 26.4446 26.9381 23.2697 25.2714 20.9466C23.2947 18.1976 18.2947 18.4299 16.3567 15.9519C19.4187 15.1389 23.2559 18.275 26.5117 17.2296C29.1474 16.3391 30.6203 13.4352 29.7675 10.7637Z"/></svg>';
 
-/** The brand pin for the salon you are looking at, so it reads apart
- *  from the neighbours on a results map. */
-const HERE = L.divIcon({
-  className: '',
-  html:
-    '<span style="display:grid;place-items:center;width:30px;height:30px;border-radius:50% 50% 50% 4px;' +
-    'transform:rotate(-45deg);background:var(--brand);box-shadow:0 4px 12px rgba(45,26,18,.35)">' +
-    '<span style="width:9px;height:9px;border-radius:50%;background:#FFF9F7"></span></span>',
-  iconSize: [30, 30],
-  iconAnchor: [15, 30],
-  popupAnchor: [0, -28],
-});
+const STAR =
+  '<svg class="vrate-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5l2.9 6 6.6.9-4.8 4.6 1.2 6.5L12 17.4l-5.9 3.1 1.2-6.5L2.5 9.4l6.6-.9z"/></svg>';
+
+/** The salon's verified score as the cards print it: a star, the
+ *  average to one decimal, the count in brackets. Nothing when there
+ *  are no reviews — a star nobody earned is worse than no star. */
+export function ratingHtml(r: MapPin['rating']): string {
+  if (!r || r.count < 1) return '';
+  return `<span class="vrate">${STAR}<b>${r.avg.toFixed(1)}</b><span class="c">(${r.count})</span></span>`;
+}
 
 /**
- * The Velnes marker for a results map (Alex, 2026-09-29): a compact
- * coral dot with a white ring and a soft shadow, and a stronger,
- * larger one with a short name pill when selected. Plain `divIcon`s in
- * the brand token — nothing about them stops a cluster group from
- * taking them later. The name rides on the selected pin only, and only
- * when it is short enough to read on a phone; the card carries the rest.
+ * The pin's words (Alex, 2026-10-05): the name, the salon's public
+ * line, its verified score — on every map the same — and, on a results
+ * map, what the card says in a line: the price and a start when the
+ * door gave one.
  */
-function velnesPin(p: MapPin, selected: boolean, flip = false): L.DivIcon {
-  // The selected pin says what the card says in a line: the name, and
-  // under it the price and a start when the door gave one. Nothing the
-  // platform does not know — no rating, since none exist yet.
+function pinWords(p: MapPin, detail: string | null): string {
+  const pitch = p.pitch ? `<small class="vpin-pitch">${escapeHtml(p.pitch)}</small>` : '';
+  const rate = ratingHtml(p.rating);
+  const extra = detail ? `<small>${detail}</small>` : '';
+  return `<b>${escapeHtml(p.label)}</b>${pitch}${rate}${extra}`;
+}
+
+/**
+ * The Velnes pin (Alex, 2026-10-05): a white circle ringed in the brand
+ * colour with the Velnes mark in the middle; the salon a page is about,
+ * or the selected result, is the larger one with the stronger ring and
+ * a pill beside it. Plain `divIcon`s — nothing about them stops a
+ * cluster group from taking them later.
+ */
+export function velnesPinHtml(p: MapPin, selected: boolean, flip = false, withPill = true): string {
   const detail = [p.price, p.sub2].filter(Boolean).map((x) => escapeHtml(x!)).join(' · ');
-  const pill = selected
-    ? `<span class="vpin-lbl"><b>${escapeHtml(p.label)}</b>${detail ? `<small>${detail}</small>` : ''}</span>`
-    : '';
+  const pill = selected && withPill ? `<span class="vpin-lbl">${pinWords(p, detail || null)}</span>` : '';
+  return `<span class="vpin${selected ? ' sel' : ''}${flip ? ' flip' : ''}" role="img"><span class="vpin-dot">${MARK}</span>${pill}</span>`;
+}
+function velnesPin(p: MapPin, selected: boolean, flip = false, withPill = true): L.DivIcon {
   return L.divIcon({
     className: '',
-    html: `<span class="vpin${selected ? ' sel' : ''}${flip ? ' flip' : ''}" role="img"><span class="vpin-dot"></span>${pill}</span>`,
+    html: velnesPinHtml(p, selected, flip, withPill),
     iconSize: selected ? [30, 30] : [22, 22],
     iconAnchor: selected ? [15, 15] : [11, 11],
+    popupAnchor: [0, selected ? -14 : -10],
   });
 }
 
@@ -89,10 +90,12 @@ export interface MapPin {
   /** A ready-to-use CSS `background-image` value, or null for no
    *  photograph at all — see `hasPhoto` in the mappers. */
   photo?: string | null;
-  /** Something true about the salon. Never a rating: there are no
-   *  reviews on this platform yet, and a star nobody earned is worse
-   *  than no star. */
+  /** Something true about the salon (bookable now, say). */
   badge?: string | null;
+  /** The salon's public line — on the pin's tooltip (Alex, 2026-10-05). */
+  pitch?: string | null;
+  /** Its verified score and count, or null when there are none. */
+  rating?: { avg: number; count: number } | null;
   price?: string | null;
   /** A second line for the selected Velnes marker (a start time, say). */
   sub2?: string | null;
@@ -207,17 +210,14 @@ export function SalonMap({
         m.on('click', () => p.id && onSelect?.(p.id));
         return m;
       }
-      const m = L.marker([p.lat, p.lng], { icon: p.here ? HERE : PIN }).addTo(map);
+      const m = L.marker([p.lat, p.lng], { icon: velnesPin(p, Boolean(p.here), false, false) }).addTo(map);
       if (labels)
-        m.bindTooltip(
-          `${escapeHtml(p.label)}${p.sub ? `<small>${escapeHtml(p.sub)}</small>` : ''}`,
-          {
-            permanent: true,
-            direction: 'right',
-            offset: [10, -10],
-            className: `velnes-lbl${p.here ? ' here' : ''}`,
-          },
-        );
+        m.bindTooltip(pinWords(p, p.sub ? escapeHtml(p.sub) : null), {
+          permanent: true,
+          direction: 'right',
+          offset: [p.here ? 14 : 10, 0],
+          className: `velnes-lbl${p.here ? ' here' : ''}`,
+        });
       if (labels && !p.here) labelled.push(m);
       // A pin that can show a card shows one, and the card is what
       // carries you onward. Clicking the pin itself never navigates:
@@ -236,9 +236,11 @@ export function SalonMap({
         });
       }
       else if (!labels || p.here)
-        m.bindPopup(
-          `<b style="font-family:inherit">${escapeHtml(p.label)}</b>${p.sub ? `<br><span>${escapeHtml(p.sub)}</span>` : ''}`,
-        );
+        m.bindPopup(`<span class="pop-words">${pinWords(p, p.sub ? escapeHtml(p.sub) : null)}</span>`, {
+          className: 'velnes-pop',
+          minWidth: 200,
+          maxWidth: 240,
+        });
       if (p.onClick && !p.href) {
         m.on('click', p.onClick);
         m.getElement()?.style.setProperty('cursor', 'pointer');
@@ -454,7 +456,9 @@ function pinCard(p: MapPin): string {
   return (
     `<span class="pop-card">${photo}` +
     `<b class="pop-name">${escapeHtml(p.label)}</b>` +
+    (p.pitch ? `<span class="pop-pitch">${escapeHtml(p.pitch)}</span>` : '') +
     (p.sub ? `<span class="pop-sub">${escapeHtml(p.sub)}</span>` : '') +
+    ratingHtml(p.rating) +
     (badge || price ? `<span class="pop-meta">${badge}${price}</span>` : '') +
     `<a class="pop-go" href="${escapeHtml(p.href ?? '#')}">${t('c.cards.viewSalon')}` +
     '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h13M13 6l6 6-6 6"/></svg>' +

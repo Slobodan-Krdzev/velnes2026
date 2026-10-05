@@ -850,6 +850,8 @@ export function Results() {
         lng: s.salon.lng!,
         label: s.salon.name,
         sub: placeSub(s),
+        pitch: s.salon.pitch,
+        rating: s.salon.rating,
         sub2: s.availableAt
           ? t('c.availNow', { t: s.availableAt })
           : s.availableOn
@@ -881,6 +883,8 @@ export function Results() {
         lng: s.salon.lng,
         name: s.salon.name,
         city: placeSub(s),
+        pitch: s.salon.pitch,
+        rating: s.salon.rating,
         photo: s.salon.photo,
         hasPhoto: s.salon.hasPhoto,
         bookable: s.salon.bookable,

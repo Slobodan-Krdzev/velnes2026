@@ -715,6 +715,7 @@ export async function gatherCategory(categoryId: string): Promise<
             salon: {
               slug: b.slug,
               name: b.name,
+              pitch: b.marketplace.pitch,
               city: b.city,
               photo,
               lat: place.lat,

@@ -32,6 +32,9 @@ export interface MapResult {
   lng: number;
   name: string;
   city: string;
+  /** The salon's public line and verified score — the pin's tooltip. */
+  pitch: string;
+  rating: { avg: number; count: number } | null;
   /** CSS background-image value, and whether it is a real photograph. */
   photo: string;
   hasPhoto: boolean;
@@ -175,6 +178,8 @@ export function MapResults({ results, onClose }: { results: MapResult[]; onClose
         lat: r.lat,
         lng: r.lng,
         label: r.name,
+        pitch: r.pitch,
+        rating: r.rating,
         price: r.price,
         sub2: r.availableAt ? t('c.availNow', { t: r.availableAt }) : null,
       })),
