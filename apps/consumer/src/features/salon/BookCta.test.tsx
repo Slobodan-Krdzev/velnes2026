@@ -63,6 +63,17 @@ describe('the Book now button names the missing step', () => {
     window.history.replaceState({}, '', '/');
   });
 
+  it('the phone bar slides away while the page scrolls and comes back once it is still', async () => {
+    window.history.replaceState({}, '', '/salon/velnes-fizio');
+    render(<App />);
+    await waitFor(() => expect(bar()).toBeTruthy());
+    const el = () => document.querySelector('.m-bookbar')!;
+    expect(el().className).toBe('m-bookbar');
+    fireEvent.scroll(window);
+    expect(el().className).toContain('hid');
+    await waitFor(() => expect(el().className).toBe('m-bookbar'));
+  });
+
   it('treatment → required option → time → Book now, each tap scrolling to its own step in its own layout', async () => {
     window.history.replaceState({}, '', '/salon/velnes-fizio');
     render(<App />);

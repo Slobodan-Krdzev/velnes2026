@@ -841,6 +841,15 @@ card cut at the right, the fixed tab bar under Chrome's toolbar. Below
 900px every field is now at least 16px (`max(16px, 1em)` keeps the
 ones that are larger); desktop is untouched.
 
+**The booking bar steps aside while the page scrolls (2026-10-05).** On
+a phone the salon page's fixed booking bar took a third of the screen;
+it now slides down out of the way on the first scroll event and eases
+back once the page has been still for about a fifth of a second — the
+same `useScrolling` the home's business button uses, animated both
+ways, off under `prefers-reduced-motion`. The entrance animation lost
+its fill-mode for this: a pinned last frame would have overridden the
+slide-away transform.
+
 **The Velnes pin (2026-10-05).** Every salon on every map is the same
 pin: a white circle ringed in the brand colour with the Velnes mark in
 the middle (`velnesPinHtml` in `SalonMap.tsx`); the salon a page is

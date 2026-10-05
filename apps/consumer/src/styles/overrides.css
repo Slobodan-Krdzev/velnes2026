@@ -1762,14 +1762,21 @@ a.pop-go:hover {
    page — a transformed ancestor is a containing block for `fixed`. */
 .page-enter{animation:page-in .22s ease-out}
 @keyframes page-in{from{opacity:0}to{opacity:1}}
-.m-bookbar{animation:bar-up .3s cubic-bezier(.22,.68,.35,1) both}
+.m-bookbar{animation:bar-up .3s cubic-bezier(.22,.68,.35,1);
+  transition:transform .26s cubic-bezier(.22,.68,.35,1),opacity .2s ease}
 @keyframes bar-up{from{transform:translateY(100%)}to{transform:none}}
+/* While the page scrolls the bar slides down out of the way and eases
+   back once the page is still (Alex, 2026-10-05) — `useScrolling`. No
+   fill-mode on the entrance above, or its last frame would pin the
+   transform and the slide-away could never happen. */
+.m-bookbar.hid{transform:translateY(110%);opacity:0;pointer-events:none}
 @keyframes reveal{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
 .acc-notif-detail,.rs-pick,.rs-confirm,.rs-pending,.rs-declined,.rs-approved,.cx-confirm,.rv-form,.rv-done,.acc-blocked,
 .loy-earn,.pro-grid,.dcart .dcart-row,.dcart .dcart-when,.dcart .dcart-tot,.dcart-mini,.acc-card.loy-hero{animation:reveal .2s ease-out both}
 .m-bookbar .btn,.dcart .btn{transition:transform .12s ease,filter .12s ease}
 .m-bookbar .btn:active,.dcart .btn:active{transform:scale(.98)}
 @media (prefers-reduced-motion:reduce){
+  .m-bookbar{transition:none}
   .page-enter,.m-bookbar,.acc-notif-detail,.rs-pick,.rs-confirm,.rs-pending,.rs-declined,.rs-approved,.cx-confirm,.rv-form,.rv-done,
   .acc-blocked,.loy-earn,.pro-grid,.dcart .dcart-row,.dcart .dcart-when,.dcart .dcart-tot,.dcart-mini,.acc-card.loy-hero,.dcart{animation:none}
 }

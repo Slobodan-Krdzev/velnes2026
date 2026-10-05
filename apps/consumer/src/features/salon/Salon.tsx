@@ -11,6 +11,7 @@ import { SalonGallery } from '../../components/SalonGallery.js';
 import { FavHeart, SugPanelD } from '../discovery/cards.js';
 import { useSearchBox } from '../discovery/useSearchBox.js';
 import { useWheelScroll } from '../../lib/useWheelScroll.js';
+import { useScrolling } from '../../lib/useScrollSettle.js';
 import { SalonMap } from '../../components/SalonMap.js';
 import { SalonAmenities } from './SalonAmenities.js';
 import { SalonReviews } from './SalonReviews.js';
@@ -302,6 +303,10 @@ function useSalonPage() {
         .filter((x): x is NonNullable<typeof x> => x !== null),
     [cart, services, offerFor],
   );
+  // The phone's booking bar steps aside while the page scrolls and comes
+  // back once it is still (Alex, 2026-10-05): it took a third of the
+  // screen off every scroll.
+  const scrolling = useScrolling();
   const availQ = useVisitSlots({
     key,
     locationId,
@@ -477,6 +482,7 @@ function useSalonPage() {
     setTime,
     free,
     bonusAt,
+    scrolling,
     /** The door's own account of a blank day, when it has one. */
     slotsReason: availQ.data?.reason ?? null,
     slotsAnswered: availQ.data !== undefined,
@@ -1293,7 +1299,7 @@ export function Salon() {
             {d.team.length ? teamCard('m') : null}
             <div style={{ height: '8px' }}></div>
             {d.bookable ? (
-              <div className="m-bookbar">
+              <div className={`m-bookbar${p.scrolling ? ' hid' : ''}`} data-testid="m-bookbar">
                 <div className="r1">
                   <span className="th" style={{ backgroundImage: photo }}></span>
                   <span className="info">
