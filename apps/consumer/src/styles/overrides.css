@@ -675,6 +675,17 @@ a.pop-go:hover {
     display: none;
   }
 }
+/* No field under 16px on a phone or tablet (Alex, 2026-10-05). iOS
+   zooms the page in on focus of any input, select or textarea whose
+   font is smaller than 16px — by 16/15 for the 15px login field — and
+   never zooms back out, so after signing in the whole app ran wider
+   than the screen (the profile card cut at the right) and the fixed
+   tab bar sat under Chrome's toolbar. Fields keep a larger size where
+   they have one. Desktop is unchanged. */
+@media (max-width:899.98px){
+  input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=file]),select,textarea{font-size:max(16px,1em)}
+}
+
 /* The bar is fixed, so the page has to stop above it rather than
    running underneath. */
 @media (max-width: 899.98px) {

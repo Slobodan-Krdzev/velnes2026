@@ -833,6 +833,14 @@ animated and switched off under `prefers-reduced-motion`. Only the home
 — other screens keep their own floating controls (the map button on
 results, the booking bar on a salon).
 
+**No field under 16px on a phone (2026-10-05).** iOS zooms the page in
+when a focused input, select or textarea has a font smaller than 16px
+— by 16/15 for the 15px login field — and never zooms back out, so
+after signing in the whole app ran wider than the screen: the profile
+card cut at the right, the fixed tab bar under Chrome's toolbar. Below
+900px every field is now at least 16px (`max(16px, 1em)` keeps the
+ones that are larger); desktop is untouched.
+
 **The phone's search sheet (2026-09-28).** One place a phone searches
 and filters: a full-screen sheet (`SearchSheet.tsx`, mounted once above
 the routes) opened by the home pill, the results pill and the Search
