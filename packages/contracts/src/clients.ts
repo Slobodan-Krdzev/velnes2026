@@ -123,6 +123,9 @@ export const ClientAppointmentSchema = z.object({
   paid: z.boolean().default(false),
   /** Free cancellation window the salon set for that location. */
   cancelHours: z.number().int(),
+  /** The quiet-time bonus promised at booking (0 when none); gone
+   *  after any reschedule (Alex, 2026-10-05). */
+  quietBonus: z.number().int().default(0),
   /**
    * Reviews (2026-09-30). `completed` is the platform's definition —
    * booked or confirmed, the end already passed in the salon's clock —

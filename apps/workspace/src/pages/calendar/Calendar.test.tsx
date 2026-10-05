@@ -131,6 +131,8 @@ function mockApi(opts: { bookResponse?: () => Response } = {}) {
           ],
         });
       if (path.includes('/appointments?')) return ok({ appointments: [appointment] });
+      // Quiet slots (2026-10-05): today's 09:00 pays a Velnes customer extra.
+      if (path.includes('/quiet-slots?')) return ok({ slots: [{ date: today, t: '09:00' }], bonus: 20 });
       if (path.includes('/availability'))
         return ok({ slots: [{ t: '09:00', emp: EMP, free: true }, { t: '09:30', emp: EMP, free: true }] });
       if (path.endsWith('/catalog/line-quote'))
@@ -190,6 +192,16 @@ describe('calendar', () => {
     expect(within(event).getByText('Follow-up session')).toBeDefined();
     expect(within(event).getByText('10:00 – 10:45')).toBeDefined();
     expect(within(event).getByText('Katerina Stojanovska')).toBeDefined();
+  });
+
+  it('marks the quiet starts the door names, with the bonus in the title', async () => {
+    mockApi();
+    await openCalendar();
+    await waitFor(() => expect(document.querySelectorAll('.cal-cell.quiet').length).toBeGreaterThan(0));
+    const quiet = document.querySelector('.cal-cell.quiet') as HTMLButtonElement;
+    expect(quiet.getAttribute('aria-label')).toContain('09:00');
+    expect(quiet.title).toContain('+20');
+    expect(document.querySelectorAll('.cal-cell.quiet').length).toBe(1);
   });
 
   it('books through the drawer: service → slot → book', async () => {

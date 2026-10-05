@@ -5,6 +5,7 @@ import type { Trx } from '../../db/index.js';
 import { db, withClient, withHq, withTenant } from '../../db/index.js';
 import { notifyClient } from '../clients/clients.service.js';
 import { visitLegs } from '../booking/changes.service.js';
+import { hhmm } from '../scheduling/scheduling.service.js';
 
 /**
  * Velnes Loyalty — Alex, 2026-09-30. docs/LOYALTY.md.
@@ -152,6 +153,9 @@ export async function visitReward(tenantId: string, anchorId: string) {
     const pts = appointmentPoints(delivered.length, productUnits, extras);
     return {
       first: legs[0]!,
+      // The quiet-time bonus as promised at booking (Alex, 2026-10-05):
+      // on the anchor leg, still there only if the visit was never moved.
+      quietBonus: legs[0]!.quietBonus ?? 0,
       clientUserId: legs[0]!.clientUserId,
       serviceCount: delivered.length,
       productUnits,
@@ -226,16 +230,34 @@ export async function settleVisit(tenantId: string, anchorId: string): Promise<n
     }),
   );
   if (!row) return 0;
+  // The quiet-time bonus: its own row, so the customer sees why there
+  // was more; same source, so it can never land twice.
+  const bonus = reward.quietBonus > 0
+    ? await withHq((trx) =>
+        award(trx, {
+          clientUserId: reward.clientUserId!,
+          type: 'promotion_bonus',
+          points: reward.quietBonus,
+          sourceType: 'appointment',
+          sourceId: first.id,
+          tenantId,
+          meta: { reason: 'quiet_slot', salonName: reward.salonName, date: first.date, time: hhmm(first.startMin) },
+        }),
+      )
+    : null;
+  const earned = reward.total + (bonus?.points ?? 0);
   const lang = asLang((await withHq((t) => t.selectFrom('clientUsers').select('lang').where('id', '=', reward.clientUserId!).executeTakeFirst()))?.lang);
   const t = createI18n(lang).t;
   await notifyClient(reward.clientUserId, {
     kind: 'loyalty',
-    title: t('loy.earnedTitle', { n: reward.total }),
-    body: t('loy.earnedBody', { n: reward.total, salon: reward.salonName }),
+    title: t('loy.earnedTitle', { n: earned }),
+    body: bonus
+      ? t('loy.earnedQuietBody', { n: earned, salon: reward.salonName, bonus: bonus.points })
+      : t('loy.earnedBody', { n: reward.total, salon: reward.salonName }),
     refType: 'loyalty',
     refId: first.id,
   });
-  return reward.total;
+  return earned;
 }
 
 /**
@@ -244,15 +266,17 @@ export async function settleVisit(tenantId: string, anchorId: string): Promise<n
  */
 async function reverseUndoneVisits(): Promise<number> {
   const awarded = await withHq(async (trx) => {
-    const r = await sql<{ id: string; clientUserId: string; points: number; sourceId: string; tenantId: string | null }>`
-      SELECT g.id, g.client_user_id AS "clientUserId", g.points, g.source_id AS "sourceId", g.tenant_id AS "tenantId"
+    const r = await sql<{ id: string; clientUserId: string; points: number; sourceId: string; tenantId: string | null; type: string }>`
+      SELECT g.id, g.client_user_id AS "clientUserId", g.points, g.source_id AS "sourceId", g.tenant_id AS "tenantId",
+             g.type
       FROM client_loyalty_ledger g
       JOIN appointments a ON a.id::text = g.source_id
-      WHERE g.type = 'appointment_completed'
+      WHERE (g.type = 'appointment_completed' OR (g.type = 'promotion_bonus' AND g.meta->>'reason' = 'quiet_slot'))
         AND a.status IN ('cancelled', 'no_show')
         AND NOT EXISTS (
           SELECT 1 FROM client_loyalty_ledger r
-          WHERE r.type = 'appointment_reversal' AND r.source_id = g.source_id AND r.client_user_id = g.client_user_id)
+          WHERE r.type = 'appointment_reversal' AND r.client_user_id = g.client_user_id
+            AND r.source_id = CASE WHEN g.type = 'promotion_bonus' THEN g.source_id || ':quiet' ELSE g.source_id END)
       LIMIT 100
     `.execute(trx);
     return r.rows;
@@ -271,7 +295,9 @@ async function reverseUndoneVisits(): Promise<number> {
         type: 'appointment_reversal',
         points: -g.points,
         sourceType: 'appointment',
-        sourceId: g.sourceId,
+        // The bonus row and the visit row share a source; their
+        // reversals must not, or the unique index would swallow one.
+        sourceId: g.type === 'promotion_bonus' ? `${g.sourceId}:quiet` : g.sourceId,
         tenantId: g.tenantId,
         meta: { reversedEntryId: g.id },
       }),

@@ -103,6 +103,17 @@ describe('booking changes', () => {
     expect(screen.queryByRole('button', { name: 'Reschedule' })).toBeNull();
   });
 
+  it('a visit carrying the quiet-time bonus says, before the request is sent, that a move forfeits it', async () => {
+    appointment = { ...base, quietBonus: 20 };
+    await openDetail();
+    fireEvent.click(screen.getByRole('button', { name: 'Reschedule' }));
+    const picker = await screen.findByRole('dialog', { name: 'Reschedule' });
+    fireEvent.click(await within(picker).findByRole('button', { name: '12:00' }));
+    fireEvent.click(within(picker).getByRole('button', { name: 'Continue' }));
+    const confirm = await screen.findByRole('dialog', { name: 'Request a new time' });
+    expect(within(confirm).getByTestId('rs-quiet-note').textContent).toContain('+20 quiet-time bonus');
+  });
+
   it('a declined request asks: keep the original, or cancel — and only keep when the window has closed', async () => {
     appointment = { ...base, canReschedule: false, changeRequest: { ...request, status: 'declined', declineReason: 'Fully booked that day', resolvedAt: '2026-09-30T11:00:00.000Z', resolvedByName: 'Ana Dimitrova' } };
     await openDetail();

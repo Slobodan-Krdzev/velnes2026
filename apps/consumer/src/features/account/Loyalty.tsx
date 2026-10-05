@@ -56,7 +56,9 @@ export function LoyaltyEarn({ serviceCount, productUnits = 0, extras = 0, classN
 export const fmtPoints = (n: number) => Math.round(n).toLocaleString(i18n.language);
 
 function EntryRow({ e }: { e: LoyaltyEntry }) {
-  const meta = e.meta as { serviceCount?: number; productUnits?: number };
+  const meta = e.meta as { serviceCount?: number; productUnits?: number; reason?: string };
+  // The quiet-time bonus is a promotion row that says why (2026-10-05).
+  const label = e.type === 'promotion_bonus' && meta.reason === 'quiet_slot' ? 'c.loy.quietBonus' : `c.loy.t.${e.type}`;
   const detail =
     e.type === 'appointment_completed' && meta.serviceCount != null
       ? t(meta.serviceCount === 1 ? 'c.loy.breakdownOne' : 'c.loy.breakdown', { services: meta.serviceCount, products: meta.productUnits ?? 0 })
@@ -64,7 +66,7 @@ function EntryRow({ e }: { e: LoyaltyEntry }) {
   return (
     <div className="acc-kv loy-row">
       <span>
-        <b className="loy-what">{t(`c.loy.t.${e.type}`)}</b>
+        <b className="loy-what">{t(label)}</b>
         <span className="sm muted" style={{ display: 'block' }}>
           {[e.salonName, detail].filter(Boolean).join(' · ')}
           {e.salonName || detail ? ' · ' : ''}
@@ -141,6 +143,15 @@ export function LoyaltySection() {
                 <span className="sm muted" style={{ display: 'block' }}>{t('c.loy.howUpgradeSub')}</span>
               </span>
               <b>+{fmtPoints(rules.extraChoice)}</b>
+            </div>
+          ) : null}
+          {rules.quietSlot ? (
+            <div className="acc-kv">
+              <span>
+                {t('c.loy.howQuiet')}
+                <span className="sm muted" style={{ display: 'block' }}>{t('c.loy.howQuietSub')}</span>
+              </span>
+              <b>+{fmtPoints(rules.quietSlot)}</b>
             </div>
           ) : null}
           <div className="acc-kv">

@@ -99,7 +99,7 @@ describe('book again', () => {
     // place the rule lives. Both cards say the "+20" themselves.
     expect((await screen.findAllByTestId('loyalty-earn'))[0]!.textContent).toBe('+140 Velnes points with this visit');
     const tags = screen.getAllByTestId('pts-badge');
-    expect(tags[0]!.textContent).toBe('Earn +20 Loyalty points!');
+    expect(tags[0]!.textContent).toBe('+20 points');
     expect(tags.some((el) => el.closest('button')?.textContent?.includes('60 min'))).toBe(true);
     expect(tags.some((el) => el.closest('button')?.textContent?.includes('Hot stones'))).toBe(true);
   });

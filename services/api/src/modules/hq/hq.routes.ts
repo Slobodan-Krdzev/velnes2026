@@ -1,5 +1,7 @@
 import { env } from '../../env.js';
 import { loyaltyLookup } from '../loyalty/loyalty.service.js';
+import { hqQuietSlots, recomputeAllQuietSlots } from '../loyalty/quiet-slots.service.js';
+import { HqQuietSlotsSchema } from '@velnes/contracts';
 import {
   HqApproveResponseSchema,
   HqAuditListSchema,
@@ -1144,6 +1146,24 @@ export function hqRoutes(app: FastifyInstance) {
 
   /** Velnes Loyalty (2026-09-30): support's read-only window on one
    *  account's ledger, by email. No adjustment door in V1. */
+  // Quiet slots (Alex, 2026-10-05): every location's last judgement
+  // and its quiet pairs, and a button to judge again now — so the
+  // thresholds can be tuned against what the algorithm actually tags.
+  r.route({
+    method: 'GET',
+    url: '/hq/quiet-slots',
+    preHandler: [app.authenticateHq],
+    schema: { response: { 200: HqQuietSlotsSchema } },
+    handler: async () => hqQuietSlots(),
+  });
+  r.route({
+    method: 'POST',
+    url: '/hq/quiet-slots/recompute',
+    preHandler: [app.authenticateHq],
+    schema: { response: { 200: z.object({ recomputed: z.number().int() }) } },
+    handler: async () => ({ recomputed: await recomputeAllQuietSlots() }),
+  });
+
   r.route({
     method: 'GET',
     url: '/hq/loyalty',

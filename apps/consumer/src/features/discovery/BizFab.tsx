@@ -1,9 +1,9 @@
-import { useEffect, useState } from 'react';
 import { businessOnboardingUrl } from '../../lib/business.js';
 import { t } from '../../lib/i18n-core.js';
+import { SCROLL_SETTLE_MS, useScrolling } from '../../lib/useScrollSettle.js';
 
 /** How long the page must be still before the button comes back. */
-export const BIZFAB_SETTLE_MS = 220;
+export const BIZFAB_SETTLE_MS = SCROLL_SETTLE_MS;
 
 /**
  * "Velnes for Business" on a phone or tablet home (Alex, 2026-10-05):
@@ -13,20 +13,7 @@ export const BIZFAB_SETTLE_MS = 220;
  * the thumb is reading mid-scroll. Same door as the desktop button.
  */
 export function BizFab() {
-  const [scrolling, setScrolling] = useState(false);
-  useEffect(() => {
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const onScroll = () => {
-      setScrolling(true);
-      if (timer) clearTimeout(timer);
-      timer = setTimeout(() => setScrolling(false), BIZFAB_SETTLE_MS);
-    };
-    window.addEventListener('scroll', onScroll, { passive: true });
-    return () => {
-      window.removeEventListener('scroll', onScroll);
-      if (timer) clearTimeout(timer);
-    };
-  }, []);
+  const scrolling = useScrolling(BIZFAB_SETTLE_MS);
   return (
     <a
       className={'m-bizfab' + (scrolling ? ' hid' : '')}

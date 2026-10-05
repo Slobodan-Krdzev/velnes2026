@@ -11,6 +11,7 @@ import { SalonGallery } from '../../components/SalonGallery.js';
 import { FavHeart, SugPanelD } from '../discovery/cards.js';
 import { useSearchBox } from '../discovery/useSearchBox.js';
 import { useWheelScroll } from '../../lib/useWheelScroll.js';
+import { useScrolling } from '../../lib/useScrollSettle.js';
 import { SalonMap } from '../../components/SalonMap.js';
 import { SalonAmenities } from './SalonAmenities.js';
 import { SalonReviews } from './SalonReviews.js';
@@ -302,6 +303,10 @@ function useSalonPage() {
         .filter((x): x is NonNullable<typeof x> => x !== null),
     [cart, services, offerFor],
   );
+  // The phone's booking bar steps aside while the page scrolls and comes
+  // back once it is still (Alex, 2026-10-05): it took a third of the
+  // screen off every scroll.
+  const scrolling = useScrolling();
   const availQ = useVisitSlots({
     key,
     locationId,
@@ -313,6 +318,12 @@ function useSalonPage() {
   // until they are, and the button says which one.
   const missing = lines.flatMap((l) => l.missing.map((g) => ({ service: l.svc.name, group: g.name, serviceId: l.serviceId, groupId: g.id })));
   const free = useMemo(() => (availQ.data?.slots ?? []).filter((s) => s.free).map((s) => s.t), [availQ.data]);
+  // The quiet-time bonus (Alex, 2026-10-05): the door marks the free
+  // starts it pays extra for; the chip wears the tag, nothing is derived.
+  const bonusAt = useMemo(
+    () => Object.fromEntries((availQ.data?.slots ?? []).filter((s) => s.free && s.bonus).map((s) => [s.t, s.bonus!])) as Record<string, number>,
+    [availQ.data],
+  );
   // The time is the person's to pick — nothing is chosen for them, so
   // "Date & time" is ticked only once they have tapped one (Alex,
   // 2026-09-21). A pick that stopped being free — another day, a hold
@@ -470,6 +481,8 @@ function useSalonPage() {
     time,
     setTime,
     free,
+    bonusAt,
+    scrolling,
     /** The door's own account of a blank day, when it has one. */
     slotsReason: availQ.data?.reason ?? null,
     slotsAnswered: availQ.data !== undefined,
@@ -877,11 +890,15 @@ function BookCard({ p, desktop }: { p: Page; desktop: boolean }) {
         </button>
       </div>
       <div className="timegrid">
-        {p.free.map((t) => (
-          <button key={t} className={`slot${p.time === t ? ' on' : ''}`} onClick={() => p.setTime(t)}>
-            {t}
+        {p.free.map((tm) => (
+          <button key={tm} className={`slot${p.time === tm ? ' on' : ''}${p.bonusAt[tm] ? ' has-pts' : ''}`} onClick={() => p.setTime(tm)}>
+            {tm}
+            {p.bonusAt[tm] ? <span className="pts-badge pts-mini" data-testid="slot-pts">{t('c.sal.ptsShort', { n: p.bonusAt[tm] })}</span> : null}
           </button>
         ))}
+        {Object.keys(p.bonusAt).length ? (
+          <p className="sm muted quiet-hint" style={{ gridColumn: '1/-1', margin: '2px 0 0' }}>{t('c.sal.quietHint', { n: Object.values(p.bonusAt)[0] })}</p>
+        ) : null}
         {!p.free.length && p.lines.length ? (
           p.slotsReason === 'NOBODY_AT_PACE' ? (
             /* Not a full day — a day nobody fits. The prototype only had
@@ -1011,7 +1028,11 @@ export function Salon() {
   const pin = p.location?.lat != null && p.location.lng != null ? p.location : d;
   const mapPins =
     pin.lat != null && pin.lng != null
-      ? [{ lat: pin.lat, lng: pin.lng, label: d.name, sub: printedAddress, here: true }]
+      ? [{
+          lat: pin.lat, lng: pin.lng, label: d.name, sub: printedAddress, here: true,
+          pitch: d.pitch,
+          rating: d.reviews ? { avg: d.reviews.avg, count: d.reviews.count } : null,
+        }]
       : [];
   const away =
     geo.position && pin.lat != null && pin.lng != null
@@ -1278,7 +1299,7 @@ export function Salon() {
             {d.team.length ? teamCard('m') : null}
             <div style={{ height: '8px' }}></div>
             {d.bookable ? (
-              <div className="m-bookbar">
+              <div className={`m-bookbar${p.scrolling ? ' hid' : ''}`} data-testid="m-bookbar">
                 <div className="r1">
                   <span className="th" style={{ backgroundImage: photo }}></span>
                   <span className="info">

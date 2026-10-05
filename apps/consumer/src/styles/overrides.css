@@ -270,8 +270,8 @@
    One tap to look, one to go. Leaflet's own popup chrome is replaced
    rather than themed: its default is a white box with a serif-ish link,
    and this has to read as the same product as the result cards beside
-   it. There is no rating line, and that is deliberate — reviews do not
-   exist yet, so there is nothing true to put there. */
+   it. Since 2026-10-05 it also says the salon's public line and its
+   verified score (`ratingHtml`) — nothing when nobody has reviewed it. */
 .velnes-pop .leaflet-popup-content-wrapper {
   border-radius: 14px;
   box-shadow: 0 18px 40px rgba(45, 26, 18, 0.22);
@@ -517,8 +517,11 @@ a.pop-go:hover {
 .pro-card > span {
   min-width: 0;
 }
-/* And the name stops before the heart rather than running under it. */
-.pro-card {
+/* And the name stops before the heart rather than running under it —
+   only on the professional cards, which are the ones that carry one.
+   On the length and option cards the same 34px stole the room
+   "Standard" needs and split it in half (Alex, 2026-10-05). */
+.pro-wrap .pro-card {
   padding-right: 34px;
 }
 
@@ -590,7 +593,11 @@ a.pop-go:hover {
   -webkit-line-clamp: 2;
   overflow: hidden;
   white-space: normal;
-  overflow-wrap: anywhere;
+  /* break-word, not anywhere (Alex, 2026-10-05): `anywhere` lets the
+     column's min-content shrink to a letter, so the grid gave the text
+     less room than "Standard" needs and split it in half. `break-word`
+     keeps the word whole wherever it can fit at all. */
+  overflow-wrap: break-word;
 }
 /* The name is no longer a single line, so the row that holds it lines
    its pieces up from the top rather than centring the heart against two
@@ -675,6 +682,17 @@ a.pop-go:hover {
     display: none;
   }
 }
+/* No field under 16px on a phone or tablet (Alex, 2026-10-05). iOS
+   zooms the page in on focus of any input, select or textarea whose
+   font is smaller than 16px — by 16/15 for the 15px login field — and
+   never zooms back out, so after signing in the whole app ran wider
+   than the screen (the profile card cut at the right) and the fixed
+   tab bar sat under Chrome's toolbar. Fields keep a larger size where
+   they have one. Desktop is unchanged. */
+@media (max-width:899.98px){
+  input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=file]),select,textarea{font-size:max(16px,1em)}
+}
+
 /* The bar is fixed, so the page has to stop above it rather than
    running underneath. */
 @media (max-width: 899.98px) {
@@ -1075,7 +1093,8 @@ a.pop-go:hover {
   /* One pixel lower than the tab bar's top edge: the Book-now bar (z 70)
      covers the tab bar's own top border (z 60), which otherwise showed
      as a hairline at the seam. */
-  .m-bookbar{bottom:calc(var(--m-tab) + env(safe-area-inset-bottom) - 1px);padding-bottom:10px}
+  /* Under the tab bar (60), so the slide-away passes behind it, never over it. */
+  .m-bookbar{bottom:calc(var(--m-tab) + env(safe-area-inset-bottom) - 1px);padding-bottom:10px;z-index:55}
   .m-page.has-bar{padding-bottom:180px}
   /* Full-screen sheets and modals cover the chrome as before. */
   .m-sheet,.mapsheet,.gps-modal{top:0;bottom:0}
@@ -1751,14 +1770,21 @@ a.pop-go:hover {
    page — a transformed ancestor is a containing block for `fixed`. */
 .page-enter{animation:page-in .22s ease-out}
 @keyframes page-in{from{opacity:0}to{opacity:1}}
-.m-bookbar{animation:bar-up .3s cubic-bezier(.22,.68,.35,1) both}
+.m-bookbar{animation:bar-up .3s cubic-bezier(.22,.68,.35,1);
+  transition:transform .45s cubic-bezier(.22,.68,.35,1),opacity .35s ease}
 @keyframes bar-up{from{transform:translateY(100%)}to{transform:none}}
+/* While the page scrolls the bar slides down out of the way and eases
+   back once the page is still (Alex, 2026-10-05) — `useScrolling`. No
+   fill-mode on the entrance above, or its last frame would pin the
+   transform and the slide-away could never happen. */
+.m-bookbar.hid{transform:translateY(110%);opacity:0;pointer-events:none}
 @keyframes reveal{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
 .acc-notif-detail,.rs-pick,.rs-confirm,.rs-pending,.rs-declined,.rs-approved,.cx-confirm,.rv-form,.rv-done,.acc-blocked,
 .loy-earn,.pro-grid,.dcart .dcart-row,.dcart .dcart-when,.dcart .dcart-tot,.dcart-mini,.acc-card.loy-hero{animation:reveal .2s ease-out both}
 .m-bookbar .btn,.dcart .btn{transition:transform .12s ease,filter .12s ease}
 .m-bookbar .btn:active,.dcart .btn:active{transform:scale(.98)}
 @media (prefers-reduced-motion:reduce){
+  .m-bookbar{transition:none}
   .page-enter,.m-bookbar,.acc-notif-detail,.rs-pick,.rs-confirm,.rs-pending,.rs-declined,.rs-approved,.cx-confirm,.rv-form,.rv-done,
   .acc-blocked,.loy-earn,.pro-grid,.dcart .dcart-row,.dcart .dcart-when,.dcart .dcart-tot,.dcart-mini,.acc-card.loy-hero,.dcart{animation:none}
 }
@@ -1870,3 +1896,13 @@ a.pop-go:hover {
 /* A product's own picture and line on the shelf card (2026-10-02). */
 .tr-card .prod-thumb{width:28px;height:28px;border-radius:6px;object-fit:cover;flex:0 0 auto}
 .tr-card .prod-desc{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;font-size:11.5px;line-height:1.3}
+
+/* ── Quiet times on the salon page (Alex, 2026-10-05) ────────────────
+   The door marks the free starts the platform pays extra for; the chip
+   wears a small version of the loyalty tag and a line under the grid
+   says what it means. */
+.timegrid .slot{position:relative;overflow:visible}
+.timegrid .slot.has-pts{border-color:var(--brand)}
+.pts-badge.pts-mini{top:-8px;right:-4px;padding:1px 6px;font-size:10px;letter-spacing:0}
+.timegrid .quiet-hint{line-height:1.4}
+

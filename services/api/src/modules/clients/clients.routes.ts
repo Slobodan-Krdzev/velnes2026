@@ -168,6 +168,7 @@ async function myAppointments(clientUserId: string) {
         'clientUserId',
         'idempotencyKey',
         'cancelHours',
+        'quietBonus',
         'cancelledAt',
         'cancelledBy',
         'cancelReason',
@@ -273,6 +274,7 @@ async function myAppointments(clientUserId: string) {
         status: a.status,
         paid: a.paid === 'paid',
         cancelHours: loc?.cancelHours ?? 24,
+        quietBonus: a.quietBonus ?? 0,
         // Reviews: completed by the platform's definition, in the
         // salon's clock; reviewable once, by whoever booked it.
         completed: isCompleted(a, loc?.tz ?? 'Europe/Skopje', now),

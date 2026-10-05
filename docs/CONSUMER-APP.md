@@ -833,6 +833,34 @@ animated and switched off under `prefers-reduced-motion`. Only the home
 — other screens keep their own floating controls (the map button on
 results, the booking bar on a salon).
 
+**No field under 16px on a phone (2026-10-05).** iOS zooms the page in
+when a focused input, select or textarea has a font smaller than 16px
+— by 16/15 for the 15px login field — and never zooms back out, so
+after signing in the whole app ran wider than the screen: the profile
+card cut at the right, the fixed tab bar under Chrome's toolbar. Below
+900px every field is now at least 16px (`max(16px, 1em)` keeps the
+ones that are larger); desktop is untouched.
+
+**The booking bar steps aside while the page scrolls (2026-10-05).** On
+a phone the salon page's fixed booking bar took a third of the screen;
+it now slides down out of the way on the first scroll event and eases
+back once the page has been still for about a fifth of a second — the
+same `useScrolling` the home's business button uses, animated both
+ways, off under `prefers-reduced-motion`. The entrance animation lost
+its fill-mode for this: a pinned last frame would have overridden the
+slide-away transform.
+
+**The Velnes pin (2026-10-05).** Every salon on every map is the same
+pin: a white circle ringed in the brand colour with the Velnes mark in
+the middle (`velnesPinHtml` in `SalonMap.tsx`); the salon a page is
+about, or the selected result, is the larger one with the stronger ring
+and a pill beside it. Leaflet's blue marker is gone. The pin's words —
+the pill on a results map, the permanent label on a desktop map, the
+popup card — are the name, the salon's public line (`pitch`, now also
+on a result's `salon` so the results maps can say it) and its verified
+score as the cards print it (a star, the average, the count); no star
+when nobody has reviewed it. A person's own position stays the blue dot.
+
 **The phone's search sheet (2026-09-28).** One place a phone searches
 and filters: a full-screen sheet (`SearchSheet.tsx`, mounted once above
 the routes) opened by the home pill, the results pill and the Search

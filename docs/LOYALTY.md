@@ -309,7 +309,73 @@ delivered leg, one for a `variant_id` (any length is an upsale) and one
 per entry of `modifier_option_ids`. The salon page follows the same
 rule: its Standard card quotes the service's own minutes and price (the
 quote equals the charge), every length and every option wears the tag
-"Earn +20 Loyalty points!" — a count badge, like the profile tab's —
+"+20 points" — a count badge, like the profile tab's —
 and the booking summary's preview counts them; the loyalty screen's
 "How to earn" has the row.
 `loyalty.test.ts`, `BookAgain.test.tsx`, `Loyalty.test.tsx`.
+
+## Quiet slots (2026-10-05)
+
+Alex: "give extra loyalty points to a user if the user books a time slot
+that is usually not booked … decided by an algorithm." Decisions taken
+with it: the platform pays, a flat **+20** per visit, judged **per
+location**, **any reschedule forfeits it**, and only salons with more
+than 40 appointments take part.
+
+**The judgement** (`quiet-slots.service.ts`, constants in
+`QUIET_SLOT_RULE`). Per location, over the last 6 weeks, every
+weekday-and-start pair (the 15-minute grid, inside the location's
+opening periods — exceptions count, Sundays closed count as nothing) is
+scored: how many of those weeks the location was open at that time, and
+in how many of them something was booked *over* it (an appointment
+running across the quarter hour fills it; a no-show wanted it; a
+cancellation and an unanswered request did not). A pair is judged only
+when open in at least 4 of those weeks. It is quiet when its fill is
+under 20 % **and** under half the location's own fill over the window
+(so a half-empty salon cannot have its whole week tagged), and at most
+30 % of each weekday's judged pairs are tagged, the quietest first —
+ties, which a quiet salon has many of, go to the hours of the day the
+salon is least booked at over the whole week, so the tags read
+"evenings are quiet here" rather than landing on whichever weekday
+sorts first. A
+location with fewer than 40 completed visits in its whole history is
+judged, recorded as not qualified, and gets no pairs at all. The pass
+runs in-process once an hour and rejudges each location once a day
+(`location_quiet_runs`, `location_quiet_slots`); `seed:demo` judges the
+seeded world at once, and HQ can judge again on demand.
+
+**One door, read only.** The availability doors — the tenant's, the
+public widget's, the chain `/slots` — add `bonus` to a free start the
+location's published pairs name; nothing is computed at request time, so
+a tag cannot flip while someone is choosing. `confirmBooking` stamps
+`appointments.quiet_bonus` on the visit's first treatment when a
+Velnes-app booking (`marketplace`, `client`) takes such a start — staff,
+widget and phone bookings never earn it. The stamp is the promise: a
+slot that stops being quiet later still pays; one that becomes quiet
+later does not. `patchAppointment` clears it when the date or time
+changes (a change of hands keeps it); `approveReschedule` clears it
+wherever the visit lands; the consumer's reschedule confirmation says
+so before they ask. At settlement the bonus is its own ledger row —
+`promotion_bonus`, source the visit, `meta.reason = 'quiet_slot'` — so
+the customer sees why there was more, and the bell says "including a
++20 quiet-time bonus"; a visit undone after its award reverses both
+rows (the bonus reversal's source is `<visit>:quiet`, so the unique
+index keeps the two apart).
+
+**What people see.** The salon page and the booking page wear a small
+"+20 pts" tag on the quiet time chips and a line under the grid
+explaining it; the loyalty screen's "How to earn" has the row and the
+ledger names the bonus; the workspace calendar stripes the quiet cells
+with a coral dot and a title, so staff know why a customer asked; HQ's
+Customers tab lists every location's last judgement, its fill, its
+quiet times by weekday with their k/N weeks, and the rule in words, with
+a "Judge again now" button. `quiet-slots.test.ts` covers the judgement,
+the bonus on a free start, the stamp, both kinds of move, settlement,
+idempotence and reversal; the apps' tests cover the tags.
+
+**Deferred, honestly.** Salon opt-in or salon-funded bonuses; a bonus
+scaled by how quiet a slot is; per-employee quiet times (a time can be
+empty only because one professional is always booked); a cap on how
+many quiet bonuses one account may earn; and the thresholds themselves,
+which are constants until real salons show what they tag.
+

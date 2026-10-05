@@ -121,6 +121,11 @@ describe('Velnes Loyalty — the platform ledger', () => {
     await admin.connect();
     // The launch cutoff, moved back so this week's visits count.
     await admin.query(`UPDATE platform_features SET since = now() - interval '10 days' WHERE key = 'loyalty'`);
+    // Quiet slots (2026-10-05) would add a bonus to any visit that lands
+    // on one: this suite asserts the visit points alone, so the demo
+    // salon publishes none here (quiet-slots.test.ts judges it afresh).
+    await admin.query(`DELETE FROM location_quiet_slots WHERE tenant_id = $1`, [demo.business]);
+    await admin.query(`UPDATE location_quiet_runs SET qualified = false, quiet_count = 0 WHERE tenant_id = $1`, [demo.business]);
     mariaToken = (await app.inject({ method: 'POST', url: `${API_PREFIX}/auth/login`, payload: { email: 'maria@velnes.mk', password: 'velnes-demo' } })).json().accessToken as string;
   });
   afterAll(async () => {

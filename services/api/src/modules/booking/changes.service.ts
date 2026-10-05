@@ -55,6 +55,7 @@ export interface Leg {
   anyEmp: boolean;
   customerId: string | null;
   clientUserId: string | null;
+  quietBonus: number;
   status: string;
   title: string;
   price: number;
@@ -91,6 +92,7 @@ export async function visitLegs(trx: Trx, appointmentId: string, lock = false): 
     anyEmp: a.anyEmp,
     customerId: a.customerId,
     clientUserId: a.clientUserId,
+    quietBonus: a.quietBonus ?? 0,
     status: a.status,
     title: a.title,
     price: a.price,
@@ -474,7 +476,8 @@ export async function approveReschedule(trx: Trx, claims: AccessClaims, requestI
   for (let i = 0; i < legs.length; i++)
     await trx
       .updateTable('appointments')
-      .set({ date: new Date(date), startMin: starts[i]! })
+      // Any reschedule forfeits the quiet-time bonus (Alex, 2026-10-05).
+      .set({ date: new Date(date), startMin: starts[i]!, quietBonus: 0 })
       .where('id', '=', legs[i]!.id)
       .execute();
   const actor = await trx.selectFrom('employees').select('name').where('id', '=', claims.sub).executeTakeFirst();

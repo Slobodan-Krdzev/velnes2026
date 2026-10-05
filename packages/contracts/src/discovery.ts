@@ -197,6 +197,9 @@ export const DiscoveryServiceCardSchema = z.object({
   salon: z.object({
     slug: z.string(),
     name: z.string(),
+    /** The salon's public line, as the listing card says it — the map
+     *  pin's tooltip repeats it (Alex, 2026-10-05). */
+    pitch: z.string().default(''),
     city: z.string().nullable(),
     /** First gallery photo (data URL), null when the salon has none. */
     photo: z.string().nullable(),

@@ -11,7 +11,7 @@ import { cancelWindow, type Leg } from './changes.service.js';
 const leg = (date: string, startMin: number, cancelHours: number | null): Leg => ({
   id: 'a', tenantId: 't', locationId: 'l', date, startMin, durationMin: 30, prepMin: 0, resetMin: 0, serviceId: null, variantId: null,
   modifierOptionIds: [], employeeId: null, anyEmp: false, customerId: null, clientUserId: null, status: 'booked', title: 'x', price: 0,
-  cancelHours, cancelledAt: null, cancelledBy: null, cancelReason: null, idempotencyKey: null,
+  cancelHours, cancelledAt: null, cancelledBy: null, cancelReason: null, idempotencyKey: null, quietBonus: 0,
 });
 
 describe('a local wall time as an instant', () => {

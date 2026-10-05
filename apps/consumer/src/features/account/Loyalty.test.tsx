@@ -13,8 +13,10 @@ const profile = {
 };
 const account = {
   balance: 1450,
-  rules: { version: 1, registration: 100, firstService: 100, additionalService: 30, productUnit: 20, extraChoice: 20, review: 50 },
+  rules: { version: 1, registration: 100, firstService: 100, additionalService: 30, productUnit: 20, extraChoice: 20, quietSlot: 20, review: 50 },
   entries: [
+    // The quiet-time bonus (2026-10-05): a promotion row that says why.
+    { id: 'e0000000-0000-4000-8000-000000000004', type: 'promotion_bonus', points: 20, sourceType: 'appointment', sourceId: 'a1', salonName: 'Velnes Fizio Centar', meta: { reason: 'quiet_slot' }, at: '2026-10-05T12:00:00.000Z' },
     { id: 'e0000000-0000-4000-8000-000000000003', type: 'review_submitted', points: 50, sourceType: 'review', sourceId: 'r1', salonName: 'Velnes Fizio Centar', meta: {}, at: '2026-09-30T10:00:00.000Z' },
     { id: 'e0000000-0000-4000-8000-000000000002', type: 'appointment_completed', points: 190, sourceType: 'appointment', sourceId: 'a1', salonName: 'Velnes Fizio Centar', meta: { serviceCount: 2, productUnits: 2, servicePoints: 130, productPoints: 40, total: 170 }, at: '2026-09-29T10:00:00.000Z' },
     { id: 'e0000000-0000-4000-8000-000000000001', type: 'registration_bonus', points: 100, sourceType: 'account', sourceId: 'c1', salonName: null, meta: {}, at: '2026-09-12T10:00:00.000Z' },
@@ -81,5 +83,9 @@ describe('Velnes Loyalty', () => {
     expect(screen.getByText('+20 per product')).toBeDefined();
     expect(screen.getByText('Choose beyond Standard — another length, an option').nextSibling?.textContent).toBe('+20');
     expect(screen.getByText('Leave a verified review').nextSibling?.textContent).toBe('+50');
+    // Quiet slots (2026-10-05): the row in the rules, the bonus named in the ledger.
+    expect(screen.getByText('Book a quiet time').nextSibling?.textContent).toBe('+20');
+    expect(screen.getByText('Quiet-time bonus')).toBeDefined();
+    expect(screen.queryByText('Bonus points')).toBeNull();
   });
 });

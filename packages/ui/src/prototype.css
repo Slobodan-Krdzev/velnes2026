@@ -2451,3 +2451,17 @@ body.ob-src .ob-body{display:flex;align-items:center;justify-content:center;
 .tl-row{display:grid;grid-template-columns:110px 1fr;gap:10px;align-items:start;font-size:13px}
 .rs-request{border-color:var(--warning)}
 .btn.has-requests{border-color:var(--warning)}
+
+/* ── Quiet times (Alex, 2026-10-05) ──────────────────────────────────
+   On the booking page a time chip wears a small points tag when the
+   platform pays a Velnes customer extra for it; on the workspace
+   calendar the same starts carry a soft stripe and a coral dot, so
+   staff know why a customer asked about points. */
+.bslot{position:relative}
+.bslot-pts{position:absolute;top:-8px;right:4px;padding:1px 6px;border-radius:999px;background:#E3673D;color:#fff;
+  font-size:10px;font-weight:800;line-height:14px;white-space:nowrap}
+.cal-cell.quiet{position:relative;background:rgba(255,141,103,.09)}
+.cal-cell.quiet::after{content:"";position:absolute;right:5px;top:5px;width:6px;height:6px;border-radius:50%;background:#FF8D67;
+  box-shadow:0 0 0 2px rgba(255,141,103,.25)}
+@media(hover:hover){.cal-col:not(.closed) .cal-cell.quiet:hover{background:rgba(255,141,103,.18)}}
+

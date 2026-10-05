@@ -70,7 +70,10 @@ consumer account (`client_loyalty_ledger`, one writer, idempotent by
 source, cached balance recomputed in the same transaction), earning on
 verification, completed visits (services + till products) and
 reviews; redemption designed for, not built. `docs/LOYALTY.md`
-(+30 per additional service, confirmed 2026-10-02).
+(+30 per additional service, confirmed 2026-10-02). Quiet slots
+(2026-10-05): a nightly per-location judgement tags usually-free
+starts; a Velnes-app booking of one is promised +20, cleared by any
+move, paid at settlement as its own ledger row.
 All apps are trilingual (en/mk/sq, `packages/i18n`, completeness
 tested); MK/SQ dictionaries still need native review.
 Principals: tenant employees, `hq_users`, `supplier_users`,

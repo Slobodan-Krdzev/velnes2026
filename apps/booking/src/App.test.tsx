@@ -61,6 +61,8 @@ const slots = {
   slots: [
     { t: '10:00', emp: EMP, free: true },
     { t: '10:15', emp: null, free: false },
+    // A quiet start (2026-10-05): the door says what it pays extra.
+    { t: '10:30', emp: EMP, free: true, bonus: 20 },
   ],
 };
 
@@ -128,6 +130,10 @@ describe('the booking page', () => {
     expect(screen.getByText('Maria')).toBeDefined();
     await user.click(screen.getByText('30 min · 900 ден.'));
     const slot = await screen.findByRole('button', { name: '10:00' });
+    // The quiet start wears the points tag, and the grid says what it means.
+    expect(screen.getByRole('button', { name: /10:30/ }).textContent).toContain('+20 pts');
+    expect(screen.getByTestId('quiet-hint').textContent).toContain('+20 Loyalty points');
+    expect(screen.getByRole('button', { name: '10:00' }).textContent).not.toContain('pts');
     await user.click(slot);
     expect((screen.getByRole('button', { name: '10:15' }) as HTMLButtonElement).disabled).toBe(
       true,

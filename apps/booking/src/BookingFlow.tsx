@@ -585,6 +585,7 @@ export function BookingFlow({
                         onClick={() => setTime(s.t)}
                       >
                         {s.t}
+                        {s.bonus ? <span className="bslot-pts">{t('book.quietShort', { n: s.bonus })}</span> : null}
                       </button>
                     ))}
                   </div>
@@ -593,6 +594,9 @@ export function BookingFlow({
                     {t('book.nothingFree')}
                   </p>
                 )}
+                {slots.some((s) => s.bonus) ? (
+                  <span className="hint" data-testid="quiet-hint">{t('book.quietHint', { n: slots.find((s) => s.bonus)!.bonus })}</span>
+                ) : null}
                 <span className="hint">{t('book.slotsHint')}</span>
               </div>
               {error ? (

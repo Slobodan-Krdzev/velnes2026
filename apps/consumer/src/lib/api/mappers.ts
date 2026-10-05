@@ -116,6 +116,8 @@ export interface ServiceVM {
   salon: {
     slug: string;
     name: string;
+    /** The salon's public line — on the map pin's tooltip. */
+    pitch: string;
     city: string;
     /** CSS background-image value, as the cards want it — the
      *  decorative default when the salon uploaded nothing. */
@@ -176,6 +178,7 @@ export function serviceVM(s: DiscoveryServiceCard): ServiceVM {
     salon: {
       slug: s.salon.slug,
       name: s.salon.name,
+      pitch: s.salon.pitch ?? '',
       city: s.salon.city ?? '',
       photo: s.salon.photo ? `url("${s.salon.photo}")` : 'var(--im)',
       hasPhoto: Boolean(s.salon.photo),

@@ -11,6 +11,7 @@ import {
   HqBrandListSchema,
   HqOutboxListSchema,
   HqLoyaltyLookupSchema,
+  HqQuietSlotsSchema,
   HqRoleListSchema,
   HqSupplierListSchema,
   HqTeamListSchema,
@@ -24,7 +25,7 @@ import {
 } from '@velnes/contracts';
 import type { Lang } from '@velnes/i18n';
 import { I, Icon, VelnesMark, siblingAppUrl } from '@velnes/ui';
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { NavSearch, useNavSearchHotkey, type NavTarget } from '@velnes/navsearch';
 import { HQ_INDEX, type HqCtx } from './navsearch.js';
 import { createPortal } from 'react-dom';
@@ -330,6 +331,7 @@ export function Hq({
             <>
               <Customers say={say} me={user} />
               <LoyaltyLookup />
+              <QuietSlots say={say} />
             </>
           ) : null}
           {tab === 'categories' ? <Categories say={say} /> : null}
@@ -3343,6 +3345,116 @@ function Tickets({
  * button here moves a point; adjustments are a future, permissioned
  * door.
  */
+/**
+ * Quiet slots (Alex, 2026-10-05) — docs/LOYALTY.md "Quiet slots": every
+ * location's last judgement and the times it tagged, and a button to
+ * judge again now, so the thresholds can be tuned against real data.
+ */
+function QuietSlots({ say }: { say: (m: string) => void }) {
+  const { t, i18n } = useTranslation();
+  const [d, setD] = useState<z.infer<typeof HqQuietSlotsSchema> | null>(null);
+  const [open, setOpen] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const load = async () => setD(await hqGet(HqQuietSlotsSchema, '/hq/quiet-slots'));
+  useEffect(() => {
+    void load().catch(() => undefined);
+  }, []);
+  const again = async () => {
+    setBusy(true);
+    try {
+      const r = await hqPost(z.object({ recomputed: z.number().int() }), '/hq/quiet-slots/recompute');
+      say(t('hq.quietRecomputed', { n: r.recomputed }));
+      await load();
+    } finally {
+      setBusy(false);
+    }
+  };
+  // 0 = Monday … 6 = Sunday, named in the viewer's language.
+  const dayName = (wd: number) => new Intl.DateTimeFormat(i18n.language, { weekday: 'short' }).format(new Date(Date.UTC(2024, 0, 1 + wd)));
+  const pct = (x: number) => `${Math.round(x * 100)}%`;
+  return (
+    <div className="card" style={{ marginTop: 16 }} data-testid="quiet-slots">
+      <div className="card-header">
+        <h2 id="hq-quiet">{t('hq.quiet')}</h2>
+        <span className="muted">{d ? t('hq.quietSub', { weeks: d.rule.windowWeeks }) : ''}</span>
+      </div>
+      {d ? (
+        <>
+          <p className="muted" style={{ padding: '0 20px 10px', margin: 0, fontSize: 13 }}>
+            {t('hq.quietRule', {
+              completed: d.rule.minCompleted,
+              weeks: d.rule.minOpenWeeks,
+              fill: Math.round(d.rule.maxFill * 100),
+              share: Math.round(d.rule.maxShare * 100),
+              bonus: d.rule.bonus,
+            })}
+          </p>
+          <div style={{ padding: '0 20px 14px' }}>
+            <button className="btn btn-primary" type="button" disabled={busy} onClick={() => void again()}>
+              {t('hq.quietRecompute')}
+            </button>
+          </div>
+          {d.locations.length ? (
+            <table>
+              <thead>
+                <tr>
+                  <th>{t('hq.quietLocation')}</th>
+                  <th className="right">{t('hq.quietCompleted')}</th>
+                  <th className="right">{t('hq.quietFill')}</th>
+                  <th className="right">{t('hq.quietCount')}</th>
+                  <th>{t('hq.quietJudged')}</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {d.locations.map((l) => (
+                  <Fragment key={l.locationId}>
+                    <tr>
+                      <td>
+                        <span className="bold">{l.salonName}</span>
+                        <span className="muted" style={{ display: 'block', fontSize: 12 }}>{l.locationName}</span>
+                      </td>
+                      <td className="right tnum">{l.completed}</td>
+                      <td className="right tnum">{l.qualified ? pct(l.locationFill) : <span className="muted">{t('hq.quietYoung', { n: d.rule.minCompleted })}</span>}</td>
+                      <td className="right tnum bold">{l.qualified ? l.quietCount : ''}</td>
+                      <td className="muted tnum" style={{ whiteSpace: 'nowrap' }}>{l.computedAt ? l.computedAt.slice(0, 16).replace('T', ' ') : t('hq.quietNever')}</td>
+                      <td className="right">
+                        {l.qualified && l.slots.length ? (
+                          <button className="btn btn-ghost" type="button" onClick={() => setOpen(open === l.locationId ? null : l.locationId)}>
+                            {open === l.locationId ? t('hq.quietHide') : t('hq.quietShow')}
+                          </button>
+                        ) : null}
+                      </td>
+                    </tr>
+                    {open === l.locationId ? (
+                      <tr>
+                        <td colSpan={6} style={{ fontSize: 13 }}>
+                          {[0, 1, 2, 3, 4, 5, 6]
+                            .filter((wd) => l.slots.some((s) => s.weekday === wd))
+                            .map((wd) => (
+                              <div key={wd} style={{ display: 'flex', gap: 8, padding: '3px 0' }}>
+                                <span className="bold" style={{ minWidth: 40 }}>{dayName(wd)}</span>
+                                <span className="tnum muted">
+                                  {l.slots.filter((s) => s.weekday === wd).map((s) => `${s.t} (${s.bookedWeeks}/${s.openWeeks})`).join(' · ')}
+                                </span>
+                              </div>
+                            ))}
+                        </td>
+                      </tr>
+                    ) : null}
+                  </Fragment>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <div className="muted" style={{ padding: '0 20px 16px' }}>{t('hq.quietEmpty')}</div>
+          )}
+        </>
+      ) : null}
+    </div>
+  );
+}
+
 function LoyaltyLookup() {
   const { t } = useTranslation();
   const [email, setEmail] = useState('');

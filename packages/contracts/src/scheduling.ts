@@ -62,7 +62,17 @@ export const SlotSchema = z.object({
   t: ClockSchema,
   emp: z.uuid().nullable(),
   free: z.boolean(),
+  /** The quiet-time bonus (Alex, 2026-10-05): the Velnes points a
+   *  Velnes-app booking of this start earns on top — present only on a
+   *  free start the location's history marks as usually empty. */
+  bonus: z.number().int().optional(),
 });
+/** The quiet starts of a location over a range — the calendar's markers. */
+export const QuietSlotsResponseSchema = z.object({
+  slots: z.array(z.object({ date: z.iso.date(), t: ClockSchema })),
+  bonus: z.number().int(),
+});
+export type QuietSlotsResponse = z.infer<typeof QuietSlotsResponseSchema>;
 /**
  * Why a day came back with nothing free, when the door knows a reason
  * the caller could act on. Absent when the day is simply full.

@@ -4,7 +4,7 @@ import { empColorOf, I, Icon } from '@velnes/ui';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useSearchParams } from 'react-router-dom';
-import { useAppointments, useChangeRequests, useEmployees, useLocations } from '../../api/queries.js';
+import { useAppointments, useChangeRequests, useEmployees, useLocations, useQuietSlots } from '../../api/queries.js';
 import { get, useSession } from '@velnes/client';
 import { useOutsideClose } from '../../lib/pop.js';
 import { useScope } from '../../shell/Shell.js';
@@ -334,6 +334,15 @@ export function CalendarPage() {
   // One query per scoped location, merged.
   const appts = useAppointments(scopeLocs[0] ?? null, from, to);
   const appts2 = useAppointments(scopeLocs[1] ?? null, from, to);
+  // Quiet times (Alex, 2026-10-05): the starts the platform pays a
+  // Velnes customer extra for — marked, so staff know why someone asked.
+  const quiet1 = useQuietSlots(scopeLocs[0] ?? null, from, to);
+  const quiet2 = useQuietSlots(scopeLocs[1] ?? null, from, to);
+  const quietAt = useMemo(
+    () => new Set([...(quiet1.data?.slots ?? []), ...(quiet2.data?.slots ?? [])].map((s) => `${s.date}|${s.t}`)),
+    [quiet1.data, quiet2.data],
+  );
+  const quietBonus = quiet1.data?.bonus ?? quiet2.data?.bonus ?? 0;
   // Cancelled visits stay on the grid, muted (Alex, 2026-09-30): there
   // WAS an appointment here, and the filter can hide them, not history.
   const list = useMemo(
@@ -412,8 +421,9 @@ export function CalendarPage() {
     slots.map((m) => (
       <button
         key={m}
-        className="cal-cell"
+        className={`cal-cell${quietAt.has(`${iso}|${hhmm(m)}`) ? ' quiet' : ''}`}
         disabled={slotPast(iso, m)}
+        title={quietAt.has(`${iso}|${hhmm(m)}`) ? t('cal.quietSlot', { n: quietBonus }) : undefined}
         aria-label={`${t('cal.newAppointment')} ${iso} ${hhmm(m)}`}
         onClick={() =>
           setDrawer({ open: true, slot: { date: iso, time: hhmm(m), ...(empId ? { empId } : {}) } })
