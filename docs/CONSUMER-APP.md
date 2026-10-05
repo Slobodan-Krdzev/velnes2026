@@ -822,6 +822,17 @@ scrolling row under the pill, "Available now" first. The tab bar is
 unchanged. The business link lives on in the home page's closing band
 and footer.
 
+**"Velnes for Business" floats on the phone home (2026-10-05).** Below
+900px the home page carries the desktop header's business link as a
+floating button (`BizFab.tsx`, `.m-bizfab`): centred just above the tab
+bar, ink with white text, the same onboarding door as the header
+button. It slides away while the page scrolls and eases back once the
+page has been still for about a fifth of a second, so it never sits
+over what a thumb is reading mid-scroll; the show and hide are
+animated and switched off under `prefers-reduced-motion`. Only the home
+— other screens keep their own floating controls (the map button on
+results, the booking bar on a salon).
+
 **The phone's search sheet (2026-09-28).** One place a phone searches
 and filters: a full-screen sheet (`SearchSheet.tsx`, mounted once above
 the routes) opened by the home pill, the results pill and the Search

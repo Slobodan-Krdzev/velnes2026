@@ -1061,11 +1061,21 @@ a.pop-go:hover {
      is exactly `--m-tab` tall, so the two meet with no page showing
      between them (the bar used to be content-sized, ~57px, under a
      64px lift — Alex, 2026-09-29). */
-  .tabbar{height:calc(var(--m-tab) + env(safe-area-inset-bottom));box-sizing:border-box;align-items:center}
+  .tabbar{height:calc(var(--m-tab) + env(safe-area-inset-bottom));box-sizing:border-box;align-items:flex-start;
+    padding:8px 6px env(safe-area-inset-bottom)}
+  /* iPhone Safari (Alex, 2026-10-05): when its toolbar collapses on a
+     scroll, the bottom safe-area inset jumps from 0 to the home
+     indicator's height. The tab bar's icons were centred in a bar that
+     grew by that much, so they floated up; and the Book-now bar, which
+     rides ABOVE the tab bar and never touches the screen edge, padded
+     its own bottom with the same inset — a doubled inset that showed as
+     white under its button. The icons now sit at the top of the tab bar
+     with the inset empty beneath them, and the Book-now bar keeps only
+     its own 10px. */
   /* One pixel lower than the tab bar's top edge: the Book-now bar (z 70)
      covers the tab bar's own top border (z 60), which otherwise showed
      as a hairline at the seam. */
-  .m-bookbar{bottom:calc(var(--m-tab) + env(safe-area-inset-bottom) - 1px)}
+  .m-bookbar{bottom:calc(var(--m-tab) + env(safe-area-inset-bottom) - 1px);padding-bottom:10px}
   .m-page.has-bar{padding-bottom:180px}
   /* Full-screen sheets and modals cover the chrome as before. */
   .m-sheet,.mapsheet,.gps-modal{top:0;bottom:0}
@@ -1219,6 +1229,22 @@ a.pop-go:hover {
   background:var(--ink);color:var(--bg);font-weight:700;font-size:13.5px;box-shadow:0 10px 26px rgba(45,26,18,.28)}
 .m-mapfab:active{background:#3a1f16}
 @media (min-width:900px){.m-mapfab{display:none}}
+
+/* ── "Velnes for Business" on the phone home (Alex, 2026-10-05): the
+   desktop header's link as a floating button centred just above the
+   tab bar, in the ink with white text. It slides away while the page
+   scrolls and eases back once the page is still (BizFab.tsx). Hidden
+   from 900px up, where the header carries the link. */
+.m-bizfab{position:fixed;left:50%;bottom:calc(var(--m-tab) + env(safe-area-inset-bottom) + 14px);z-index:55;
+  display:inline-flex;align-items:center;gap:8px;border:0;border-radius:999px;padding:12px 18px;white-space:nowrap;
+  background:var(--ink);color:#fff;font-weight:700;font-size:13.5px;text-decoration:none;
+  box-shadow:0 10px 26px rgba(45,26,18,.28);
+  transform:translateX(-50%);opacity:1;
+  transition:opacity .22s ease,transform .26s cubic-bezier(.22,.68,.35,1)}
+.m-bizfab:active{background:#3a1f16}
+.m-bizfab.hid{opacity:0;transform:translate(-50%,18px) scale(.96);pointer-events:none}
+@media (min-width:900px){.m-bizfab{display:none}}
+@media (prefers-reduced-motion:reduce){.m-bizfab{transition:none}}
 
 /* ── Amenities on the salon page (Alex, 2026-09-29): rows of one-colour
    icons on the warm tile, the vocabulary's order; the full grouped
@@ -1680,7 +1706,8 @@ a.pop-go:hover {
 .loy-earn{display:flex;align-items:center;gap:8px;margin:8px 0 10px;padding:8px 12px;border-radius:12px;background:var(--warm);color:var(--brand-hover);font-weight:700;font-size:13px}
 .loy-earn-ic{display:inline-grid;place-items:center;color:var(--brand)}
 .loy-earn-ic svg{width:16px;height:16px}
-.loy-earn.m{margin:0 0 8px}
+/* Room above the points chip in the phone bar (Alex, 2026-10-05). */
+.loy-earn.m{margin:10px 0 8px}
 
 /* "Available now" card on the phone: the slot and Book share a row. */
 .nn-row{align-items:center;justify-content:space-between}
