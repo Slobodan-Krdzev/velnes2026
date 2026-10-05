@@ -2888,7 +2888,7 @@ export const en = {
   'c.sal.products': 'Add products to take home — paid with your visit, picked up at the salon.',
   'c.sal.product': 'Product',
   'c.sal.inVisit': 'In your visit',
-  'c.sal.ptsBadge': 'Earn +{{n}} Loyalty points!',
+  'c.sal.ptsBadge': '+{{n}} points',
   'c.sal.ptsShort': '+{{n}} pts',
   'c.sal.quietHint': 'Times marked +{{n}} pts are quiet times: book one and earn +{{n}} Loyalty points. Not paid if you reschedule.',
   'c.sal.inVisitN': '{{n}} in your visit',

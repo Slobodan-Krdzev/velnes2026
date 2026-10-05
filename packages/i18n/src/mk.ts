@@ -2870,7 +2870,7 @@ export const mk: Record<TranslationKey, string> = {
   'c.sal.products': 'Додајте производи за дома — се плаќаат со посетата, се подигаат во салонот.',
   'c.sal.product': 'Производ',
   'c.sal.inVisit': 'Во вашата посета',
-  'c.sal.ptsBadge': 'Освојте +{{n}} Loyalty поени!',
+  'c.sal.ptsBadge': '+{{n}} поени',
   'c.sal.ptsShort': '+{{n}} поени',
   'c.sal.quietHint': 'Термините означени со +{{n}} поени се тивки термини: резервирајте еден и освојте +{{n}} Loyalty поени. Не се исплаќаат ако го поместите терминот.',
   'c.sal.inVisitN': '{{n}} во вашата посета',

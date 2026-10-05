@@ -309,7 +309,7 @@ delivered leg, one for a `variant_id` (any length is an upsale) and one
 per entry of `modifier_option_ids`. The salon page follows the same
 rule: its Standard card quotes the service's own minutes and price (the
 quote equals the charge), every length and every option wears the tag
-"Earn +20 Loyalty points!" — a count badge, like the profile tab's —
+"+20 points" — a count badge, like the profile tab's —
 and the booking summary's preview counts them; the loyalty screen's
 "How to earn" has the row.
 `loyalty.test.ts`, `BookAgain.test.tsx`, `Loyalty.test.tsx`.

@@ -2870,7 +2870,7 @@ export const sq: Record<TranslationKey, string> = {
   'c.sal.products': 'Shtoni produkte për në shtëpi — paguhen me vizitën, merren në sallon.',
   'c.sal.product': 'Produkt',
   'c.sal.inVisit': 'Në vizitën tuaj',
-  'c.sal.ptsBadge': 'Fitoni +{{n}} pikë Loyalty!',
+  'c.sal.ptsBadge': '+{{n}} pikë',
   'c.sal.ptsShort': '+{{n}} pikë',
   'c.sal.quietHint': 'Oraret e shënuara me +{{n}} pikë janë orare të qeta: rezervoni një dhe fitoni +{{n}} pikë Loyalty. Nuk paguhen nëse e zhvendosni terminin.',
   'c.sal.inVisitN': '{{n}} në vizitën tuaj',
