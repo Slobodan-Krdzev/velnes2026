@@ -128,3 +128,5 @@ export const post = <S extends z.ZodType>(schema: S, path: string, body: unknown
   api(schema, path, { method: 'POST', body: JSON.stringify(body) });
 export const patch = <S extends z.ZodType>(schema: S, path: string, body: unknown) =>
   api(schema, path, { method: 'PATCH', body: JSON.stringify(body) });
+export const put = <S extends z.ZodType>(schema: S, path: string, body: unknown) =>
+  api(schema, path, { method: 'PUT', body: JSON.stringify(body) });

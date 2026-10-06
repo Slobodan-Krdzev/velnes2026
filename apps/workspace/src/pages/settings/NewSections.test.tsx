@@ -29,7 +29,19 @@ const me = {
     'widget.manage': 'business',
     'customers.view_business': 'business',
     'payments.manage': 'business',
+    'billing.settings': 'business',
   },
+};
+
+const LE = '50000000-0000-4000-8000-000000000001';
+const billingProfile = {
+  legalEntityId: LE, legalName: 'Velnes Studio DOOEL Skopje', edb: 'MK4030026512345', vatRegNo: '', embs: '', entityStatus: 'verified', isDefault: true,
+  businessName: 'Velnes Fizio Centar', locations: [{ id: LOC, name: 'Centar', tz: 'Europe/Skopje' }],
+  tradingName: null, address: '', city: '', zip: '', country: 'North Macedonia', vatRegistered: false, bankName: '', bankAccount: '',
+  defaultCurrency: 'MKD', invoicePrefix: '', creditPrefix: 'KO-', yearlyReset: true, numberWidth: 6, defaultVatRateBp: 0, pricesIncludeVat: true,
+  footerText: '', paymentInstructions: '', signatoryName: '', contactEmail: '', phone: '', website: '', logo: null, issueMode: 'draft',
+  completeness: { complete: false, missing: ['address', 'city', 'zip', 'signatoryName'], invalid: [] },
+  updatedAt: null,
 };
 
 const business = {
@@ -88,6 +100,9 @@ function mockApi(calls: { method: string; path: string; body?: unknown }[]) {
         calls.push({ method, path, body: init?.body ? JSON.parse(String(init.body)) : undefined });
       const ok = (body: unknown) => new Response(JSON.stringify(body), { status: 200 });
       if (path.endsWith('/auth/me')) return ok(me);
+      if (path.includes('/billing/profiles/') && method === 'PUT')
+        return ok({ ...billingProfile, ...(JSON.parse(String(init?.body)) as object), completeness: { complete: true, missing: [], invalid: [] } });
+      if (path.includes('/billing/profiles')) return ok({ profiles: [billingProfile] });
       if (path.includes('/business-settings')) {
         if (method === 'PATCH') {
           const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
@@ -199,6 +214,27 @@ describe('settings — the eight parity sections', () => {
     // The pointer card jumps to Schedules & services.
     await userEvent.click(screen.getByRole('button', { name: 'Open Employees' }));
     await screen.findByText('What each access level may do');
+  });
+
+  it('Invoicing: the legal entity issues; the banner names the gaps the server found; saving goes through PUT /billing/profiles', async () => {
+    const calls: { method: string; path: string; body?: unknown }[] = [];
+    mockApi(calls);
+    await openSettings();
+    await userEvent.click(screen.getByRole('button', { name: 'Invoicing' }));
+    await screen.findByText('Invoice setup incomplete');
+    expect(screen.getByTestId('invoicing-status').textContent).toContain('4 required field(s) missing');
+    expect(screen.getByTestId('invoicing-status').textContent).toContain('Authorised signatory — missing');
+    // Identity is HQ's: read-only, not a form field.
+    expect((screen.getByDisplayValue('Velnes Studio DOOEL Skopje') as HTMLInputElement).disabled).toBe(true);
+    expect(screen.getByTestId('numbering-preview').textContent).toContain(`${new Date().getFullYear()}-000001`);
+    expect(screen.getByTestId('numbering-preview').textContent).toContain(`KO-${new Date().getFullYear()}-000001`);
+    await userEvent.type(screen.getByLabelText(/Name of the person authorised to sign invoices/), 'Maria Petrovska');
+    await userEvent.type(screen.getByLabelText(/^Street and number/), 'Partizanski Odredi 14');
+    await userEvent.click(screen.getByRole('button', { name: 'Save invoice settings' }));
+    await waitFor(() => {
+      const call = calls.find((c) => c.method === 'PUT' && c.path.endsWith(`/billing/profiles/${LE}`));
+      expect(call?.body).toMatchObject({ signatoryName: 'Maria Petrovska', address: 'Partizanski Odredi 14', vatRegistered: false, defaultVatRateBp: 0, creditPrefix: 'KO-' });
+    });
   });
 
   it('Company: edits the card through PATCH /business and shows the HQ legal block read-only', async () => {

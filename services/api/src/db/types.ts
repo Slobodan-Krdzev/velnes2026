@@ -647,9 +647,70 @@ export interface LastMinuteOffers {
   tenantId: string;
 }
 
+export interface BillingConsentEvents {
+  actorEmployeeId: string | null;
+  actorName: Generated<string>;
+  at: Generated<Timestamp>;
+  billingCustomerId: string;
+  granted: boolean;
+  id: Generated<string>;
+  note: Generated<string>;
+  tenantId: string;
+}
+
+export interface BillingCustomers {
+  address: Generated<string>;
+  city: Generated<string>;
+  consentElectronicAt: Timestamp | null;
+  country: Generated<string>;
+  createdAt: Generated<Timestamp>;
+  customerId: string | null;
+  edb: Generated<string>;
+  email: Generated<string>;
+  id: Generated<string>;
+  kind: string;
+  name: string;
+  phone: Generated<string>;
+  tenantId: string;
+  updatedAt: Generated<Timestamp>;
+  vatRegNo: Generated<string>;
+  zip: Generated<string>;
+}
+
+export interface BillingProfiles {
+  address: Generated<string>;
+  bankAccount: Generated<string>;
+  bankName: Generated<string>;
+  city: Generated<string>;
+  contactEmail: Generated<string>;
+  country: Generated<string>;
+  createdAt: Generated<Timestamp>;
+  creditPrefix: Generated<string>;
+  defaultCurrency: Generated<string>;
+  defaultVatRateBp: Generated<number>;
+  footerText: Generated<string>;
+  invoicePrefix: Generated<string>;
+  issueMode: Generated<string>;
+  legalEntityId: string;
+  logo: string | null;
+  numberWidth: Generated<number>;
+  paymentInstructions: Generated<string>;
+  phone: Generated<string>;
+  pricesIncludeVat: Generated<boolean>;
+  signatoryName: Generated<string>;
+  tenantId: string;
+  tradingName: string | null;
+  updatedAt: Generated<Timestamp>;
+  vatRegistered: Generated<boolean>;
+  website: Generated<string>;
+  yearlyReset: Generated<boolean>;
+  zip: Generated<string>;
+}
+
 export interface LegalEntities {
   createdAt: Generated<Timestamp>;
   currency: Generated<string>;
+  embs: string | null;
   fiscalProfileId: string | null;
   id: Generated<string>;
   isDefault: Generated<boolean>;
@@ -1310,6 +1371,9 @@ export interface DB {
   appointmentHistory: AppointmentHistory;
   appointmentProducts: AppointmentProducts;
   appointments: Appointments;
+  billingConsentEvents: BillingConsentEvents;
+  billingCustomers: BillingCustomers;
+  billingProfiles: BillingProfiles;
   bookingChangeRequests: BookingChangeRequests;
   assistantActions: AssistantActions;
   assistantDrafts: AssistantDrafts;

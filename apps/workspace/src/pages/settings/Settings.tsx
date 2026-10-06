@@ -39,6 +39,7 @@ import { MarketplaceSection } from './MarketplaceSection.js';
 import { NewLocationWizard } from './NewLocation.js';
 import { RankingSection } from './RankingSection.js';
 import { SalesSection } from './SalesSection.js';
+import { InvoicingSection } from './InvoicingSection.js';
 import { PanelPortal } from '../../lib/Panel.js';
 import { useToast } from '../../lib/toast.js';
 import { refusalText } from '@velnes/client';
@@ -60,6 +61,7 @@ type SectionId =
   | 'marketplace'
   | 'customers'
   | 'sales'
+  | 'invoicing'
   | 'audit';
 
 /** The prototype's SEC_PERM — every section hangs off one right. */
@@ -76,6 +78,7 @@ const SEC_PERM: Record<SectionId, PermKey> = {
   marketplace: 'widget.manage',
   customers: 'customers.view_business',
   sales: 'payments.manage',
+  invoicing: 'billing.settings',
   audit: 'roles.manage',
 };
 
@@ -98,6 +101,7 @@ export function SettingsPage() {
     ['marketplace', t('settings.marketplace')],
     ['customers', t('settings.customersSection')],
     ['sales', t('settings.sales')],
+    ['invoicing', t('settings.invoicing')],
     ['#Governance', ''],
     ['audit', t('settings.audit')],
   ];
@@ -199,6 +203,7 @@ export function SettingsPage() {
           {tab === 'marketplace' ? <MarketplaceSection /> : null}
           {tab === 'customers' ? <CustomersSettingsSection /> : null}
           {tab === 'sales' ? <SalesSection /> : null}
+          {tab === 'invoicing' ? <InvoicingSection /> : null}
           {tab === 'audit' ? (
             <AuditSection
               onBack={

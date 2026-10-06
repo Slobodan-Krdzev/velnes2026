@@ -729,9 +729,13 @@ door + UI + tests + seed + docs paragraph; each shippable alone)
    prices are VAT-inclusive (decision 3). Cart-level deductions are not
    allocated to lines in the till ledger; the accounting invoice does
    that (C.5).
-1. **Issuer profile + billing customers**: `billing_profiles`,
-   `billing_customers`, Settings → Invoicing, customer Billing details,
-   permissions `billing.settings`/`billing.create`, completeness rules.
+1. **Issuer profile + billing customers** — **built 2026-10-06**
+   (`docs/INVOICING.md`). Settled against the analysis: legal name,
+   ЕДБ and VAT number stay on `legal_entities` (ЕМБС added there), so
+   `billing_profiles` carries no copy of identity — only configuration
+   and the seat address; consent gained an append-only
+   `billing_consent_events` beside the timestamp; only
+   `billing.settings` and `billing.create` exist as rights so far.
 2. **Draft from a sale**: `billing_invoices/_lines` with triggers and
    policies, `POST /billing/invoices` from a sale, draft preview, list
    and detail pages (read-only money), snapshots, tenant-isolation

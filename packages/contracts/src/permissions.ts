@@ -63,6 +63,13 @@ export const PERM_GROUPS = [
     ],
   },
   {
+    group: 'Invoicing',
+    perms: [
+      ['billing.settings', 'Set up invoicing: legal identity, numbering, defaults'],
+      ['billing.create', 'Create and edit billing details for customers'],
+    ],
+  },
+  {
     group: 'Administration',
     perms: [
       ['users.manage', 'Invite and manage users'],
@@ -107,7 +114,7 @@ export function scopeChoices(key: PermKey): Scope[] {
   if (key === 'customers.view_assigned') return ['none', 'assigned'];
   if (key === 'customers.view_business' || key === 'reports.view_business')
     return ['none', 'business'];
-  if (/^(users|roles|locations|payments|integrations|ranking)\./.test(key))
+  if (/^(users|roles|locations|payments|integrations|ranking)\./.test(key) || key === 'billing.settings')
     return ['none', 'business'];
   return ['none', 'location', 'locations', 'business'];
 }
@@ -156,6 +163,9 @@ export function employeePermMap(): PermMap {
     'appointments.edit': 'location',
     'appointments.cancel': 'location',
     'pos.checkout': 'location',
+    // Billing details for the customer at the till (Phase 1, 2026-10-06) —
+    // the one invoicing right a front desk needs; settings stay with owners.
+    'billing.create': 'location',
   });
 }
 

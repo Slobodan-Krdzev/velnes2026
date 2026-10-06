@@ -21,8 +21,16 @@ const me = {
     'customers.view_business': 'business',
     'customers.edit': 'business',
     'marketing.personal_offers': 'business',
+    'billing.create': 'business',
   },
 };
+
+let billingRows: Record<string, unknown>[] = [];
+const billingIdentity = (body: Record<string, unknown>) => ({
+  id: 'bb000000-0000-4000-8000-000000000001', customerId: C1, kind: 'person', name: '', address: '', city: '', zip: '', country: 'North Macedonia',
+  edb: '', vatRegNo: '', email: '', phone: '', consentElectronicAt: null, consentHistory: [], createdAt: '2026-10-06T10:00:00.000Z', updatedAt: '2026-10-06T10:00:00.000Z',
+  ...body,
+});
 
 const profile = {
   id: C1, name: 'Katerina Stojanovska', email: 'katerina.s@example.com',
@@ -61,6 +69,16 @@ function mockApi(calls: { method: string; path: string; body?: unknown }[]) {
         calls.push({ method, path, body: init?.body ? JSON.parse(String(init.body)) : undefined });
       const ok = (b: unknown) => new Response(JSON.stringify(b), { status: 200 });
       if (path.endsWith('/auth/me')) return ok(me);
+      if (path.includes('/billing/customers') && path.endsWith('/consent') && method === 'POST') {
+        const b = JSON.parse(String(init?.body)) as { granted: boolean; note: string };
+        billingRows = billingRows.map((r) => ({ ...r, consentElectronicAt: b.granted ? '2026-10-06T12:00:00.000Z' : null, consentHistory: [{ id: 'ce000000-0000-4000-8000-000000000001', granted: b.granted, at: '2026-10-06T12:00:00.000Z', actorName: 'Maria Petrovska', note: b.note }] }));
+        return ok(billingRows[0]);
+      }
+      if (path.includes('/billing/customers') && method === 'POST') {
+        billingRows = [billingIdentity(JSON.parse(String(init?.body)) as Record<string, unknown>)];
+        return ok(billingRows[0]);
+      }
+      if (path.includes('/billing/customers')) return ok({ customers: billingRows });
       if (path.includes('/customers?'))
         return ok({
           customers: [
@@ -194,5 +212,36 @@ describe('customers', () => {
         ),
       ).toBe(true),
     );
+  });
+
+  it('Billing details: a company identity for the customer is created through its own door and consent is an explicit, recorded act', async () => {
+    billingRows = [];
+    const calls: { method: string; path: string; body?: unknown }[] = [];
+    mockApi(calls);
+    await openList();
+    await userEvent.click(screen.getByRole('button', { name: 'View' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Billing details' }));
+    await screen.findByText('No billing details yet.');
+    await userEvent.click(screen.getByRole('button', { name: 'Add billing details' }));
+    await userEvent.click(screen.getByRole('button', { name: 'A company' }));
+    await userEvent.type(screen.getByLabelText(/Legal company name/), 'Nova Health DOO');
+    await userEvent.type(screen.getByLabelText(/Street and number/), 'Bul. Ilinden 5');
+    await userEvent.type(screen.getByLabelText(/^City/), 'Skopje');
+    await userEvent.type(screen.getByLabelText(/Tax number/), '4030026512399');
+    await userEvent.click(screen.getByRole('button', { name: 'Save billing details' }));
+    await waitFor(() => {
+      const call = calls.find((c) => c.method === 'POST' && c.path.endsWith('/billing/customers'));
+      expect(call?.body).toMatchObject({ customerId: C1, kind: 'company', name: 'Nova Health DOO', edb: '4030026512399' });
+    });
+    // The customer profile itself was never patched by this.
+    expect(calls.some((c) => c.method === 'PATCH' && c.path.endsWith(`/customers/${C1}`))).toBe(false);
+    await screen.findByTestId('billing-details');
+    expect(screen.getByTestId('consent-state').textContent).toBe('No consent on record');
+    await userEvent.type(screen.getByPlaceholderText('Note (how it was given)'), 'Signed form');
+    await userEvent.click(screen.getByRole('button', { name: 'Record consent' }));
+    await waitFor(() => expect(screen.getByTestId('consent-state').textContent).toContain('Consent given on'));
+    const consent = calls.find((c) => c.path.endsWith('/consent'));
+    expect(consent?.body).toEqual({ granted: true, note: 'Signed form' });
+    expect(screen.getByText(/given · Maria Petrovska · Signed form/)).toBeDefined();
   });
 });
