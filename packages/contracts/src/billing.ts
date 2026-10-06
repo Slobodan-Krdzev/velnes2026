@@ -219,3 +219,204 @@ export const BillingConsentWriteSchema = z.object({
   granted: z.boolean(),
   note: text(300).default(''),
 });
+
+/* ── Accounting invoice drafts (phase 2, 2026-10-06) ─────────────────
+   Money in minor units (deni: the till's whole denars × 100); rates in
+   basis points; quantities in thousandths — the billing-math units.
+   The document carries snapshots; the UI renders, it never computes. */
+
+export const BILLING_DOC_KINDS = ['invoice', 'credit_note', 'debit_note', 'advance_invoice'] as const;
+export const BillingDocKindSchema = z.enum(BILLING_DOC_KINDS);
+export const BILLING_DOC_STATUSES = ['draft', 'issued', 'void'] as const;
+export const BillingDocStatusSchema = z.enum(BILLING_DOC_STATUSES);
+
+export const BillingIssuerSnapshotSchema = z.object({
+  legalEntityId: z.uuid(),
+  legalName: z.string(),
+  tradingName: z.string(),
+  edb: z.string(),
+  vatRegNo: z.string(),
+  embs: z.string(),
+  address: z.string(),
+  city: z.string(),
+  zip: z.string(),
+  country: z.string(),
+  bankName: z.string(),
+  bankAccount: z.string(),
+  signatoryName: z.string(),
+  contactEmail: z.string(),
+  phone: z.string(),
+  website: z.string(),
+  footerText: z.string(),
+  paymentInstructions: z.string(),
+});
+export type BillingIssuerSnapshot = z.infer<typeof BillingIssuerSnapshotSchema>;
+
+export const BillingBuyerSnapshotSchema = z.object({
+  /** The billing identity it was taken from, when it was one. */
+  billingCustomerId: z.uuid().nullable(),
+  /** The Velnes customer behind it, when known. */
+  customerId: z.uuid().nullable(),
+  kind: BillingKindSchema,
+  name: z.string(),
+  address: z.string(),
+  city: z.string(),
+  zip: z.string(),
+  country: z.string(),
+  edb: z.string(),
+  vatRegNo: z.string(),
+  email: z.string(),
+  phone: z.string(),
+});
+export type BillingBuyerSnapshot = z.infer<typeof BillingBuyerSnapshotSchema>;
+
+export const BillingLocationSnapshotSchema = z.object({
+  locationId: z.uuid(),
+  name: z.string(),
+  address: z.string(),
+  city: z.string(),
+  zip: z.string(),
+  country: z.string(),
+  tz: z.string(),
+});
+
+/** What the till sale said, as the document remembers it — the facts
+ *  the reconciliation invariant is checked against. Amounts in minor. */
+export const BillingOriginSchema = z.object({
+  saleNumber: z.string(),
+  saleDate: z.iso.date(),
+  method: z.string(),
+  employeeName: z.string(),
+  saleTotalMinor: z.number().int(),
+  linesMinor: z.number().int(),
+  /** Price reductions allocated over the lines (reduce the VAT base). */
+  cartDiscountMinor: z.number().int(),
+  promoMinor: z.number().int(),
+  loyaltyMinor: z.number().int(),
+  /** Not a price reduction: a gift card redeemed is a means of payment. [confirm] */
+  giftTenderMinor: z.number().int(),
+  /** Not a supply: a gratuity to staff, outside the document. [confirm] */
+  tipMinor: z.number().int(),
+  /** Flags for the reviewer: which [confirm] treatments this document relies on. */
+  flags: z.array(z.enum(['loyalty_as_discount', 'gift_card_as_tender', 'tip_excluded', 'promo_as_discount'])),
+});
+export type BillingOrigin = z.infer<typeof BillingOriginSchema>;
+
+export const BillingInvoiceLineSchema = z.object({
+  id: z.uuid(),
+  sort: z.number().int(),
+  itemClass: z.enum(['service', 'product', 'other']),
+  serviceId: z.uuid().nullable(),
+  productId: z.uuid().nullable(),
+  appointmentId: z.uuid().nullable(),
+  tillLineId: z.uuid().nullable(),
+  description: z.string(),
+  employeeName: z.string(),
+  unit: z.string(),
+  qtyMilli: z.number().int(),
+  unitPriceMinor: z.number().int(),
+  sourceAmountMinor: z.number().int(),
+  allocatedDiscountMinor: z.number().int(),
+  vatRateBp: z.number().int(),
+  exempt: z.boolean(),
+  netMinor: z.number().int(),
+  vatMinor: z.number().int(),
+  grossMinor: z.number().int(),
+});
+export type BillingInvoiceLine = z.infer<typeof BillingInvoiceLineSchema>;
+
+export const BillingVatRowSchema = z.object({
+  rateBp: z.number().int(),
+  netMinor: z.number().int(),
+  vatMinor: z.number().int(),
+  grossMinor: z.number().int(),
+});
+
+export const BillingInvoiceSchema = z.object({
+  id: z.uuid(),
+  kind: BillingDocKindSchema,
+  status: BillingDocStatusSchema,
+  /** Null until issued — a draft has no number, by design. */
+  number: z.string().nullable(),
+  currency: z.string(),
+  vatRegistered: z.boolean(),
+  pricesIncludeVat: z.boolean(),
+  legalEntityId: z.uuid(),
+  locationId: z.uuid(),
+  billingCustomerId: z.uuid().nullable(),
+  originSaleId: z.uuid().nullable(),
+  originAppointmentId: z.uuid().nullable(),
+  supplyDate: z.iso.date(),
+  issueDate: z.iso.date().nullable(),
+  dueDate: z.iso.date().nullable(),
+  issuedAt: z.iso.datetime().nullable(),
+  issuer: BillingIssuerSnapshotSchema,
+  buyer: BillingBuyerSnapshotSchema.nullable(),
+  location: BillingLocationSnapshotSchema,
+  origin: BillingOriginSchema.nullable(),
+  lines: z.array(BillingInvoiceLineSchema),
+  totals: z.object({
+    netMinor: z.number().int(),
+    vatMinor: z.number().int(),
+    grossMinor: z.number().int(),
+    discountMinor: z.number().int(),
+  }),
+  vatBreakdown: z.array(BillingVatRowSchema),
+  /** What a later issue would still need on the buyer side (B2B). */
+  buyerCompleteness: BillingCompletenessSchema,
+  notes: z.string(),
+  createdBy: z.object({ id: z.uuid().nullable(), name: z.string() }),
+  createdAt: z.iso.datetime(),
+  updatedBy: z.object({ id: z.uuid().nullable(), name: z.string() }),
+  updatedAt: z.iso.datetime(),
+});
+export type BillingInvoice = z.infer<typeof BillingInvoiceSchema>;
+
+export const BillingInvoiceRowSchema = BillingInvoiceSchema.pick({
+  id: true, kind: true, status: true, number: true, currency: true, vatRegistered: true,
+  legalEntityId: true, locationId: true, billingCustomerId: true, originSaleId: true,
+  supplyDate: true, issueDate: true, dueDate: true, totals: true, createdAt: true, updatedAt: true,
+}).extend({
+  buyerName: z.string(),
+  locationName: z.string(),
+  saleNumber: z.string().nullable(),
+});
+export const BillingInvoiceListSchema = z.object({ invoices: z.array(BillingInvoiceRowSchema) });
+
+export const BillingInvoiceCreateSchema = z.object({
+  saleId: z.uuid(),
+  /** A billing identity to invoice; absent, the sale's customer's own identity is used when there is exactly one, else the customer's name alone. */
+  billingCustomerId: z.uuid().nullable().optional(),
+  key: z.string().min(8).optional(),
+});
+export const BillingInvoicePatchSchema = z.object({
+  /** Re-snapshot the buyer from this identity; null = back to the sale's customer, or nobody. */
+  billingCustomerId: z.uuid().nullable().optional(),
+  supplyDate: z.iso.date().optional(),
+  dueDate: z.iso.date().nullable().optional(),
+  notes: z.string().trim().max(1000).optional(),
+});
+export const BillingInvoiceQuerySchema = z.object({
+  status: BillingDocStatusSchema.optional(),
+  kind: BillingDocKindSchema.optional(),
+  locationId: z.uuid().optional(),
+  from: z.iso.date().optional(),
+  to: z.iso.date().optional(),
+  q: z.string().trim().max(80).optional(),
+  limit: z.coerce.number().int().min(1).max(200).default(50),
+});
+
+/** What a buyer snapshot still lacks for a legally addressed invoice:
+ *  a company needs its legal name, seat and ЕДБ; a person its name. */
+export function evaluateBuyer(b: BillingBuyerSnapshot | null): BillingCompleteness {
+  if (!b) return { complete: true, missing: [], invalid: [] };
+  const missing: string[] = [];
+  const invalid: BillingCompleteness['invalid'] = [];
+  if (!b.name.trim()) missing.push('name');
+  if (b.kind === 'company') {
+    for (const f of ['address', 'city', 'edb'] as const) if (!b[f].trim()) missing.push(f);
+    if (b.edb && !EDB_RE.test(b.edb)) invalid.push({ field: 'edb', reason: 'invalid' });
+    if (b.vatRegNo && !VAT_NO_RE.test(b.vatRegNo)) invalid.push({ field: 'vatRegNo', reason: 'invalid' });
+  }
+  return { complete: missing.length === 0 && invalid.length === 0, missing, invalid };
+}

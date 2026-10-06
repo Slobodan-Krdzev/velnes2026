@@ -110,3 +110,129 @@ emails an invoice — phases 2–8. The accountant's confirmations in the
 plan's section I still stand; the identifier shapes above are
 structural until then. The payment-method CHECK from phase 0 stays
 `NOT VALID` until production's distinct values have been inspected.
+
+## Phase 2 — the draft accounting invoice
+
+### What a draft is
+
+A `billing_invoices` row of kind `invoice` and status `draft`, built
+once from a paid till sale (`POST /billing/invoices { saleId }`) under
+an advisory lock on the sale, so a double click, a retry or two desks
+at once find the same document; a partial unique index on
+`(tenant_id, origin_sale_id)` backs that at the database. It has no
+number and consumes none — `number`, `series`, `issued_at` stay NULL
+until phase 3. It is never deleted; there is no DELETE policy.
+
+### Snapshots (what the document remembers at creation)
+
+| Snapshot | Taken from | Frozen for the draft |
+|---|---|---|
+| `issuer` | `legal_entities` (legal name, ЕДБ, VAT no, ЕМБС) + `billing_profiles` (seat, bank, signatory, contact, footer, payment instructions) + `businesses.name` as the trading name unless the profile overrides it | yes |
+| `location` | `locations` (name, address, clock `tz`) | yes |
+| `buyer` | the chosen `billing_customers` row; else the sale's customer's only identity; else the customer's name alone; else nobody (walk-in) | yes — re-taken only by an explicit PATCH of `billingCustomerId` |
+| `origin` | the sale: number, date, method, employee, and every deduction in minor units with the `[confirm]` flags it relies on | yes |
+| lines | `invoice_lines` (description, qty, class, catalog ids, **`amount`**, `vat`) | yes |
+| `currency`, `vatRegistered`, `pricesIncludeVat` | the profile at creation | yes |
+| `supplyDate` | the sale's `created_at` in the **location's** clock, never the server's | editable |
+| `dueDate`, `notes` | — | editable |
+
+Later changes to the catalog, the identity, the brand or the profile
+never reach an existing draft (tested); a new sale's draft sees today's
+world. The profile's logo is not snapshotted yet (a data URL per
+document is a phase-4 decision: snapshot or reference).
+
+### Money — the reconciliation invariant
+
+Everything is in minor units (the till's whole denars × 100) and goes
+through billing-math only:
+
+1. Each till line's exact `amount` is the line's source amount.
+2. The sale's **price reductions** — cart discount, promo code, and the
+   loyalty value — are spread over the lines in proportion to their
+   amounts by `allocateDiscount` (largest remainder; deterministic).
+   The loyalty value is not stored on the receipt; it is what remains
+   once every stored figure is accounted for
+   (`Σ amounts + tip + service charge − cart − gift − promo − total`).
+3. Each line: `gross = amount − allocated`, then one half-up split into
+   net and VAT at the line's own rate (gross-priced; VAT-inclusive
+   prices are decision 3). A non-registered issuer gets rate 0, VAT 0,
+   `exempt` true.
+4. Totals and the breakdown by rate are **sums of the lines**.
+5. Before the row is written, both readings must agree:
+   `Σ line gross = Σ amounts − cart − promo − loyalty = sale total − tip − service charge + gift tender`;
+   otherwise the draft is refused (422), never fudged. Database CHECKs
+   repeat `net + vat = gross` per line and per document and
+   `gross = source − allocated` per line.
+
+### Till concepts and their treatment
+
+| Till field | Treatment on the accounting invoice | Status |
+|---|---|---|
+| line `amount` (after line discount) | taxable base per line | settled (phase 0) |
+| `cart_discount` | price reduction, allocated to lines, reduces the VAT base | approved allocation |
+| `promo_amount` (discount code) | price reduction, allocated like the cart discount | **[confirm]** flag `promo_as_discount` |
+| loyalty points value (derived) | price reduction, allocated like the cart discount | **[confirm]** flag `loyalty_as_discount` — a salon-funded discount is the usual reading; an accountant may want it shown separately |
+| `gift_amount` | **means of payment**, not a discount: inside gross, recorded as tender | **[confirm]** flag `gift_card_as_tender` — hinges on whether the gift card was a single- or multi-purpose voucher when sold |
+| `tip` | gratuity, outside the supply and the document | **[confirm]** flag `tip_excluded` |
+| `service_charge` | **no agreed treatment — a sale carrying one is refused** | open |
+| refunded sale | refused; belongs to a credit note (phase 6) | by design |
+| online payment (`Online card`, `Apple Pay`) | same lines, same math; the method is remembered in `origin` for the payment phase | settled |
+
+### Doors, rights, reach
+
+`POST /billing/invoices`, `PATCH /billing/invoices/:id`
+(`billing.create`); `GET /billing/invoices`, `GET /billing/invoices/:id`
+(`billing.read`, new; owner-shaped roles get it at business scope, roles
+with `billing.create` at that same scope, the Employee kit at
+`location`). Reach follows the role's scope: `business` sees every
+location, `location`/`locations` the employee's own (`claims.locs`), so
+a desk at Aerodrom neither lists, reads, drafts from nor changes a
+Centar document (404, not 403 — nothing is disclosed). RLS cuts the
+tenant beneath that. Edits (drafts only): the buyer (re-snapshot from
+an identity, or back to the sale's customer), supply date, due date,
+notes; `legalEntityId`, `locationId`, `originSaleId` and every amount
+are not accepted by the contract and cannot change. Creation and
+changes write the audit log and `created_by`/`updated_by` on the row;
+the richer `billing_events` arrive with issuing.
+
+### Phase 3 preparation at the database
+
+Two triggers already guard the future: an `issued` row refuses any
+change to its status, number, snapshots, money, dates, entity, location
+or origin (notes and the later payment, PDF-hash and reference columns
+remain writable), and the lines of an issued document refuse insert,
+update and delete. Tested from the database owner's path.
+
+### Workspace
+
+A new **Invoices** tile (`billing.read`) opens the accounting list —
+titled and worded apart from the till's receipts, with a link to them.
+Tabs All and Draft work; Issued, Unpaid, Paid and Credited are present
+but disabled until their phases. The draft preview shows issuer, buyer
+(with what it still lacks for issue), place of supply, lines with
+quantity, net, VAT % and VAT for a registered issuer and gross for all,
+the VAT breakdown, discounts, totals, the gift tender and tip outside
+the document, who drafted and changed it. A paid receipt under the cash
+register offers "Draft accounting invoice" and lands on the draft.
+Nothing is computed in React; minor units are formatted with two
+decimals. Checkout is untouched: no draft is created automatically.
+
+### Tests
+
+`drafts.test.ts` (plain sale; discounted mixed-rate multi-quantity sale
+with deterministic allocation; tip outside; service charge and refunded
+sale refused; non-VAT issuer; buyers — identity, name, explicit, an
+incomplete company, a foreign identity; history stays after catalog,
+identity, brand and profile edits; one draft per sale under a burst of
+four concurrent creates; editing — allowed fields change, structural
+and money fields do not; reach for the Aerodrom desk; list filters;
+another salon's owner; the frozen-row triggers) and the workspace
+tests (list, registered and non-registered previews, the receipt door).
+
+### Deferred, honestly
+
+Issuing and numbering (phase 3), the PDF (4), payments (5), credit
+notes and void (6), auto-draft on checkout (7), email (8). The four
+`[confirm]` treatments above and the service-charge rule are decisions
+for the accountant before issuing goes live.
+

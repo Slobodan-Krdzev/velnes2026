@@ -736,10 +736,15 @@ door + UI + tests + seed + docs paragraph; each shippable alone)
    and the seat address; consent gained an append-only
    `billing_consent_events` beside the timestamp; only
    `billing.settings` and `billing.create` exist as rights so far.
-2. **Draft from a sale**: `billing_invoices/_lines` with triggers and
-   policies, `POST /billing/invoices` from a sale, draft preview, list
-   and detail pages (read-only money), snapshots, tenant-isolation
-   tests.
+2. **Draft from a sale** — **built 2026-10-06** (`docs/INVOICING.md`
+   "Phase 2"). Settled against the analysis: the issuer snapshot joins
+   entity + profile + brand (no identity copy on the profile); the
+   loyalty value is derived from the receipt's stored figures; a gift
+   card is tender, a tip is outside, a service charge is refused until
+   decided; `billing.read` arrived with this phase; reach by role scope
+   is enforced in the service, not only in the UI; the frozen-row
+   triggers for issued documents were created now as phase-3 schema
+   preparation.
 3. **Issue**: sequences, the atomic issue step, idempotency,
    concurrency test (parallel issues never share a number), yearly
    reset test, immutability tests (UPDATE rejected), audit events.

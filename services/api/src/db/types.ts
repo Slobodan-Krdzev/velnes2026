@@ -49,6 +49,9 @@ export type MtxStatus = "config_incomplete" | "failed" | "paid";
 
 export type Numeric = ColumnType<string, number | string, number | string>;
 
+/** bigint columns come back from pg as strings; the services Number() them. */
+export type Int8 = ColumnType<string, bigint | number | string, bigint | number | string>;
+
 export type PaymentAccountStatus = "active" | "incomplete";
 
 export type PurchaseOrderStatus = "accepted" | "approval" | "cancelled" | "delivered" | "disputed" | "draft" | "partdelivered" | "partial" | "processing" | "shipped" | "submitted";
@@ -675,6 +678,77 @@ export interface BillingCustomers {
   updatedAt: Generated<Timestamp>;
   vatRegNo: Generated<string>;
   zip: Generated<string>;
+}
+
+export interface BillingInvoiceLines {
+  allocatedDiscountMinor: Generated<Int8>;
+  appointmentId: string | null;
+  description: string;
+  employeeName: Generated<string>;
+  exempt: Generated<boolean>;
+  grossMinor: Int8;
+  id: Generated<string>;
+  invoiceId: string;
+  itemClass: string;
+  netMinor: Int8;
+  productId: string | null;
+  qtyMilli: number;
+  serviceId: string | null;
+  sort: Generated<number>;
+  sourceAmountMinor: Int8;
+  tenantId: string;
+  tillLineId: string | null;
+  unit: Generated<string>;
+  unitPriceMinor: Int8;
+  vatMinor: Int8;
+  vatRateBp: number;
+}
+
+export interface BillingInvoices {
+  billingCustomerId: string | null;
+  buyer: Json | null;
+  correctsInvoiceId: string | null;
+  createdAt: Generated<Timestamp>;
+  createdBy: string | null;
+  createdByName: Generated<string>;
+  currency: string;
+  discountMinor: Generated<Int8>;
+  dueDate: Timestamp | null;
+  efakturaEuid: string | null;
+  efakturaStatus: string | null;
+  fiscalReceiptRef: string | null;
+  grossMinor: Int8;
+  id: Generated<string>;
+  idempotencyKey: string | null;
+  issueDate: Timestamp | null;
+  issuedAt: Timestamp | null;
+  issuer: Json;
+  kind: Generated<string>;
+  legalEntityId: string;
+  location: Json;
+  locationId: string;
+  netMinor: Int8;
+  notes: Generated<string>;
+  number: string | null;
+  numberSeq: number | null;
+  origin: Generated<Json>;
+  originAppointmentId: string | null;
+  originSaleId: string | null;
+  paidMinor: Generated<Int8>;
+  pdfSha256: string | null;
+  pricesIncludeVat: Generated<boolean>;
+  series: string | null;
+  status: Generated<string>;
+  supplyDate: Timestamp;
+  tenantId: string;
+  updatedAt: Generated<Timestamp>;
+  updatedBy: string | null;
+  updatedByName: Generated<string>;
+  vatBreakdown: Generated<Json>;
+  vatMinor: Int8;
+  vatRegistered: boolean;
+  voidedAt: Timestamp | null;
+  year: number | null;
 }
 
 export interface BillingProfiles {
@@ -1373,6 +1447,8 @@ export interface DB {
   appointments: Appointments;
   billingConsentEvents: BillingConsentEvents;
   billingCustomers: BillingCustomers;
+  billingInvoiceLines: BillingInvoiceLines;
+  billingInvoices: BillingInvoices;
   billingProfiles: BillingProfiles;
   bookingChangeRequests: BookingChangeRequests;
   assistantActions: AssistantActions;

@@ -15,6 +15,7 @@ import { SettingsPage } from './pages/settings/Settings.js';
 import { SuppliersPage } from './pages/suppliers/Suppliers.js';
 import { SupportPage } from './pages/support/Support.js';
 import { InvoicesPage } from './pages/till/Invoices.js';
+import { AccountingInvoicesPage } from './pages/billing/Invoices.js';
 import { TillPage } from './pages/till/Till.js';
 import { Login } from './pages/Login.js';
 import { Onboarding } from './pages/Onboarding.js';
@@ -60,6 +61,8 @@ export function App() {
                 <Route path="/requests" element={<RequestsPage />} />
                 <Route path="/till" element={<TillPage />} />
                 <Route path="/till/invoices" element={<InvoicesPage />} />
+                <Route path="/invoices" element={<AccountingInvoicesPage />} />
+                <Route path="/invoices/:id" element={<AccountingInvoicesPage />} />
                 <Route path="/catalog" element={<CatalogPage />} />
                 <Route path="/suppliers" element={<SuppliersPage />} />
                 <Route path="/customers" element={<CustomersPage />} />

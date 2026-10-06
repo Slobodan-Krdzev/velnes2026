@@ -66,7 +66,8 @@ export const PERM_GROUPS = [
     group: 'Invoicing',
     perms: [
       ['billing.settings', 'Set up invoicing: legal identity, numbering, defaults'],
-      ['billing.create', 'Create and edit billing details for customers'],
+      ['billing.create', 'Create billing details and accounting invoice drafts'],
+      ['billing.read', 'See accounting invoices'],
     ],
   },
   {
@@ -166,6 +167,7 @@ export function employeePermMap(): PermMap {
     // Billing details for the customer at the till (Phase 1, 2026-10-06) —
     // the one invoicing right a front desk needs; settings stay with owners.
     'billing.create': 'location',
+    'billing.read': 'location',
   });
 }
 
