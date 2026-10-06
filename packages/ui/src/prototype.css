@@ -2471,7 +2471,6 @@ body.ob-src .ob-body{display:flex;align-items:center;justify-content:center;
    carry these"). */
 .rowcard .grow .t,.rowcard .grow .s{display:block}
 .rowcard .grow .s{margin-top:2px;line-height:1.4}
-/* The portal's mark as a button: the dashboard's door. */
-button.applogo{border:0;background:none;cursor:pointer;padding:0;font:inherit;color:inherit}
-button.applogo:focus-visible{outline:2px solid var(--accent-deep);outline-offset:2px;border-radius:12px}
+/* The portal's mark is a button too (2026-10-06): the workspace's
+   `button.applogo` rules above dress it — same tile, same ring. */
 
