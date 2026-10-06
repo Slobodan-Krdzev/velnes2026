@@ -294,7 +294,8 @@ describe('the supplier portal', () => {
     window.open = realOpen;
     (URL as unknown as { createObjectURL: unknown }).createObjectURL = realUrl;
     // Details still shows the full order with its total and the honest note.
-    await userEvent.click(screen.getAllByRole('button', { name: 'Details' })[0]!);
+    const row = screen.getByText('AER-0031').closest('tr')!;
+    await userEvent.click(within(row).getByRole('button', { name: 'Details' }));
     expect(await screen.findByText('Order lines')).toBeDefined();
     expect(screen.getByText('MK-PARCEL-90009')).toBeDefined();
     // The line total and order total (12 × 550 = 6600) both render.
