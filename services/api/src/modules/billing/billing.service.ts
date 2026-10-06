@@ -68,7 +68,8 @@ async function buildProfile(trx: Trx, legalEntityId: string): Promise<BillingPro
     creditPrefix: p?.creditPrefix ?? 'KO-',
     yearlyReset: p?.yearlyReset ?? true,
     numberWidth: p?.numberWidth ?? 6,
-    defaultVatRateBp: p?.defaultVatRateBp ?? 1800,
+    // Nothing is invented: until the salon says it is VAT-registered, the default rate is 0.
+    defaultVatRateBp: p?.defaultVatRateBp ?? 0,
     pricesIncludeVat: p?.pricesIncludeVat ?? true,
     footerText: p?.footerText ?? '',
     paymentInstructions: p?.paymentInstructions ?? '',

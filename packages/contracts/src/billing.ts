@@ -55,7 +55,8 @@ export const BillingProfileWriteSchema = z.object({
   creditPrefix: z.string().trim().toUpperCase().regex(SERIES_RE, 'Letters, digits and dashes, up to 12').default('KO-'),
   yearlyReset: z.boolean().default(true),
   numberWidth: z.number().int().min(4).max(8).default(6),
-  defaultVatRateBp: z.number().int().min(0).max(10_000).default(1800),
+  /** 0 until the salon declares VAT registration — nothing is invented. */
+  defaultVatRateBp: z.number().int().min(0).max(10_000).default(0),
   pricesIncludeVat: z.boolean().default(true),
   footerText: text(1000).default(''),
   paymentInstructions: text(1000).default(''),
