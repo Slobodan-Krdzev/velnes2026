@@ -1666,7 +1666,7 @@ function Promotions({
       </div>
       <div className="card">
         {rows.map((o) => (
-          <div className="rowcard" key={o.id}>
+          <div className="rowcard multiline" key={o.id}>
             <span className="mark on">%</span>
             <span className="grow">
               <span className="t">{o.title}</span>

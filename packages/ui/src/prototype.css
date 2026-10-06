@@ -2465,3 +2465,10 @@ body.ob-src .ob-body{display:flex;align-items:center;justify-content:center;
   box-shadow:0 0 0 2px rgba(255,141,103,.25)}
 @media(hover:hover){.cal-col:not(.closed) .cal-cell.quiet:hover{background:rgba(255,141,103,.18)}}
 
+/* A row card whose lines stack (Alex, 2026-10-06): the title on its
+   own row, each secondary line under it — for rows that carry more
+   than a name and a word, like a promotion with its products, dates
+   and terms, which inline ran into one long sentence. */
+.rowcard.multiline .grow .t,.rowcard.multiline .grow .s{display:block}
+.rowcard.multiline .grow .s{margin-top:2px;line-height:1.4}
+
