@@ -56,6 +56,7 @@ describe('the supplier chain', () => {
   afterAll(async () => {
     if (orderId) {
       await admin.query(`DELETE FROM supplier_notifications WHERE ref_id=$1`, [orderId]);
+      await admin.query(`DELETE FROM platform_notices WHERE ref_id=$1`, [orderId]);
       await admin.query(`DELETE FROM mail_outbox WHERE ref_id=$1`, [orderId]);
       await admin.query(`DELETE FROM purchase_order_lines WHERE order_id=$1`, [orderId]);
       await admin.query(`DELETE FROM purchase_orders WHERE id=$1`, [orderId]);
@@ -117,12 +118,49 @@ describe('the supplier chain', () => {
   it('runs the connection handshake: salon asks, the portal accepts', async () => {
     const ask = await post(`${API_PREFIX}/suppliers/${demo.sup3}/connect`, { note: 'New customer' });
     expect(ask.statusCode).toBe(200);
+    // The supplier hears it: a row in its bell, kind `connection`,
+    // pointing at the salon (2026-10-06).
+    const heard = await admin.query(
+      `SELECT title, kind FROM supplier_notifications WHERE supplier_id=$1 AND ref_id=$2 ORDER BY created_at DESC LIMIT 1`,
+      [demo.sup3, demo.business],
+    );
+    expect(heard.rows[0]).toMatchObject({ kind: 'connection' });
+    expect(heard.rows[0].title).toContain('Connection request');
     // Adriatic has no portal user seeded; BeautyPro's Vesna sees only
     // her own connections (RLS) — so the sup3 request is invisible.
     const salons = await get(`${API_PREFIX}/portal/salons`, vesnaToken);
     expect(
       salons.json().salons.every((s: { status: string; note: string }) => s.status !== 'pending' || s.note !== 'New customer'),
     ).toBe(true);
+  });
+
+  it('the portal\'s answer rings the salon\'s bell and mails its owner — accepted here, declined the same way', async () => {
+    // Another salon asks BeautyPro; Bojan accepts from the portal.
+    const other = (
+      await admin.query(
+        `SELECT b.id, o.email FROM businesses b JOIN employees o ON o.id = b.owner_employee_id
+         WHERE b.id <> $1 AND NOT EXISTS (SELECT 1 FROM supplier_connections c WHERE c.tenant_id = b.id AND c.supplier_id = $2) LIMIT 1`,
+        [demo.business, demo.sup1],
+      )
+    ).rows[0] as { id: string; email: string };
+    expect(other).toBeDefined();
+    await admin.query(`INSERT INTO supplier_connections (tenant_id, supplier_id, status) VALUES ($1, $2, 'pending')`, [other.id, demo.sup1]);
+    try {
+      const ok = await post(`${API_PREFIX}/portal/connections/${other.id}/accept`, {}, bojanToken);
+      expect(ok.statusCode, ok.body).toBe(200);
+      const bell = await admin.query(
+        `SELECT kind, title FROM platform_notices WHERE audience='salons' AND tenant_id=$1 AND ref_id=$2 ORDER BY created_at DESC LIMIT 1`,
+        [other.id, demo.sup1],
+      );
+      expect(bell.rows[0]).toMatchObject({ kind: 'supplier_connection' });
+      expect(bell.rows[0].title).toContain('accepted your connection');
+      const mail = await admin.query(`SELECT kind, to_email FROM mail_outbox WHERE ref_id=$1 AND tenant_id=$2 ORDER BY sent_at DESC LIMIT 1`, [demo.sup1, other.id]);
+      expect(mail.rows[0]).toMatchObject({ kind: 'connection_accepted', to_email: other.email });
+    } finally {
+      await admin.query(`DELETE FROM platform_notices WHERE tenant_id=$1 AND ref_id=$2`, [other.id, demo.sup1]);
+      await admin.query(`DELETE FROM mail_outbox WHERE ref_id=$1 AND tenant_id=$2`, [demo.sup1, other.id]);
+      await admin.query(`DELETE FROM supplier_connections WHERE tenant_id=$1 AND supplier_id=$2`, [other.id, demo.sup1]);
+    }
   });
 
   it('refuses ordering below the product minimum and the supplier minimum', async () => {
@@ -208,6 +246,17 @@ describe('the supplier chain', () => {
     expect(shipped.statusCode).toBe(200);
     expect(shipped.json().status).toBe('shipped');
     expect(shipped.json().track).toBe('MK-PARCEL-90001');
+    // The salon heard both steps the supplier took — bell and mail (2026-10-06).
+    const bells = await admin.query(
+      `SELECT kind, title FROM platform_notices WHERE audience='salons' AND tenant_id=$1 AND ref_id=$2 ORDER BY created_at`,
+      [demo.business, orderId],
+    );
+    expect(bells.rows.map((r: { kind: string }) => r.kind)).toEqual(['supplier_order', 'supplier_order']);
+    expect(bells.rows[0].title).toContain('accepted');
+    expect(bells.rows[1].title).toContain('shipped');
+    const mails = await admin.query(`SELECT kind, to_email FROM mail_outbox WHERE ref_id=$1 AND kind LIKE 'order_%' ORDER BY sent_at`, [orderId]);
+    expect(mails.rows.map((r: { kind: string }) => r.kind)).toEqual(['order_placed', 'order_accepted', 'order_shipped']);
+    expect(mails.rows[1].to_email).toBe('maria@velnes.mk');
     // The wrong side cannot receive: that is the salon's step.
     const wrong = await post(
       `${API_PREFIX}/portal/orders/${orderId}/transitions`,
@@ -287,6 +336,16 @@ describe('the supplier chain', () => {
       lines: [{ lineId, received: 24, damaged: 0 }],
     });
     expect(done.json().status).toBe('delivered');
+    // The supplier heard both: the shortage, then the finish (2026-10-06).
+    const heard = await admin.query(
+      `SELECT title FROM supplier_notifications WHERE supplier_id=$1 AND ref_id=$2 ORDER BY created_at`,
+      [demo.sup1, orderId],
+    );
+    const titles = heard.rows.map((r: { title: string }) => r.title);
+    expect(titles.some((t: string) => t.includes('partially received'))).toBe(true);
+    expect(titles[titles.length - 1]).toContain('received in full');
+    const mail = await admin.query(`SELECT kind FROM mail_outbox WHERE ref_id=$1 AND kind IN ('order_received','order_partly_received') ORDER BY sent_at`, [orderId]);
+    expect(mail.rows.map((r: { kind: string }) => r.kind)).toEqual(['order_partly_received', 'order_received']);
   });
 
   it('keeps the token worlds apart: a portal token opens no tenant door', async () => {

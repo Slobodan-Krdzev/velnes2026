@@ -540,7 +540,7 @@ function OrderDraft({
               <h2>{t('sup.offersFrom', { name: s.name })}</h2>
             </div>
             {myPromos.map((o) => (
-              <div className="rowcard multiline" key={o.id}>
+              <div className="rowcard" key={o.id}>
                 <span className="mark on">
                   <Icon d={I.tag} size={20} />
                 </span>

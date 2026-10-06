@@ -60,7 +60,6 @@ const TAB_IDS: Tab[] = ['dashboard', 'orders', 'salons', 'catalog', 'promotions'
 // The prototype's PORTAL_NAV order (Orders sits second); Settings is
 // in the sidebar foot, like the salon workspace.
 const NAV: { tab: Tab; label: string; icon: string; size: number }[] = [
-  { tab: 'dashboard', label: 'po.tabDashboard', icon: I.reports, size: 28 },
   { tab: 'orders', label: 'po.tabOrders', icon: I.invoice, size: 26 },
   { tab: 'salons', label: 'po.tabSalons', icon: I.users, size: 28 },
   { tab: 'catalog', label: 'po.tabCatalog', icon: I.products, size: 28 },
@@ -162,9 +161,16 @@ export function Portal({
     <>
       <aside className="sidebar">
         <div className="sidebar-group">
-          <div className="applogo" title={t('po.portalTitle')}>
+          {/* The mark is the dashboard (Alex, 2026-10-06): one tile fewer. */}
+          <button
+            type="button"
+            className={`applogo applogo-btn${tab === 'dashboard' ? ' active' : ''}`}
+            title={t('po.tabDashboard')}
+            aria-label={t('po.tabDashboard')}
+            onClick={() => setTab('dashboard')}
+          >
             <VelnesMark size={34} />
-          </div>
+          </button>
           <nav id="nav-main" className="sidebar-group">
             {NAV.map((n) => (
               <button
@@ -248,13 +254,15 @@ export function Portal({
                           if (n.kind === 'ticket') {
                             setTab('support');
                             if (n.refId) setFocusTicket(n.refId);
+                          } else if (n.kind === 'connection') {
+                            setTab('salons');
                           } else {
                             setTab('orders');
                             if (n.refId) setFocusOrder(n.refId);
                           }
                         }}
                       >
-                        <Icon d={n.kind === 'ticket' ? I.info : I.invoice} size={20} />
+                        <Icon d={n.kind === 'ticket' ? I.info : n.kind === 'connection' ? I.users : I.invoice} size={20} />
                         <span className="grow" style={{ textAlign: 'left' }}>
                           <span className="mi-t" style={{ fontWeight: 700 }}>
                             {n.title}
@@ -1666,7 +1674,7 @@ function Promotions({
       </div>
       <div className="card">
         {rows.map((o) => (
-          <div className="rowcard multiline" key={o.id}>
+          <div className="rowcard" key={o.id}>
             <span className="mark on">%</span>
             <span className="grow">
               <span className="t">{o.title}</span>

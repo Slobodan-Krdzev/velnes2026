@@ -295,3 +295,44 @@ own `supplier_id` by RLS. Every open and reply also queues mail through
 the outbox, so the thread lives in the app and (once the provider is
 live) over SMTP. HQ answers from its own Tickets queue; see
 REGISTRATIONS-HQ.md.
+
+## News on both sides of the chain (2026-10-06)
+
+Alex: the supplier must hear a connection request, the salon must hear
+the answer; the supplier hears a new order, the salon hears it accepted
+and shipped, and the supplier hears when the salon marks it finished —
+each by notification **and** email. Every step now tells the other side
+twice, inside the step's own transaction so a refused step leaves no
+message: a row in that side's own bell and a mail through the outbox
+(mock transport until the provider is decided, like every Velnes mail).
+
+- **Supplier's side** (`tellSupplier` in `suppliers.service.ts`):
+  `supplier_notifications` rows of kind `connection` (a salon asked —
+  the bell opens Salons) or `order` (received in full / partially
+  received — the bell opens the order), and a mail to the address in
+  `suppliers.contact`: `connection_requested`, `order_received`,
+  `order_partly_received`. The existing `order_placed` stays as it was.
+- **Salon's side** (`tellSalon`): `platform_notices` for the salon's own
+  tenant, kinds `supplier_connection` (accepted / declined — the
+  workspace bell opens Suppliers) and `supplier_order` (accepted,
+  shipped with tracking and the expected date, declined with the reason
+  — the bell opens Suppliers → Orders), and a mail to the business
+  owner's address: `connection_accepted`, `connection_declined`,
+  `order_accepted`, `order_shipped`, `order_declined`.
+- **Who writes where.** A salon's step runs under its tenant context,
+  which may already insert into the supplier's feed. A supplier's step
+  sets the salon's tenant context inside its transaction (as
+  `poTransition` always did for the audit row) so the salon's bell and
+  mailbox — the salon's rows under RLS — accept the write. No new
+  policy was needed.
+- **"Finished" is receiving.** The salon's Receive flow is the act that
+  marks an order finished: a full count ends it (`delivered`, the
+  supplier hears "received in full"); a shortage keeps it open
+  (`partdelivered`, the supplier hears "partially received").
+
+The portal's sidebar lost its Dashboard tile: the Velnes mark at the top
+is the dashboard's door (a button, active when there). Row cards across
+every app now stack their lines — title, then each secondary line —
+instead of running them into one sentence. `suppliers.test.ts` asserts
+the bell and the mail on each step, on both sides.
+

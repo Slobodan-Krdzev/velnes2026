@@ -35,7 +35,9 @@ import { z } from 'zod';
 import { db, withSupplier, type Trx } from '../../db/index.js';
 import { AuthError } from '../auth/auth.service.js';
 import { localIso } from '../scheduling/scheduling.service.js';
-import { poTransition, SupplierError, toOrderContract } from './suppliers.service.js';
+import { poTransition, SupplierError, toOrderContract,
+  notifyConnectionDecided,
+} from './suppliers.service.js';
 import { queueMail } from '../mail/mail.service.js';
 import { createTicket, listTickets, replyToTicket, SupportError } from '../support/support.service.js';
 
@@ -400,6 +402,10 @@ export function portalRoutes(app: FastifyInstance) {
           .where('tenantId', '=', req.params.businessId)
           .where('supplierId', '=', req.supplierClaims.sup)
           .execute();
+        // The salon hears the answer — its bell and mailbox are its
+        // own rows, written under its tenant context inside this step.
+        await sql`select set_config('app.tenant_id', ${req.params.businessId}, true)`.execute(trx);
+        await notifyConnectionDecided(trx, req.params.businessId, req.supplierClaims.sup, req.params.action === 'accept');
         return { ok: true as const };
       }),
   });

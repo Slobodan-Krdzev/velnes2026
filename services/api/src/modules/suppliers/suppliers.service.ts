@@ -55,6 +55,168 @@ export async function notifyOrderSubmitted(trx: Trx, orderId: string) {
     });
 }
 
+/* ── News on both sides of the chain (Alex, 2026-10-06) ──────────────
+   Every step one side takes is told to the other, twice: a row in that
+   side's own bell and a mail through the outbox (mock transport until
+   the provider is decided). The supplier's bell is `supplier_notifications`
+   (kinds: `order`, `connection`); the salon's is `platform_notices`
+   for its own tenant (kinds: `supplier_order`, `supplier_connection`).
+   Each helper runs inside the step's own transaction, so a refused step
+   leaves no message behind. A supplier's step writes under the salon's
+   tenant context (set by the caller, as `poTransition` does) because
+   the salon's bell and mailbox are the salon's rows. */
+
+const EMAIL_RE = /[\w.+-]+@[\w.-]+\.\w+/;
+
+async function supplierEmail(trx: Trx, supplierId: string): Promise<string | null> {
+  const s = await trx.selectFrom('suppliers').select('contact').where('id', '=', supplierId).executeTakeFirst();
+  return (s?.contact ?? '').match(EMAIL_RE)?.[0] ?? null;
+}
+
+/** The salon's owner — the business's one address for news. */
+async function salonOwnerEmail(trx: Trx, tenantId: string): Promise<string | null> {
+  const b = await trx
+    .selectFrom('businesses as b')
+    .innerJoin('employees as o', 'o.id', 'b.ownerEmployeeId')
+    .select('o.email')
+    .where('b.id', '=', tenantId)
+    .executeTakeFirst();
+  return b?.email ?? null;
+}
+
+async function names(trx: Trx, tenantId: string, supplierId: string) {
+  const b = await trx.selectFrom('businesses').select('name').where('id', '=', tenantId).executeTakeFirst();
+  const s = await trx.selectFrom('suppliers').select('name').where('id', '=', supplierId).executeTakeFirst();
+  return { salon: b?.name ?? 'A salon', supplier: s?.name ?? 'the supplier' };
+}
+
+/** Ring the supplier's bell and mail its contact address. */
+export async function tellSupplier(
+  trx: Trx,
+  q: { tenantId: string; supplierId: string; kind: 'order' | 'connection'; title: string; body: string; refId: string; mailKind: string; ctaPath: string },
+) {
+  await trx
+    .insertInto('supplierNotifications')
+    .values({ supplierId: q.supplierId, kind: q.kind, title: q.title, body: q.body, refId: q.refId })
+    .execute();
+  const email = await supplierEmail(trx, q.supplierId);
+  if (email)
+    await queueMail(trx, {
+      tenantId: q.tenantId,
+      to: email,
+      subject: q.title,
+      body: q.body,
+      kind: q.mailKind,
+      refId: q.refId,
+      cta: { label: 'Open the supplier portal', url: `${env.supplierAppUrl}${q.ctaPath}` },
+    });
+}
+
+/** Ring the salon's bell and mail its owner. Tenant context required. */
+export async function tellSalon(
+  trx: Trx,
+  q: { tenantId: string; kind: 'supplier_order' | 'supplier_connection'; title: string; body: string; refId: string; mailKind: string; ctaPath: string },
+) {
+  await trx
+    .insertInto('platformNotices')
+    .values({ audience: 'salons', tenantId: q.tenantId, kind: q.kind, title: q.title, body: q.body, refId: q.refId })
+    .execute();
+  const email = await salonOwnerEmail(trx, q.tenantId);
+  if (email)
+    await queueMail(trx, {
+      tenantId: q.tenantId,
+      to: email,
+      subject: q.title,
+      body: q.body,
+      kind: q.mailKind,
+      refId: q.refId,
+      cta: { label: 'Open Suppliers', url: `${env.workspaceAppUrl}${q.ctaPath}` },
+    });
+}
+
+/** A salon asked to connect: the supplier hears it. Salon's context. */
+export async function notifyConnectionRequested(trx: Trx, tenantId: string, supplierId: string) {
+  const n = await names(trx, tenantId, supplierId);
+  await tellSupplier(trx, {
+    tenantId,
+    supplierId,
+    kind: 'connection',
+    title: `Connection request from ${n.salon}`,
+    body: `${n.salon} asked to connect with ${n.supplier}. Accept or decline it under Salons in the portal.`,
+    refId: tenantId,
+    mailKind: 'connection_requested',
+    ctaPath: '/salons',
+  });
+}
+
+/** The supplier answered: the salon hears it. Caller sets the salon's
+ *  tenant context first (the supplier's own context cannot write there). */
+export async function notifyConnectionDecided(trx: Trx, tenantId: string, supplierId: string, accepted: boolean) {
+  const n = await names(trx, tenantId, supplierId);
+  await tellSalon(trx, {
+    tenantId,
+    kind: 'supplier_connection',
+    title: accepted ? `${n.supplier} accepted your connection` : `${n.supplier} declined your connection`,
+    body: accepted
+      ? `You are now connected with ${n.supplier}: their catalogue is open to order from under Suppliers.`
+      : `${n.supplier} declined the connection request. You can ask again later or contact them directly.`,
+    refId: supplierId,
+    mailKind: accepted ? 'connection_accepted' : 'connection_declined',
+    ctaPath: '/suppliers',
+  });
+}
+
+/** The supplier moved an order on: the salon hears it. Tenant context
+ *  already set by `poTransition`. */
+async function notifyOrderStep(trx: Trx, orderId: string, to: PurchaseOrderStatus, reason?: string) {
+  const o = await trx
+    .selectFrom('purchaseOrders as o')
+    .innerJoin('suppliers as s', 's.id', 'o.supplierId')
+    .select(['o.id', 'o.ref', 'o.tenantId', 'o.track', 'o.expected', 's.name as supplierName'])
+    .where('o.id', '=', orderId)
+    .executeTakeFirst();
+  if (!o) return;
+  const words =
+    to === 'accepted'
+      ? { title: `Order ${o.ref} accepted`, body: `${o.supplierName} accepted order ${o.ref} and is preparing it.`, mailKind: 'order_accepted' }
+      : to === 'shipped'
+        ? {
+            title: `Order ${o.ref} shipped`,
+            body: `${o.supplierName} shipped order ${o.ref}${o.track ? ` · tracking ${o.track}` : ''}${o.expected ? ` · expected ${localIso(o.expected)}` : ''}. Receive it under Suppliers → Orders when it arrives.`,
+            mailKind: 'order_shipped',
+          }
+        : to === 'cancelled'
+          ? { title: `Order ${o.ref} declined`, body: `${o.supplierName} declined order ${o.ref}${reason ? `: ${reason}` : ''}.`, mailKind: 'order_declined' }
+          : null;
+  if (!words) return;
+  await tellSalon(trx, { tenantId: o.tenantId, kind: 'supplier_order', refId: o.id, ctaPath: '/suppliers?tab=orders', ...words });
+}
+
+/** The salon received the goods: the supplier hears whether all of it
+ *  arrived. Salon's context. */
+async function notifyOrderReceived(trx: Trx, orderId: string, complete: boolean) {
+  const o = await trx
+    .selectFrom('purchaseOrders as o')
+    .leftJoin('businesses as b', 'b.id', 'o.tenantId')
+    .select(['o.id', 'o.ref', 'o.tenantId', 'o.supplierId', 'b.name as salonName'])
+    .where('o.id', '=', orderId)
+    .executeTakeFirst();
+  if (!o) return;
+  const salon = o.salonName ?? 'The salon';
+  await tellSupplier(trx, {
+    tenantId: o.tenantId,
+    supplierId: o.supplierId,
+    kind: 'order',
+    title: complete ? `Order ${o.ref} received in full` : `Order ${o.ref} partially received`,
+    body: complete
+      ? `${salon} received order ${o.ref} in full and marked it finished.`
+      : `${salon} received part of order ${o.ref} and reported a shortage; the order stays open until the rest arrives.`,
+    refId: o.id,
+    mailKind: complete ? 'order_received' : 'order_partly_received',
+    ctaPath: '/orders',
+  });
+}
+
 export class SupplierError extends Error {
   constructor(
     public code: 'NOT_FOUND' | 'INVALID' | 'WRONG_STATE' | 'MIN_ORDER',
@@ -303,6 +465,9 @@ export async function poTransition(
   // Reaching 'submitted' from an internal-approval draft notifies the
   // supplier, exactly like a direct submit.
   if (side === 'salon' && to === 'submitted') await notifyOrderSubmitted(trx, id);
+  // The supplier's steps the salon waits for (Alex, 2026-10-06).
+  if (side === 'supplier' && (to === 'accepted' || to === 'shipped' || to === 'cancelled'))
+    await notifyOrderStep(trx, id, to, extra?.reason);
   return toOrderContract(trx, id);
 }
 
@@ -397,5 +562,8 @@ export async function receiveOrder(
     after: complete ? 'Delivered in full' : 'Partially delivered — shortage reported',
     locationName: locName?.name ?? '—',
   });
+  // Receiving is the salon marking the order finished (or short): the
+  // supplier hears which (Alex, 2026-10-06).
+  await notifyOrderReceived(trx, id, complete);
   return toOrderContract(trx, id);
 }

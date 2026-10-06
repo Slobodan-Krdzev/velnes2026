@@ -20,6 +20,7 @@ import {
   receiveOrder,
   SupplierError,
   toOrderContract,
+  notifyConnectionRequested,
 } from './suppliers.service.js';
 
 const Err = z.object({ error: z.string(), message: z.string() });
@@ -139,6 +140,7 @@ export function suppliersRoutes(app: FastifyInstance) {
             locationIds: req.body.locationIds,
           })
           .execute();
+        await notifyConnectionRequested(trx, req.claims.ten, req.params.id);
         return { ok: true as const };
       }),
   });

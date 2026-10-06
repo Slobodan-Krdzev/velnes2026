@@ -310,6 +310,10 @@ export function Shell() {
                             navigate('/calendar', { state: { appointment: n.refId } });
                           else if (n.kind === 'review')
                             navigate(`/marketing?tab=reviews${n.refId ? `&review=${n.refId}` : ''}`);
+                          // Supplier news (2026-10-06): an order step opens
+                          // the orders tab, a connection answer the suppliers.
+                          else if (n.kind === 'supplier_order') navigate('/suppliers?tab=orders');
+                          else if (n.kind === 'supplier_connection') navigate('/suppliers');
                         }}
                       >
                         <span className="grow" style={{ textAlign: 'left' }}>
