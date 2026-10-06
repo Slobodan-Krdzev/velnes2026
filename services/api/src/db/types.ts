@@ -923,6 +923,8 @@ export interface PurchaseOrders {
   createdBy: string | null;
   expected: Timestamp | null;
   id: Generated<string>;
+  invoicedAt: Timestamp | null;
+  invoiceNo: string | null;
   locationId: string;
   offerId: string | null;
   ref: string;

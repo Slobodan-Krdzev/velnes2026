@@ -92,6 +92,11 @@ export const PurchaseOrderSchema = z.object({
   expected: z.iso.date().nullable(),
   track: z.string(),
   supplierNote: z.string().default(''), // why the supplier declined, if it did
+  /** The invoice (Alex, 2026-10-06): numbered once the order is
+   *  delivered, in the supplier's own yearly sequence; the PDF doors
+   *  render it for both sides. Null until then. */
+  invoiceNo: z.string().nullable().default(null),
+  invoicedAt: z.iso.datetime().nullable().default(null),
   createdAt: z.iso.datetime(),
   lines: z.array(PurchaseOrderLineSchema),
   total: MoneySchema,

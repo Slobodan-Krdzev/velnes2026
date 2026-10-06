@@ -13,7 +13,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router-dom';
 import { z } from 'zod';
-import { ApiError, get, post, useSession } from '@velnes/client';
+import { ApiError, get, getBlob, post, useSession } from '@velnes/client';
 import { useLocations } from '../../api/queries.js';
 import { money } from '../../lib/money.js';
 import { useToast } from '../../lib/toast.js';
@@ -311,6 +311,13 @@ function CatalogTab() {
   );
 }
 
+/** The invoice PDF (Alex, 2026-10-06): fetched with the session's
+ *  token and opened in a new tab — a plain link could not carry it. */
+async function openInvoicePdf(orderId: string) {
+  const blob = await getBlob(`/purchase-orders/${orderId}/invoice.pdf`);
+  window.open(URL.createObjectURL(blob), '_blank', 'noopener');
+}
+
 function OrderRow({
   o,
   receive,
@@ -369,6 +376,10 @@ function OrderRow({
         ) : o.status === 'shipped' || o.status === 'partdelivered' ? (
           <button className="btn btn-secondary btn-sm" onClick={() => receive(o)}>
             {t('sup.receive')}
+          </button>
+        ) : o.status === 'delivered' ? (
+          <button className="btn btn-secondary btn-sm" onClick={() => void openInvoicePdf(o.id)}>
+            {t('sup.invoicePdf')}
           </button>
         ) : null}
       </td>

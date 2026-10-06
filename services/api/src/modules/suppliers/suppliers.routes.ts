@@ -1,3 +1,4 @@
+import { invoicePdf } from './invoice-pdf.service.js';
 import {
   OrderCreateSchema,
   PurchaseOrderListSchema,
@@ -212,6 +213,28 @@ export function suppliersRoutes(app: FastifyInstance) {
         const orders = [];
         for (const row of rows) orders.push(await toOrderContract(trx, row.id));
         return { orders };
+      }),
+  });
+
+  // The invoice as a PDF (Alex, 2026-10-06): the same document the
+  // supplier opens, for a delivered order of this salon.
+  r.route({
+    method: 'GET',
+    url: '/purchase-orders/:id/invoice.pdf',
+    preHandler: [app.authenticate],
+    schema: { params: z.object({ id: z.uuid() }) },
+    handler: async (req, reply) =>
+      withTenant(req.claims.ten, async (trx) => {
+        if (!(await gate(trx, req.claims, reply))) return reply;
+        try {
+          const { buffer, invoiceNo } = await invoicePdf(trx, req.params.id);
+          return reply
+            .header('content-type', 'application/pdf')
+            .header('content-disposition', `inline; filename="${invoiceNo}.pdf"`)
+            .send(buffer);
+        } catch (e) {
+          return sendErr(reply, e);
+        }
       }),
   });
 

@@ -1,3 +1,4 @@
+import { invoicePdf } from './invoice-pdf.service.js';
 import { env } from '../../env.js';
 import {
   PO_PERM_GROUPS,
@@ -426,6 +427,31 @@ export function portalRoutes(app: FastifyInstance) {
         const orders = [];
         for (const row of rows) orders.push(await toOrderContract(trx, row.id));
         return { orders };
+      }),
+  });
+
+  // The invoice as a PDF (Alex, 2026-10-06), from the supplier's side.
+  // Numbering and the salon's rows need the order's tenant context,
+  // set inside this step as `poTransition` does.
+  r.route({
+    method: 'GET',
+    url: '/portal/orders/:id/invoice.pdf',
+    preHandler: [app.authenticateSupplier],
+    schema: { params: z.object({ id: z.uuid() }) },
+    handler: async (req, reply) =>
+      withSupplier(req.supplierClaims.sup, async (trx) => {
+        const o = await trx.selectFrom('purchaseOrders').select(['id', 'tenantId']).where('id', '=', req.params.id).executeTakeFirst();
+        if (!o) return reply.code(404).send({ error: 'NOT_FOUND', message: 'Unknown order' });
+        await sql`select set_config('app.tenant_id', ${o.tenantId}, true)`.execute(trx);
+        try {
+          const { buffer, invoiceNo } = await invoicePdf(trx, o.id);
+          return reply
+            .header('content-type', 'application/pdf')
+            .header('content-disposition', `inline; filename="${invoiceNo}.pdf"`)
+            .send(buffer);
+        } catch (e) {
+          return sendErr(reply, e);
+        }
       }),
   });
 

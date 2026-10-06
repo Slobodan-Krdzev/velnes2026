@@ -336,3 +336,37 @@ every app now stack their lines — title, then each secondary line —
 instead of running them into one sentence. `suppliers.test.ts` asserts
 the bell and the mail on each step, on both sides.
 
+## The invoice as a PDF (2026-10-06)
+
+Alex: the invoice a finished order produces must be PDF-ready, with a
+button to view it on both sides. A delivered order is now **invoiced**:
+`ensureInvoiceNo` (in `invoice-pdf.service.ts`, called from
+`receiveOrder` on a complete count) gives it a number in the supplier's
+own yearly sequence — `INV-<year>-<nnnn>`, serialised with an advisory
+lock per supplier, unique per supplier across every salon it serves
+(migration 20261006120000: `purchase_orders.invoice_no`,
+`invoiced_at`) — and the order contract carries `invoiceNo` and
+`invoicedAt` from then on. Two doors render the same document:
+`GET /purchase-orders/:id/invoice.pdf` for the salon (its tenant gate)
+and `GET /portal/orders/:id/invoice.pdf` for the supplier (which sets
+the order's tenant context inside the step, as `poTransition` does, so
+numbering an older delivered order on first open works from either
+side). Before delivery the door answers 409.
+
+The PDF is built with pdfkit and the bundled DejaVu Sans (the standard
+PDF fonts cannot set a Cyrillic salon name): the number and dates, the
+order reference and tracking, **From** (the supplier, its contact and
+territory) and **Bill to** (the location's legal entity with its tax and
+VAT numbers when it has one, else the business; the location's
+address), the lines with SKU, quantity, free units, unit price, VAT rate
+(from `supplier_products.vat`) and line total, then net, VAT by rate
+and the total incl. VAT. Prices are treated as net. The footer says
+plainly that this is the Velnes invoice document, not the fiscal
+receipt, which still waits for the fiscalization decision; the in-app
+invoice note says the same. The workspace's Orders tab shows **Invoice
+(PDF)** on a delivered order and the portal's invoice drawer **View as
+PDF**; both fetch the bytes with the session's token (`getBlob`,
+`pBlob`) and open them in a new tab, since a plain link cannot carry a
+bearer token. `suppliers.test.ts` asserts the 409 before delivery, the
+number, the headers and the `%PDF-` bytes from both doors.
+

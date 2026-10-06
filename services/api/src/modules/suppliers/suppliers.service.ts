@@ -9,6 +9,7 @@ import type { Trx } from '../../db/index.js';
 import { logAudit } from '../audit/audit.service.js';
 import { queueMail } from '../mail/mail.service.js';
 import { localIso } from '../scheduling/scheduling.service.js';
+import { ensureInvoiceNo } from './invoice-pdf.service.js';
 
 /**
  * A salon submitted an order to a supplier: drop a notification in
@@ -280,6 +281,8 @@ export async function toOrderContract(trx: Trx, id: string): Promise<PurchaseOrd
     expected: o.expected ? localIso(o.expected) : null,
     track: o.track,
     supplierNote: o.supplierNote ?? '',
+    invoiceNo: o.invoiceNo ?? null,
+    invoicedAt: o.invoicedAt ? o.invoicedAt.toISOString() : null,
     createdAt: o.createdAt.toISOString(),
     lines: lines.map((l) => ({
       id: l.id,
@@ -547,6 +550,9 @@ export async function receiveOrder(
   }
   const to = complete ? 'delivered' : 'partdelivered';
   await trx.updateTable('purchaseOrders').set({ status: to }).where('id', '=', id).execute();
+  // Delivered is invoiced (Alex, 2026-10-06): the number is given here,
+  // once, so both sides open the same document from this moment on.
+  if (complete) await ensureInvoiceNo(trx, id);
   const by = await actorName(trx, claims.sub);
   const locName = await trx
     .selectFrom('locations')

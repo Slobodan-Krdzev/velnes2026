@@ -201,6 +201,10 @@ describe('the supplier chain', () => {
     expect(o.status).toBe('submitted');
     expect(o.lines[0]!.free).toBe(4); // buy 10 get 2 → 20 buys 4 free
     expect(o.total).toBe(20 * 550);
+    // No invoice before delivery (2026-10-06).
+    expect(o.invoiceNo).toBeNull();
+    const early = await get(`${API_PREFIX}/purchase-orders/${o.id}/invoice.pdf`);
+    expect(early.statusCode).toBe(409);
     const audit = await admin.query(
       `SELECT 1 FROM audit_log WHERE action='Order submitted' AND object=$1`,
       [`Order · ${o.ref}`],
@@ -336,6 +340,21 @@ describe('the supplier chain', () => {
       lines: [{ lineId, received: 24, damaged: 0 }],
     });
     expect(done.json().status).toBe('delivered');
+    // Delivered is invoiced: a number in the supplier's yearly sequence,
+    // and the same PDF from either side (2026-10-06).
+    expect(done.json().invoiceNo).toMatch(/^INV-\d{4}-\d{4}$/);
+    expect(done.json().invoicedAt).toBeTruthy();
+    const pdf = await get(`${API_PREFIX}/purchase-orders/${orderId}/invoice.pdf`);
+    expect(pdf.statusCode).toBe(200);
+    expect(pdf.headers['content-type']).toContain('application/pdf');
+    expect(pdf.headers['content-disposition']).toContain(`${done.json().invoiceNo}.pdf`);
+    expect(pdf.rawPayload.subarray(0, 5).toString()).toBe('%PDF-');
+    const theirs = await get(`${API_PREFIX}/portal/orders/${orderId}/invoice.pdf`, vesnaToken);
+    expect(theirs.statusCode).toBe(200);
+    expect(theirs.headers['content-disposition']).toContain(`${done.json().invoiceNo}.pdf`);
+    // Numbered once: the list says the same number.
+    const listed = await get(`${API_PREFIX}/purchase-orders`);
+    expect(listed.json().orders.find((x: { id: string }) => x.id === orderId).invoiceNo).toBe(done.json().invoiceNo);
     // The supplier heard both: the shortage, then the finish (2026-10-06).
     const heard = await admin.query(
       `SELECT title FROM supplier_notifications WHERE supplier_id=$1 AND ref_id=$2 ORDER BY created_at`,

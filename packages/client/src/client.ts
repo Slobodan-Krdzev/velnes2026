@@ -114,6 +114,16 @@ export async function api<S extends z.ZodType>(
 }
 
 export const get = <S extends z.ZodType>(schema: S, path: string) => api(schema, path);
+/** A binary door (a PDF, say): the same auth and refresh, the body as a Blob. */
+export async function getBlob(path: string): Promise<Blob> {
+  let res = await rawFetch(path);
+  if (res.status === 401 && (await tryRefresh())) res = await rawFetch(path);
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as { error?: string; message?: string };
+    throw new ApiError(res.status, body.error ?? 'ERROR', body.message ?? body.error ?? 'Request failed');
+  }
+  return res.blob();
+}
 export const post = <S extends z.ZodType>(schema: S, path: string, body: unknown) =>
   api(schema, path, { method: 'POST', body: JSON.stringify(body) });
 export const patch = <S extends z.ZodType>(schema: S, path: string, body: unknown) =>

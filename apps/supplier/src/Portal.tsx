@@ -28,7 +28,7 @@ import { SUPPLIER_INDEX, type PoCtx } from './navsearch.js';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { z } from 'zod';
-import { pDelete, pGet, pPatch, pPost, PortalApiError, type PortalUser } from './api.js';
+import { pDelete, pGet, pPatch, pPost, PortalApiError, type PortalUser, pBlob } from './api.js';
 import { fileToAvatarDataUrl } from './image.js';
 
 /** The supplier's own workspace: the prototype's viewPortal, chrome
@@ -1490,6 +1490,18 @@ function OrderDetail({
               {t(statusKey[order.status] ?? order.status)}
             </span>
           )}
+          {order.status === 'delivered' ? (
+            <button
+              className="btn btn-primary btn-sm"
+              onClick={() =>
+                void pBlob(`/portal/orders/${order.id}/invoice.pdf`).then((blob) => {
+                  window.open(URL.createObjectURL(blob), '_blank', 'noopener');
+                })
+              }
+            >
+              {t('po.invoicePdf')}
+            </button>
+          ) : null}
           <button className="iconbtn" aria-label={t('po.cancel')} onClick={onClose}>
             <Icon d={I.x} size={20} />
           </button>

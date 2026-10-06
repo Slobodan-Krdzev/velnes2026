@@ -286,5 +286,7 @@ describe('the supplier portal', () => {
     // The line total and order total (12 × 550 = 6600) both render.
     expect(screen.getAllByText((c) => /6[.,\s]600/.test(c)).length).toBeGreaterThan(0);
     expect(screen.getByText(/fiscalization provider decision/)).toBeDefined();
+    // The invoice can be opened as a PDF (2026-10-06).
+    expect(screen.getByRole('button', { name: 'View as PDF' })).toBeDefined();
   });
 });

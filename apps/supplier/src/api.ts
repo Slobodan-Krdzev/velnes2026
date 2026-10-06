@@ -56,6 +56,16 @@ async function call<S extends z.ZodType>(schema: S, path: string, init?: Request
 }
 
 export const pGet = <S extends z.ZodType>(schema: S, path: string) => call(schema, path);
+/** A binary door (the invoice PDF): the same session, the body as a Blob. */
+export async function pBlob(path: string): Promise<Blob> {
+  const s = getSession();
+  const res = await fetch(`${API_PREFIX}${path}`, { headers: s ? { authorization: `Bearer ${s.token}` } : {} });
+  if (!res.ok) {
+    const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+    throw new PortalApiError(res.status, String(data.error ?? 'ERROR'), String(data.message ?? 'failed'));
+  }
+  return res.blob();
+}
 export const pPost = <S extends z.ZodType>(schema: S, path: string, body?: unknown) =>
   call(schema, path, { method: 'POST', ...(body !== undefined ? { body: JSON.stringify(body) } : {}) });
 export const pPatch = <S extends z.ZodType>(schema: S, path: string, body: unknown) =>
