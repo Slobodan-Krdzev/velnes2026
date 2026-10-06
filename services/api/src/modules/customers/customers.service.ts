@@ -289,7 +289,7 @@ export async function customerInsights(trx: Trx, cid: string): Promise<CustomerI
     .selectFrom('invoiceLines as l')
     .innerJoin('invoices as i', 'i.id', 'l.invoiceId')
     .leftJoin('products as p', 'p.id', 'l.productId')
-    .select(['l.productId', 'l.qty', 'l.unitPrice', 'l.description', 'i.date', 'p.name as pname'])
+    .select(['l.productId', 'l.qty', 'l.amount', 'l.description', 'i.date', 'p.name as pname'])
     .where('i.customerId', '=', cid)
     .where('l.itemClass', '=', 'product')
     .execute();
@@ -327,7 +327,7 @@ export async function customerInsights(trx: Trx, cid: string): Promise<CustomerI
   const prodOn = (d: string) =>
     productLines
       .filter((l) => localIso(l.date) === d)
-      .reduce((n, l) => n + l.qty * l.unitPrice, 0);
+      .reduce((n, l) => n + l.amount, 0);
 
   const byDate = new Map<string, typeof done>();
   for (const a of done) {
@@ -338,7 +338,7 @@ export async function customerInsights(trx: Trx, cid: string): Promise<CustomerI
   const visits = dates.length;
   const spend =
     done.reduce((n, a) => n + a.price, 0) +
-    productLines.reduce((n, l) => n + l.qty * l.unitPrice, 0);
+    productLines.reduce((n, l) => n + l.amount, 0);
 
   const visitDetail = (d: string) => {
     const rows = byDate.get(d)!;
@@ -384,7 +384,7 @@ export async function customerInsights(trx: Trx, cid: string): Promise<CustomerI
       spend: 0,
     };
     p.qty += l.qty;
-    p.spend += l.qty * l.unitPrice;
+    p.spend += l.amount;
     pmap.set(key, p);
   }
   const productsAgg = [...pmap.values()].sort((a, b) => b.qty - a.qty);

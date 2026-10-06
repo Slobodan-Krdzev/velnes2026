@@ -593,6 +593,7 @@ export interface InvoiceCounters {
 }
 
 export interface InvoiceLines {
+  amount: Generated<number>;
   appointmentId: string | null;
   description: string;
   id: Generated<string>;

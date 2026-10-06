@@ -12,6 +12,7 @@ export * from './stock.js';
 export * from './scheduling.js';
 export * from './timing.js';
 export * from './till.js';
+export * from './billing-math.js';
 export * from './team.js';
 export * from './payments.js';
 export * from './public.js';

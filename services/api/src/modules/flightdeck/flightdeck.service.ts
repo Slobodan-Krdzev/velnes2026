@@ -116,7 +116,7 @@ export async function flightdeck(
   const monthProductLines = await trx
     .selectFrom('invoiceLines as il')
     .innerJoin('invoices as inv', 'inv.id', 'il.invoiceId')
-    .select(['il.productId', 'il.qty', 'il.unitPrice', 'inv.employeeId', 'inv.date', 'il.itemClass'])
+    .select(['il.productId', 'il.qty', 'il.amount', 'inv.employeeId', 'inv.date', 'il.itemClass'])
     .where('il.itemClass', '=', 'product')
     .where('inv.date', '>=', monthStart)
     .execute();
@@ -132,7 +132,7 @@ export async function flightdeck(
   const upsellByEmp = new Map<string, number>();
   for (const l of monthProductLines) {
     if (!l.employeeId) continue;
-    upsellByEmp.set(l.employeeId, (upsellByEmp.get(l.employeeId) ?? 0) + l.unitPrice * l.qty);
+    upsellByEmp.set(l.employeeId, (upsellByEmp.get(l.employeeId) ?? 0) + l.amount);
   }
   const emps = await trx
     .selectFrom('employees')
@@ -148,12 +148,12 @@ export async function flightdeck(
     await trx
       .selectFrom('invoiceLines as il')
       .innerJoin('invoices as inv', 'inv.id', 'il.invoiceId')
-      .select(['il.qty', 'il.unitPrice'])
+      .select(['il.qty', 'il.amount'])
       .where('il.itemClass', '=', 'product')
       .where('inv.locationId', '=', locId)
       .where(sql<boolean>`inv.date::date = ${today}::date`)
       .execute()
-  ).reduce((s, l) => s + l.unitPrice * l.qty, 0);
+  ).reduce((s, l) => s + l.amount, 0);
 
   // The upsell gap: the team's own average vs. its floor.
   let upsell: InsightSignals['upsell'] = null;

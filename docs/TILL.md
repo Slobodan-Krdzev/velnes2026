@@ -95,3 +95,38 @@ takes it off the list. **Deferred:** a deposit taken at booking is shown
 on the row (`deposit`, `due = price − deposit`) but the sale door still
 charges the appointment's price; netting a deposit at the till is not
 built. `till/till.due.test.ts`, `till/Till.test.tsx`.
+
+## Phase 0 of invoicing — the ledger adds up (2026-10-06)
+
+Before the accounting invoice is built on top of it
+(`docs/INVOICING-PLAN.md`), the till's own figures were made
+trustworthy. `invoice_lines.unit_price` had always been the unit price
+*after* the line discount, rounded, with `line_discount` stored beside
+it; Reports, the cash drawer and a customer's sale history then took
+`qty × unit_price − line_discount` and subtracted the discount a second
+time, and the rounding of `unit_price` could lose up to `qty − 1`
+denars against the receipt's total. Migration 20261006150000 adds
+`invoice_lines.amount` — the exact line total after its discount,
+written by the sale door, backfilled as `qty × unit_price` for history,
+filled by a trigger when a writer omits it — and every reader now sums
+`amount`: the Reports panes and VAT block, the Flightdeck, the customer
+upsell figures, the ranking's upsell turnover. The cash drawer and the
+customer's sale history read `invoices.total`, the one total the sale
+door wrote. Appointment lines take the service's own VAT rate instead
+of a hard-coded 18, falling back to Settings → Sales → default VAT only
+when the service is gone; the rate stays snapshotted on the line. The
+Reports VAT block lists every rate the lines actually carry and splits
+the net out of the gross through the one billing-math door
+(`packages/contracts/src/billing-math.ts`: integer minor units, basis
+points, half-up once per line, totals as sums — the module the
+accounting invoice will use). Payment methods are one list
+(`PAYMENT_METHODS`: Cash, Card, Gift card, Bank transfer, Online card,
+Apple Pay): the sale door validates it, and a `CHECK … NOT VALID` on
+`invoices` and `merchant_transactions` fences new rows without
+refusing a historical one — validate it after production's distinct
+values are confirmed. `till.amounts.test.ts` and
+`billing-math.test.ts` carry the cases. Still honest: cart-level
+deductions (cart discount, points, gift, promo) live on the receipt,
+not allocated to lines, so the VAT block is on line amounts before
+them — the accounting invoice allocates them per line (plan C.5).
+

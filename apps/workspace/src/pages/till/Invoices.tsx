@@ -181,7 +181,7 @@ export function InvoicesPage() {
                       {l.qty} × {l.description}
                     </span>
                     <span className="tnum" style={{ fontWeight: 600 }}>
-                      {money(l.qty * l.unitPrice)}
+                      {money(l.amount)}
                     </span>
                   </div>
                 ))}

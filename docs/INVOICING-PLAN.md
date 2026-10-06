@@ -716,10 +716,19 @@ voiding stay owner-only until a salon widens them — the `pos.discount`
 ## J. Implementation phases (each: contract + migration + service +
 door + UI + tests + seed + docs paragraph; each shippable alone)
 
-0. **Till arithmetic**: fix the double-discount readers and appointment
-   VAT rate; add `billing-math` helpers (integer, half-up, tests for
-   rounding and multiple rates); payment-method CHECK. *Small; unblocks
-   everything.*
+0. **Till arithmetic** — **built 2026-10-06** (`docs/TILL.md` "Phase
+   0"). What implementation settled against the analysis: the defect
+   was in the readers and in the rounding of `unit_price`, not in the
+   stored totals, so no historical value was rewritten — `invoice_lines`
+   gained an exact `amount` (backfilled, trigger-filled for writers
+   that omit it) and every reader sums it; the cash drawer and the
+   customer's history read `invoices.total`. Payment methods stay the
+   six display strings the apps emit (no renaming migration); the CHECK
+   is `NOT VALID`, to be validated after production's distinct values
+   are confirmed. The VAT block derives net from gross because till
+   prices are VAT-inclusive (decision 3). Cart-level deductions are not
+   allocated to lines in the till ledger; the accounting invoice does
+   that (C.5).
 1. **Issuer profile + billing customers**: `billing_profiles`,
    `billing_customers`, Settings → Invoicing, customer Billing details,
    permissions `billing.settings`/`billing.create`, completeness rules.

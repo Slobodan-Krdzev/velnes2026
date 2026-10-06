@@ -54,7 +54,7 @@ export async function rankingBoard(trx: Trx, tenantId: string): Promise<RankingB
   const productLines = paidIds.length
     ? await trx
         .selectFrom('invoiceLines')
-        .select(['invoiceId', 'qty', 'unitPrice'])
+        .select(['invoiceId', 'qty', 'amount'])
         .where('itemClass', '=', 'product')
         .where('invoiceId', 'in', paidIds)
         .execute()
@@ -82,7 +82,7 @@ export async function rankingBoard(trx: Trx, tenantId: string): Promise<RankingB
     const m = empId ? metrics.get(empId) : undefined;
     if (m) {
       m.upsellCount += l.qty;
-      m.upsellTurnover += l.unitPrice * l.qty;
+      m.upsellTurnover += l.amount;
     }
   }
   for (const a of appts) {
