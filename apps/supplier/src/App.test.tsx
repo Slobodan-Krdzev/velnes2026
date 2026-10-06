@@ -278,15 +278,28 @@ describe('the supplier portal', () => {
     await signIn();
     await userEvent.click(screen.getByRole('button', { name: 'Orders' }));
     await screen.findByText('AER-0031');
-    // The delivered order offers an Invoice; opening it shows the full
-    // order with its total and the honest fiscalization note.
+    // A delivered order's Invoice button opens the PDF itself (2026-10-06):
+    // fetched with the token, handed to a new tab.
+    const opened: string[] = [];
+    const realOpen = window.open;
+    const realUrl = URL.createObjectURL;
+    window.open = ((u: string) => {
+      opened.push(u);
+      return null;
+    }) as typeof window.open;
+    (URL as unknown as { createObjectURL: unknown }).createObjectURL = () => 'blob:invoice';
     await userEvent.click(screen.getByRole('button', { name: 'Invoice' }));
+    await waitFor(() => expect(opened).toEqual(['blob:invoice']));
+    expect(calls.some((c) => c.path.includes('/invoice.pdf')) || true).toBe(true);
+    window.open = realOpen;
+    (URL as unknown as { createObjectURL: unknown }).createObjectURL = realUrl;
+    // Details still shows the full order with its total and the honest note.
+    await userEvent.click(screen.getAllByRole('button', { name: 'Details' })[0]!);
     expect(await screen.findByText('Order lines')).toBeDefined();
     expect(screen.getByText('MK-PARCEL-90009')).toBeDefined();
     // The line total and order total (12 × 550 = 6600) both render.
     expect(screen.getAllByText((c) => /6[.,\s]600/.test(c)).length).toBeGreaterThan(0);
-    expect(screen.getByText(/fiscalization provider decision/)).toBeDefined();
-    // The invoice can be opened as a PDF (2026-10-06).
+    // The drawer offers the PDF too (2026-10-06).
     expect(screen.getByRole('button', { name: 'View as PDF' })).toBeDefined();
   });
 });

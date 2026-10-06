@@ -1213,6 +1213,13 @@ const statusKey: Record<string, string> = {
 
 type DetailMode = 'details' | 'invoice' | 'creditnote';
 
+/** The invoice PDF, fetched with the session's token and opened in a
+ *  new tab — a plain link could not carry the token. */
+async function openInvoicePdf(orderId: string) {
+  const blob = await pBlob(`/portal/orders/${orderId}/invoice.pdf`);
+  window.open(URL.createObjectURL(blob), '_blank', 'noopener');
+}
+
 function Orders({
   say,
   focusOrderId,
@@ -1399,7 +1406,12 @@ function Orders({
                       <button className="btn btn-secondary btn-sm" onClick={() => setDetail({ order: o, mode: 'creditnote' })}>
                         {t('po.creditNote')}
                       </button>
-                    ) : ['delivered', 'shipped', 'partdelivered'].includes(o.status) ? (
+                    ) : o.status === 'delivered' ? (
+                      /* A delivered order's Invoice is the PDF itself (Alex, 2026-10-06). */
+                      <button className="btn btn-secondary btn-sm" onClick={() => void openInvoicePdf(o.id)}>
+                        {t('po.invoice')}
+                      </button>
+                    ) : ['shipped', 'partdelivered'].includes(o.status) ? (
                       <button className="btn btn-secondary btn-sm" onClick={() => setDetail({ order: o, mode: 'invoice' })}>
                         {t('po.invoice')}
                       </button>
@@ -1493,11 +1505,7 @@ function OrderDetail({
           {order.status === 'delivered' ? (
             <button
               className="btn btn-primary btn-sm"
-              onClick={() =>
-                void pBlob(`/portal/orders/${order.id}/invoice.pdf`).then((blob) => {
-                  window.open(URL.createObjectURL(blob), '_blank', 'noopener');
-                })
-              }
+              onClick={() => void openInvoicePdf(order.id)}
             >
               {t('po.invoicePdf')}
             </button>
