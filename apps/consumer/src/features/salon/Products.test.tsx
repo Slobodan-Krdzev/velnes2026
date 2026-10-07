@@ -48,9 +48,12 @@ function mockApi(which: 'few' | 'many' = 'few') {
       const ok = (body: unknown) => new Response(JSON.stringify(body), { status: 200 });
       if (url.includes('/discovery/salons/velnes-fizio/reviews')) return ok({ reviews: [], total: 0, offset: 0, limit: 5 });
       if (url.includes('/discovery/salons/velnes-fizio/products')) {
-        const q = new URL(url, 'http://x').searchParams.get('q') ?? '';
+        const sp = new URL(url, 'http://x').searchParams;
+        const q = sp.get('q') ?? '';
+        const limit = Number(sp.get('limit') ?? 12);
+        const pg = Number(sp.get('page') ?? 1);
         const all = [many.products[0]!, ...many.products.slice(1), extra].filter((p) => p.name.toLowerCase().includes(q.toLowerCase()));
-        return ok({ products: all.slice(0, 12), total: all.length, page: 1, limit: 12 });
+        return ok({ products: all.slice((pg - 1) * limit, pg * limit), total: all.length, page: pg, limit });
       }
       if (url.includes('/discovery/salons/velnes-fizio')) return ok(which === 'many' ? many : detail);
       if (url.includes('/services?key=')) return ok(services);
@@ -149,7 +152,7 @@ describe('products with a booking, on the salon page', () => {
     expect(grid.querySelector('[data-product]')!.getAttribute('data-product')).toBe(PROMO);
     fireEvent.click(screen.getAllByTestId('see-all-products')[0]!);
     const modal = (await screen.findAllByTestId('all-products'))[0]!;
-    expect(await within(modal).findByText(/1–12 of 13/)).toBeDefined(); // the mock's shelf: the promo, eleven more, and the one only the modal carries
+    expect(await within(modal).findByText(/1–13 of 13/)).toBeDefined(); // desktop: 24 a page — the mock's thirteen fit on one
     fireEvent.change(within(modal).getByLabelText('Search by name'), { target: { value: 'foot' } });
     const found = await within(modal).findByText('Foot cream deluxe');
     fireEvent.click(found.closest('button')!);

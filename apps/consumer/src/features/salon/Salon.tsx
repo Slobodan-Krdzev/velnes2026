@@ -1438,9 +1438,11 @@ function ProductCard({ pr, on, qty, desktop, onClick }: { pr: ShelfProduct; on: 
   );
 }
 
-/** Every product of the salon, searched by name, twelve a page, on
- *  promotion first — the server pages and prices; a click puts the
- *  product into the visit, exactly like a card on the page. */
+/** Every product of the salon, searched by name, on promotion first —
+ *  the server pages and prices; a click puts the product into the
+ *  visit, exactly like a card on the page. Desktop: a large dialog,
+ *  24 a page with Previous / Next. Phone: a bottom sheet that grows to
+ *  the full screen and loads the next page as you scroll. */
 function AllProductsModal({
   slug,
   locationId,
@@ -1459,9 +1461,12 @@ function AllProductsModal({
   onClose: () => void;
 }) {
   const { t } = useTranslation();
+  const limit = desktop ? 24 : 12;
+  const [typed, setTyped] = useState('');
   const [q, setQ] = useState('');
   const [page, setPage] = useState(1);
-  const [typed, setTyped] = useState('');
+  const [tall, setTall] = useState(false);
+  const [stack, setStack] = useState<{ q: string; pages: Record<number, DiscoveryProduct[]>; total: number }>({ q: '', pages: {}, total: 0 });
   useEffect(() => {
     const h = setTimeout(() => {
       setQ(typed.trim());
@@ -1469,18 +1474,41 @@ function AllProductsModal({
     }, 250);
     return () => clearTimeout(h);
   }, [typed]);
-  const limit = 12;
   const query = useQuery({
-    queryKey: ['salonProducts', slug, q, page],
+    queryKey: ['salonProducts', slug, q, page, limit],
     queryFn: () => pub<{ products: DiscoveryProduct[]; total: number; page: number; limit: number }>(`/discovery/salons/${slug}/products?q=${encodeURIComponent(q)}&page=${page}&limit=${limit}`),
   });
-  const rows = (query.data?.products ?? []).flatMap((pr) => {
+  // Pages land in a stack keyed by the search; the phone shows them all
+  // one after another, the desktop shows the one it is on.
+  useEffect(() => {
+    if (!query.data) return;
+    setStack((s) => (s.q === q ? { ...s, pages: { ...s.pages, [query.data!.page]: query.data!.products }, total: query.data!.total } : { q, pages: { [query.data!.page]: query.data!.products }, total: query.data!.total }));
+  }, [query.data, q]);
+  const products = desktop
+    ? (stack.q === q ? (stack.pages[page] ?? []) : [])
+    : stack.q === q
+      ? Object.keys(stack.pages).map(Number).sort((a, b) => a - b).flatMap((k) => stack.pages[k]!)
+      : [];
+  const total = stack.q === q ? stack.total : 0;
+  const rows = products.flatMap((pr) => {
     const here = (pr.at ?? []).find((a) => a.locationId === locationId);
     return here ? [{ pr, card: { id: pr.id, name: pr.name, price: here.price, regularPrice: here.regularPrice ?? here.price, promo: pr.promo ?? null, img: pr.img ?? null, description: pr.description ?? null } }] : [];
   });
-  const total = query.data?.total ?? 0;
-  const from = total ? (page - 1) * limit + 1 : 0;
-  const to = Math.min(page * limit, total);
+  const loaded = desktop ? Math.min(page * limit, total) : products.length;
+  const more = loaded < total;
+  // The phone loads the next page when the sentinel at the end scrolls into view.
+  const sentinel = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (desktop || !sentinel.current || !more || query.isFetching || typeof IntersectionObserver === 'undefined') return;
+    const io = new IntersectionObserver((es) => {
+      if (es.some((e) => e.isIntersecting)) {
+        setTall(true);
+        setPage((p) => p + 1);
+      }
+    }, { rootMargin: '200px' });
+    io.observe(sentinel.current);
+    return () => io.disconnect();
+  }, [desktop, more, query.isFetching, products.length]);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
@@ -1488,39 +1516,56 @@ function AllProductsModal({
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
+  const from = total ? (desktop ? (page - 1) * limit + 1 : 1) : 0;
+  const to = desktop ? Math.min(page * limit, total) : loaded;
   return (
-    <div className="prod-modal" role="dialog" aria-modal="true" aria-label={t('c.sal.allProducts')} onClick={onClose}>
+    <div className={`prod-modal${desktop ? ' desk' : ' sheet'}${tall ? ' tall' : ''}`} role="dialog" aria-modal="true" aria-label={t('c.sal.allProducts')} onClick={onClose}>
       <div className="prod-modal-card" onClick={(e) => e.stopPropagation()} data-testid="all-products">
+        {!desktop ? (
+          <button type="button" className="prod-sheet-handle" aria-label={t('c.sal.expand')} onClick={() => setTall((v) => !v)}>
+            <span />
+          </button>
+        ) : null}
         <div className="prod-modal-head">
           <h3 className="serif">{t('c.sal.allProducts')}</h3>
           <button className="iconbtn" aria-label={t('c.sal.close')} onClick={onClose}>
             ✕
           </button>
         </div>
-        <input className="input prod-search" value={typed} onChange={(e) => setTyped(e.target.value)} placeholder={t('c.sal.searchProducts')} aria-label={t('c.sal.searchProducts')} autoFocus />
+        <div className="pillsearch prod-search">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="M20 20l-4.2-4.2" /></svg>
+          <input value={typed} onChange={(e) => setTyped(e.target.value)} placeholder={t('c.sal.searchProducts')} aria-label={t('c.sal.searchProducts')} autoFocus={desktop} />
+          {typed ? (
+            <button type="button" className="clear" aria-label={t('c.sal.clear')} onClick={() => setTyped('')}>
+              ✕
+            </button>
+          ) : null}
+        </div>
         <div className="prod-modal-body">
-          {query.data && rows.length === 0 ? <p className="muted">{t('c.sal.noMatch')}</p> : null}
-          <div className="tr-grid">
+          {query.data && rows.length === 0 && !more ? <p className="muted">{t('c.sal.noMatch')}</p> : null}
+          <div className="tr-grid prod-modal-grid">
             {rows.map(({ pr, card }) => (
               <div key={pr.id} className={`tr-wrap${inProds(pr.id) ? ' on' : ''}`}>
                 <ProductCard pr={card} on={inProds(pr.id)} qty={prodQty(pr.id)} desktop={desktop} onClick={() => onPick(pr)} />
               </div>
             ))}
           </div>
+          {!desktop ? <div ref={sentinel} className="prod-sentinel" aria-hidden="true">{more ? <span className="muted">{t('c.sal.loadingMore')}</span> : null}</div> : null}
         </div>
         <div className="prod-modal-foot">
           <span className="muted tnum">{t('c.sal.pageOf', { from, to, total })}</span>
-          <span style={{ display: 'flex', gap: 8 }}>
-            <button className="btn btn-g" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
-              {t('c.sal.pagePrev')}
-            </button>
-            <button className="btn btn-g" disabled={to >= total} onClick={() => setPage((p) => p + 1)}>
-              {t('c.sal.pageNext')}
-            </button>
-          </span>
+          {desktop ? (
+            <span style={{ display: 'flex', gap: 8 }}>
+              <button className="btn btn-g" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
+                {t('c.sal.pagePrev')}
+              </button>
+              <button className="btn btn-g" disabled={!more} onClick={() => setPage((p) => p + 1)}>
+                {t('c.sal.pageNext')}
+              </button>
+            </span>
+          ) : null}
         </div>
       </div>
     </div>
   );
 }
-
