@@ -1414,17 +1414,17 @@ function ProductCard({ pr, on, qty, desktop, onClick }: { pr: ShelfProduct; on: 
   const promo = pr.promo && pr.price < pr.regularPrice ? pr.promo : null;
   return (
     <button className={`tr-card${desktop ? ' dtr' : ''}${on ? ' on' : ''}${promo ? ' promo' : ''}`} aria-pressed={on} data-product={pr.id} onClick={onClick}>
+      {promo ? (
+        <span className="promo-tag" data-testid="promo-tag">
+          {t('c.sal.promo')}
+          {promo.kind === 'pct' ? ` ${t('c.sal.promoPct', { n: promo.value })}` : ''}
+        </span>
+      ) : null}
       <span className="row1">
         <span className="nm">
           {pr.img ? <img className="prod-thumb" src={pr.img} alt="" /> : IcBottle}
           <span className="t">{pr.name}</span>
         </span>
-        {promo ? (
-          <span className="promo-tag" data-testid="promo-tag">
-            {t('c.sal.promo')}
-            {promo.kind === 'pct' ? ` ${t('c.sal.promoPct', { n: promo.value })}` : ''}
-          </span>
-        ) : null}
       </span>
       {pr.description ? <span className="sm muted prod-desc">{pr.description}</span> : null}
       <span className="in2">
