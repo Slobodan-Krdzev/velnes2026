@@ -370,3 +370,28 @@ PDF**; both fetch the bytes with the session's token (`getBlob`,
 bearer token. `suppliers.test.ts` asserts the 409 before delivery, the
 number, the headers and the `%PDF-` bytes from both doors.
 
+## Brands: suppliers add their own (2026-10-07)
+
+A brand was an HQ row, and the product panel only offered what the
+supplier's catalog already carried. Now the panel's brand field lists
+every brand on the platform (`GET /portal/brands`, the supplier's own
+first) and ends with "New brand…", which turns the field into an input.
+The server owns what happens on save: `ensureBrand` (migration
+`20261007200000_supplier_brands_self.sql`) finds the name
+case-insensitively — "Davines" and "DAVINES" are one brand, and the
+product takes the canonical spelling — creates it as a `brands` row with
+`source = 'supplier'` and the supplier remembered when it is new, links
+the supplier as carrying it (`supplier_brands`), and rings HQ's bell
+with a `brand_added` notice. HQ is told, not asked: no approval step. The
+HQ brands list shows who added each brand and when. Policies let a
+supplier insert a brand only in its own name and link only itself.
+What stays deferred: renaming or merging brands (HQ, later), and a brand
+owner's claim on a name.
+
+The product's **Category** is a free-text label on the supplier's
+product. It is used in two places only: the portal's catalog table shows
+it, and a salon browsing a connected supplier's catalog sees the
+products grouped under it as section headings. It is not linked to the
+platform's service-category taxonomy nor to the salon's own product
+categories.
+

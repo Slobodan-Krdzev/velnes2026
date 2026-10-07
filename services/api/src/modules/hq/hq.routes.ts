@@ -1648,7 +1648,13 @@ export function hqRoutes(app: FastifyInstance) {
     schema: { response: { 200: HqBrandListSchema } },
     handler: async () =>
       withHq(async (trx) => {
-        const brands = await trx.selectFrom('brands').selectAll().orderBy('name').execute();
+        const brands = await trx
+          .selectFrom('brands as b')
+          .leftJoin('suppliers as s', 's.id', 'b.addedBySupplierId')
+          .selectAll('b')
+          .select('s.name as addedBySupplier')
+          .orderBy('b.name')
+          .execute();
         const sups = await trx.selectFrom('suppliers').select(['id', 'name', 'territory']).orderBy('name').execute();
         const carried = await trx
           .selectFrom('supplierBrands as sb')
@@ -1656,7 +1662,7 @@ export function hqRoutes(app: FastifyInstance) {
           .select(['sb.supplierId', 'b.name'])
           .execute();
         return {
-          brands: brands.map((b) => ({ id: b.id, name: b.name, owner: b.owner, country: b.country })),
+          brands: brands.map((b) => ({ id: b.id, name: b.name, owner: b.owner, country: b.country, source: b.source as 'hq' | 'supplier', addedBySupplier: b.addedBySupplier ?? null, createdAt: b.createdAt.toISOString() })),
           carriage: sups.map((s2) => ({
             supplierId: s2.id,
             supplierName: s2.name,

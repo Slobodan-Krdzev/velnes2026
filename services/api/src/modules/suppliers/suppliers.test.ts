@@ -483,6 +483,29 @@ describe('the supplier chain', () => {
     const del = (url: string, token = bojanToken) =>
       app.inject({ method: 'DELETE', url, headers: { authorization: `Bearer ${token}` } });
 
+    // A brand the platform does not know is born on the product panel
+    // (2026-10-07): a platform row in the supplier's name, the link, and
+    // a note to HQ; the same name in another spelling is the same brand.
+    const nb = await post(`${API_PREFIX}/portal/catalog`, { name: 'Bond builder', brand: '  Olaplex  Pro ', sku: 'OLX-1', buy: 900 }, bojanToken);
+    expect(nb.statusCode, nb.body).toBe(200);
+    const brandRow = (await admin.query(`SELECT id, name, source, added_by_supplier_id FROM brands WHERE lower(name) = 'olaplex pro'`)).rows[0];
+    expect(brandRow).toMatchObject({ name: 'Olaplex Pro', source: 'supplier' });
+    expect((await admin.query(`SELECT 1 FROM supplier_brands WHERE brand_id=$1 AND supplier_id=$2`, [brandRow.id, brandRow.added_by_supplier_id])).rowCount).toBe(1);
+    expect((await admin.query(`SELECT title FROM platform_notices WHERE audience='hq' AND kind='brand_added' AND ref_id=$1`, [brandRow.id])).rows[0]?.title).toBe('New brand: Olaplex Pro');
+    const nb2 = await post(`${API_PREFIX}/portal/catalog`, { name: 'Bond builder 2', brand: 'OLAPLEX PRO', sku: 'OLX-2', buy: 900 }, bojanToken);
+    expect(nb2.statusCode).toBe(200);
+    expect((await admin.query(`SELECT brand FROM supplier_products WHERE id=$1`, [(nb2.json() as { id: string }).id])).rows[0].brand).toBe('Olaplex Pro');
+    expect((await admin.query(`SELECT count(*)::int AS c FROM brands WHERE lower(name)='olaplex pro'`)).rows[0].c).toBe(1);
+    expect((await admin.query(`SELECT count(*)::int AS c FROM platform_notices WHERE kind='brand_added' AND ref_id=$1`, [brandRow.id])).rows[0].c).toBe(1);
+    const offered = (await get(`${API_PREFIX}/portal/brands`, bojanToken)).json() as { brands: { name: string; carried: boolean }[] };
+    expect(offered.brands.find((b) => b.name === 'Olaplex Pro')?.carried).toBe(true);
+    const firstForeign = offered.brands.findIndex((b) => !b.carried); // own first, then the rest
+    if (firstForeign >= 0) expect(offered.brands.slice(0, firstForeign).every((b) => b.carried)).toBe(true);
+    // Every portal user of the platform is offered it from now on.
+    const theirs = (await get(`${API_PREFIX}/portal/brands`, vesnaToken)).json() as { brands: { name: string; carried: boolean }[] };
+    expect(theirs.brands.some((b) => b.name === 'Olaplex Pro')).toBe(true);
+    for (const id of [(nb.json() as { id: string }).id, (nb2.json() as { id: string }).id]) await del(`${API_PREFIX}/portal/catalog/${id}`);
+
     // Create a throwaway product, edit every kind of field, delete it.
     const created = await post(
       `${API_PREFIX}/portal/catalog`,

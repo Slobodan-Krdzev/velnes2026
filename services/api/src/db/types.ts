@@ -237,10 +237,13 @@ export interface AuditLog {
 }
 
 export interface Brands {
+  addedBySupplierId: string | null;
   country: Generated<string>;
+  createdAt: Generated<Timestamp>;
   id: Generated<string>;
   name: string;
   owner: Generated<string>;
+  source: Generated<string>;
 }
 
 export interface BusinessCategories {

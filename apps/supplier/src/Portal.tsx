@@ -3,6 +3,7 @@ import {
   PO_PERM_GROUPS,
   PO_SCOPES,
   PortalCompanySchema,
+  PortalBrandListSchema,
   PortalDashboardSchema,
   PortalNotificationListSchema,
   PortalProductCreateSchema,
@@ -743,8 +744,11 @@ function Catalog({
     if (asked === 'bulk-prices') setBulk(true);
     onAsked?.();
   }, [asked, canEdit, onAsked]);
+  const [brands, setBrands] = useState<string[]>([]);
   const reload = useCallback(() => {
     void pGet(SupplierProductListSchema, '/portal/catalog').then((r) => setRows(r.products));
+    // Every brand on the platform, this supplier's own first (2026-10-07).
+    void pGet(PortalBrandListSchema, '/portal/brands').then((r) => setBrands(r.brands.map((b) => b.name)));
   }, []);
   useEffect(reload, [reload]);
 
@@ -759,8 +763,6 @@ function Catalog({
       say(e instanceof PortalApiError ? e.message : 'failed');
     }
   };
-
-  const brands = [...new Set(rows.map((r) => r.brand).filter(Boolean))];
 
   return (
     <>
@@ -1015,6 +1017,10 @@ function ProductPanel({
   });
   const dirty = JSON.stringify(f) !== snap;
   const valid = !!(f.name.trim() && f.brand.trim() && f.sku.trim() && f.buy.trim() !== '');
+  // The brand field: the platform's list, or a new name typed in — which
+  // becomes a brand when the product is saved (the server owns that).
+  const NEW = '__new__';
+  const [newBrand, setNewBrand] = useState(!!product?.brand && !brands.includes(product.brand));
 
   const save = async () => {
     if (!valid) {
@@ -1096,17 +1102,30 @@ function ProductPanel({
               {t('po.brand')}
               <span className="req">*</span>
             </span>
-            {brands.length ? (
-              <select className="select" style={{ width: '100%' }} value={f.brand} onChange={set('brand')}>
+            {brands.length && !newBrand ? (
+              <select
+                className="select"
+                style={{ width: '100%' }}
+                value={f.brand}
+                aria-label={t('po.brand')}
+                onChange={(e) => {
+                  if (e.target.value === NEW) {
+                    setNewBrand(true);
+                    setF((x) => ({ ...x, brand: '' }));
+                  } else setF((x) => ({ ...x, brand: e.target.value }));
+                }}
+              >
                 {brands.map((b) => (
                   <option key={b} value={b}>
                     {b}
                   </option>
                 ))}
+                <option value={NEW}>{t('po.newBrand')}</option>
               </select>
             ) : (
-              <input className="input" value={f.brand} onChange={set('brand')} />
+              <input className="input" value={f.brand} onChange={set('brand')} placeholder={t('po.newBrandName')} aria-label={t('po.newBrandName')} autoFocus={newBrand && brands.length > 0} />
             )}
+            {newBrand || !brands.length ? <span className="muted" style={{ display: 'block', fontSize: 12, marginTop: 4 }}>{t('po.brandHint')}</span> : null}
           </label>
           <label className="field">
             <span>{t('po.category')}</span>

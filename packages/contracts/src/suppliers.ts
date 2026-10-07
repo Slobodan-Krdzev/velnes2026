@@ -178,6 +178,13 @@ export const PortalSalonSchema = z.object({
 });
 export const PortalSalonListSchema = z.object({ salons: z.array(PortalSalonSchema) });
 
+/** Every brand on the platform, as the product panel offers it: the
+ *  supplier's own first. A name not in this list, typed into the panel,
+ *  becomes a new brand when the product is saved (2026-10-07). */
+export const PortalBrandListSchema = z.object({
+  brands: z.array(z.object({ name: z.string(), carried: z.boolean() })),
+});
+
 export const PortalDashboardSchema = z.object({
   supplierName: z.string(),
   supplierType: z.string(),

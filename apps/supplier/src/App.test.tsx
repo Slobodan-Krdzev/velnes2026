@@ -86,6 +86,7 @@ function mockApi(calls: { method: string; path: string; body?: unknown }[]) {
             order('submitted', 'd4000000-0000-4000-8000-000000000003', 'CEN-0043'),
           ],
         });
+      if (path.includes('/portal/brands')) return ok({ brands: [{ name: 'Thera-Band', carried: true }, { name: 'CureTape', carried: true }, { name: 'Davines', carried: false }] });
       if (path.includes('/portal/catalog') && method === 'GET')
         return ok({
           products: [{
@@ -302,5 +303,26 @@ describe('the supplier portal', () => {
     expect(screen.getAllByText((c) => /6[.,\s]600/.test(c)).length).toBeGreaterThan(0);
     // The drawer offers the PDF too (2026-10-06).
     expect(screen.getByRole('button', { name: 'View as PDF' })).toBeDefined();
+  });
+
+  it('catalog: the brand field lists every platform brand and takes a new one, which the save sends as plain text', async () => {
+    const calls: { method: string; path: string; body?: unknown }[] = [];
+    mockApi(calls);
+    await signIn();
+    await userEvent.click(screen.getByRole('button', { name: 'Catalog' }));
+    await screen.findByText('Thera-Band resistance set, 3 levels');
+    await userEvent.click(screen.getByRole('button', { name: 'Edit' }));
+    const select = (await screen.findByLabelText('Brand')) as HTMLSelectElement;
+    expect(select.value).toBe('Thera-Band');
+    expect([...select.options].map((o) => o.textContent)).toEqual(['Thera-Band', 'CureTape', 'Davines', 'New brand…']);
+    await userEvent.selectOptions(select, '__new__');
+    const input = await screen.findByLabelText('Name of the new brand');
+    expect(screen.getByText(/added to the platform when you save/)).toBeDefined();
+    await userEvent.type(input, 'Olaplex');
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+    await waitFor(() => {
+      const sent = calls.find((c) => c.method === 'PATCH' && c.path.includes('/portal/catalog/'));
+      expect((sent?.body as { brand: string }).brand).toBe('Olaplex');
+    });
   });
 });

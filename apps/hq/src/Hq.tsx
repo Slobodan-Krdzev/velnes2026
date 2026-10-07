@@ -2398,7 +2398,14 @@ function Suppliers({ say, isSuper }: { say: (m: string) => void; isSuper: boolea
             <span className="t">{t('hq.brandsTitle')}</span>
             {(brandData?.brands ?? []).map((b) => (
               <div key={b.id} className="kv">
-                <span className="k">{b.name}</span>
+                <span className="k">
+                  {b.name}
+                  {b.source === 'supplier' ? (
+                    <span className="muted" style={{ display: 'block', fontSize: 12, fontWeight: 500 }} data-testid="brand-source">
+                      {t('hq.brandBySupplier', { name: b.addedBySupplier ?? '—' })} · {b.createdAt.slice(0, 10)}
+                    </span>
+                  ) : null}
+                </span>
                 <span className="v">{b.country}</span>
               </div>
             ))}

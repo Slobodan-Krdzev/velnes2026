@@ -309,6 +309,10 @@ export const HqBrandSchema = z.object({
   name: z.string(),
   owner: z.string(),
   country: z.string(),
+  /** 'hq' when HQ created it; 'supplier' when a supplier added it from its product panel (2026-10-07). */
+  source: z.enum(['hq', 'supplier']),
+  addedBySupplier: z.string().nullable(),
+  createdAt: z.iso.datetime(),
 });
 export const HqBrandListSchema = z.object({
   brands: z.array(HqBrandSchema),
