@@ -863,8 +863,8 @@ function BookCard({ p, desktop }: { p: Page; desktop: boolean }) {
                 })}
               </div>
               {p.productsTotal > 0 ? (
-                <button className="btn-secondary viewall" onClick={() => p.setAllProdsOpen(true)} data-testid="see-all-products">
-                  {t('c.sal.seeAll')} · {p.productsTotal}
+                <button className="btn btn-g viewall" onClick={() => p.setAllProdsOpen(true)} data-testid="see-all-products">
+                  {t('c.sal.seeAll')} ({p.productsTotal}) {IcArr}
                 </button>
               ) : null}
               {p.allProdsOpen && p.location ? (
@@ -1511,10 +1511,10 @@ function AllProductsModal({
         <div className="prod-modal-foot">
           <span className="muted tnum">{t('c.sal.pageOf', { from, to, total })}</span>
           <span style={{ display: 'flex', gap: 8 }}>
-            <button className="btn-secondary" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
+            <button className="btn btn-g" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
               {t('c.sal.pagePrev')}
             </button>
-            <button className="btn-secondary" disabled={to >= total} onClick={() => setPage((p) => p + 1)}>
+            <button className="btn btn-g" disabled={to >= total} onClick={() => setPage((p) => p + 1)}>
               {t('c.sal.pageNext')}
             </button>
           </span>

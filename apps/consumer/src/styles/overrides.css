@@ -1918,7 +1918,7 @@ a.pop-go:hover {
 .prod-search{margin:4px 20px 10px;width:calc(100% - 40px)}
 .prod-modal-body{flex:1;min-height:0;overflow:auto;padding:4px 20px 12px}
 .prod-modal-foot{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 20px 16px;border-top:1px solid var(--line-soft);font-size:13px}
-.prod-modal-foot .btn-secondary:disabled{opacity:.45;cursor:default}
+.prod-modal-foot .btn:disabled{opacity:.45;cursor:default}
 @media(max-width:640px){
   .prod-modal{align-items:flex-end;padding:0}
   .prod-modal-card{border-radius:18px 18px 0 0;max-height:92vh}
