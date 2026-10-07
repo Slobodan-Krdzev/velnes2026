@@ -323,6 +323,8 @@ describe('the supplier portal', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Catalog' }));
     await screen.findByText('Thera-Band resistance set, 3 levels');
     await userEvent.click(screen.getByRole('button', { name: 'Edit' }));
+    // The EAN field explains itself on hover: the barcode number, optional, not scanned yet.
+    expect(screen.getByTestId('ean-tip').getAttribute('data-tip')).toMatch(/barcode number.*EAN-13.*Optional/);
     const select = (await screen.findByLabelText('Brand')) as HTMLSelectElement;
     expect(select.value).toBe('Thera-Band');
     expect([...select.options].map((o) => o.textContent)).toEqual(['Thera-Band', 'CureTape', 'Davines', 'New brand…']);

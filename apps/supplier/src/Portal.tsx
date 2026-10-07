@@ -1164,8 +1164,11 @@ function ProductPanel({
             <input className="input" value={f.sku} onChange={set('sku')} />
           </label>
           <label className="field">
-            <span>{t('po.ean')}</span>
-            <input className="input" value={f.ean} onChange={set('ean')} />
+            <span>
+              {t('po.ean')}
+              <InfoTip text={t('po.eanTip')} testId="ean-tip" />
+            </span>
+            <input className="input" value={f.ean} onChange={set('ean')} inputMode="numeric" placeholder="3474636975918" />
           </label>
           <label className="field">
             <span>{t('po.size')}</span>
@@ -3187,5 +3190,14 @@ function AskCategory({ say }: { say: (m: string) => void }) {
         </ul>
       ) : null}
     </div>
+  );
+}
+
+/** A small info icon whose tooltip explains a field on hover or focus. */
+function InfoTip({ text, testId }: { text: string; testId?: string }) {
+  return (
+    <button type="button" className="hovertip" data-tip={text} aria-label={text} data-testid={testId} onClick={(e) => e.preventDefault()}>
+      <Icon d={I.info} size={14} />
+    </button>
   );
 }

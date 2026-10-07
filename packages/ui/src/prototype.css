@@ -2443,6 +2443,12 @@ body.ob-src .ob-body{display:flex;align-items:center;justify-content:center;
 .infotip-title{font-weight:800;font-size:13px;margin-bottom:6px}
 .infotip-p{margin:0 0 8px;font-size:13px;line-height:1.45;font-weight:500;color:var(--text)}
 .infotip-p:last-child{margin-bottom:0}
+/* A ⓘ whose explanation shows on hover or keyboard focus (2026-10-07); `data-tip` carries the text. */
+.hovertip{position:relative;display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;margin-left:4px;vertical-align:middle;border:0;background:none;padding:0;color:var(--ink-muted);cursor:help;border-radius:50%}
+.hovertip:hover,.hovertip:focus-visible{color:var(--ink)}
+.hovertip::after{content:attr(data-tip);position:absolute;right:-4px;bottom:calc(100% + 8px);width:max-content;max-width:280px;padding:8px 10px;border-radius:8px;background:var(--ink);color:#fff;font-size:12px;line-height:1.45;font-weight:500;text-align:left;white-space:normal;box-shadow:0 6px 20px rgba(0,0,0,.18);opacity:0;pointer-events:none;transition:opacity .12s;z-index:30}
+.hovertip:hover::after,.hovertip:focus-visible::after{opacity:1}
+.hovertip.left::after{right:auto;left:-4px}
 
 /* Booking changes (Alex, 2026-09-30): a cancelled visit stays on the
    grid as history — muted and struck, never in the way. */

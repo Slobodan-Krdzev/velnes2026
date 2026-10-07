@@ -2033,6 +2033,7 @@ export const sq: Record<TranslationKey, string> = {
   'hq.brandByHq': 'Velnes HQ',
   'hq.requesterSupplier': 'furnitor',
   'po.ean': 'EAN',
+  'po.eanTip': 'Numri i barkodit i shtypur në paketim (EAN-13 / GTIN). Opsional. Sallonet e shohin në katalogun tuaj dhe e përdorin për ta përputhur produktin në raftin e tyre; Velnes ende nuk e skanon në arkë.',
   'po.size': 'Madhësia',
   'po.piecesPerBox': 'Copë për kuti',
   'po.purchasePrice': 'Çmimi i blerjes',

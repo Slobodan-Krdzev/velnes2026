@@ -2033,6 +2033,7 @@ export const mk: Record<TranslationKey, string> = {
   'hq.brandByHq': 'Velnes HQ',
   'hq.requesterSupplier': 'добавувач',
   'po.ean': 'EAN',
+  'po.eanTip': 'Бројот на баркодот отпечатен на пакувањето (EAN-13 / GTIN). Опционално. Салоните го гледаат во вашиот каталог и го користат за да го совпаднат производот на својата полица; Velnes сè уште не го скенира на каса.',
   'po.size': 'Големина',
   'po.piecesPerBox': 'Парчиња по кутија',
   'po.purchasePrice': 'Набавна цена',

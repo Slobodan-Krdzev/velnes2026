@@ -2040,6 +2040,7 @@ export const en = {
   'hq.brandByHq': 'Velnes HQ',
   'hq.requesterSupplier': 'supplier',
   'po.ean': 'EAN',
+  'po.eanTip': 'The barcode number printed on the packaging (EAN-13 / GTIN). Optional. Salons see it in your catalog and use it to match the product on their own shelf; Velnes does not scan it at the till yet.',
   'po.size': 'Size',
   'po.piecesPerBox': 'Pieces per box',
   'po.purchasePrice': 'Purchase price',
