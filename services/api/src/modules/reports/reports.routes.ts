@@ -1,4 +1,5 @@
 import { ReportQuerySchema, ReportSchema, type Report } from '@velnes/contracts';
+import { bp, splitGross } from '@velnes/contracts';
 import type { FastifyInstance } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { sql } from 'kysely';
@@ -101,7 +102,7 @@ export async function buildReport(
       's.name as name',
       'sc.name as category',
       sql<number>`sum(l.qty)::int`.as('booked'),
-      sql<number>`sum(l.qty * l.unit_price - l.line_discount)::int`.as('revenue'),
+      sql<number>`sum(l.amount)::int`.as('revenue'),
     ])
     .groupBy(['s.id', 's.name', 'sc.name'])
     .orderBy('revenue', 'desc')
@@ -113,7 +114,7 @@ export async function buildReport(
       'p.id as id',
       'p.name as name',
       sql<number>`sum(l.qty)::int`.as('sold'),
-      sql<number>`sum(l.qty * l.unit_price - l.line_discount)::int`.as('revenue'),
+      sql<number>`sum(l.amount)::int`.as('revenue'),
       sql<number>`coalesce((select sum(stock)::int from location_catalog_products lcp where lcp.product_id = p.id), 0)`.as(
         'stock',
       ),
@@ -185,16 +186,20 @@ export async function buildReport(
     .$if(!!scope.own, (q) => q.where('i.employeeId', '=', scope.own!))
     .select([
       'l.vat as rate',
-      sql<number>`sum(l.qty * l.unit_price - l.line_discount)::int`.as('gross'),
+      sql<number>`sum(l.amount)::int`.as('gross'),
     ])
     .groupBy('l.vat')
     .execute();
-  const vatMap = new Map(vatRows.map((r) => [r.rate, r.gross] as const));
-  const vat: Report['vat'] = [18, 5].map((rate) => {
-    const gross = vatMap.get(rate) ?? 0;
-    const net = Math.round(gross / (1 + rate / 100));
-    return { rate, net, vat: gross - net, gross };
-  });
+  // Every rate the lines actually carry (Phase 0, 2026-10-06) — no
+  // list of rates lives in code. Till prices are VAT-inclusive, so the
+  // net is split out of the gross by the one billing-math door, in
+  // whole denars as the ledger keeps them.
+  const vat: Report['vat'] = vatRows
+    .map((r) => {
+      const s = splitGross(Number(r.gross), bp(Number(r.rate)));
+      return { rate: Number(r.rate), net: s.net, vat: s.vat, gross: s.gross };
+    })
+    .sort((a, b) => b.rate - a.rate);
 
   let srcQ = trx
     .selectFrom('appointments')
@@ -250,7 +255,7 @@ export async function buildReport(
     let prodQ = trx
       .selectFrom('invoiceLines as l')
       .innerJoin('invoices as i', 'i.id', 'l.invoiceId')
-      .select(sql<number>`coalesce(sum(l.qty * l.unit_price - l.line_discount),0)::int`.as('rev'))
+      .select(sql<number>`coalesce(sum(l.amount),0)::int`.as('rev'))
       .where('i.status', '=', 'Paid')
       .where('i.locationId', '=', l.id)
       .where('l.itemClass', '=', 'product')

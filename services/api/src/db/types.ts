@@ -49,6 +49,9 @@ export type MtxStatus = "config_incomplete" | "failed" | "paid";
 
 export type Numeric = ColumnType<string, number | string, number | string>;
 
+/** bigint columns come back from pg as strings; the services Number() them. */
+export type Int8 = ColumnType<string, bigint | number | string, bigint | number | string>;
+
 export type PaymentAccountStatus = "active" | "incomplete";
 
 export type PurchaseOrderStatus = "accepted" | "approval" | "cancelled" | "delivered" | "disputed" | "draft" | "partdelivered" | "partial" | "processing" | "shipped" | "submitted";
@@ -234,10 +237,13 @@ export interface AuditLog {
 }
 
 export interface Brands {
+  addedBySupplierId: string | null;
   country: Generated<string>;
+  createdAt: Generated<Timestamp>;
   id: Generated<string>;
   name: string;
   owner: Generated<string>;
+  source: Generated<string>;
 }
 
 export interface BusinessCategories {
@@ -279,7 +285,8 @@ export interface CategoryRequests {
   name: string;
   note: Generated<string>;
   status: Generated<string>;
-  tenantId: string;
+  supplierId: string | null;
+  tenantId: string | null;
 }
 
 export interface CheckoutItems {
@@ -593,6 +600,7 @@ export interface InvoiceCounters {
 }
 
 export interface InvoiceLines {
+  amount: Generated<number>;
   appointmentId: string | null;
   description: string;
   id: Generated<string>;
@@ -646,9 +654,199 @@ export interface LastMinuteOffers {
   tenantId: string;
 }
 
+export interface BillingConsentEvents {
+  actorEmployeeId: string | null;
+  actorName: Generated<string>;
+  at: Generated<Timestamp>;
+  billingCustomerId: string;
+  granted: boolean;
+  id: Generated<string>;
+  note: Generated<string>;
+  tenantId: string;
+}
+
+export interface BillingCustomers {
+  address: Generated<string>;
+  city: Generated<string>;
+  consentElectronicAt: Timestamp | null;
+  country: Generated<string>;
+  createdAt: Generated<Timestamp>;
+  customerId: string | null;
+  edb: Generated<string>;
+  email: Generated<string>;
+  id: Generated<string>;
+  kind: string;
+  name: string;
+  phone: Generated<string>;
+  tenantId: string;
+  updatedAt: Generated<Timestamp>;
+  vatRegNo: Generated<string>;
+  zip: Generated<string>;
+}
+
+export interface BillingAssets {
+  bytes: number;
+  createdAt: Generated<Timestamp>;
+  data: string;
+  kind: string;
+  mime: string;
+  sha256: string;
+  tenantId: string;
+}
+
+export interface BillingEvents {
+  actorEmployeeId: string | null;
+  actorName: Generated<string>;
+  at: Generated<Timestamp>;
+  data: Generated<Json>;
+  id: Generated<string>;
+  invoiceId: string;
+  kind: string;
+  source: Generated<string>;
+  tenantId: string;
+}
+
+export interface BillingSequences {
+  createdAt: Generated<Timestamp>;
+  lastSeq: Generated<number>;
+  legalEntityId: string;
+  series: string;
+  tenantId: string;
+  updatedAt: Generated<Timestamp>;
+  year: number;
+}
+
+export interface BillingInvoiceLines {
+  allocatedDiscountMinor: Generated<Int8>;
+  appointmentId: string | null;
+  description: string;
+  employeeName: Generated<string>;
+  exempt: Generated<boolean>;
+  grossMinor: Int8;
+  id: Generated<string>;
+  invoiceId: string;
+  itemClass: string;
+  netMinor: Int8;
+  productId: string | null;
+  qtyMilli: number;
+  serviceId: string | null;
+  sort: Generated<number>;
+  sourceAmountMinor: Int8;
+  tenantId: string;
+  tillLineId: string | null;
+  unit: Generated<string>;
+  unitPriceMinor: Int8;
+  vatMinor: Int8;
+  vatRateBp: number;
+}
+
+export interface BillingInvoices {
+  billingCustomerId: string | null;
+  buyer: Json | null;
+  correctsInvoiceId: string | null;
+  createdAt: Generated<Timestamp>;
+  createdBy: string | null;
+  createdByName: Generated<string>;
+  currency: string;
+  discountMinor: Generated<Int8>;
+  dueDate: Timestamp | null;
+  efakturaEuid: string | null;
+  efakturaStatus: string | null;
+  fiscalReceiptRef: string | null;
+  grossMinor: Int8;
+  id: Generated<string>;
+  idempotencyKey: string | null;
+  issueDate: Timestamp | null;
+  issuedAt: Timestamp | null;
+  issuedBy: string | null;
+  issuedByName: Generated<string>;
+  issueKey: string | null;
+  issuer: Json;
+  kind: Generated<string>;
+  lang: Generated<string>;
+  legalEntityId: string;
+  location: Json;
+  locationId: string;
+  netMinor: Int8;
+  notes: Generated<string>;
+  number: string | null;
+  numberSeq: number | null;
+  origin: Generated<Json>;
+  originAppointmentId: string | null;
+  originSaleId: string | null;
+  paidMinor: Generated<Int8>;
+  pdfRenderer: string | null;
+  pdfSha256: string | null;
+  pricesIncludeVat: Generated<boolean>;
+  series: string | null;
+  status: Generated<string>;
+  supplyDate: Timestamp;
+  tenantId: string;
+  updatedAt: Generated<Timestamp>;
+  updatedBy: string | null;
+  updatedByName: Generated<string>;
+  vatBreakdown: Generated<Json>;
+  vatMinor: Int8;
+  vatRegistered: boolean;
+  voidedAt: Timestamp | null;
+  year: number | null;
+}
+
+export interface BillingPayments {
+  amountMinor: Int8;
+  createdAt: Generated<Timestamp>;
+  currency: string;
+  id: Generated<string>;
+  invoiceId: string;
+  method: string;
+  note: Generated<string>;
+  originKey: string | null;
+  originSaleId: string | null;
+  paidAt: Timestamp;
+  paidOn: Timestamp;
+  provider: string | null;
+  providerPaymentId: string | null;
+  recordedBy: string | null;
+  recordedByName: Generated<string>;
+  reference: Generated<string>;
+  source: string;
+  tenantId: string;
+}
+
+export interface BillingProfiles {
+  address: Generated<string>;
+  bankAccount: Generated<string>;
+  bankName: Generated<string>;
+  city: Generated<string>;
+  contactEmail: Generated<string>;
+  country: Generated<string>;
+  createdAt: Generated<Timestamp>;
+  creditPrefix: Generated<string>;
+  defaultCurrency: Generated<string>;
+  defaultVatRateBp: Generated<number>;
+  footerText: Generated<string>;
+  invoicePrefix: Generated<string>;
+  issueMode: Generated<string>;
+  legalEntityId: string;
+  logo: string | null;
+  numberWidth: Generated<number>;
+  paymentInstructions: Generated<string>;
+  phone: Generated<string>;
+  pricesIncludeVat: Generated<boolean>;
+  signatoryName: Generated<string>;
+  tenantId: string;
+  tradingName: string | null;
+  updatedAt: Generated<Timestamp>;
+  vatRegistered: Generated<boolean>;
+  website: Generated<string>;
+  yearlyReset: Generated<boolean>;
+  zip: Generated<string>;
+}
+
 export interface LegalEntities {
   createdAt: Generated<Timestamp>;
   currency: Generated<string>;
+  embs: string | null;
   fiscalProfileId: string | null;
   id: Generated<string>;
   isDefault: Generated<boolean>;
@@ -883,6 +1081,22 @@ export interface ProductCategories {
   sort: Generated<number>;
 }
 
+export interface ProductPromotions {
+  active: Generated<boolean>;
+  createdAt: Generated<Timestamp>;
+  createdBy: string | null;
+  createdByName: Generated<string>;
+  endedAt: Timestamp | null;
+  ends: Timestamp;
+  id: Generated<string>;
+  kind: string;
+  note: Generated<string>;
+  productId: string;
+  starts: Timestamp;
+  tenantId: string;
+  value: number;
+}
+
 export interface Products {
   description: string | null;
   active: Generated<boolean>;
@@ -923,6 +1137,8 @@ export interface PurchaseOrders {
   createdBy: string | null;
   expected: Timestamp | null;
   id: Generated<string>;
+  invoicedAt: Timestamp | null;
+  invoiceNo: string | null;
   locationId: string;
   offerId: string | null;
   ref: string;
@@ -1178,6 +1394,7 @@ export interface SupplierProducts {
   brand: Generated<string>;
   buy: Generated<number>;
   category: Generated<string>;
+  categoryId: string | null;
   descr: Generated<string>;
   ean: Generated<string>;
   id: Generated<string>;
@@ -1238,6 +1455,31 @@ export interface Suppliers {
   territory: Generated<string>;
   type: Generated<string>;
   verified: Generated<boolean>;
+}
+
+export interface SupplierMedia {
+  createdAt: Generated<Timestamp>;
+  data: Buffer;
+  id: Generated<string>;
+  mime: Generated<string>;
+  name: string;
+  sha256: string;
+  sizeBytes: number;
+  supplierId: string;
+  uploadedBy: string | null;
+  uploadedByName: Generated<string>;
+}
+
+export interface SupplierJoinLinks {
+  createdAt: Generated<Timestamp>;
+  createdBy: Generated<string>;
+  expiresAt: Timestamp;
+  id: Generated<string>;
+  revokedAt: Timestamp | null;
+  supplierId: string;
+  supplierUserId: string;
+  tokenHash: string;
+  usedAt: Timestamp | null;
 }
 
 export interface SupplierUsers {
@@ -1307,6 +1549,15 @@ export interface DB {
   appointmentHistory: AppointmentHistory;
   appointmentProducts: AppointmentProducts;
   appointments: Appointments;
+  billingAssets: BillingAssets;
+  billingConsentEvents: BillingConsentEvents;
+  billingEvents: BillingEvents;
+  billingCustomers: BillingCustomers;
+  billingInvoiceLines: BillingInvoiceLines;
+  billingInvoices: BillingInvoices;
+  billingPayments: BillingPayments;
+  billingProfiles: BillingProfiles;
+  billingSequences: BillingSequences;
   bookingChangeRequests: BookingChangeRequests;
   assistantActions: AssistantActions;
   assistantDrafts: AssistantDrafts;
@@ -1364,6 +1615,7 @@ export interface DB {
   platformNotices: PlatformNotices;
   premiumOffers: PremiumOffers;
   productCategories: ProductCategories;
+  productPromotions: ProductPromotions;
   products: Products;
   purchaseOrderLines: PurchaseOrderLines;
   purchaseOrders: PurchaseOrders;
@@ -1393,6 +1645,8 @@ export interface DB {
   supplierPromotions: SupplierPromotions;
   supplierRoles: SupplierRoles;
   suppliers: Suppliers;
+  supplierJoinLinks: SupplierJoinLinks;
+  supplierMedia: SupplierMedia;
   supplierUsers: SupplierUsers;
   supportTickets: SupportTickets;
   taxRules: TaxRules;

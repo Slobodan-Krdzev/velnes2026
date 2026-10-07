@@ -107,6 +107,7 @@ function mockApi(calls: { method: string; path: string; body?: unknown }[]) {
               action: 'Location lifecycle', object: 'Location · Debar Maalo',
               before: 'SUBMITTED', after: 'APPROVED', source: 'Web', reason: null,
               tenantName: 'Velnes Fizio Centar',
+              requester: 'salon',
             },
           ],
         });

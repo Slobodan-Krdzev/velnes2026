@@ -1,3 +1,4 @@
+import { invoicePdf } from './invoice-pdf.service.js';
 import {
   OrderCreateSchema,
   PurchaseOrderListSchema,
@@ -5,8 +6,9 @@ import {
   PurchaseOrderStatusSchema,
   ReceiveRequestSchema,
   SupplierListSchema,
+  SupplierMediaListSchema,
   SupplierProductListSchema,
-  SupplierPromotionListSchema,
+  SalonPromotionListSchema,
 } from '@velnes/contracts';
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
@@ -14,12 +16,15 @@ import { z } from 'zod';
 import { withTenant } from '../../db/index.js';
 import { can, permsFor } from '../auth/authz.service.js';
 import { localIso } from '../scheduling/scheduling.service.js';
+import { salonPromotions } from './promotions.service.js';
+import { listMedia, readMedia } from './media.service.js';
 import {
   createOrder,
   poTransition,
   receiveOrder,
   SupplierError,
   toOrderContract,
+  notifyConnectionRequested,
 } from './suppliers.service.js';
 
 const Err = z.object({ error: z.string(), message: z.string() });
@@ -139,6 +144,7 @@ export function suppliersRoutes(app: FastifyInstance) {
             locationIds: req.body.locationIds,
           })
           .execute();
+        await notifyConnectionRequested(trx, req.claims.ten, req.params.id);
         return { ok: true as const };
       }),
   });
@@ -185,6 +191,7 @@ export function suppliersRoutes(app: FastifyInstance) {
             lead: p.lead,
             use: p.use,
             category: p.category,
+            categoryId: p.categoryId,
             descr: p.descr,
             sample: p.sample,
             linkedProductId: links.find((l) => l.supplierProductId === p.id)?.id ?? null,
@@ -210,6 +217,69 @@ export function suppliersRoutes(app: FastifyInstance) {
         const orders = [];
         for (const row of rows) orders.push(await toOrderContract(trx, row.id));
         return { orders };
+      }),
+  });
+
+  // The invoice as a PDF (Alex, 2026-10-06): the same document the
+  // supplier opens, for a delivered order of this salon.
+  // ── A connected supplier's printed catalogs (2026-10-07). RLS shows a
+  // salon only the files of suppliers it is connected to; the door says
+  // 404 for anyone else rather than an empty list.
+  const connectedTo = async (trx: Parameters<typeof permsFor>[0], supplierId: string) =>
+    !!(await trx
+      .selectFrom('supplierConnections')
+      .select('supplierId')
+      .where('supplierId', '=', supplierId)
+      .where('status', '=', 'connected')
+      .executeTakeFirst());
+
+  r.route({
+    method: 'GET',
+    url: '/suppliers/:id/media',
+    preHandler: [app.authenticate],
+    schema: { params: z.object({ id: z.uuid() }), response: { 200: SupplierMediaListSchema, 403: Err, 404: Err } },
+    handler: async (req, reply) =>
+      withTenant(req.claims.ten, async (trx) => {
+        if (!(await gate(trx, req.claims, reply))) return reply;
+        if (!(await connectedTo(trx, req.params.id))) return reply.code(404).send({ error: 'NOT_FOUND', message: 'Not a connected supplier' });
+        return { files: await listMedia(trx, req.params.id) };
+      }),
+  });
+
+  r.route({
+    method: 'GET',
+    url: '/suppliers/:id/media/:fid/file',
+    preHandler: [app.authenticate],
+    schema: { params: z.object({ id: z.uuid(), fid: z.uuid() }) },
+    handler: async (req, reply) =>
+      withTenant(req.claims.ten, async (trx) => {
+        if (!(await gate(trx, req.claims, reply))) return reply;
+        const file = await readMedia(trx, req.params.id, req.params.fid);
+        if (!file) return reply.code(404).send({ error: 'NOT_FOUND', message: 'No such file' });
+        return reply
+          .header('content-type', file.mime)
+          .header('content-disposition', `inline; filename="${encodeURIComponent(file.name)}"`)
+          .send(file.data);
+      }),
+  });
+
+  r.route({
+    method: 'GET',
+    url: '/purchase-orders/:id/invoice.pdf',
+    preHandler: [app.authenticate],
+    schema: { params: z.object({ id: z.uuid() }) },
+    handler: async (req, reply) =>
+      withTenant(req.claims.ten, async (trx) => {
+        if (!(await gate(trx, req.claims, reply))) return reply;
+        try {
+          const { buffer, invoiceNo } = await invoicePdf(trx, req.params.id);
+          return reply
+            .header('content-type', 'application/pdf')
+            .header('content-disposition', `inline; filename="${invoiceNo}.pdf"`)
+            .send(buffer);
+        } catch (e) {
+          return sendErr(reply, e);
+        }
       }),
   });
 
@@ -283,41 +353,19 @@ export function suppliersRoutes(app: FastifyInstance) {
       }),
   });
 
+  // Promotions from connected suppliers, running or about to, with the
+  // reasons each may matter to this salon — one ranking for the tab and
+  // for the flight deck's picks (2026-10-07).
   r.route({
     method: 'GET',
     url: '/supplier-promotions',
     preHandler: [app.authenticate],
-    schema: { response: { 200: SupplierPromotionListSchema, 403: Err } },
+    schema: { querystring: z.object({ limit: z.coerce.number().int().min(1).max(50).optional() }), response: { 200: SalonPromotionListSchema, 403: Err } },
     handler: async (req, reply) =>
       withTenant(req.claims.ten, async (trx) => {
         if (!(await gate(trx, req.claims, reply))) return reply;
-        const rows = await trx
-          .selectFrom('supplierPromotions as p')
-          .innerJoin('suppliers as s', 's.id', 'p.supplierId')
-          .selectAll('p')
-          .select('s.name as supplierName')
-          .where('p.active', '=', true)
-          .orderBy('p.starts', 'desc')
-          .execute();
-        return {
-          promotions: rows.map((p) => ({
-            id: p.id,
-            supplierId: p.supplierId,
-            supplierName: p.supplierName,
-            brand: p.brand,
-            title: p.title,
-            kind: p.kind,
-            productIds: p.productIds,
-            starts: localIso(p.starts),
-            ends: localIso(p.ends),
-            minOrder: p.minOrder,
-            usageLimit: p.usageLimit,
-            terms: p.terms,
-            audience: p.audience,
-            value: p.value,
-            per: p.per,
-          })),
-        };
+        const all = await salonPromotions(trx, req.claims.ten);
+        return { promotions: req.query.limit ? all.slice(0, req.query.limit) : all };
       }),
   });
 }

@@ -56,6 +56,7 @@ describe('the supplier chain', () => {
   afterAll(async () => {
     if (orderId) {
       await admin.query(`DELETE FROM supplier_notifications WHERE ref_id=$1`, [orderId]);
+      await admin.query(`DELETE FROM platform_notices WHERE ref_id=$1`, [orderId]);
       await admin.query(`DELETE FROM mail_outbox WHERE ref_id=$1`, [orderId]);
       await admin.query(`DELETE FROM purchase_order_lines WHERE order_id=$1`, [orderId]);
       await admin.query(`DELETE FROM purchase_orders WHERE id=$1`, [orderId]);
@@ -117,12 +118,49 @@ describe('the supplier chain', () => {
   it('runs the connection handshake: salon asks, the portal accepts', async () => {
     const ask = await post(`${API_PREFIX}/suppliers/${demo.sup3}/connect`, { note: 'New customer' });
     expect(ask.statusCode).toBe(200);
+    // The supplier hears it: a row in its bell, kind `connection`,
+    // pointing at the salon (2026-10-06).
+    const heard = await admin.query(
+      `SELECT title, kind FROM supplier_notifications WHERE supplier_id=$1 AND ref_id=$2 ORDER BY created_at DESC LIMIT 1`,
+      [demo.sup3, demo.business],
+    );
+    expect(heard.rows[0]).toMatchObject({ kind: 'connection' });
+    expect(heard.rows[0].title).toContain('Connection request');
     // Adriatic has no portal user seeded; BeautyPro's Vesna sees only
     // her own connections (RLS) — so the sup3 request is invisible.
     const salons = await get(`${API_PREFIX}/portal/salons`, vesnaToken);
     expect(
       salons.json().salons.every((s: { status: string; note: string }) => s.status !== 'pending' || s.note !== 'New customer'),
     ).toBe(true);
+  });
+
+  it('the portal\'s answer rings the salon\'s bell and mails its owner — accepted here, declined the same way', async () => {
+    // Another salon asks BeautyPro; Bojan accepts from the portal.
+    const other = (
+      await admin.query(
+        `SELECT b.id, o.email FROM businesses b JOIN employees o ON o.id = b.owner_employee_id
+         WHERE b.id <> $1 AND NOT EXISTS (SELECT 1 FROM supplier_connections c WHERE c.tenant_id = b.id AND c.supplier_id = $2) LIMIT 1`,
+        [demo.business, demo.sup1],
+      )
+    ).rows[0] as { id: string; email: string };
+    expect(other).toBeDefined();
+    await admin.query(`INSERT INTO supplier_connections (tenant_id, supplier_id, status) VALUES ($1, $2, 'pending')`, [other.id, demo.sup1]);
+    try {
+      const ok = await post(`${API_PREFIX}/portal/connections/${other.id}/accept`, {}, bojanToken);
+      expect(ok.statusCode, ok.body).toBe(200);
+      const bell = await admin.query(
+        `SELECT kind, title FROM platform_notices WHERE audience='salons' AND tenant_id=$1 AND ref_id=$2 ORDER BY created_at DESC LIMIT 1`,
+        [other.id, demo.sup1],
+      );
+      expect(bell.rows[0]).toMatchObject({ kind: 'supplier_connection' });
+      expect(bell.rows[0].title).toContain('accepted your connection');
+      const mail = await admin.query(`SELECT kind, to_email FROM mail_outbox WHERE ref_id=$1 AND tenant_id=$2 ORDER BY sent_at DESC LIMIT 1`, [demo.sup1, other.id]);
+      expect(mail.rows[0]).toMatchObject({ kind: 'connection_accepted', to_email: other.email });
+    } finally {
+      await admin.query(`DELETE FROM platform_notices WHERE tenant_id=$1 AND ref_id=$2`, [other.id, demo.sup1]);
+      await admin.query(`DELETE FROM mail_outbox WHERE ref_id=$1 AND tenant_id=$2`, [demo.sup1, other.id]);
+      await admin.query(`DELETE FROM supplier_connections WHERE tenant_id=$1 AND supplier_id=$2`, [other.id, demo.sup1]);
+    }
   });
 
   it('refuses ordering below the product minimum and the supplier minimum', async () => {
@@ -163,6 +201,10 @@ describe('the supplier chain', () => {
     expect(o.status).toBe('submitted');
     expect(o.lines[0]!.free).toBe(4); // buy 10 get 2 → 20 buys 4 free
     expect(o.total).toBe(20 * 550);
+    // No invoice before delivery (2026-10-06).
+    expect(o.invoiceNo).toBeNull();
+    const early = await get(`${API_PREFIX}/purchase-orders/${o.id}/invoice.pdf`);
+    expect(early.statusCode).toBe(409);
     const audit = await admin.query(
       `SELECT 1 FROM audit_log WHERE action='Order submitted' AND object=$1`,
       [`Order · ${o.ref}`],
@@ -208,6 +250,17 @@ describe('the supplier chain', () => {
     expect(shipped.statusCode).toBe(200);
     expect(shipped.json().status).toBe('shipped');
     expect(shipped.json().track).toBe('MK-PARCEL-90001');
+    // The salon heard both steps the supplier took — bell and mail (2026-10-06).
+    const bells = await admin.query(
+      `SELECT kind, title FROM platform_notices WHERE audience='salons' AND tenant_id=$1 AND ref_id=$2 ORDER BY created_at`,
+      [demo.business, orderId],
+    );
+    expect(bells.rows.map((r: { kind: string }) => r.kind)).toEqual(['supplier_order', 'supplier_order']);
+    expect(bells.rows[0].title).toContain('accepted');
+    expect(bells.rows[1].title).toContain('shipped');
+    const mails = await admin.query(`SELECT kind, to_email FROM mail_outbox WHERE ref_id=$1 AND kind LIKE 'order_%' ORDER BY sent_at`, [orderId]);
+    expect(mails.rows.map((r: { kind: string }) => r.kind)).toEqual(['order_placed', 'order_accepted', 'order_shipped']);
+    expect(mails.rows[1].to_email).toBe('maria@velnes.mk');
     // The wrong side cannot receive: that is the salon's step.
     const wrong = await post(
       `${API_PREFIX}/portal/orders/${orderId}/transitions`,
@@ -287,6 +340,31 @@ describe('the supplier chain', () => {
       lines: [{ lineId, received: 24, damaged: 0 }],
     });
     expect(done.json().status).toBe('delivered');
+    // Delivered is invoiced: a number in the supplier's yearly sequence,
+    // and the same PDF from either side (2026-10-06).
+    expect(done.json().invoiceNo).toMatch(/^INV-\d{4}-\d{4}$/);
+    expect(done.json().invoicedAt).toBeTruthy();
+    const pdf = await get(`${API_PREFIX}/purchase-orders/${orderId}/invoice.pdf`);
+    expect(pdf.statusCode).toBe(200);
+    expect(pdf.headers['content-type']).toContain('application/pdf');
+    expect(pdf.headers['content-disposition']).toContain(`${done.json().invoiceNo}.pdf`);
+    expect(pdf.rawPayload.subarray(0, 5).toString()).toBe('%PDF-');
+    const theirs = await get(`${API_PREFIX}/portal/orders/${orderId}/invoice.pdf`, vesnaToken);
+    expect(theirs.statusCode).toBe(200);
+    expect(theirs.headers['content-disposition']).toContain(`${done.json().invoiceNo}.pdf`);
+    // Numbered once: the list says the same number.
+    const listed = await get(`${API_PREFIX}/purchase-orders`);
+    expect(listed.json().orders.find((x: { id: string }) => x.id === orderId).invoiceNo).toBe(done.json().invoiceNo);
+    // The supplier heard both: the shortage, then the finish (2026-10-06).
+    const heard = await admin.query(
+      `SELECT title FROM supplier_notifications WHERE supplier_id=$1 AND ref_id=$2 ORDER BY created_at`,
+      [demo.sup1, orderId],
+    );
+    const titles = heard.rows.map((r: { title: string }) => r.title);
+    expect(titles.some((t: string) => t.includes('partially received'))).toBe(true);
+    expect(titles[titles.length - 1]).toContain('received in full');
+    const mail = await admin.query(`SELECT kind FROM mail_outbox WHERE ref_id=$1 AND kind IN ('order_received','order_partly_received') ORDER BY sent_at`, [orderId]);
+    expect(mail.rows.map((r: { kind: string }) => r.kind)).toEqual(['order_partly_received', 'order_received']);
   });
 
   it('keeps the token worlds apart: a portal token opens no tenant door', async () => {
@@ -405,10 +483,100 @@ describe('the supplier chain', () => {
     const del = (url: string, token = bojanToken) =>
       app.inject({ method: 'DELETE', url, headers: { authorization: `Bearer ${token}` } });
 
+    // A brand the platform does not know is born on the product panel
+    // (2026-10-07): a platform row in the supplier's name, the link, and
+    // a note to HQ; the same name in another spelling is the same brand.
+    const nb = await post(`${API_PREFIX}/portal/catalog`, { name: 'Bond builder', brand: '  Olaplex  Pro ', category: 'hair care', sku: 'OLX-1', buy: 900 }, bojanToken);
+    expect(nb.statusCode, nb.body).toBe(200);
+    const brandRow = (await admin.query(`SELECT id, name, source, added_by_supplier_id FROM brands WHERE lower(name) = 'olaplex pro'`)).rows[0];
+    expect(brandRow).toMatchObject({ name: 'Olaplex Pro', source: 'supplier' });
+    expect((await admin.query(`SELECT 1 FROM supplier_brands WHERE brand_id=$1 AND supplier_id=$2`, [brandRow.id, brandRow.added_by_supplier_id])).rowCount).toBe(1);
+    expect((await admin.query(`SELECT title FROM platform_notices WHERE audience='hq' AND kind='brand_added' AND ref_id=$1`, [brandRow.id])).rows[0]?.title).toBe('New brand: Olaplex Pro');
+    const nb2 = await post(`${API_PREFIX}/portal/catalog`, { name: 'Bond builder 2', brand: 'OLAPLEX PRO', category: 'Hair care', sku: 'OLX-2', buy: 900 }, bojanToken);
+    expect(nb2.statusCode).toBe(200);
+    expect((await admin.query(`SELECT brand FROM supplier_products WHERE id=$1`, [(nb2.json() as { id: string }).id])).rows[0].brand).toBe('Olaplex Pro');
+    // The category is one of Velnes' shelves, in its canonical spelling and linked by id; an unknown one is refused.
+    const shelf = (await admin.query(`SELECT p.category, c.name FROM supplier_products p JOIN product_categories c ON c.id = p.category_id WHERE p.id=$1`, [(nb.json() as { id: string }).id])).rows[0];
+    expect(shelf).toEqual({ category: 'Hair care', name: 'Hair care' });
+    const unknown = await post(`${API_PREFIX}/portal/catalog`, { name: 'Nowhere', brand: 'Olaplex Pro', category: 'Clinic supplies', sku: 'OLX-3', buy: 900 }, bojanToken);
+    expect(unknown.statusCode).toBe(422);
+    expect((unknown.json() as { error: string }).error).toBe('UNKNOWN_CATEGORY');
+    expect((await patch(`${API_PREFIX}/portal/catalog/${(nb.json() as { id: string }).id}`, { category: 'Made up' })).statusCode).toBe(422);
+    expect((await patch(`${API_PREFIX}/portal/catalog/${(nb.json() as { id: string }).id}`, { category: 'SKIN CARE' })).statusCode).toBe(200);
+    expect((await admin.query(`SELECT category FROM supplier_products WHERE id=$1`, [(nb.json() as { id: string }).id])).rows[0].category).toBe('Skin care');
+    const shelves = (await get(`${API_PREFIX}/portal/categories`, bojanToken)).json() as { categories: string[] };
+    expect(shelves.categories).toEqual(expect.arrayContaining(['Hair care', 'Skin care', 'Supports']));
+    // A missing shelf is asked of HQ: pending, HQ's bell rung; a shelf that exists or a pending twin is 409;
+    // HQ's answer lands on the supplier's bell (checked at the database — the HQ door is HQ's own test).
+    const ask = await post(`${API_PREFIX}/portal/category-requests`, { name: 'Clinic supplies', note: 'Gloves, paper, disinfectant' }, bojanToken);
+    expect(ask.statusCode, ask.body).toBe(200);
+    const reqId = (ask.json() as { id: string }).id;
+    expect((await admin.query(`SELECT supplier_id IS NOT NULL AS sup, tenant_id IS NULL AS no_tenant, status, kind FROM category_requests WHERE id=$1`, [reqId])).rows[0]).toEqual({ sup: true, no_tenant: true, status: 'pending', kind: 'products' });
+    expect((await admin.query(`SELECT body FROM platform_notices WHERE audience='hq' AND kind='category_request' AND ref_id=$1`, [reqId])).rows[0]?.body).toContain('(supplier) asks for a new product category');
+    expect((await post(`${API_PREFIX}/portal/category-requests`, { name: 'clinic supplies' }, bojanToken)).statusCode).toBe(409);
+    expect((await post(`${API_PREFIX}/portal/category-requests`, { name: 'Hair care' }, bojanToken)).statusCode).toBe(409);
+    expect((await post(`${API_PREFIX}/portal/category-requests`, { name: 'Anything' }, vesnaToken)).statusCode).toBe(403);
+    const mine = (await get(`${API_PREFIX}/portal/category-requests`, bojanToken)).json() as { requests: { id: string; status: string }[] };
+    expect(mine.requests.find((r) => r.id === reqId)?.status).toBe('pending');
+    await admin.query(`DELETE FROM platform_notices WHERE ref_id=$1`, [reqId]);
+    await admin.query(`DELETE FROM category_requests WHERE id=$1`, [reqId]);
+    expect((await admin.query(`SELECT count(*)::int AS c FROM brands WHERE lower(name)='olaplex pro'`)).rows[0].c).toBe(1);
+    expect((await admin.query(`SELECT count(*)::int AS c FROM platform_notices WHERE kind='brand_added' AND ref_id=$1`, [brandRow.id])).rows[0].c).toBe(1);
+    const offered = (await get(`${API_PREFIX}/portal/brands`, bojanToken)).json() as { brands: { name: string; carried: boolean }[] };
+    expect(offered.brands.find((b) => b.name === 'Olaplex Pro')?.carried).toBe(true);
+    const firstForeign = offered.brands.findIndex((b) => !b.carried); // own first, then the rest
+    if (firstForeign >= 0) expect(offered.brands.slice(0, firstForeign).every((b) => b.carried)).toBe(true);
+    // Every portal user of the platform is offered it from now on.
+    const theirs = (await get(`${API_PREFIX}/portal/brands`, vesnaToken)).json() as { brands: { name: string; carried: boolean }[] };
+    expect(theirs.brands.some((b) => b.name === 'Olaplex Pro')).toBe(true);
+    for (const id of [(nb.json() as { id: string }).id, (nb2.json() as { id: string }).id]) await del(`${API_PREFIX}/portal/catalog/${id}`);
+    // The brand this test gave birth to does not outlive it (the HQ registry test reads the seeded world).
+    await admin.query(`DELETE FROM platform_notices WHERE ref_id=$1`, [brandRow.id]);
+    await admin.query(`DELETE FROM supplier_brands WHERE brand_id=$1`, [brandRow.id]);
+    await admin.query(`DELETE FROM brands WHERE id=$1`, [brandRow.id]);
+
+    // A promotion (2026-10-07): published, every connected salon is told
+    // (bell + mail); it can be paused, resumed, edited and deleted; a
+    // paused one is offered to nobody.
+    const prodForPromo = (await admin.query(`SELECT id FROM supplier_products WHERE supplier_id = (SELECT supplier_id FROM supplier_users WHERE email='bojan@beautypro.mk') LIMIT 1`)).rows[0].id as string;
+    const connectedSalons = (await admin.query(`SELECT tenant_id FROM supplier_connections WHERE status='connected' AND supplier_id = (SELECT supplier_id FROM supplier_users WHERE email='bojan@beautypro.mk')`)).rows.map((r) => r.tenant_id as string);
+    expect(connectedSalons.length).toBeGreaterThan(0);
+    const promo = await post(`${API_PREFIX}/portal/promotions`, { title: 'Autumn tape week', kind: 'pct', productIds: [prodForPromo], starts: '2026-10-01', ends: '2026-12-31', terms: '10% off' }, bojanToken);
+    expect(promo.statusCode, promo.body).toBe(200);
+    const promoId = (promo.json() as { id: string }).id;
+    const told = await admin.query(`SELECT tenant_id FROM platform_notices WHERE kind='supplier_promotion' AND ref_id=$1`, [promoId]);
+    expect(told.rows.map((r) => r.tenant_id).sort()).toEqual([...connectedSalons].sort());
+    expect((await admin.query(`SELECT count(*)::int AS c FROM mail_outbox WHERE kind='supplier_promotion' AND tenant_id = ANY($1::uuid[])`, [connectedSalons])).rows[0].c).toBeGreaterThanOrEqual(1);
+    const minePromos = (await get(`${API_PREFIX}/portal/promotions`, bojanToken)).json() as { promotions: { id: string; status: string; active: boolean }[] };
+    expect(minePromos.promotions.find((p) => p.id === promoId)).toMatchObject({ active: true, status: 'running' });
+    expect((await patch(`${API_PREFIX}/portal/promotions/${promoId}`, { active: false })).statusCode).toBe(200);
+    expect(((await get(`${API_PREFIX}/portal/promotions`, bojanToken)).json() as { promotions: { id: string; status: string }[] }).promotions.find((p) => p.id === promoId)?.status).toBe('paused');
+    const salonSees = (await get(`${API_PREFIX}/supplier-promotions`)).json() as { promotions: { id: string }[] };
+    expect(salonSees.promotions.some((p) => p.id === promoId)).toBe(false);
+    // Resumed, the salon sees it as the server ranks it: products named, reasons computed, connected suppliers only.
+    expect((await patch(`${API_PREFIX}/portal/promotions/${promoId}`, { active: true })).statusCode).toBe(200);
+    const ranked = (await get(`${API_PREFIX}/supplier-promotions`)).json() as { promotions: { id: string; supplierId: string; products: { id: string; name: string; carried: boolean }[]; reasons: string[]; daysLeft: number; status: string }[] };
+    const mineRanked = ranked.promotions.find((p) => p.id === promoId)!;
+    expect(mineRanked.products.map((x) => x.id)).toEqual([prodForPromo]);
+    expect(mineRanked.status).toBe('running');
+    expect(mineRanked.daysLeft).toBeGreaterThan(7);
+    expect(mineRanked.reasons).toContain('new');
+    const connectedIds = (await admin.query(`SELECT supplier_id FROM supplier_connections WHERE tenant_id=$1 AND status='connected'`, [demo.business])).rows.map((r) => r.supplier_id as string);
+    for (const p of ranked.promotions) expect(connectedIds).toContain(p.supplierId);
+    expect(ranked.promotions.every((p) => p.status !== 'ended' && p.status !== 'paused')).toBe(true);
+    const one = (await get(`${API_PREFIX}/supplier-promotions?limit=1`)).json() as { promotions: unknown[] };
+    expect(one.promotions).toHaveLength(1);
+    expect((await patch(`${API_PREFIX}/portal/promotions/${promoId}`, { active: true, title: 'Autumn tape fortnight', ends: '2026-11-30' })).statusCode).toBe(200);
+    expect((await admin.query(`SELECT title, ends::text, active FROM supplier_promotions WHERE id=$1`, [promoId])).rows[0]).toEqual({ title: 'Autumn tape fortnight', ends: '2026-11-30', active: true });
+    expect((await patch(`${API_PREFIX}/portal/promotions/${promoId}`, { ends: '2026-09-01' })).statusCode).toBe(409);
+    expect((await del(`${API_PREFIX}/portal/promotions/${promoId}`)).statusCode).toBe(200);
+    expect((await del(`${API_PREFIX}/portal/promotions/${promoId}`)).statusCode).toBe(404);
+    await admin.query(`DELETE FROM platform_notices WHERE ref_id=$1`, [promoId]);
+
     // Create a throwaway product, edit every kind of field, delete it.
     const created = await post(
       `${API_PREFIX}/portal/catalog`,
-      { name: 'Test Widget', brand: 'Thera-Band', sku: 'TW-1', buy: 100 },
+      { name: 'Test Widget', brand: 'Thera-Band', category: 'Supports', sku: 'TW-1', buy: 100 },
       bojanToken,
     );
     expect(created.statusCode).toBe(200);

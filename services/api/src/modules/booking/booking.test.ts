@@ -50,6 +50,12 @@ describe('scheduling & booking doors', () => {
       `DELETE FROM appointment_history WHERE appointment_id IN (SELECT id FROM appointments WHERE date >= $1)`,
       [future],
     );
+    // A till test may have sold one of these visits in the same run (CI
+    // runs the files in another order): drop the receipt lines first.
+    await admin.query(
+      `DELETE FROM invoice_lines WHERE appointment_id IN (SELECT id FROM appointments WHERE date >= $1)`,
+      [future],
+    );
     await admin.query(`DELETE FROM appointments WHERE date >= $1`, [future]);
     await admin.query(`DELETE FROM customers WHERE name='Petar Novak (walk-in test)'`);
     await admin.query(`DELETE FROM holds`);

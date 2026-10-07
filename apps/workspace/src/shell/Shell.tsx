@@ -34,6 +34,7 @@ const NAV: { to: string; key: string; icon: string; size: number; perm: PermKey 
   { to: '/catalog', key: 'nav.catalog', icon: I.products, size: 30, perm: 'catalog.view' },
   { to: '/suppliers', key: 'nav.suppliers', icon: I.invoice, size: 28, perm: 'suppliers.manage' },
   { to: '/customers', key: 'nav.customers', icon: I.users, size: 30, perm: 'customers.view_assigned' },
+  { to: '/invoices', key: 'nav.accounting', icon: I.note, size: 28, perm: 'billing.read' },
   { to: '/marketing', key: 'nav.marketing', icon: I.mail, size: 30, perm: 'marketing.personal_offers' },
   { to: '/reports', key: 'nav.reports', icon: I.reports, size: 30, perm: 'reports.view_own' },
 ];
@@ -310,6 +311,11 @@ export function Shell() {
                             navigate('/calendar', { state: { appointment: n.refId } });
                           else if (n.kind === 'review')
                             navigate(`/marketing?tab=reviews${n.refId ? `&review=${n.refId}` : ''}`);
+                          // Supplier news (2026-10-06): an order step opens
+                          // the orders tab, a connection answer the suppliers.
+                          else if (n.kind === 'supplier_order') navigate('/suppliers?tab=orders');
+                          else if (n.kind === 'supplier_connection') navigate('/suppliers');
+                          else if (n.kind === 'supplier_promotion') navigate(`/suppliers?tab=promotions${n.refId ? `&promo=${n.refId}` : ''}`);
                         }}
                       >
                         <span className="grow" style={{ textAlign: 'left' }}>

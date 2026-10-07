@@ -5,6 +5,11 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import type { z } from 'zod';
 import { LOYALTY_RULES, PRODUCT_QTY_MAX, type PublicServiceSchema } from '@velnes/contracts';
 import { fmtMKD, minutesLbl } from '../../lib/api/mappers.js';
+import { SALON_PAGE_PRODUCTS_MAX, type DiscoveryProductSchema } from '@velnes/contracts';
+import { useQuery } from '@tanstack/react-query';
+import { pub } from '../../lib/api/client.js';
+
+type DiscoveryProduct = z.infer<typeof DiscoveryProductSchema>;
 import { useSalonDetail, useSalonServices, useVisitSlots } from '../../lib/api/queries.js';
 import { useMyOffers } from '../../lib/api/session.js';
 import { SalonGallery } from '../../components/SalonGallery.js';
@@ -232,6 +237,7 @@ function useSalonPage() {
   const [allOpen, setAllOpen] = useState(false);
   const [proOpen, setProOpen] = useState(false);
   const [prodOpen, setProdOpen] = useState(false);
+  const [allProdsOpen, setAllProdsOpen] = useState(false);
   const [cartMin, setCartMin] = useState(false);
   // A slot tapped on the home screen arrives as a link: start the visit
   // with that treatment already in the cart. "Book again" (Alex,
@@ -343,13 +349,21 @@ function useSalonPage() {
   // What the door will actually charge for the visit: every line at the
   // price its own option carries. Never a "from" price.
   // The shelf at this location: what the salon sells here, priced here.
+  // Products the modal added that the page's first twelve did not carry (2026-10-07).
+  const [extraProducts, setExtraProducts] = useState<NonNullable<typeof detail>['products']>([]);
   const shelf = useMemo(
-    () =>
-      (detail?.products ?? []).flatMap((pr) => {
+    () => {
+      const seen = new Set<string>();
+      return [...(detail?.products ?? []), ...extraProducts].flatMap((pr) => {
+        if (seen.has(pr.id)) return [];
+        seen.add(pr.id);
         const here = (pr.at ?? []).find((a) => a.locationId === locationId);
-        return here ? [{ id: pr.id, name: pr.name, category: pr.category, price: here.price, img: pr.img ?? null, description: pr.description ?? null }] : [];
-      }),
-    [detail?.products, locationId],
+        return here
+          ? [{ id: pr.id, name: pr.name, category: pr.category, price: here.price, regularPrice: here.regularPrice ?? here.price, promo: pr.promo ?? null, img: pr.img ?? null, description: pr.description ?? null }]
+          : [];
+      });
+    },
+    [detail?.products, extraProducts, locationId],
   );
   const plines = useMemo(
     () =>
@@ -410,6 +424,8 @@ function useSalonPage() {
     plines,
     productUnits,
     extras,
+    productsTotal: detail?.productsTotal ?? shelf.length,
+    addExtraProduct: (pr: NonNullable<typeof detail>['products'][number]) => setExtraProducts((c) => (c.some((x) => x.id === pr.id) ? c : [...c, pr])),
     inProds: (id: string) => prods.some((x) => x.productId === id),
     toggleProd: (id: string) =>
       setProds((c) => (c.some((x) => x.productId === id) ? c.filter((x) => x.productId !== id) : [...c, { productId: id, qty: 1 }])),
@@ -491,6 +507,8 @@ function useSalonPage() {
     proOpen,
     setProOpen,
     prodOpen,
+    allProdsOpen,
+    setAllProdsOpen,
     setProdOpen,
     cartMin,
     setCartMin,
@@ -820,7 +838,7 @@ function BookCard({ p, desktop }: { p: Page; desktop: boolean }) {
             }}
           >
             {d.name} products
-            <span className="tiny-tag" style={{ marginLeft: '9px' }}>{t('c.sal.productsN', { n: p.shelf.length })}</span>
+            <span className="tiny-tag" style={{ marginLeft: '9px' }}>{t('c.sal.productsN', { n: p.productsTotal })}</span>
             <span className="chv">{IcChevD}</span>
           </div>
           {p.prodOpen ? (
@@ -829,29 +847,12 @@ function BookCard({ p, desktop }: { p: Page; desktop: boolean }) {
                 <span className="muted">{t('c.sal.products')}</span>
               </div>
               <div className="tr-grid">
-                {p.shelf.map((pr) => {
+                {p.shelf.slice(0, SALON_PAGE_PRODUCTS_MAX).map((pr) => {
                   const on = p.inProds(pr.id);
                   const qty = p.prodQty(pr.id);
                   return (
                     <div key={pr.id} className={`tr-wrap${on ? ' on' : ''}`}>
-                      <button
-                        className={`tr-card${desktop ? ' dtr' : ''}${on ? ' on' : ''}`}
-                        aria-pressed={on}
-                        data-product={pr.id}
-                        onClick={() => p.toggleProd(pr.id)}
-                      >
-                        <span className="row1">
-                          <span className="nm">
-                            {pr.img ? <img className="prod-thumb" src={pr.img} alt="" /> : IcBottle}
-                            <span className="t">{pr.name}</span>
-                          </span>
-                        </span>
-                        {pr.description ? <span className="sm muted prod-desc">{pr.description}</span> : null}
-                        <span className="in2">
-                          <span>{on ? (qty > 1 ? t('c.sal.inVisitN', { n: qty }) : t('c.sal.inVisit')) : t('c.sal.product')}</span>
-                          <b>{fmtMKD(pr.price)}</b>
-                        </span>
-                      </button>
+                      <ProductCard pr={pr} on={on} qty={qty} desktop={desktop} onClick={() => p.toggleProd(pr.id)} />
                       {/* More than one of it: the stepper is the card's
                           sibling, so the card stays one button. */}
                       {on ? (
@@ -861,6 +862,25 @@ function BookCard({ p, desktop }: { p: Page; desktop: boolean }) {
                   );
                 })}
               </div>
+              {p.productsTotal > 0 ? (
+                <button className="btn btn-g viewall" onClick={() => p.setAllProdsOpen(true)} data-testid="see-all-products">
+                  {t('c.sal.seeAll')} ({p.productsTotal}) {IcArr}
+                </button>
+              ) : null}
+              {p.allProdsOpen && p.location ? (
+                <AllProductsModal
+                  slug={p.slug}
+                  locationId={p.location.id}
+                  desktop={desktop}
+                  inProds={p.inProds}
+                  prodQty={p.prodQty}
+                  onPick={(pr) => {
+                    p.addExtraProduct(pr);
+                    p.toggleProd(pr.id);
+                  }}
+                  onClose={() => p.setAllProdsOpen(false)}
+                />
+              ) : null}
             </div>
           ) : null}
         </>
@@ -1381,6 +1401,171 @@ export function AboutText({ text }: { text: string }) {
           {more ? t('c.sal.readLess') : t('c.sal.readMore')}
         </button>
       ) : null}
+    </div>
+  );
+}
+
+type ShelfProduct = { id: string; name: string; price: number; regularPrice: number; promo: { kind: 'pct' | 'price'; value: number; ends: string } | null; img: string | null; description: string | null };
+
+/** One product card, the same on the page and in the modal (2026-10-07):
+ *  a promo shows its tag, the regular price crossed out, the promo price. */
+function ProductCard({ pr, on, qty, desktop, onClick }: { pr: ShelfProduct; on: boolean; qty: number; desktop: boolean; onClick: () => void }) {
+  const { t } = useTranslation();
+  const promo = pr.promo && pr.price < pr.regularPrice ? pr.promo : null;
+  return (
+    <button className={`tr-card${desktop ? ' dtr' : ''}${on ? ' on' : ''}${promo ? ' promo' : ''}`} aria-pressed={on} data-product={pr.id} onClick={onClick}>
+      {promo ? (
+        <span className="promo-tag" data-testid="promo-tag">
+          {t('c.sal.promo')}
+          {promo.kind === 'pct' ? ` ${t('c.sal.promoPct', { n: promo.value })}` : ''}
+        </span>
+      ) : null}
+      <span className="row1">
+        <span className="nm">
+          {pr.img ? <img className="prod-thumb" src={pr.img} alt="" /> : IcBottle}
+          <span className="t">{pr.name}</span>
+        </span>
+      </span>
+      {pr.description ? <span className="sm muted prod-desc">{pr.description}</span> : null}
+      <span className="in2">
+        <span>{on ? (qty > 1 ? t('c.sal.inVisitN', { n: qty }) : t('c.sal.inVisit')) : t('c.sal.product')}</span>
+        <b>
+          {promo ? <s className="was">{fmtMKD(pr.regularPrice)}</s> : null}
+          {fmtMKD(pr.price)}
+        </b>
+      </span>
+    </button>
+  );
+}
+
+/** Every product of the salon, searched by name, on promotion first —
+ *  the server pages and prices; a click puts the product into the
+ *  visit, exactly like a card on the page. Desktop: a large dialog,
+ *  24 a page with Previous / Next. Phone: a bottom sheet that grows to
+ *  the full screen and loads the next page as you scroll. */
+function AllProductsModal({
+  slug,
+  locationId,
+  desktop,
+  inProds,
+  prodQty,
+  onPick,
+  onClose,
+}: {
+  slug: string;
+  locationId: string;
+  desktop: boolean;
+  inProds: (id: string) => boolean;
+  prodQty: (id: string) => number;
+  onPick: (pr: DiscoveryProduct) => void;
+  onClose: () => void;
+}) {
+  const { t } = useTranslation();
+  const limit = desktop ? 24 : 12;
+  const [typed, setTyped] = useState('');
+  const [q, setQ] = useState('');
+  const [page, setPage] = useState(1);
+  const [tall, setTall] = useState(false);
+  const [stack, setStack] = useState<{ q: string; pages: Record<number, DiscoveryProduct[]>; total: number }>({ q: '', pages: {}, total: 0 });
+  useEffect(() => {
+    const h = setTimeout(() => {
+      setQ(typed.trim());
+      setPage(1);
+    }, 250);
+    return () => clearTimeout(h);
+  }, [typed]);
+  const query = useQuery({
+    queryKey: ['salonProducts', slug, q, page, limit],
+    queryFn: () => pub<{ products: DiscoveryProduct[]; total: number; page: number; limit: number }>(`/discovery/salons/${slug}/products?q=${encodeURIComponent(q)}&page=${page}&limit=${limit}`),
+  });
+  // Pages land in a stack keyed by the search; the phone shows them all
+  // one after another, the desktop shows the one it is on.
+  useEffect(() => {
+    if (!query.data) return;
+    setStack((s) => (s.q === q ? { ...s, pages: { ...s.pages, [query.data!.page]: query.data!.products }, total: query.data!.total } : { q, pages: { [query.data!.page]: query.data!.products }, total: query.data!.total }));
+  }, [query.data, q]);
+  const products = desktop
+    ? (stack.q === q ? (stack.pages[page] ?? []) : [])
+    : stack.q === q
+      ? Object.keys(stack.pages).map(Number).sort((a, b) => a - b).flatMap((k) => stack.pages[k]!)
+      : [];
+  const total = stack.q === q ? stack.total : 0;
+  const rows = products.flatMap((pr) => {
+    const here = (pr.at ?? []).find((a) => a.locationId === locationId);
+    return here ? [{ pr, card: { id: pr.id, name: pr.name, price: here.price, regularPrice: here.regularPrice ?? here.price, promo: pr.promo ?? null, img: pr.img ?? null, description: pr.description ?? null } }] : [];
+  });
+  const loaded = desktop ? Math.min(page * limit, total) : products.length;
+  const more = loaded < total;
+  // The phone loads the next page when the sentinel at the end scrolls into view.
+  const sentinel = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (desktop || !sentinel.current || !more || query.isFetching || typeof IntersectionObserver === 'undefined') return;
+    const io = new IntersectionObserver((es) => {
+      if (es.some((e) => e.isIntersecting)) {
+        setTall(true);
+        setPage((p) => p + 1);
+      }
+    }, { rootMargin: '200px' });
+    io.observe(sentinel.current);
+    return () => io.disconnect();
+  }, [desktop, more, query.isFetching, products.length]);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+  const from = total ? (desktop ? (page - 1) * limit + 1 : 1) : 0;
+  const to = desktop ? Math.min(page * limit, total) : loaded;
+  return (
+    <div className={`prod-modal${desktop ? ' desk' : ' sheet'}${tall ? ' tall' : ''}`} role="dialog" aria-modal="true" aria-label={t('c.sal.allProducts')} onClick={onClose}>
+      <div className="prod-modal-card" onClick={(e) => e.stopPropagation()} data-testid="all-products">
+        {!desktop ? (
+          <button type="button" className="prod-sheet-handle" aria-label={t('c.sal.expand')} onClick={() => setTall((v) => !v)}>
+            <span />
+          </button>
+        ) : null}
+        <div className="prod-modal-head">
+          <h3 className="serif">{t('c.sal.allProducts')}</h3>
+          <button className="iconbtn" aria-label={t('c.sal.close')} onClick={onClose}>
+            ✕
+          </button>
+        </div>
+        <div className="pillsearch prod-search">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="M20 20l-4.2-4.2" /></svg>
+          <input value={typed} onChange={(e) => setTyped(e.target.value)} placeholder={t('c.sal.searchProducts')} aria-label={t('c.sal.searchProducts')} autoFocus={desktop} />
+          {typed ? (
+            <button type="button" className="clear" aria-label={t('c.sal.clear')} onClick={() => setTyped('')}>
+              ✕
+            </button>
+          ) : null}
+        </div>
+        <div className="prod-modal-body">
+          {query.data && rows.length === 0 && !more ? <p className="muted">{t('c.sal.noMatch')}</p> : null}
+          <div className="tr-grid prod-modal-grid">
+            {rows.map(({ pr, card }) => (
+              <div key={pr.id} className={`tr-wrap${inProds(pr.id) ? ' on' : ''}`}>
+                <ProductCard pr={card} on={inProds(pr.id)} qty={prodQty(pr.id)} desktop={desktop} onClick={() => onPick(pr)} />
+              </div>
+            ))}
+          </div>
+          {!desktop ? <div ref={sentinel} className="prod-sentinel" aria-hidden="true">{more ? <span className="muted">{t('c.sal.loadingMore')}</span> : null}</div> : null}
+        </div>
+        <div className="prod-modal-foot">
+          <span className="muted tnum">{t('c.sal.pageOf', { from, to, total })}</span>
+          {desktop ? (
+            <span style={{ display: 'flex', gap: 8 }}>
+              <button className="btn btn-g" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
+                {t('c.sal.pagePrev')}
+              </button>
+              <button className="btn btn-g" disabled={!more} onClick={() => setPage((p) => p + 1)}>
+                {t('c.sal.pageNext')}
+              </button>
+            </span>
+          ) : null}
+        </div>
+      </div>
     </div>
   );
 }

@@ -1070,3 +1070,18 @@ closed the button is gone and the card says why (the salon's hours'
 notice, or that the visit has started) and to contact the salon.
 Cancelling takes a confirmation and, for a visit paid online, shows the
 refund state afterwards. Full story: `docs/BOOKING-CHANGES.md`.
+
+## Products on the salon page: promotions and "See all" (2026-10-07)
+
+The salon page shows at most twelve products, those on promotion first
+and then by name; `productsTotal` says how many there are in all. A
+product on promotion carries a Promo tag (with the percentage when it is
+one), the regular price crossed out and the promo price beside it; the
+price in the visit is the promo price, decided by the server. "See all
+products" opens a modal over the page: every product of the salon,
+searched by name (`GET /public/discovery/salons/:slug/products?q=&page=&
+limit=`), twelve a page, promotion first, the same cards as the page; a
+click puts the product into the visit exactly like a card on the page,
+and a product the page's first twelve did not carry joins the shelf so
+the basket can price and show it.
+

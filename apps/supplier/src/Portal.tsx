@@ -3,6 +3,10 @@ import {
   PO_PERM_GROUPS,
   PO_SCOPES,
   PortalCompanySchema,
+  PortalBrandListSchema,
+  PortalCategoryListSchema,
+  PortalCategoryRequestCreateSchema,
+  PortalCategoryRequestListSchema,
   PortalDashboardSchema,
   PortalNotificationListSchema,
   PortalProductCreateSchema,
@@ -13,10 +17,16 @@ import {
   PurchaseOrderListSchema,
   PurchaseOrderSchema,
   SupplierProductListSchema,
+  PortalPromotionPatchSchema,
   SupplierPromotionListSchema,
   SUPPORT_CATEGORIES,
   SupportTicketListSchema,
+  SupplierMediaListSchema,
+  SupplierMediaSchema,
+  SUPPLIER_MEDIA_MAX_BYTES,
+  SUPPLIER_MEDIA_MAX_FILES,
   type PurchaseOrder,
+  type SupplierMedia,
   type SupportCategory,
   type SupportTicket,
 } from '@velnes/contracts';
@@ -28,7 +38,7 @@ import { SUPPLIER_INDEX, type PoCtx } from './navsearch.js';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { z } from 'zod';
-import { pDelete, pGet, pPatch, pPost, PortalApiError, type PortalUser } from './api.js';
+import { type PortalUser, PortalApiError, pBlob, pDelete, pGet, pPatch, pPost } from './api.js';
 import { fileToAvatarDataUrl } from './image.js';
 
 /** The supplier's own workspace: the prototype's viewPortal, chrome
@@ -60,7 +70,6 @@ const TAB_IDS: Tab[] = ['dashboard', 'orders', 'salons', 'catalog', 'promotions'
 // The prototype's PORTAL_NAV order (Orders sits second); Settings is
 // in the sidebar foot, like the salon workspace.
 const NAV: { tab: Tab; label: string; icon: string; size: number }[] = [
-  { tab: 'dashboard', label: 'po.tabDashboard', icon: I.reports, size: 28 },
   { tab: 'orders', label: 'po.tabOrders', icon: I.invoice, size: 26 },
   { tab: 'salons', label: 'po.tabSalons', icon: I.users, size: 28 },
   { tab: 'catalog', label: 'po.tabCatalog', icon: I.products, size: 28 },
@@ -162,9 +171,16 @@ export function Portal({
     <>
       <aside className="sidebar">
         <div className="sidebar-group">
-          <div className="applogo" title={t('po.portalTitle')}>
+          {/* The mark is the dashboard (Alex, 2026-10-06): one tile fewer. */}
+          <button
+            type="button"
+            className={`applogo applogo-btn${tab === 'dashboard' ? ' active' : ''}`}
+            title={t('po.tabDashboard')}
+            aria-label={t('po.tabDashboard')}
+            onClick={() => setTab('dashboard')}
+          >
             <VelnesMark size={34} />
-          </div>
+          </button>
           <nav id="nav-main" className="sidebar-group">
             {NAV.map((n) => (
               <button
@@ -248,13 +264,17 @@ export function Portal({
                           if (n.kind === 'ticket') {
                             setTab('support');
                             if (n.refId) setFocusTicket(n.refId);
+                          } else if (n.kind === 'connection') {
+                            setTab('salons');
+                          } else if (n.kind === 'category') {
+                            setTab('catalog');
                           } else {
                             setTab('orders');
                             if (n.refId) setFocusOrder(n.refId);
                           }
                         }}
                       >
-                        <Icon d={n.kind === 'ticket' ? I.info : I.invoice} size={20} />
+                        <Icon d={n.kind === 'ticket' ? I.info : n.kind === 'connection' ? I.users : I.invoice} size={20} />
                         <span className="grow" style={{ textAlign: 'left' }}>
                           <span className="mi-t" style={{ fontWeight: 700 }}>
                             {n.title}
@@ -712,6 +732,109 @@ const USE_LABEL: Record<string, string> = { pro: 'po.usePro', retail: 'po.useRet
 
 type CatProduct = z.infer<typeof SupplierProductListSchema>['products'][number];
 
+/** Printed catalogs as PDFs (2026-10-07): the supplier attaches the
+ *  catalogs it had made for print; connected salons open them from the
+ *  supplier's row. PDF only, 15 MB each. Add and remove at any time. */
+function MediaCard({ canEdit, say }: { canEdit: boolean; say: (m: string) => void }) {
+  const { t, i18n } = useTranslation();
+  const [files, setFiles] = useState<SupplierMedia[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [confirmId, setConfirmId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const reload = useCallback(() => {
+    void pGet(SupplierMediaListSchema, '/portal/media').then((r) => setFiles(r.files));
+  }, []);
+  useEffect(reload, [reload]);
+  const size = (n: number) => (n >= 1024 * 1024 ? `${(n / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
+  const when = (iso: string) => new Date(iso).toLocaleDateString(i18n.language, { day: 'numeric', month: 'short', year: 'numeric' });
+  const pick = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    e.target.value = '';
+    if (!f) return;
+    setError(null);
+    if (f.size > SUPPLIER_MEDIA_MAX_BYTES) {
+      setError(t('po.media.tooBig'));
+      return;
+    }
+    setBusy(true);
+    try {
+      const data = await new Promise<string>((res, rej) => {
+        const r = new FileReader();
+        r.onload = () => res(String(r.result).replace(/^data:[^,]*,/, ''));
+        r.onerror = () => rej(new Error('read'));
+        r.readAsDataURL(f);
+      });
+      await pPost(SupplierMediaSchema, '/portal/media', { name: f.name, data });
+      say(t('po.media.added'));
+      reload();
+    } catch (err) {
+      setError(err instanceof PortalApiError ? err.message : t('login.error'));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const open = async (f: SupplierMedia) => {
+    const blob = await pBlob(`/portal/media/${f.id}/file`);
+    window.open(URL.createObjectURL(blob), '_blank', 'noopener');
+  };
+  const remove = async (id: string) => {
+    setBusy(true);
+    try {
+      await pDelete(z.object({ ok: z.literal(true) }), `/portal/media/${id}`);
+      setConfirmId(null);
+      say(t('po.media.removed'));
+      reload();
+    } catch (err) {
+      setError(err instanceof PortalApiError ? err.message : t('login.error'));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <section className="card" style={{ padding: 16, marginBottom: 14 }} data-testid="media-card">
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+        <div>
+          <h3 style={{ margin: 0 }}>{t('po.media.title')}</h3>
+          <p className="muted" style={{ margin: '2px 0 0', fontSize: 13 }}>{t('po.media.sub', { max: SUPPLIER_MEDIA_MAX_FILES })}</p>
+        </div>
+        {canEdit ? (
+          <label className="btn btn-secondary" style={{ cursor: busy ? 'progress' : 'pointer' }}>
+            {busy ? t('po.media.uploading') : t('po.media.add')}
+            <input type="file" accept="application/pdf,.pdf" onChange={(e) => void pick(e)} disabled={busy || files.length >= SUPPLIER_MEDIA_MAX_FILES} style={{ display: 'none' }} data-testid="media-input" />
+          </label>
+        ) : null}
+      </div>
+      {error ? <p role="alert" style={{ color: 'var(--danger)', fontWeight: 600, margin: '10px 0 0' }}>{error}</p> : null}
+      {files.length === 0 ? (
+        <p className="muted" style={{ margin: '12px 0 0' }}>{t('po.media.empty')}</p>
+      ) : (
+        <ul style={{ listStyle: 'none', margin: '12px 0 0', padding: 0, display: 'grid', gap: 6 }}>
+          {files.map((f) => (
+            <li key={f.id} className="rowcard" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px' }} data-testid="media-row">
+              <Icon d={I.note} size={18} />
+              <span className="grow" style={{ minWidth: 0 }}>
+                <span className="t" style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.name}</span>
+                <span className="s muted" style={{ fontSize: 12 }}>{size(f.sizeBytes)} · {when(f.createdAt)}{f.uploadedByName ? ` · ${f.uploadedByName}` : ''}</span>
+              </span>
+              <button className="btn btn-ghost btn-sm" onClick={() => void open(f)}>{t('po.media.open')}</button>
+              {canEdit ? (
+                confirmId === f.id ? (
+                  <>
+                    <button className="btn btn-sm" style={{ background: 'var(--danger, #b3261e)', color: '#fff' }} disabled={busy} onClick={() => void remove(f.id)} data-testid="media-remove-confirm">{t('po.media.removeSure')}</button>
+                    <button className="btn btn-ghost btn-sm" onClick={() => setConfirmId(null)}>{t('po.cancel')}</button>
+                  </>
+                ) : (
+                  <button className="btn btn-ghost btn-sm" onClick={() => setConfirmId(f.id)}>{t('po.media.remove')}</button>
+                )
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
 function Catalog({
   user,
   say,
@@ -735,8 +858,13 @@ function Catalog({
     if (asked === 'bulk-prices') setBulk(true);
     onAsked?.();
   }, [asked, canEdit, onAsked]);
+  const [brands, setBrands] = useState<string[]>([]);
+  const [categories, setCategories] = useState<string[]>([]);
   const reload = useCallback(() => {
     void pGet(SupplierProductListSchema, '/portal/catalog').then((r) => setRows(r.products));
+    // Every brand on the platform, this supplier's own first; Velnes' product shelves (2026-10-07).
+    void pGet(PortalBrandListSchema, '/portal/brands').then((r) => setBrands(r.brands.map((b) => b.name)));
+    void pGet(PortalCategoryListSchema, '/portal/categories').then((r) => setCategories(r.categories));
   }, []);
   useEffect(reload, [reload]);
 
@@ -751,8 +879,6 @@ function Catalog({
       say(e instanceof PortalApiError ? e.message : 'failed');
     }
   };
-
-  const brands = [...new Set(rows.map((r) => r.brand).filter(Boolean))];
 
   return (
     <>
@@ -785,6 +911,7 @@ function Catalog({
           </div>
         ) : null}
       </div>
+      <MediaCard canEdit={canEdit} say={say} />
       <div className="card">
         <table>
           <thead>
@@ -861,6 +988,7 @@ function Catalog({
         <ProductPanel
           product={edit === 'new' ? null : edit}
           brands={brands}
+          categories={categories}
           onClose={() => setEdit(null)}
           onSaved={(msg) => {
             setEdit(null);
@@ -971,12 +1099,14 @@ function BulkPricePanel({
 function ProductPanel({
   product,
   brands,
+  categories,
   onClose,
   onSaved,
   say,
 }: {
   product: CatProduct | null;
   brands: string[];
+  categories: string[];
   onClose: () => void;
   onSaved: (msg: string) => void;
   say: (m: string) => void;
@@ -1006,7 +1136,12 @@ function ProductPanel({
     moq: String(product?.moq ?? 1), stock: String(product?.stock ?? 0), use: product?.use ?? 'both', descr: product?.descr ?? '',
   });
   const dirty = JSON.stringify(f) !== snap;
-  const valid = !!(f.name.trim() && f.brand.trim() && f.sku.trim() && f.buy.trim() !== '');
+  const categoryKnown = categories.includes(f.category);
+  const valid = !!(f.name.trim() && f.brand.trim() && categoryKnown && f.sku.trim() && f.buy.trim() !== '');
+  // The brand field: the platform's list, or a new name typed in — which
+  // becomes a brand when the product is saved (the server owns that).
+  const NEW = '__new__';
+  const [newBrand, setNewBrand] = useState(!!product?.brand && !brands.includes(product.brand));
 
   const save = async () => {
     if (!valid) {
@@ -1088,21 +1223,47 @@ function ProductPanel({
               {t('po.brand')}
               <span className="req">*</span>
             </span>
-            {brands.length ? (
-              <select className="select" style={{ width: '100%' }} value={f.brand} onChange={set('brand')}>
+            {brands.length && !newBrand ? (
+              <select
+                className="select"
+                style={{ width: '100%' }}
+                value={f.brand}
+                aria-label={t('po.brand')}
+                onChange={(e) => {
+                  if (e.target.value === NEW) {
+                    setNewBrand(true);
+                    setF((x) => ({ ...x, brand: '' }));
+                  } else setF((x) => ({ ...x, brand: e.target.value }));
+                }}
+              >
                 {brands.map((b) => (
                   <option key={b} value={b}>
                     {b}
                   </option>
                 ))}
+                <option value={NEW}>{t('po.newBrand')}</option>
               </select>
             ) : (
-              <input className="input" value={f.brand} onChange={set('brand')} />
+              <input className="input" value={f.brand} onChange={set('brand')} placeholder={t('po.newBrandName')} aria-label={t('po.newBrandName')} autoFocus={newBrand && brands.length > 0} />
             )}
+            {newBrand || !brands.length ? <span className="muted" style={{ display: 'block', fontSize: 12, marginTop: 4 }}>{t('po.brandHint')}</span> : null}
           </label>
           <label className="field">
-            <span>{t('po.category')}</span>
-            <input className="input" value={f.category} onChange={set('category')} />
+            <span>
+              {t('po.category')}
+              <span className="req">*</span>
+            </span>
+            <select className="select" style={{ width: '100%' }} value={categoryKnown ? f.category : f.category ? '__unknown__' : ''} aria-label={t('po.category')} onChange={(e) => setF((x) => ({ ...x, category: e.target.value === '__unknown__' ? x.category : e.target.value }))}>
+              <option value="" disabled>{t('po.categoryPick')}</option>
+              {!categoryKnown && f.category ? <option value="__unknown__" disabled>{t('po.categoryUnknown', { name: f.category })}</option> : null}
+              {categories.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+            <span className="muted" style={{ display: 'block', fontSize: 12, marginTop: 4 }}>{t('po.categoryHint')}</span>
+            <AskCategory say={say} />
           </label>
           <label className="field">
             <span>
@@ -1112,8 +1273,11 @@ function ProductPanel({
             <input className="input" value={f.sku} onChange={set('sku')} />
           </label>
           <label className="field">
-            <span>{t('po.ean')}</span>
-            <input className="input" value={f.ean} onChange={set('ean')} />
+            <span>
+              {t('po.ean')}
+              <InfoTip text={t('po.eanTip')} testId="ean-tip" />
+            </span>
+            <input className="input" value={f.ean} onChange={set('ean')} inputMode="numeric" placeholder="3474636975918" />
           </label>
           <label className="field">
             <span>{t('po.size')}</span>
@@ -1204,6 +1368,13 @@ const statusKey: Record<string, string> = {
 };
 
 type DetailMode = 'details' | 'invoice' | 'creditnote';
+
+/** The invoice PDF, fetched with the session's token and opened in a
+ *  new tab — a plain link could not carry the token. */
+async function openInvoicePdf(orderId: string) {
+  const blob = await pBlob(`/portal/orders/${orderId}/invoice.pdf`);
+  window.open(URL.createObjectURL(blob), '_blank', 'noopener');
+}
 
 function Orders({
   say,
@@ -1391,7 +1562,12 @@ function Orders({
                       <button className="btn btn-secondary btn-sm" onClick={() => setDetail({ order: o, mode: 'creditnote' })}>
                         {t('po.creditNote')}
                       </button>
-                    ) : ['delivered', 'shipped', 'partdelivered'].includes(o.status) ? (
+                    ) : o.status === 'delivered' ? (
+                      /* A delivered order's Invoice is the PDF itself (Alex, 2026-10-06). */
+                      <button className="btn btn-secondary btn-sm" onClick={() => void openInvoicePdf(o.id)}>
+                        {t('po.invoice')}
+                      </button>
+                    ) : ['shipped', 'partdelivered'].includes(o.status) ? (
                       <button className="btn btn-secondary btn-sm" onClick={() => setDetail({ order: o, mode: 'invoice' })}>
                         {t('po.invoice')}
                       </button>
@@ -1482,6 +1658,14 @@ function OrderDetail({
               {t(statusKey[order.status] ?? order.status)}
             </span>
           )}
+          {order.status === 'delivered' ? (
+            <button
+              className="btn btn-primary btn-sm"
+              onClick={() => void openInvoicePdf(order.id)}
+            >
+              {t('po.invoicePdf')}
+            </button>
+          ) : null}
           <button className="iconbtn" aria-label={t('po.cancel')} onClick={onClose}>
             <Icon d={I.x} size={20} />
           </button>
@@ -1634,6 +1818,8 @@ function Promotions({
   const [rows, setRows] = useState<z.infer<typeof SupplierPromotionListSchema>['promotions']>([]);
   const [products, setProducts] = useState<z.infer<typeof SupplierProductListSchema>['products']>([]);
   const [adding, setAdding] = useState(false);
+  const [open, setOpen] = useState<string | null>(null);
+  const [editing, setEditing] = useState<Promo | null>(null);
   const canAdd = user.role === 'sr_owner' || user.role === 'sr_account';
   useEffect(() => {
     if (asked !== 'add-promotion' || !canAdd) return;
@@ -1654,7 +1840,7 @@ function Promotions({
       <div className="toolbar">
         <div className="toolbar-context">
           <span className="k">{t('po.tabPromotions')}</span>
-          <span className="v">{t('po.runningCount', { n: rows.length })}</span>
+          <span className="v">{t('po.runningCount', { n: rows.filter((o) => o.status === 'running').length })}</span>
         </div>
         {canAdd ? (
           <div className="toolbar-actions">
@@ -1666,10 +1852,12 @@ function Promotions({
       </div>
       <div className="card">
         {rows.map((o) => (
-          <div className="rowcard" key={o.id}>
-            <span className="mark on">%</span>
+          <button type="button" className="rowcard" key={o.id} onClick={() => setOpen(o.id)} data-testid="promo-row" style={{ width: '100%', textAlign: 'left', cursor: 'pointer' }}>
+            <span className={`mark ${o.status === 'running' ? 'on' : ''}`}>%</span>
             <span className="grow">
-              <span className="t">{o.title}</span>
+              <span className="t">
+                {o.title} <span className={`badge ${o.status === 'running' ? 'success' : o.status === 'paused' ? 'warning' : ''}`} style={{ marginLeft: 6 }}>{t(`po.promoStatus.${o.status}`)}</span>
+              </span>
               <span className="s">
                 {o.productIds.map(prodName).join(', ')} · {dateShort(o.starts)} → {dateShort(o.ends)}
               </span>
@@ -1677,7 +1865,8 @@ function Promotions({
                 {o.audience} · {o.terms || '—'}
               </span>
             </span>
-          </div>
+            <Icon d={I.right} size={18} />
+          </button>
         ))}
         {rows.length === 0 ? (
           <p className="muted" style={{ padding: '16px 20px', fontWeight: 500 }}>
@@ -1688,14 +1877,39 @@ function Promotions({
           {t('po.promoNote')}
         </div>
       </div>
-      {adding ? (
+      {open && !editing ? (
+        <PromotionDetail
+          promo={rows.find((o) => o.id === open) ?? null}
+          prodName={prodName}
+          canEdit={canAdd}
+          onClose={() => setOpen(null)}
+          onEdit={(p) => setEditing(p)}
+          onChanged={(msg) => {
+            reload();
+            say(msg);
+          }}
+          onDeleted={() => {
+            setOpen(null);
+            reload();
+            say(t('po.promoDeleted'));
+          }}
+          say={say}
+        />
+      ) : null}
+      {adding || editing ? (
         <AddPromotionPanel
           products={products}
-          onClose={() => setAdding(false)}
-          onSaved={() => {
+          existing={editing}
+          onClose={() => {
             setAdding(false);
+            setEditing(null);
+          }}
+          onSaved={() => {
+            const wasEdit = !!editing;
+            setAdding(false);
+            setEditing(null);
             reload();
-            say(t('po.promoPublished'));
+            say(wasEdit ? t('po.promoUpdated') : t('po.promoPublished'));
           }}
           say={say}
         />
@@ -1704,29 +1918,156 @@ function Promotions({
   );
 }
 
+type Promo = z.infer<typeof SupplierPromotionListSchema>['promotions'][number];
+
+/** One promotion in full, with what the supplier may do to it: pause or
+ *  resume (kept, offered to nobody while paused), edit, delete. */
+function PromotionDetail({
+  promo,
+  prodName,
+  canEdit,
+  onClose,
+  onEdit,
+  onChanged,
+  onDeleted,
+  say,
+}: {
+  promo: Promo | null;
+  prodName: (id: string) => string;
+  canEdit: boolean;
+  onClose: () => void;
+  onEdit: (p: Promo) => void;
+  onChanged: (msg: string) => void;
+  onDeleted: () => void;
+  say: (m: string) => void;
+}) {
+  const { t } = useTranslation();
+  const [confirmDel, setConfirmDel] = useState(false);
+  const [busy, setBusy] = useState(false);
+  if (!promo) return null;
+  const kindLabel = t(`po.kind${promo.kind.charAt(0).toUpperCase()}${promo.kind.slice(1)}`, { defaultValue: promo.kind });
+  const value =
+    promo.kind === 'pct' && promo.value ? `${promo.value}%`
+    : promo.kind === 'bxgy' && promo.per ? `${promo.per} + ${promo.value}`
+    : promo.value ? String(promo.value) : '—';
+  const toggle = async () => {
+    setBusy(true);
+    try {
+      await pPatch(z.object({ ok: z.literal(true) }), `/portal/promotions/${promo.id}`, { active: !promo.active });
+      onChanged(promo.active ? t('po.promoPaused') : t('po.promoResumed'));
+    } catch (e) {
+      say(e instanceof PortalApiError ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const remove = async () => {
+    setBusy(true);
+    try {
+      await pDelete(z.object({ ok: z.literal(true) }), `/portal/promotions/${promo.id}`);
+      onDeleted();
+    } catch (e) {
+      say(e instanceof PortalApiError ? e.message : String(e));
+      setConfirmDel(false);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const Row = ({ k, v }: { k: string; v: string }) => (
+    <div className="kv" style={{ display: 'flex', justifyContent: 'space-between', gap: 16, padding: '6px 0', borderBottom: '1px solid var(--line, #eee)' }}>
+      <span className="muted">{k}</span>
+      <span style={{ textAlign: 'right' }}>{v}</span>
+    </div>
+  );
+  return (
+    <Panel onClose={onClose}>
+      <div className="panel-head plain">
+        <div>
+          <h2>{promo.title}</h2>
+          <p className="sub">
+            {t('po.promoDetailTitle')} · <span className={`badge ${promo.status === 'running' ? 'success' : promo.status === 'paused' ? 'warning' : ''}`} data-testid="promo-status">{t(`po.promoStatus.${promo.status}`)}</span>
+          </p>
+        </div>
+        <div className="panel-actions">
+          {canEdit && promo.status !== 'ended' ? (
+            <button className="btn btn-secondary btn-sm" disabled={busy} onClick={() => void toggle()} data-testid="promo-toggle">
+              {promo.active ? t('po.promoPause') : t('po.promoResume')}
+            </button>
+          ) : null}
+          {canEdit ? (
+            <button className="btn btn-primary btn-sm" disabled={busy} onClick={() => onEdit(promo)} data-testid="promo-edit">
+              {t('po.promoEdit')}
+            </button>
+          ) : null}
+          <button className="iconbtn" aria-label={t('po.cancel')} onClick={onClose}>
+            <Icon d={I.x} size={20} />
+          </button>
+        </div>
+      </div>
+      <div className="panel-body" data-testid="promo-detail">
+        <Row k={t('po.type')} v={kindLabel} />
+        <Row k={t('po.promoValue')} v={value} />
+        <Row k={t('po.promoProducts')} v={promo.productIds.map(prodName).join(', ')} />
+        <Row k={t('po.promoPeriod')} v={`${dateShort(promo.starts)} → ${dateShort(promo.ends)}`} />
+        <Row k={t('po.minimumOrder')} v={promo.minOrder ? money(promo.minOrder) : '—'} />
+        <Row k={t('po.promoUsageLimit')} v={promo.usageLimit ? String(promo.usageLimit) : t('po.promoNoLimit')} />
+        <Row k={t('po.promoAudience')} v={promo.audience} />
+        <Row k={t('po.promoTerms')} v={promo.terms || '—'} />
+        <div className="note" style={{ marginTop: 14 }}>{t('po.promoNote')}</div>
+        {canEdit ? (
+          <div className="rowcard" style={{ marginTop: 14 }}>
+            <span className="grow">
+              <span className="bold" style={{ display: 'block' }}>{t('po.promoDelete')}</span>
+              <span className="muted" style={{ fontSize: 12 }}>{t('po.promoDeleteSub')}</span>
+            </span>
+            {confirmDel ? (
+              <span style={{ display: 'inline-flex', gap: 6 }}>
+                <button className="btn btn-secondary btn-sm" disabled={busy} onClick={() => setConfirmDel(false)}>
+                  {t('po.cancel')}
+                </button>
+                <button className="btn btn-sm" style={{ background: 'var(--danger, #b3261e)', color: '#fff' }} disabled={busy} onClick={() => void remove()} data-testid="promo-delete-confirm">
+                  {t('po.promoDelete')}
+                </button>
+              </span>
+            ) : (
+              <button className="btn btn-secondary btn-sm" onClick={() => setConfirmDel(true)} data-testid="promo-delete">
+                {t('po.promoDelete')}
+              </button>
+            )}
+          </div>
+        ) : null}
+      </div>
+    </Panel>
+  );
+}
+
 function AddPromotionPanel({
   products,
+  existing = null,
   onClose,
   onSaved,
   say,
 }: {
   products: z.infer<typeof SupplierProductListSchema>['products'];
+  /** Editing this one (2026-10-07) — the same panel, PATCH instead of POST. */
+  existing?: Promo | null;
   onClose: () => void;
   onSaved: () => void;
   say: (m: string) => void;
 }) {
   const { t } = useTranslation();
+  const today = new Date().toISOString().slice(0, 10);
   const [f, setF] = useState({
-    title: '',
-    kind: 'pct' as 'pct' | 'amt' | 'tier' | 'bxgy' | 'gift' | 'bundle' | 'training',
-    min: '0',
-    from: '2026-08-10',
-    until: '2026-09-30',
-    limit: '0',
-    audience: 'All connected salons',
-    terms: '',
+    title: existing?.title ?? '',
+    kind: (existing?.kind ?? 'pct') as 'pct' | 'amt' | 'tier' | 'bxgy' | 'gift' | 'bundle' | 'training',
+    min: String(existing?.minOrder ?? 0),
+    from: existing?.starts ?? today,
+    until: existing?.ends ?? today,
+    limit: String(existing?.usageLimit ?? 0),
+    audience: existing?.audience ?? 'All connected salons',
+    terms: existing?.terms ?? '',
   });
-  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [picked, setPicked] = useState<Set<string>>(new Set(existing?.productIds ?? []));
   const dirty = f.title.trim() !== '' || picked.size > 0;
   const valid = f.title.trim() !== '' && picked.size > 0;
 
@@ -1748,7 +2089,7 @@ function AddPromotionPanel({
       return;
     }
     try {
-      await pPost(z.object({ id: z.string() }), '/portal/promotions', {
+      const body = {
         title: f.title.trim(),
         kind: f.kind,
         productIds: [...picked],
@@ -1758,7 +2099,9 @@ function AddPromotionPanel({
         usageLimit: Number(f.limit) || 0,
         terms: f.terms.trim(),
         audience: f.audience,
-      });
+      };
+      if (existing) await pPatch(z.object({ ok: z.literal(true) }), `/portal/promotions/${existing.id}`, PortalPromotionPatchSchema.parse(body));
+      else await pPost(z.object({ id: z.string() }), '/portal/promotions', body);
       onSaved();
     } catch (e) {
       say(e instanceof PortalApiError ? e.message : String(e));
@@ -1769,15 +2112,15 @@ function AddPromotionPanel({
     <Panel onClose={onClose}>
       <div className="panel-head plain">
         <div>
-          <h2>{t('po.createPromoTitle')}</h2>
-          <p className="sub">{t('po.createPromoSub')}</p>
+          <h2>{existing ? t('po.editPromoTitle') : t('po.createPromoTitle')}</h2>
+          <p className="sub">{existing ? t('po.promoNote') : t('po.createPromoSub')}</p>
         </div>
         <div className="panel-actions">
           <span className={`panel-status${dirty ? ' warn' : ''}`}>
             {dirty ? t('drawer.statusUnsaved') : t('drawer.statusSaved')}
           </span>
           <button className="btn btn-primary btn-sm" disabled={!valid} onClick={() => void save()}>
-            {t('po.publishPromo')}
+            {existing ? t('po.savePromo') : t('po.publishPromo')}
           </button>
           <button className="iconbtn" aria-label={t('po.cancel')} onClick={onClose}>
             <Icon d={I.x} size={20} />
@@ -1879,7 +2222,7 @@ function AddPromotionPanel({
             onChange={(e) => setF({ ...f, terms: e.target.value })}
           />
         </label>
-        <div className="note">{t('po.addPromoNote')}</div>
+        <div className="note">{existing ? t('po.addPromoNote') : `${t('po.addPromoNote')} ${t('po.promoNotified')}`}</div>
       </div>
     </Panel>
   );
@@ -2894,5 +3237,76 @@ function PortalSupport({
         )}
       </div>
     </div>
+  );
+}
+
+/** A shelf that is missing is asked of Velnes HQ, from the product
+ *  panel: the request's lifecycle is HQ's; the answer comes to the bell. */
+function AskCategory({ say }: { say: (m: string) => void }) {
+  const { t } = useTranslation();
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState('');
+  const [note, setNote] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [requests, setRequests] = useState<z.infer<typeof PortalCategoryRequestListSchema>['requests']>([]);
+  const load = useCallback(() => {
+    void pGet(PortalCategoryRequestListSchema, '/portal/category-requests').then((r) => setRequests(r.requests));
+  }, []);
+  useEffect(load, [load]);
+  const send = async () => {
+    setBusy(true);
+    try {
+      await pPost(z.object({ id: z.string() }), '/portal/category-requests', PortalCategoryRequestCreateSchema.parse({ name, note }));
+      say(t('po.askCategorySent'));
+      setName('');
+      setNote('');
+      setOpen(false);
+      load();
+    } catch (e) {
+      say(e instanceof PortalApiError ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const recent = requests.filter((r) => r.status === 'pending' || (r.decidedAt && Date.now() - Date.parse(r.decidedAt) < 14 * 86_400_000));
+  return (
+    <div style={{ marginTop: 6 }}>
+      {!open ? (
+        <button type="button" className="btn btn-secondary btn-sm" onClick={() => setOpen(true)} data-testid="ask-category">
+          {t('po.askCategory')}
+        </button>
+      ) : (
+        <div style={{ display: 'grid', gap: 6, marginTop: 4 }} data-testid="ask-category-form">
+          <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder={t('po.askCategoryName')} aria-label={t('po.askCategoryName')} />
+          <input className="input" value={note} onChange={(e) => setNote(e.target.value)} placeholder={t('po.askCategoryNote')} aria-label={t('po.askCategoryNote')} />
+          <span style={{ display: 'flex', gap: 6 }}>
+            <button type="button" className="btn btn-primary btn-sm" disabled={busy || !name.trim()} onClick={() => void send()}>
+              {t('po.askCategorySend')}
+            </button>
+            <button type="button" className="btn btn-secondary btn-sm" disabled={busy} onClick={() => setOpen(false)}>
+              {t('po.cancel')}
+            </button>
+          </span>
+        </div>
+      )}
+      {recent.length ? (
+        <ul className="muted" style={{ margin: '6px 0 0', padding: 0, listStyle: 'none', fontSize: 12 }} data-testid="category-requests">
+          {recent.map((r) => (
+            <li key={r.id}>
+              {t('po.askCategoryRequests')}: {r.name} · {t(`po.askCategoryStatus.${r.status}`)}{r.status === 'declined' && r.hqReason ? ` — ${r.hqReason}` : ''}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
+  );
+}
+
+/** A small info icon whose tooltip explains a field on hover or focus. */
+function InfoTip({ text, testId }: { text: string; testId?: string }) {
+  return (
+    <button type="button" className="hovertip" data-tip={text} aria-label={text} data-testid={testId} onClick={(e) => e.preventDefault()}>
+      <Icon d={I.info} size={14} />
+    </button>
   );
 }

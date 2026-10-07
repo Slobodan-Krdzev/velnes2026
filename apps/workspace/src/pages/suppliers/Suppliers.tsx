@@ -4,8 +4,11 @@ import {
   PurchaseOrderSchema,
   SupplierListSchema,
   SupplierProductListSchema,
-  SupplierPromotionListSchema,
+  SalonPromotionListSchema,
+  SupplierMediaListSchema,
   type PurchaseOrder,
+  type SupplierMedia,
+  type SalonPromotion,
   type Supplier,
 } from '@velnes/contracts';
 import { I, Icon, NumInput } from '@velnes/ui';
@@ -13,7 +16,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router-dom';
 import { z } from 'zod';
-import { ApiError, get, post, useSession } from '@velnes/client';
+import { ApiError, get, getBlob, post, useSession } from '@velnes/client';
 import { useLocations } from '../../api/queries.js';
 import { money } from '../../lib/money.js';
 import { useToast } from '../../lib/toast.js';
@@ -25,6 +28,7 @@ import { useToast } from '../../lib/toast.js';
 const TABS = [
   ['suppliers', 'sup.tabSuppliers'],
   ['catalog', 'sup.tabCatalog'],
+  ['promotions', 'sup.tabPromotions'],
   ['orders', 'sup.tabOrders'],
   ['deliveries', 'sup.tabDeliveries'],
   ['academy', 'sup.tabAcademy'],
@@ -92,6 +96,7 @@ export function SuppliersPage() {
       </div>
       {tab === 'suppliers' ? <SuppliersTab startOrder={setDrafting} /> : null}
       {tab === 'catalog' ? <CatalogTab /> : null}
+      {tab === 'promotions' ? <PromotionsTab startOrder={setDrafting} openId={params.get('promo')} /> : null}
       {tab === 'orders' ? <OrdersTab receive={setReceiving} /> : null}
       {tab === 'deliveries' ? <DeliveriesTab receive={setReceiving} /> : null}
       {tab === 'academy' ? (
@@ -118,6 +123,7 @@ function SupplierRow({
   const toast = useToast();
   const qc = useQueryClient();
   const locations = useLocations();
+  const [mediaOf, setMediaOf] = useState<Supplier | null>(null);
   const locName = (id: string) => locations.data?.locations.find((l) => l.id === id)?.name ?? '—';
 
   const connect = async () => {
@@ -167,6 +173,9 @@ function SupplierRow({
       </span>
       {s.status === 'connected' ? (
         <span className="acts">
+          <button className="btn btn-secondary btn-sm" onClick={() => setMediaOf(s)} data-testid={`media-${s.id}`}>
+            {t('sup.media.button')}
+          </button>
           <button className="btn btn-primary btn-sm" onClick={() => startOrder(s.id)}>
             {t('sup.newOrder')}
           </button>
@@ -178,6 +187,59 @@ function SupplierRow({
           {t('sup.requestConnection')}
         </button>
       ) : null}
+      {mediaOf ? <MediaModal supplier={mediaOf} onClose={() => setMediaOf(null)} /> : null}
+    </div>
+  );
+}
+
+/** A connected supplier's printed catalogs (2026-10-07): the PDFs it
+ *  published, opened in a new tab through the session like the invoice. */
+function MediaModal({ supplier, onClose }: { supplier: Supplier; onClose: () => void }) {
+  const { t, i18n } = useTranslation();
+  const files = useQuery({
+    queryKey: ['supplier-media', supplier.id],
+    queryFn: () => get(SupplierMediaListSchema, `/suppliers/${supplier.id}/media`),
+  });
+  const size = (n: number) => (n >= 1024 * 1024 ? `${(n / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
+  const when = (iso: string) => new Date(iso).toLocaleDateString(i18n.language, { day: 'numeric', month: 'short', year: 'numeric' });
+  const open = async (f: SupplierMedia) => {
+    const blob = await getBlob(`/suppliers/${supplier.id}/media/${f.id}/file`);
+    window.open(URL.createObjectURL(blob), '_blank', 'noopener');
+  };
+  return (
+    <div className="overlay" onClick={onClose}>
+      <div className="modal" role="dialog" aria-modal="true" aria-labelledby="media-title" style={{ maxWidth: 560 }} onClick={(e) => e.stopPropagation()}>
+        <div className="modal-head">
+          <div>
+            <h2 id="media-title">{t('sup.media.title', { name: supplier.name })}</h2>
+            <span className="muted" style={{ fontWeight: 500 }}>{t('sup.media.sub')}</span>
+          </div>
+        </div>
+        <div className="modal-body" style={{ display: 'grid', gap: 8 }} data-testid="media-list">
+          {files.isLoading ? (
+            <p className="muted" style={{ margin: 0 }}>{t('sup.media.loading')}</p>
+          ) : !files.data || files.data.files.length === 0 ? (
+            <p className="muted" style={{ margin: 0 }}>{t('sup.media.empty')}</p>
+          ) : (
+            files.data.files.map((f) => (
+              <button key={f.id} type="button" className="rowcard" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', textAlign: 'left', width: '100%' }} onClick={() => void open(f)} data-testid="media-file">
+                <Icon d={I.note} size={18} />
+                <span className="grow" style={{ minWidth: 0 }}>
+                  <span className="t" style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.name}</span>
+                  <span className="s muted" style={{ fontSize: 12 }}>{size(f.sizeBytes)} · {when(f.createdAt)}</span>
+                </span>
+                <span className="muted" style={{ fontSize: 12, whiteSpace: 'nowrap' }}>{t('sup.media.openPdf')}</span>
+              </button>
+            ))
+          )}
+        </div>
+        <div className="modal-foot" style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+          <button className="btn btn-secondary" onClick={onClose}>{t('sup.promoClose')}</button>
+        </div>
+        <button className="modal-close" aria-label={t('sup.promoClose')} onClick={onClose}>
+          <Icon d={I.x} size={20} />
+        </button>
+      </div>
     </div>
   );
 }
@@ -311,6 +373,13 @@ function CatalogTab() {
   );
 }
 
+/** The invoice PDF (Alex, 2026-10-06): fetched with the session's
+ *  token and opened in a new tab — a plain link could not carry it. */
+async function openInvoicePdf(orderId: string) {
+  const blob = await getBlob(`/purchase-orders/${orderId}/invoice.pdf`);
+  window.open(URL.createObjectURL(blob), '_blank', 'noopener');
+}
+
 function OrderRow({
   o,
   receive,
@@ -369,6 +438,10 @@ function OrderRow({
         ) : o.status === 'shipped' || o.status === 'partdelivered' ? (
           <button className="btn btn-secondary btn-sm" onClick={() => receive(o)}>
             {t('sup.receive')}
+          </button>
+        ) : o.status === 'delivered' ? (
+          <button className="btn btn-secondary btn-sm" onClick={() => void openInvoicePdf(o.id)}>
+            {t('sup.invoicePdf')}
           </button>
         ) : null}
       </td>
@@ -483,7 +556,7 @@ function OrderDraft({
   const catalog = useSupCatalog(supplierId);
   const promos = useQuery({
     queryKey: ['supPromotions'],
-    queryFn: () => get(SupplierPromotionListSchema, '/supplier-promotions'),
+    queryFn: () => get(SalonPromotionListSchema, '/supplier-promotions'),
   });
   const [qty, setQty] = useState<Record<string, number>>({});
   const [error, setError] = useState<string | null>(null);
@@ -718,5 +791,105 @@ function Receive({ order, done }: { order: PurchaseOrder; done: () => void }) {
         </div>
       </div>
     </>
+  );
+}
+
+/** Running promotions from connected suppliers (2026-10-07): the
+ *  server's list with its reasons; a row opens the offer; the offer
+ *  leads to an order from that supplier. */
+function PromotionsTab({ startOrder, openId }: { startOrder: (supplierId: string) => void; openId: string | null }) {
+  const { t } = useTranslation();
+  const promos = useQuery({ queryKey: ['supPromotions'], queryFn: () => get(SalonPromotionListSchema, '/supplier-promotions') });
+  const [open, setOpen] = useState<string | null>(openId);
+  const rows = promos.data?.promotions ?? [];
+  const current = rows.find((p) => p.id === open) ?? null;
+  return (
+    <>
+      <div className="card">
+        <div className="card-header">
+          <div>
+            <h2>{t('sup.promosTitle')}</h2>
+            <span className="muted" style={{ fontWeight: 500 }}>{t('sup.promosSub')}</span>
+          </div>
+        </div>
+        {promos.data && rows.length === 0 ? (
+          <p className="muted" style={{ padding: '16px 20px', fontWeight: 500 }}>{t('sup.noPromos')}</p>
+        ) : null}
+        {rows.map((o) => (
+          <button type="button" className="rowcard" key={o.id} onClick={() => setOpen(o.id)} data-testid="salon-promo" style={{ width: '100%', textAlign: 'left', cursor: 'pointer' }}>
+            <span className={`mark ${o.status === 'running' ? 'on' : ''}`}>
+              <Icon d={I.tag} size={20} />
+            </span>
+            <span className="grow">
+              <span className="t">
+                {o.title}
+                {o.reasons.map((r) => (
+                  <span key={r} className={`badge ${r === 'carry' || r === 'ordered_before' ? 'success' : r === 'ending_soon' ? 'warning' : ''}`} style={{ marginLeft: 6 }}>
+                    {t(`sup.reason.${r}`)}
+                  </span>
+                ))}
+              </span>
+              <span className="s">
+                {o.supplierName} · {o.products.map((x) => x.name).join(', ')}
+              </span>
+              <span className="s">
+                {o.status === 'scheduled' ? t('sup.promoStarts', { date: dateShort(o.starts) }) : o.daysLeft === 0 ? t('sup.promoEndsToday') : t('sup.promoEndsIn', { n: o.daysLeft })} · {o.terms || '—'}
+              </span>
+            </span>
+            <Icon d={I.right} size={18} />
+          </button>
+        ))}
+      </div>
+      {current ? <PromotionDetail promo={current} onClose={() => setOpen(null)} onOrder={() => startOrder(current.supplierId)} /> : null}
+    </>
+  );
+}
+
+function PromotionDetail({ promo, onClose, onOrder }: { promo: SalonPromotion; onClose: () => void; onOrder: () => void }) {
+  const { t } = useTranslation();
+  return (
+    <div className="overlay" onClick={onClose}>
+      <div className="modal" role="dialog" aria-modal="true" aria-labelledby="promo-title" style={{ maxWidth: 560 }} onClick={(e) => e.stopPropagation()}>
+        <div className="modal-head">
+          <div>
+            <h2 id="promo-title">{promo.title}</h2>
+            <span className="muted" style={{ fontWeight: 500 }}>{promo.supplierName} · {promo.brand}</span>
+          </div>
+        </div>
+        <div className="modal-body" style={{ display: 'grid', gap: 12 }} data-testid="salon-promo-detail">
+          <div>
+            {promo.reasons.map((r) => (
+              <span key={r} className={`badge ${r === 'carry' || r === 'ordered_before' ? 'success' : r === 'ending_soon' ? 'warning' : ''}`} style={{ marginRight: 6 }}>
+                {t(`sup.reason.${r}`)}
+              </span>
+            ))}
+          </div>
+          <div>
+            <span className="stat-label">{t('sup.promoProducts')}</span>
+            <ul style={{ margin: '4px 0 0', paddingLeft: 18 }}>
+              {promo.products.map((x) => (
+                <li key={x.id}>
+                  <span className="bold">{x.name}</span> <span className="muted tnum">· {money(x.buy)}</span>
+                  {x.carried ? <span className="badge success" style={{ marginLeft: 6 }}>{t('sup.promoCarried')}</span> : null}
+                </li>
+              ))}
+            </ul>
+          </div>
+          <div className="muted" style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '2px 14px' }}>
+            <span>{t('sup.promoPeriod')}</span><span className="tnum">{dateShort(promo.starts)} → {dateShort(promo.ends)}</span>
+            <span>{t('sup.promoMinOrder')}</span><span className="tnum">{promo.minOrder ? money(promo.minOrder) : '—'}</span>
+            <span>{t('sup.promoTerms')}</span><span>{promo.terms || '—'}</span>
+          </div>
+          <div className="note">{t('sup.promosSub')}</div>
+        </div>
+        <div className="modal-foot" style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+          <button className="btn btn-ghost" onClick={onClose}>{t('sup.promoClose')}</button>
+          <button className="btn btn-primary" onClick={onOrder} data-testid="promo-order">{t('sup.promoOrderFrom', { name: promo.supplierName })}</button>
+        </div>
+        <button className="modal-close" aria-label={t('sup.promoClose')} onClick={onClose}>
+          <Icon d={I.x} size={20} />
+        </button>
+      </div>
+    </div>
   );
 }

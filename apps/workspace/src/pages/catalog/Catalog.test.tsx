@@ -1,7 +1,7 @@
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { App } from '../../App.js';
+import { App, queryClient } from '../../App.js';
 import { setAccessToken } from '@velnes/client';
 
 const LOC = '20000000-0000-4000-8000-000000000001';
@@ -20,7 +20,7 @@ const me = {
   perms: { 'catalog.view': 'business', 'catalog.edit': 'business' },
 };
 
-function mockApi(calls: { method: string; path: string; body?: unknown }[]) {
+function mockApi(calls: { method: string; path: string; body?: unknown }[], promoLive = false) {
   vi.stubGlobal(
     'fetch',
     vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
@@ -72,9 +72,17 @@ function mockApi(calls: { method: string; path: string; body?: unknown }[]) {
               vat: 18,
               own: false,
               config: { active: true, price: 550, pos: true, stock: 41, lowStock: 2 },
+              promo: promoLive ? { id: 'ff000000-0000-4000-8000-000000000001', kind: 'pct', value: 20, ends: '2026-10-20' } : null,
+              promoPrice: promoLive ? 440 : null,
             },
           ],
         });
+      if (path.includes('/promotions/') && path.endsWith('/end') && method === 'POST')
+        return ok({ id: 'ff000000-0000-4000-8000-000000000001', productId: PROD, kind: 'pct', value: 20, starts: '2026-10-01', ends: '2026-10-20', active: false, status: 'ended', note: '', createdBy: { id: null, name: 'Maria' }, createdAt: '2026-10-01T08:00:00.000Z', endedAt: '2026-10-07T09:00:00.000Z' });
+      if (path.endsWith('/promotions') && method === 'POST')
+        return ok({ id: 'ff000000-0000-4000-8000-000000000002', productId: PROD, kind: 'pct', value: 15, starts: '2026-10-07', ends: '2026-10-14', active: true, status: 'running', note: '', createdBy: { id: null, name: 'Maria' }, createdAt: '2026-10-07T09:00:00.000Z', endedAt: null });
+      if (path.endsWith('/promotions'))
+        return ok({ promotions: promoLive ? [{ id: 'ff000000-0000-4000-8000-000000000001', productId: PROD, kind: 'pct', value: 20, starts: '2026-10-01', ends: '2026-10-20', active: true, status: 'running', note: 'Autumn', createdBy: { id: null, name: 'Maria' }, createdAt: '2026-10-01T08:00:00.000Z', endedAt: null }] : [] });
       if (path.endsWith('/combos') && method === 'GET')
         return ok({
           combos: [
@@ -126,6 +134,7 @@ async function openCatalog() {
 
 describe('catalog', () => {
   beforeEach(() => {
+    queryClient.clear();
     localStorage.clear();
     setAccessToken(null);
   });
@@ -245,5 +254,44 @@ describe('catalog', () => {
       expect(body.name).toBe('Test pack');
       expect(body.items.some((i) => i.type === 'service' && i.id === SVC)).toBe(true);
     });
+  });
+
+  it('products: the Promo button opens the promotion panel; starting one POSTs kind, value and dates', async () => {
+    const calls: { method: string; path: string; body?: unknown }[] = [];
+    mockApi(calls);
+    await openCatalog();
+    await userEvent.click(screen.getByRole('button', { name: 'Products' }));
+    await screen.findByText('Kinesiology tape roll');
+    expect(screen.queryByTestId('promo-badge')).toBeNull();
+    await userEvent.click(screen.getByTestId(`promo-${PROD}`));
+    const panel = await screen.findByTestId('promo-panel');
+    expect(within(panel).getByText('No promotion on this product.')).toBeDefined();
+    const value = within(panel).getByLabelText('Percent off');
+    await userEvent.clear(value);
+    await userEvent.type(value, '15');
+    expect(within(panel).getByTestId('promo-preview').textContent).toMatch(/550.*→.*468/); // 550 − 15 % = 467.5 → 468, the server's rule
+    await userEvent.click(within(panel).getByTestId('promo-start'));
+    await waitFor(() => {
+      const sent = calls.find((c) => c.method === 'POST' && c.path.endsWith(`/products/${PROD}/promotions`));
+      expect(sent?.body).toMatchObject({ kind: 'pct', value: 15 });
+      expect((sent?.body as { starts: string; ends: string }).starts).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    });
+  });
+
+  it('products: a running promotion shows its badge in the table and can be ended from the panel', async () => {
+    const calls: { method: string; path: string; body?: unknown }[] = [];
+    mockApi(calls, true);
+    await openCatalog();
+    await userEvent.click(screen.getByRole('button', { name: 'Products' }));
+    await screen.findByText('Kinesiology tape roll');
+    expect(screen.getByTestId('promo-badge').textContent).toContain('−20%');
+    await userEvent.click(screen.getByTestId(`promo-${PROD}`));
+    const panel = await screen.findByTestId('promo-panel');
+    const live = await within(panel).findByTestId('promo-live');
+    expect(live.textContent).toContain('Running now');
+    expect(live.textContent).toContain('Autumn');
+    expect(within(panel).queryByTestId('promo-start')).toBeNull();
+    await userEvent.click(within(panel).getByTestId('promo-end'));
+    await waitFor(() => expect(calls.some((c) => c.method === 'POST' && c.path.endsWith('/promotions/ff000000-0000-4000-8000-000000000001/end'))).toBe(true));
   });
 });

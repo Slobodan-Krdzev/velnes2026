@@ -1,4 +1,5 @@
 import type { AccessClaims, DuePayment, Invoice, SaleRequest, SaleResponse } from '@velnes/contracts';
+import { BusinessSettingsSchema } from '@velnes/contracts';
 import { sql } from 'kysely';
 import type { Trx } from '../../db/index.js';
 import { logAudit } from '../audit/audit.service.js';
@@ -32,6 +33,13 @@ interface ResolvedLine {
 
 export const lineTotal = (l: ResolvedLine) => Math.max(0, l.price * l.qty - l.lineDiscount);
 
+/** The salon's default VAT rate (Settings → Sales), for a line whose
+ *  catalog record no longer exists. */
+async function defaultVat(trx: Trx): Promise<number> {
+  const b = await trx.selectFrom('businesses').select('settings').executeTakeFirst();
+  return BusinessSettingsSchema.parse((b?.settings ?? {}) as Record<string, unknown>).sales.defaultVat;
+}
+
 /** Resolve every basket line at the door: real prices, real classes. */
 async function resolveLines(
   trx: Trx,
@@ -46,7 +54,7 @@ async function resolveLines(
         .selectFrom('appointments as a')
         .leftJoin('services as s', 's.id', 'a.serviceId')
         .selectAll('a')
-        .select('s.name as serviceName')
+        .select(['s.name as serviceName', 's.vat as serviceVat'])
         .where('a.id', '=', l.appointmentId)
         .executeTakeFirst();
       if (!a) throw new TillError('NOT_FOUND', 'That appointment is gone');
@@ -59,7 +67,11 @@ async function resolveLines(
         serviceId: a.serviceId,
         productId: null,
         appointmentId: a.id,
-        vat: 18,
+        // The service's own rate, as the service and product lines do
+        // (Phase 0, 2026-10-06) — snapshotted on the line, so a later
+        // rate change never rewrites this sale. A visit whose service is
+        // gone falls back to the salon's default rate, not to a constant.
+        vat: a.serviceVat ?? (await defaultVat(trx)),
         poId: a.poId,
         pmoId: a.pmoId,
       });
@@ -334,6 +346,9 @@ async function invoiceContract(trx: Trx, id: string): Promise<Invoice> {
       description: l.description,
       qty: l.qty,
       unitPrice: l.unitPrice,
+      amount: l.amount,
+      lineDiscount: l.lineDiscount,
+      vat: l.vat,
       itemClass: l.itemClass,
     })),
   };
@@ -500,6 +515,8 @@ export async function settleSale(trx: Trx, actor: SaleActor, req: SaleRequest): 
         qty: l.qty,
         unitPrice: Math.round(lineTotal(l) / l.qty),
         lineDiscount: l.lineDiscount,
+        // The exact line total — what every reader sums (Phase 0).
+        amount: lineTotal(l),
         itemClass: l.itemClass,
         serviceId: l.serviceId,
         productId: l.productId,

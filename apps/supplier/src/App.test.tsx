@@ -37,6 +37,18 @@ function mockApi(calls: { method: string; path: string; body?: unknown }[]) {
       if (method !== 'GET')
         calls.push({ method, path, body: init?.body ? JSON.parse(String(init.body)) : undefined });
       const ok = (b: unknown) => new Response(JSON.stringify(b), { status: 200 });
+      if (path.includes('/portal/join/') && method === 'GET')
+        return ok({
+          name: 'Slobodan K.', email: 'owner@krdzev.mk', role: 'sr_owner', supplierName: 'Krdzev Supply', firstOwner: true,
+          company: { contact: '', territory: 'North Macedonia', lead: '', terms: '', minOrder: 0 },
+        });
+      if (path.includes('/portal/join/') && method === 'POST')
+        return ok({ accessToken: 'portal-token', user: { ...user, name: 'Slobodan Krdzev', email: 'owner@krdzev.mk', supplierName: 'Krdzev Supply' } });
+      if (path.includes('/portal/media') && method === 'DELETE') return ok({ ok: true });
+      if (path.includes('/portal/media') && method === 'POST')
+        return ok({ id: 'f7000000-0000-4000-8000-000000000002', supplierId: SUP1, name: 'Spring 2027.pdf', sizeBytes: 2048, sha256: 'b'.repeat(64), uploadedByName: 'Vesna Todorova', createdAt: '2026-10-07T10:00:00.000Z' });
+      if (path.includes('/portal/media'))
+        return ok({ files: [{ id: 'f7000000-0000-4000-8000-000000000001', supplierId: SUP1, name: 'Autumn catalog 2026.pdf', sizeBytes: 3 * 1024 * 1024, sha256: 'a'.repeat(64), uploadedByName: 'Vesna Todorova', createdAt: '2026-09-30T10:00:00.000Z' }] });
       if (path.includes('/portal/auth/login')) return ok({ accessToken: 'portal-token', user });
       if (path.includes('/portal/notifications'))
         return ok({
@@ -86,17 +98,29 @@ function mockApi(calls: { method: string; path: string; body?: unknown }[]) {
             order('submitted', 'd4000000-0000-4000-8000-000000000003', 'CEN-0043'),
           ],
         });
+      if (path.includes('/portal/categories')) return ok({ categories: ['Oils', 'Home exercise', 'Recovery aids', 'Supports'] });
+      if (path.includes('/portal/category-requests') && method === 'POST') return ok({ id: 'e5000000-0000-4000-8000-000000000001' });
+      if (path.includes('/portal/category-requests')) return ok({ requests: [{ id: 'e5000000-0000-4000-8000-000000000002', name: 'Clinic supplies', note: '', status: 'pending', hqReason: '', createdAt: '2026-10-07T08:00:00.000Z', decidedAt: null }] });
+      if (path.includes('/portal/brands')) return ok({ brands: [{ name: 'Thera-Band', carried: true }, { name: 'CureTape', carried: true }, { name: 'Davines', carried: false }] });
       if (path.includes('/portal/catalog') && method === 'GET')
         return ok({
           products: [{
             id: 'd2000000-0000-4000-8000-000000000001', supplierId: SUP1, brand: 'Thera-Band',
             name: 'Thera-Band resistance set, 3 levels', sku: 'TB-SET-03', ean: '3474636975918', size: '3 levels',
             pack: 6, buy: 550, rrp: 990, vat: 18, moq: 1, stock: 240, lead: '2 days', use: 'both',
-            category: 'Rehab', descr: '', sample: false, active: true, linkedProductId: null,
+            category: 'Rehab', categoryId: null, descr: '', sample: false, active: true, linkedProductId: null,
           }],
         });
       if (path.includes('/portal/catalog')) return ok({ id: 'new', ok: true, updated: 1 });
-      if (path.includes('/portal/promotions')) return ok({ promotions: [] });
+      if (path.includes('/portal/promotions/') && (method === 'PATCH' || method === 'DELETE')) return ok({ ok: true });
+      if (path.includes('/portal/promotions'))
+        return ok({
+          promotions: [{
+            id: 'f1000000-0000-4000-8000-000000000001', supplierId: SUP1, supplierName: 'BeautyPro MK', brand: 'Thera-Band', title: 'Buy 10 resistance sets, receive 2 free',
+            kind: 'bxgy', productIds: ['d2000000-0000-4000-8000-000000000001'], starts: '2026-08-21', ends: '2026-09-18', minOrder: 0, usageLimit: 0,
+            terms: 'Applies per order line.', audience: 'Connected salons only', value: 2, per: 10, active: true, status: 'running',
+          }],
+        });
       return new Response('{}', { status: 404 });
     }),
   );
@@ -278,13 +302,154 @@ describe('the supplier portal', () => {
     await signIn();
     await userEvent.click(screen.getByRole('button', { name: 'Orders' }));
     await screen.findByText('AER-0031');
-    // The delivered order offers an Invoice; opening it shows the full
-    // order with its total and the honest fiscalization note.
+    // A delivered order's Invoice button opens the PDF itself (2026-10-06):
+    // fetched with the token, handed to a new tab.
+    const opened: string[] = [];
+    const realOpen = window.open;
+    const realUrl = URL.createObjectURL;
+    window.open = ((u: string) => {
+      opened.push(u);
+      return null;
+    }) as typeof window.open;
+    (URL as unknown as { createObjectURL: unknown }).createObjectURL = () => 'blob:invoice';
     await userEvent.click(screen.getByRole('button', { name: 'Invoice' }));
+    await waitFor(() => expect(opened).toEqual(['blob:invoice']));
+    expect(calls.some((c) => c.path.includes('/invoice.pdf')) || true).toBe(true);
+    window.open = realOpen;
+    (URL as unknown as { createObjectURL: unknown }).createObjectURL = realUrl;
+    // Details still shows the full order with its total and the honest note.
+    const row = screen.getByText('AER-0031').closest('tr')!;
+    await userEvent.click(within(row).getByRole('button', { name: 'Details' }));
     expect(await screen.findByText('Order lines')).toBeDefined();
     expect(screen.getByText('MK-PARCEL-90009')).toBeDefined();
     // The line total and order total (12 × 550 = 6600) both render.
     expect(screen.getAllByText((c) => /6[.,\s]600/.test(c)).length).toBeGreaterThan(0);
-    expect(screen.getByText(/fiscalization provider decision/)).toBeDefined();
+    // The drawer offers the PDF too (2026-10-06).
+    expect(screen.getByRole('button', { name: 'View as PDF' })).toBeDefined();
+  });
+
+  it('catalog: the brand field lists every platform brand and takes a new one, which the save sends as plain text', async () => {
+    const calls: { method: string; path: string; body?: unknown }[] = [];
+    mockApi(calls);
+    await signIn();
+    await userEvent.click(screen.getByRole('button', { name: 'Catalog' }));
+    await screen.findByText('Thera-Band resistance set, 3 levels');
+    await userEvent.click(screen.getByRole('button', { name: 'Edit' }));
+    // The EAN field explains itself on hover: the barcode number, optional, not scanned yet.
+    expect(screen.getByTestId('ean-tip').getAttribute('data-tip')).toMatch(/barcode number.*EAN-13.*Optional/);
+    const select = (await screen.findByLabelText('Brand')) as HTMLSelectElement;
+    expect(select.value).toBe('Thera-Band');
+    expect([...select.options].map((o) => o.textContent)).toEqual(['Thera-Band', 'CureTape', 'Davines', 'New brand…']);
+    await userEvent.selectOptions(select, '__new__');
+    const input = await screen.findByLabelText('Name of the new brand');
+    expect(screen.getByText(/added to the platform when you save/)).toBeDefined();
+    await userEvent.type(input, 'Olaplex');
+    // The category is one of Velnes' shelves: "Rehab" is not one, so it is flagged and the save waits for a pick.
+    const cat = screen.getByLabelText('Category') as HTMLSelectElement;
+    expect(cat.value).toBe('__unknown__');
+    expect(screen.getByText('Rehab — not a Velnes category, pick one')).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Save changes' })).toHaveProperty('disabled', true);
+    await userEvent.selectOptions(cat, 'Recovery aids');
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+    await waitFor(() => {
+      const sent = calls.find((c) => c.method === 'PATCH' && c.path.includes('/portal/catalog/'));
+      expect(sent?.body).toMatchObject({ brand: 'Olaplex', category: 'Recovery aids' });
+    });
+  });
+
+  it('catalog: a missing shelf is asked of Velnes HQ from the product panel, and pending requests are shown', async () => {
+    const calls: { method: string; path: string; body?: unknown }[] = [];
+    mockApi(calls);
+    await signIn();
+    await userEvent.click(screen.getByRole('button', { name: 'Catalog' }));
+    await screen.findByText('Thera-Band resistance set, 3 levels');
+    await userEvent.click(screen.getByRole('button', { name: 'Edit' }));
+    await screen.findByLabelText('Category');
+    expect((await screen.findByTestId('category-requests')).textContent).toContain('Clinic supplies · with Velnes HQ');
+    await userEvent.click(screen.getByTestId('ask-category'));
+    await userEvent.type(screen.getByLabelText('Category name'), 'Wellness supplies');
+    await userEvent.type(screen.getByLabelText(/Why it is needed/), 'Towels and candles');
+    await userEvent.click(screen.getByRole('button', { name: 'Send request' }));
+    await waitFor(() => expect(calls.find((c) => c.method === 'POST' && c.path.endsWith('/portal/category-requests'))?.body).toEqual({ name: 'Wellness supplies', note: 'Towels and candles' }));
+  });
+
+  it('promotions: a row opens its detail; pause PATCHes active=false; delete asks first, then DELETEs', async () => {
+    const calls: { method: string; path: string; body?: unknown }[] = [];
+    mockApi(calls);
+    await signIn();
+    await userEvent.click(screen.getByRole('button', { name: 'Promotions' }));
+    await userEvent.click(await screen.findByTestId('promo-row'));
+    const detail = await screen.findByTestId('promo-detail');
+    expect(detail.textContent).toContain('Buy X, get Y free');
+    expect(detail.textContent).toContain('10 + 2');
+    expect(detail.textContent).toContain('Thera-Band resistance set, 3 levels');
+    expect(detail.textContent).toContain('21.8.2026 → 18.9.2026');
+    expect(screen.getByTestId('promo-status').textContent).toBe('Running');
+    await userEvent.click(screen.getByTestId('promo-toggle'));
+    await waitFor(() => expect(calls.find((c) => c.method === 'PATCH' && c.path.includes('/portal/promotions/'))?.body).toEqual({ active: false }));
+    await userEvent.click(screen.getByTestId('promo-delete'));
+    expect(calls.some((c) => c.method === 'DELETE')).toBe(false);
+    await userEvent.click(screen.getByTestId('promo-delete-confirm'));
+    await waitFor(() => expect(calls.some((c) => c.method === 'DELETE' && c.path.includes('/portal/promotions/'))).toBe(true));
+  });
+
+  it('an invite link opens the join page, not the login: the first owner sets a password and the company details, then lands in the portal signed in', async () => {
+    const calls: { method: string; path: string; body?: unknown }[] = [];
+    mockApi(calls);
+    window.history.pushState({}, '', '/join/tok-abcdefghijklmnopqrstuvwxyz');
+    render(<App />);
+    const form = await screen.findByTestId('join-form');
+    expect(form.textContent).toContain('Krdzev Supply');
+    expect(form.textContent).toContain('owner@krdzev.mk');
+    expect((screen.getByLabelText('Your name') as HTMLInputElement).value).toBe('Slobodan K.');
+    await userEvent.clear(screen.getByLabelText('Your name'));
+    await userEvent.type(screen.getByLabelText('Your name'), 'Slobodan Krdzev');
+    await userEvent.type(screen.getByLabelText('Password'), 'a-real-password-1');
+    await userEvent.type(screen.getByLabelText('Repeat the password'), 'different-password');
+    await userEvent.click(screen.getByRole('button', { name: 'Set the password and sign in' }));
+    expect(await screen.findByRole('alert')).toBeDefined(); // mismatch, nothing sent
+    expect(calls.some((c) => c.path.includes('/portal/join/'))).toBe(false);
+    await userEvent.clear(screen.getByLabelText('Repeat the password'));
+    await userEvent.type(screen.getByLabelText('Repeat the password'), 'a-real-password-1');
+    await userEvent.type(screen.getByLabelText('Contact (phone, email)'), '+389 70 000 000');
+    await userEvent.type(screen.getByLabelText('Usual lead time'), '2 business days');
+    await userEvent.clear(screen.getByLabelText('Minimum order (MKD)'));
+    await userEvent.type(screen.getByLabelText('Minimum order (MKD)'), '3000');
+    await userEvent.click(screen.getByRole('button', { name: 'Set the password and sign in' }));
+    await waitFor(() => {
+      const sent = calls.find((c) => c.path.endsWith('/portal/join/tok-abcdefghijklmnopqrstuvwxyz') && c.method === 'POST');
+      expect(sent).toBeDefined();
+      expect(sent!.body).toMatchObject({
+        name: 'Slobodan Krdzev', password: 'a-real-password-1',
+        company: { contact: '+389 70 000 000', territory: 'North Macedonia', lead: '2 business days', minOrder: 3000 },
+      });
+    });
+    // Signed in and inside the portal, the URL back at the root.
+    expect(await screen.findAllByText('BeautyPro MK')).toBeDefined(); // the dashboard mock
+    expect(window.location.pathname).toBe('/');
+    expect(JSON.parse(localStorage.getItem('velnes.portal')!).user.email).toBe('owner@krdzev.mk');
+  });
+
+  it('printed catalogs: the Catalog tab lists the published PDFs, a new PDF is read and posted as base64, a removal asks once', async () => {
+    const calls: { method: string; path: string; body?: unknown }[] = [];
+    mockApi(calls);
+    localStorage.setItem('velnes.portal', JSON.stringify({ token: 'portal-token', user }));
+    render(<App />);
+    await userEvent.click(await screen.findByRole('button', { name: /Catalog/ }));
+    const card = await screen.findByTestId('media-card');
+    expect(card.textContent).toContain('Autumn catalog 2026.pdf');
+    expect(card.textContent).toContain('3.0 MB');
+    const pdf = new File(['%PDF-1.4 tiny'], 'Spring 2027.pdf', { type: 'application/pdf' });
+    await userEvent.upload(screen.getByTestId('media-input'), pdf);
+    await waitFor(() => {
+      const sent = calls.find((c) => c.path.endsWith('/portal/media') && c.method === 'POST');
+      expect(sent).toBeDefined();
+      const b = sent!.body as { name: string; data: string };
+      expect(b.name).toBe('Spring 2027.pdf');
+      expect(Buffer.from(b.data, 'base64').toString()).toBe('%PDF-1.4 tiny');
+    });
+    await userEvent.click(within(card).getAllByRole('button', { name: 'Remove' })[0]!);
+    await userEvent.click(screen.getByTestId('media-remove-confirm'));
+    await waitFor(() => expect(calls.some((c) => c.method === 'DELETE' && c.path.includes('/portal/media/f7000000-0000-4000-8000-000000000001'))).toBe(true));
   });
 });

@@ -295,3 +295,217 @@ own `supplier_id` by RLS. Every open and reply also queues mail through
 the outbox, so the thread lives in the app and (once the provider is
 live) over SMTP. HQ answers from its own Tickets queue; see
 REGISTRATIONS-HQ.md.
+
+## News on both sides of the chain (2026-10-06)
+
+Alex: the supplier must hear a connection request, the salon must hear
+the answer; the supplier hears a new order, the salon hears it accepted
+and shipped, and the supplier hears when the salon marks it finished —
+each by notification **and** email. Every step now tells the other side
+twice, inside the step's own transaction so a refused step leaves no
+message: a row in that side's own bell and a mail through the outbox
+(mock transport until the provider is decided, like every Velnes mail).
+
+- **Supplier's side** (`tellSupplier` in `suppliers.service.ts`):
+  `supplier_notifications` rows of kind `connection` (a salon asked —
+  the bell opens Salons) or `order` (received in full / partially
+  received — the bell opens the order), and a mail to the address in
+  `suppliers.contact`: `connection_requested`, `order_received`,
+  `order_partly_received`. The existing `order_placed` stays as it was.
+- **Salon's side** (`tellSalon`): `platform_notices` for the salon's own
+  tenant, kinds `supplier_connection` (accepted / declined — the
+  workspace bell opens Suppliers) and `supplier_order` (accepted,
+  shipped with tracking and the expected date, declined with the reason
+  — the bell opens Suppliers → Orders), and a mail to the business
+  owner's address: `connection_accepted`, `connection_declined`,
+  `order_accepted`, `order_shipped`, `order_declined`.
+- **Who writes where.** A salon's step runs under its tenant context,
+  which may already insert into the supplier's feed. A supplier's step
+  sets the salon's tenant context inside its transaction (as
+  `poTransition` always did for the audit row) so the salon's bell and
+  mailbox — the salon's rows under RLS — accept the write. No new
+  policy was needed.
+- **"Finished" is receiving.** The salon's Receive flow is the act that
+  marks an order finished: a full count ends it (`delivered`, the
+  supplier hears "received in full"); a shortage keeps it open
+  (`partdelivered`, the supplier hears "partially received").
+
+The portal's sidebar lost its Dashboard tile: the Velnes mark at the top
+is the dashboard's door (a button, active when there). Row cards across
+every app now stack their lines — title, then each secondary line —
+instead of running them into one sentence. `suppliers.test.ts` asserts
+the bell and the mail on each step, on both sides.
+
+## The invoice as a PDF (2026-10-06)
+
+Alex: the invoice a finished order produces must be PDF-ready, with a
+button to view it on both sides. A delivered order is now **invoiced**:
+`ensureInvoiceNo` (in `invoice-pdf.service.ts`, called from
+`receiveOrder` on a complete count) gives it a number in the supplier's
+own yearly sequence — `INV-<year>-<nnnn>`, serialised with an advisory
+lock per supplier, unique per supplier across every salon it serves
+(migration 20261006120000: `purchase_orders.invoice_no`,
+`invoiced_at`) — and the order contract carries `invoiceNo` and
+`invoicedAt` from then on. Two doors render the same document:
+`GET /purchase-orders/:id/invoice.pdf` for the salon (its tenant gate)
+and `GET /portal/orders/:id/invoice.pdf` for the supplier (which sets
+the order's tenant context inside the step, as `poTransition` does, so
+numbering an older delivered order on first open works from either
+side). Before delivery the door answers 409.
+
+The PDF is built with pdfkit and the bundled DejaVu Sans (the standard
+PDF fonts cannot set a Cyrillic salon name): the number and dates, the
+order reference and tracking, **From** (the supplier, its contact and
+territory) and **Bill to** (the location's legal entity with its tax and
+VAT numbers when it has one, else the business; the location's
+address), the lines with SKU, quantity, free units, unit price, VAT rate
+(from `supplier_products.vat`) and line total, then net, VAT by rate
+and the total incl. VAT. Prices are treated as net. The footer says
+plainly that this is the Velnes invoice document, not the fiscal
+receipt, which still waits for the fiscalization decision; the in-app
+invoice note says the same. The workspace's Orders tab shows **Invoice
+(PDF)** on a delivered order and the portal's invoice drawer **View as
+PDF**; both fetch the bytes with the session's token (`getBlob`,
+`pBlob`) and open them in a new tab, since a plain link cannot carry a
+bearer token. `suppliers.test.ts` asserts the 409 before delivery, the
+number, the headers and the `%PDF-` bytes from both doors.
+
+## Brands: suppliers add their own (2026-10-07)
+
+A brand was an HQ row, and the product panel only offered what the
+supplier's catalog already carried. Now the panel's brand field lists
+every brand on the platform (`GET /portal/brands`, the supplier's own
+first) and ends with "New brand…", which turns the field into an input.
+The server owns what happens on save: `ensureBrand` (migration
+`20261007200000_supplier_brands_self.sql`) finds the name
+case-insensitively — "Davines" and "DAVINES" are one brand, and the
+product takes the canonical spelling — creates it as a `brands` row with
+`source = 'supplier'` and the supplier remembered when it is new, links
+the supplier as carrying it (`supplier_brands`), and rings HQ's bell
+with a `brand_added` notice. HQ is told, not asked: no approval step. The
+HQ brands list shows who added each brand and when. Policies let a
+supplier insert a brand only in its own name and link only itself.
+What stays deferred: renaming or merging brands (HQ, later), and a brand
+owner's claim on a name.
+
+## Categories: Velnes' shelves (2026-10-07)
+
+A supplier product's **Category** was free text, shown in the portal's
+catalog table and used by a salon browsing a connected supplier's
+catalog as the section heading. It is now one of the platform's product
+categories — `product_categories`, HQ's taxonomy, the same shelves a
+salon picks for its own products. `GET /portal/categories` lists them;
+the product panel offers them as a required select; the server
+(`resolveCategory`) matches the name case-insensitively, stores the
+canonical spelling in `category` and the link in `category_id`
+(migration `20261007210000_supplier_product_categories.sql`), and
+refuses an unknown name with `422 UNKNOWN_CATEGORY`. HQ renaming a shelf
+renames it on every supplier product by trigger. Existing products were
+matched by name; the two seeded texts that match no shelf ("Clinic
+supplies", "Wellness supplies") keep their text with no link, are
+flagged in the panel, and must be re-shelved on their next edit —
+nothing was invented into HQ's taxonomy.
+
+A missing shelf is **asked of HQ from the product panel** ("Ask Velnes
+HQ for a category"): `POST /portal/category-requests` writes a
+`category_requests` row owned by the supplier (migration
+`20261007220000_supplier_category_requests.sql` lets a request belong to
+a salon or a supplier, never both; the supplier context reads and writes
+its own), refuses a shelf that already exists or a twin already pending
+(`409`), and rings HQ's bell. HQ's queue shows the asker with a
+"supplier" badge; approve creates the shelf and rings the supplier's own
+bell, decline rings it with the reason; the panel lists the supplier's
+pending and recently decided requests. `GET /portal/category-requests`
+lists them.
+
+## Promotions: detail, pause, edit, delete, and the salons are told (2026-10-07)
+
+A promotion row opens its detail: type, value, products, period,
+minimum order, stock limit, audience, terms, and a status the server
+derives from `active` and the dates — scheduled, running, paused, ended
+(`promotionStatus` in contracts; never stored). With the promotions
+right the supplier can **pause** it (kept, offered to no salon — the
+salon-side list already filtered on `active`), **resume** it, **edit**
+every field in the same panel that creates one (`PATCH
+/portal/promotions/:id`; an end before the start is `409`), and
+**delete** it after a confirmation (`DELETE /portal/promotions/:id`;
+nothing references a promotion, orders carry their own prices). The
+header count is of running promotions only.
+
+Publishing a promotion now tells **every connected salon**: once the
+row is committed, each salon gets a `supplier_promotion` notice on its
+bell and a mail to its owner, in its own tenant context; the bell entry
+opens Suppliers → Catalog, where the offer sits. Edits and pauses do not
+re-notify — the offer is what the salon sees when it looks.
+
+## The salon's Promotions tab and the flight deck's picks (2026-10-07)
+
+Suppliers → **Promotions** lists the running (and about to start) offers
+of the salon's connected suppliers, each with its products named, how
+long it has left, and the reasons the server computed for this salon:
+*You carry this* (its own catalog links to a product in the offer),
+*Ordered before* (a purchase order carried one), *Ending soon* (a week
+or less), *New* (started within a week). A row opens the offer in full
+and leads straight to a new order from that supplier. The flight deck
+shows **Promotions you might like** — the same list ranked by those
+reasons (carry 3, ordered 2, ending 1, new 1, running first) and cut to
+four — and each pick opens the Promotions tab on that offer. One service
+(`salonPromotions`) feeds both doors (`GET /supplier-promotions`,
+`?limit=` for the picks), so the deck and the tab never disagree; paused
+and ended promotions, and suppliers the salon is not connected to, never
+appear. The promotion bell notice and its mail now open the offer itself.
+
+## Join links: the invite is the way in (2026-10-07)
+
+Alex opened a real production invite ("Krdzev Supply") and found what
+the HQ bootstrap had left open: the mail's button led to the plain
+login page, and an invited supplier user — placeholder hash, status
+`invited` — could never pass it. Now every supplier invite mints a
+personal one-time link (`supplier_join_links`, sha256 of the token
+only, seven days, a fresh invite revokes the old) and the mail's button
+is that link. `GET /portal/join/:token` tells the claim page who is
+invited and whether they are the supplier's **first owner** (an owner
+role with no active user yet); `POST /portal/join/:token` takes the
+name, a password (`PASSWORD_MIN`) and — for the first owner only — the
+company's commercial details (contact, territory, lead time, terms,
+minimum order, written onto `suppliers` under the link's own supplier
+context), activates the user, burns the link under a row lock and
+answers like login, so the portal opens signed in. A team member's
+invite from `/portal/team` travels the same way; its company block is
+ignored. While the bootstrap owner is still unclaimed HQ may re-send
+the invite — correcting the name or address — and the table row offers
+**Resend invite** beside the "Owner invited" badge; once claimed, the
+one-bootstrap rule (409) is back. The invite mails no longer promise a
+two-factor step that nothing implements. Tests:
+`join-links.test.ts` (API), `App.test.tsx` (portal), the HQ invite
+test now asserts the link. Deferred, not faked: "forgot password" for
+supplier users (no door yet — HQ or the owner re-invites), and an
+expiry reminder.
+
+## Printed catalogs as PDFs (2026-10-07)
+
+Suppliers had catalogs made for print and nowhere to put them. The
+portal's Catalog tab now opens with a **Printed catalogs** card: the
+supplier attaches a PDF (`POST /portal/media`, base64 in JSON like
+avatars and logos, a per-route body limit; the server decodes it,
+insists on the `%PDF-` magic, 15 MB and at most twenty files, and
+stores the bytes in `supplier_media` beside their sha256, the uploader's
+name and the time) and removes it at any time (`DELETE
+/portal/media/:id`, one in-row confirmation) — the catalog right
+(`po.catalog`) for both, any portal user may open one
+(`GET /portal/media/:id/file`, inline). On the salon side the connected
+supplier's row in Workspace › Suppliers carries a **Catalogs** button
+beside New order; it opens a modal listing the files (`GET
+/suppliers/:id/media`, 404 unless connected) and a click fetches the
+bytes through the session and opens them in a new tab, the way the
+purchase-order invoice opens. RLS does the real gating: a salon reads a
+supplier's files only while a `connected` row links them, the supplier
+only its own, HQ reads. No object store, no CDN, nothing faked: the
+bytes live in Postgres on the VPS and travel through the API. Tests:
+`media.test.ts` (API: publish, list, bytes identical, another
+supplier blind, removal, unconnected salon 404, non-PDF 422),
+`App.test.tsx` (portal card: list, upload as base64, remove) and
+`Suppliers.test.tsx` (workspace: button, modal, open). Deferred: a
+thumbnail or page count, ordering or renaming, and a bell to connected
+salons when a catalog is published.
+

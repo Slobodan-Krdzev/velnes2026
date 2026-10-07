@@ -1067,7 +1067,10 @@ function Categories({ say }: { say: (m: string) => void }) {
                   <td className="muted">
                     {r.type === 'services' ? t('hq.forServices') : t('hq.forProducts')}
                   </td>
-                  <td className="muted">{r.tenantName}</td>
+                  <td className="muted">
+                    {r.tenantName}
+                    {r.requester === 'supplier' ? <span className="badge" style={{ marginLeft: 6 }}>{t('hq.requesterSupplier')}</span> : null}
+                  </td>
                   <td className="muted" style={{ maxWidth: 280 }}>
                     {r.note || '—'}
                   </td>
@@ -2364,12 +2367,23 @@ function Suppliers({ say, isSuper }: { say: (m: string) => void; isSuper: boolea
                           {t('hq.inviteOwner')}
                         </button>
                       ) : (
-                        <span
-                          className={`badge ${s2.ownerStatus === 'active' ? 'success' : 'warning'}`}
-                          title={t('hq.ownerStateHint')}
-                        >
-                          {s2.ownerStatus === 'active' ? t('hq.ownerActive') : t('hq.ownerInvited')}
-                        </span>
+                        <>
+                          <span
+                            className={`badge ${s2.ownerStatus === 'active' ? 'success' : 'warning'}`}
+                            title={t('hq.ownerStateHint')}
+                          >
+                            {s2.ownerStatus === 'active' ? t('hq.ownerActive') : t('hq.ownerInvited')}
+                          </span>
+                          {s2.ownerStatus === 'invited' ? (
+                            <button
+                              className="btn btn-ghost btn-sm"
+                              title={t('hq.resendInviteHint')}
+                              onClick={() => setInviting({ id: s2.id, supplier: s2.name })}
+                            >
+                              {t('hq.resendInvite')}
+                            </button>
+                          ) : null}
+                        </>
                       )}
                       <button
                         className={s2.verified ? 'btn btn-ghost btn-sm' : 'btn btn-primary btn-sm'}
@@ -2398,7 +2412,14 @@ function Suppliers({ say, isSuper }: { say: (m: string) => void; isSuper: boolea
             <span className="t">{t('hq.brandsTitle')}</span>
             {(brandData?.brands ?? []).map((b) => (
               <div key={b.id} className="kv">
-                <span className="k">{b.name}</span>
+                <span className="k">
+                  {b.name}
+                  {b.source === 'supplier' ? (
+                    <span className="muted" style={{ display: 'block', fontSize: 12, fontWeight: 500 }} data-testid="brand-source">
+                      {t('hq.brandBySupplier', { name: b.addedBySupplier ?? '—' })} · {b.createdAt.slice(0, 10)}
+                    </span>
+                  ) : null}
+                </span>
                 <span className="v">{b.country}</span>
               </div>
             ))}

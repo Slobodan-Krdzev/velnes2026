@@ -26,11 +26,24 @@ export const SaleLineSchema = z.discriminatedUnion('kind', [
 ]);
 export type SaleLine = z.infer<typeof SaleLineSchema>;
 
+/** The payment methods the apps emit — the till's four, the Velnes
+ *  app's two. One list (Phase 0, 2026-10-06); a CHECK NOT VALID on the
+ *  ledger fences new rows to it. */
+export const PAYMENT_METHODS = ['Cash', 'Card', 'Gift card', 'Bank transfer', 'Online card', 'Apple Pay'] as const;
+export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
+/** The canonical spelling for a method typed any way ("cash", " CARD ") — or the input unchanged, for the enum to refuse. */
+export const normalizePaymentMethod = (v: unknown): unknown => {
+  if (typeof v !== 'string') return v;
+  const key = v.trim().toLowerCase();
+  return PAYMENT_METHODS.find((m) => m.toLowerCase() === key) ?? v;
+};
+export const PaymentMethodSchema = z.preprocess(normalizePaymentMethod, z.enum(PAYMENT_METHODS));
+
 export const SaleRequestSchema = z.object({
   key: z.string().min(8),
   locationId: z.uuid(),
   lines: z.array(SaleLineSchema).min(1),
-  method: z.string().min(1), // Cash | Card | …
+  method: PaymentMethodSchema,
   customerId: z.uuid().nullable().optional(),
   employeeId: z.uuid().nullable().optional(),
   tip: MoneySchema.nonnegative().default(0),
@@ -46,7 +59,13 @@ export type SaleRequest = z.infer<typeof SaleRequestSchema>;
 export const InvoiceLineSchema = z.object({
   description: z.string(),
   qty: z.number().int(),
+  /** After the line discount, rounded — show `amount`, not qty × this. */
   unitPrice: MoneySchema,
+  /** The line's exact total after its discount (Phase 0, 2026-10-06). */
+  amount: MoneySchema.default(0),
+  lineDiscount: MoneySchema.default(0),
+  /** The VAT rate (percent) that applied when the sale was made. */
+  vat: z.number().int().default(18),
   itemClass: z.string(),
 });
 export const InvoiceSchema = z.object({

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { AvatarSchema } from './auth.js';
+import { AvatarSchema, PASSWORD_MIN, SIGN_IN_LINK_DAYS } from './auth.js';
 import { MoneySchema } from './catalog.js';
 
 /**
@@ -51,6 +51,8 @@ export const SupplierProductSchema = z.object({
   lead: z.string(),
   use: z.string(), // pro | retail | both
   category: z.string(),
+  /** The platform shelf (product_categories) the category names; null when the text matches none and the product must be re-shelved. */
+  categoryId: z.uuid().nullable(),
   descr: z.string(),
   sample: z.boolean(),
   active: z.boolean().optional(), // portal view only
@@ -92,6 +94,11 @@ export const PurchaseOrderSchema = z.object({
   expected: z.iso.date().nullable(),
   track: z.string(),
   supplierNote: z.string().default(''), // why the supplier declined, if it did
+  /** The invoice (Alex, 2026-10-06): numbered once the order is
+   *  delivered, in the supplier's own yearly sequence; the PDF doors
+   *  render it for both sides. Null until then. */
+  invoiceNo: z.string().nullable().default(null),
+  invoicedAt: z.iso.datetime().nullable().default(null),
   createdAt: z.iso.datetime(),
   lines: z.array(PurchaseOrderLineSchema),
   total: MoneySchema,
@@ -132,10 +139,27 @@ export const SupplierPromotionSchema = z.object({
   audience: z.string(),
   value: z.number().int(),
   per: z.number().int(),
+  /** Paused by the supplier (2026-10-07): kept, but offered to nobody. */
+  active: z.boolean(),
+  /** Derived by the server from `active` and the dates — never stored. */
+  status: z.enum(['scheduled', 'running', 'paused', 'ended']),
 });
 export const SupplierPromotionListSchema = z.object({
   promotions: z.array(SupplierPromotionSchema),
 });
+
+/** A promotion as the salon sees it (2026-10-07): from a connected
+ *  supplier, running or about to, with its products named and the
+ *  reasons it may matter to this salon — computed by the server. */
+export const SALON_PROMO_REASONS = ['carry', 'ordered_before', 'ending_soon', 'new'] as const;
+export const SalonPromotionSchema = SupplierPromotionSchema.extend({
+  products: z.array(z.object({ id: z.uuid(), name: z.string(), buy: MoneySchema, carried: z.boolean() })),
+  reasons: z.array(z.enum(SALON_PROMO_REASONS)),
+  /** Calendar days until it ends (0 on its last day). */
+  daysLeft: z.number().int(),
+});
+export type SalonPromotion = z.infer<typeof SalonPromotionSchema>;
+export const SalonPromotionListSchema = z.object({ promotions: z.array(SalonPromotionSchema) });
 
 // ── The portal's own principals. ─────────────────────────────────
 
@@ -149,6 +173,64 @@ export const SupplierLoginResponseSchema = z.object({
     supplierId: z.uuid(),
     supplierName: z.string(),
   }),
+});
+
+/**
+ * Join links (2026-10-07): every supplier invite — HQ's bootstrap owner
+ * or a team member — carries a personal one-time link. Opening it shows
+ * who is invited and asks for a password; the first owner also
+ * completes the company's commercial details. Then they are signed in.
+ * The link lives `SUPPLIER_JOIN_LINK_DAYS`, is single-use, and a fresh
+ * invite revokes the old one.
+ */
+export const SUPPLIER_JOIN_LINK_DAYS = SIGN_IN_LINK_DAYS;
+export const SupplierJoinCompanySchema = z.object({
+  contact: z.string().max(200),
+  territory: z.string().max(120),
+  lead: z.string().max(80),
+  terms: z.string().max(200),
+  minOrder: z.number().int().min(0),
+});
+export const SupplierJoinPreviewSchema = z.object({
+  name: z.string(),
+  email: z.string(),
+  role: z.string(),
+  supplierName: z.string(),
+  /** The bootstrap owner completes the company; a team member only joins. */
+  firstOwner: z.boolean(),
+  company: SupplierJoinCompanySchema,
+});
+export const SupplierJoinRequestSchema = z.object({
+  name: z.string().trim().min(1).max(80),
+  password: z.string().min(PASSWORD_MIN).max(200),
+  /** Accepted only for the first owner; ignored otherwise. */
+  company: SupplierJoinCompanySchema.optional(),
+});
+
+/**
+ * Supplier media (2026-10-07): the printed catalogs a supplier publishes
+ * as PDFs. PDF only, `SUPPLIER_MEDIA_MAX_BYTES` each, at most
+ * `SUPPLIER_MEDIA_MAX_FILES` per supplier. Uploaded as base64 in JSON
+ * (the same road avatars and logos take); read back as the bytes.
+ */
+export const SUPPLIER_MEDIA_MAX_BYTES = 15 * 1024 * 1024;
+export const SUPPLIER_MEDIA_MAX_FILES = 20;
+export const SupplierMediaSchema = z.object({
+  id: z.uuid(),
+  supplierId: z.uuid(),
+  name: z.string(),
+  sizeBytes: z.number().int(),
+  sha256: z.string(),
+  uploadedByName: z.string(),
+  createdAt: z.string(),
+});
+export type SupplierMedia = z.infer<typeof SupplierMediaSchema>;
+export const SupplierMediaListSchema = z.object({ files: z.array(SupplierMediaSchema) });
+export const SupplierMediaUploadSchema = z.object({
+  /** The file name as shown to salons, `.pdf` kept or added. */
+  name: z.string().trim().min(1).max(120),
+  /** The PDF bytes, base64 (no data: prefix). */
+  data: z.string().min(8).max(Math.ceil((SUPPLIER_MEDIA_MAX_BYTES * 4) / 3) + 4),
 });
 
 /** Shaped to reject tenant and HQ tokens by construction. */
@@ -172,6 +254,33 @@ export const PortalSalonSchema = z.object({
   note: z.string(),
 });
 export const PortalSalonListSchema = z.object({ salons: z.array(PortalSalonSchema) });
+
+/** Every brand on the platform, as the product panel offers it: the
+ *  supplier's own first. A name not in this list, typed into the panel,
+ *  becomes a new brand when the product is saved (2026-10-07). */
+/** A supplier asks HQ for a product shelf that is missing (2026-10-07):
+ *  the salons' request lifecycle, pending → approved / declined. */
+export const PortalCategoryRequestCreateSchema = z.object({
+  name: z.string().trim().min(1).max(60),
+  note: z.string().trim().max(300).default(''),
+});
+export const PortalCategoryRequestSchema = z.object({
+  id: z.uuid(),
+  name: z.string(),
+  note: z.string(),
+  status: z.enum(['pending', 'approved', 'declined']),
+  hqReason: z.string(),
+  createdAt: z.iso.datetime(),
+  decidedAt: z.iso.datetime().nullable(),
+});
+export const PortalCategoryRequestListSchema = z.object({ requests: z.array(PortalCategoryRequestSchema) });
+
+/** The platform's product categories — the shelves a supplier product must stand on (2026-10-07). */
+export const PortalCategoryListSchema = z.object({ categories: z.array(z.string()) });
+
+export const PortalBrandListSchema = z.object({
+  brands: z.array(z.object({ name: z.string(), carried: z.boolean() })),
+});
 
 export const PortalDashboardSchema = z.object({
   supplierName: z.string(),
@@ -252,6 +361,17 @@ export const PortalPromotionCreateSchema = z.object({
   terms: z.string().max(500).default(''),
   audience: z.string().max(120).default('Connected salons only'),
 });
+
+/** Edit a promotion (2026-10-07): any field of the offer, and pause / resume. */
+export const PortalPromotionPatchSchema = PortalPromotionCreateSchema.partial().extend({ active: z.boolean().optional() });
+
+/** The one derivation of a promotion's state. */
+export function promotionStatus(p: { active: boolean; starts: string; ends: string }, today: string): 'scheduled' | 'running' | 'paused' | 'ended' {
+  if (today > p.ends) return 'ended';
+  if (!p.active) return 'paused';
+  if (today < p.starts) return 'scheduled';
+  return 'running';
+}
 
 // ── Portal Settings: the supplier's own team + role kit. ─────────
 

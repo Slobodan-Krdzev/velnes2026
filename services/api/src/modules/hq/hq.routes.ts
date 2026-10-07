@@ -81,6 +81,7 @@ import {
   hqUserById,
 } from '../hq/hq.service.js';
 import { queueMail } from '../mail/mail.service.js';
+import { joinMailBody, mintJoinLink } from '../suppliers/join-links.service.js';
 import {
   listTickets as listSupportTickets,
   replyToTicket as replySupportTicket,
@@ -847,16 +848,18 @@ export function hqRoutes(app: FastifyInstance) {
       withHq(async (trx) => {
         const rows = await trx
           .selectFrom('categoryRequests as cr')
-          .innerJoin('businesses as b', 'b.id', 'cr.tenantId')
+          .leftJoin('businesses as b', 'b.id', 'cr.tenantId')
+          .leftJoin('suppliers as s', 's.id', 'cr.supplierId')
           .selectAll('cr')
-          .select('b.name as tenantName')
+          .select(['b.name as tenantName', 's.name as supplierName'])
           .orderBy('cr.createdAt', 'desc')
           .limit(100)
           .execute();
         return {
           requests: rows.map((r2) => ({
             id: r2.id,
-            tenantName: r2.tenantName,
+            tenantName: r2.tenantName ?? r2.supplierName ?? '—',
+            requester: (r2.supplierId ? 'supplier' : 'salon') as 'salon' | 'supplier',
             name: r2.name,
             type: r2.kind as 'services' | 'products',
             note: r2.note,
@@ -917,6 +920,12 @@ export function hqRoutes(app: FastifyInstance) {
                 : 'A new product category is available to every salon.',
           })
           .execute();
+        // A supplier that asked hears it on its own bell.
+        if (cr.supplierId)
+          await trx
+            .insertInto('supplierNotifications')
+            .values({ supplierId: cr.supplierId, kind: 'category', title: `Category approved: ${cr.name}`, body: 'The shelf is now on the list — pick it on your products.', refId: cr.id })
+            .execute();
         return { ok: true as const };
       }),
   });
@@ -934,7 +943,7 @@ export function hqRoutes(app: FastifyInstance) {
       withHq(async (trx) => {
         const cr = await trx
           .selectFrom('categoryRequests')
-          .select(['id', 'status', 'name', 'tenantId'])
+          .select(['id', 'status', 'name', 'tenantId', 'supplierId'])
           .where('id', '=', req.params.id)
           .executeTakeFirst();
         if (!cr) return reply.code(404).send({ error: 'NOT_FOUND', message: 'Unknown request' });
@@ -946,16 +955,22 @@ export function hqRoutes(app: FastifyInstance) {
           .where('id', '=', cr.id)
           .execute();
         // The answer travels back to whoever asked — with the reason.
-        await trx
-          .insertInto('platformNotices')
-          .values({
-            audience: 'salons',
-            tenantId: cr.tenantId,
-            kind: 'category_declined',
-            title: `Category request declined: ${cr.name}`,
-            body: req.body.reason,
-          })
-          .execute();
+        if (cr.tenantId)
+          await trx
+            .insertInto('platformNotices')
+            .values({
+              audience: 'salons',
+              tenantId: cr.tenantId,
+              kind: 'category_declined',
+              title: `Category request declined: ${cr.name}`,
+              body: req.body.reason,
+            })
+            .execute();
+        if (cr.supplierId)
+          await trx
+            .insertInto('supplierNotifications')
+            .values({ supplierId: cr.supplierId, kind: 'category', title: `Category request declined: ${cr.name}`, body: req.body.reason, refId: cr.id })
+            .execute();
         return { ok: true as const };
       }),
   });
@@ -1381,12 +1396,16 @@ export function hqRoutes(app: FastifyInstance) {
           .where('id', '=', req.params.id)
           .executeTakeFirst();
         if (!sup) return reply.code(404).send({ error: 'NOT_FOUND', message: 'Unknown supplier' });
-        const already = await trx
+        const existing = await trx
           .selectFrom('supplierUsers')
-          .select('id')
+          .select(['id', 'status', 'email'])
           .where('supplierId', '=', req.params.id)
-          .executeTakeFirst();
-        if (already)
+          .execute();
+        // One bootstrap only — unless nobody has claimed it yet: then HQ
+        // may correct the name/address and send a fresh link (the old
+        // one is revoked by the mint).
+        const unclaimed = existing.length === 1 && existing[0]!.status === 'invited' ? existing[0]! : null;
+        if (existing.length && !unclaimed)
           return reply
             .code(409)
             .send({ error: 'HAS_OWNER', message: 'That supplier already has a portal owner' });
@@ -1394,31 +1413,44 @@ export function hqRoutes(app: FastifyInstance) {
           .selectFrom('supplierUsers')
           .select('id')
           .where(sql2<boolean>`lower(email) = lower(${req.body.email})`)
+          .$if(unclaimed !== null, (q) => q.where('id', '!=', unclaimed!.id))
           .executeTakeFirst();
         if (taken)
           return reply.code(409).send({ error: 'DUPLICATE', message: 'Someone already uses that address' });
-        const row = await trx
-          .insertInto('supplierUsers')
-          .values({
-            supplierId: req.params.id,
-            name: req.body.name,
-            email: req.body.email,
-            role: 'sr_owner',
-            status: 'invited',
-            passwordHash:
-              '$argon2id$v=19$m=65536,t=3,p=4$AAAAAAAAAAAAAAAAAAAAAA$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
-          })
-          .returning('id')
-          .executeTakeFirstOrThrow();
+        let userId: string;
+        if (unclaimed) {
+          await trx
+            .updateTable('supplierUsers')
+            .set({ name: req.body.name, email: req.body.email })
+            .where('id', '=', unclaimed.id)
+            .execute();
+          userId = unclaimed.id;
+        } else {
+          const row = await trx
+            .insertInto('supplierUsers')
+            .values({
+              supplierId: req.params.id,
+              name: req.body.name,
+              email: req.body.email,
+              role: 'sr_owner',
+              status: 'invited',
+              passwordHash:
+                '$argon2id$v=19$m=65536,t=3,p=4$AAAAAAAAAAAAAAAAAAAAAA$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+            })
+            .returning('id')
+            .executeTakeFirstOrThrow();
+          userId = row.id;
+        }
+        const link = await mintJoinLink(trx, req.params.id, userId, 'hq');
         await queueMail(trx, {
           to: req.body.email,
           subject: 'You are invited to run the Velnes supplier portal',
-          body: `Revelapps invited you as the owner of ${sup.name} on the Velnes supplier portal. Two-factor is required at first sign-in.`,
+          body: joinMailBody(`Revelapps invited you as the owner of ${sup.name} on the Velnes supplier portal.`),
           kind: 'supplier_invite',
-          refId: row.id,
-          cta: { label: 'Open the supplier portal', url: env.supplierAppUrl },
+          refId: userId,
+          cta: { label: 'Join the supplier portal', url: link.url },
         });
-        return { id: row.id };
+        return { id: userId };
       });
     },
   });
@@ -1648,7 +1680,13 @@ export function hqRoutes(app: FastifyInstance) {
     schema: { response: { 200: HqBrandListSchema } },
     handler: async () =>
       withHq(async (trx) => {
-        const brands = await trx.selectFrom('brands').selectAll().orderBy('name').execute();
+        const brands = await trx
+          .selectFrom('brands as b')
+          .leftJoin('suppliers as s', 's.id', 'b.addedBySupplierId')
+          .selectAll('b')
+          .select('s.name as addedBySupplier')
+          .orderBy('b.name')
+          .execute();
         const sups = await trx.selectFrom('suppliers').select(['id', 'name', 'territory']).orderBy('name').execute();
         const carried = await trx
           .selectFrom('supplierBrands as sb')
@@ -1656,7 +1694,7 @@ export function hqRoutes(app: FastifyInstance) {
           .select(['sb.supplierId', 'b.name'])
           .execute();
         return {
-          brands: brands.map((b) => ({ id: b.id, name: b.name, owner: b.owner, country: b.country })),
+          brands: brands.map((b) => ({ id: b.id, name: b.name, owner: b.owner, country: b.country, source: b.source as 'hq' | 'supplier', addedBySupplier: b.addedBySupplier ?? null, createdAt: b.createdAt.toISOString() })),
           carriage: sups.map((s2) => ({
             supplierId: s2.id,
             supplierName: s2.name,

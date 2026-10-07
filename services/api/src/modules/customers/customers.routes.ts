@@ -13,8 +13,8 @@ import {
 } from '@velnes/contracts';
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
-import { sql } from 'kysely';
 import { z } from 'zod';
+import { localIso } from '../scheduling/scheduling.service.js';
 import { withTenant } from '../../db/index.js';
 import { can, permsFor } from '../auth/authz.service.js';
 import { logAudit } from '../audit/audit.service.js';
@@ -346,27 +346,16 @@ export function customersRoutes(app: FastifyInstance) {
           .orderBy('date', 'desc')
           .limit(100)
           .execute();
-        const totals = await trx
-          .selectFrom('invoiceLines')
-          .select(['invoiceId'])
-          .select((eb) => eb.fn.sum<string>(sql`qty * unit_price - line_discount`).as('sum'))
-          .where('invoiceId', 'in', rows.length ? rows.map((r) => r.id) : ['00000000-0000-4000-8000-000000000000'])
-          .groupBy('invoiceId')
-          .execute();
+        // The receipt's own total (Phase 0, 2026-10-06): the sale door
+        // wrote it once; re-deriving it from lines double-counted discounts.
         return {
-          invoices: rows.map((i) => {
-            const lineSum = Number(totals.find((t) => t.invoiceId === i.id)?.sum ?? 0);
-            return {
-              id: i.id,
-              number: i.number,
-              date: i.date.toISOString().slice(0, 10),
-              method: i.method,
-              total: Math.max(
-                0,
-                lineSum - i.cartDiscount - i.pointsRedeemed - i.giftAmount - i.promoAmount,
-              ) + i.tip + i.serviceCharge,
-            };
-          }),
+          invoices: rows.map((i) => ({
+            id: i.id,
+            number: i.number,
+            date: localIso(i.date),
+            method: i.method,
+            total: i.total,
+          })),
         };
       }),
   });

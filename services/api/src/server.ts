@@ -34,6 +34,8 @@ import { businessCategoriesRoutes } from './modules/business-categories/business
 import { registrationsRoutes } from './modules/registrations/registrations.routes.js';
 import { assistantRoutes } from './modules/assistant/assistant.routes.js';
 import { reviewsRoutes } from './modules/reviews/reviews.routes.js';
+import { billingRoutes } from './modules/billing/billing.routes.js';
+import { draftsRoutes } from './modules/billing/drafts.routes.js';
 import { authPlugin } from './plugins/auth.js';
 import { clientRoutes } from './modules/clients/clients.routes.js';
 import { publicRoutes } from './public/public.routes.js';
@@ -88,6 +90,8 @@ export async function buildServer() {
       businessCategoriesRoutes(api);
       assistantRoutes(api);
       reviewsRoutes(api);
+      billingRoutes(api);
+      draftsRoutes(api);
     },
     { prefix: API_PREFIX },
   );

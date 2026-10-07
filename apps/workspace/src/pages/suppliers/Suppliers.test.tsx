@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App, queryClient } from '../../App.js';
@@ -32,7 +32,7 @@ const supplier = (over: Record<string, unknown> = {}) => ({
 const spRow = {
   id: SP1, supplierId: SUP1, brand: 'Thera-Band', name: 'Thera-Band resistance set, 3 levels',
   sku: 'TB-SET-03', ean: '', size: '3 bands', pack: 6, buy: 550, rrp: 990, vat: 18,
-  moq: 1, stock: 240, lead: '2 days', use: 'both', category: 'Home exercise', descr: '',
+  moq: 1, stock: 240, lead: '2 days', use: 'both', category: 'Home exercise', categoryId: null, descr: '',
   sample: false, linkedProductId: '70000000-0000-4000-8000-000000000001',
 };
 
@@ -57,6 +57,9 @@ function mockApi(calls: { method: string; path: string; body?: unknown }[], orde
       const ok = (b: unknown) => new Response(JSON.stringify(b), { status: 200 });
       if (path.endsWith('/auth/me')) return ok(me);
       if (path.includes('/suppliers') && path.includes('/catalog')) return ok({ products: [spRow] });
+      if (path.includes('/media/') && path.endsWith('/file')) return new Response('%PDF-1.4 x', { status: 200, headers: { 'content-type': 'application/pdf' } });
+      if (path.includes('/suppliers') && path.includes('/media'))
+        return ok({ files: [{ id: 'f7000000-0000-4000-8000-000000000001', supplierId: SUP1, name: 'Autumn catalog 2026.pdf', sizeBytes: 3 * 1024 * 1024, sha256: 'a'.repeat(64), uploadedByName: 'Vesna', createdAt: '2026-09-30T10:00:00.000Z' }] });
       if (path.includes('/suppliers')) return ok({ suppliers: [supplier(), supplier({ id: 'd1000000-0000-4000-8000-000000000003', name: 'Adriatic Beauty Group', status: 'available', customerNo: '', products: 1 })] });
       if (path.includes('/purchase-orders') && path.includes('/receive'))
         return ok(order('partdelivered'));
@@ -70,7 +73,9 @@ function mockApi(calls: { method: string; path: string; body?: unknown }[], orde
               brand: 'Thera-Band', title: 'Buy 10 resistance sets, receive 2 free', kind: 'bxgy',
               productIds: [SP1], starts: '2026-08-01', ends: '2026-08-31', minOrder: 0,
               usageLimit: 400, terms: 'Applies per order line.', audience: 'Connected salons only',
-              value: 2, per: 10,
+              value: 2, per: 10, active: true, status: 'running',
+              products: [{ id: SP1, name: 'Thera-Band resistance set, 3 levels', buy: 550, carried: true }],
+              reasons: ['carry', 'ending_soon'], daysLeft: 3,
             },
           ],
         });
@@ -162,5 +167,38 @@ describe('suppliers', () => {
     await openSuppliers();
     await userEvent.click(screen.getByRole('button', { name: 'Orders' }));
     expect(await screen.findByText(/Out of stock until next month/)).toBeDefined();
+  });
+
+  it('promotions tab: running offers from connected suppliers with their reasons; the detail leads to an order from that supplier', async () => {
+    mockApi([]);
+    await openSuppliers();
+    await userEvent.click(await screen.findByRole('button', { name: 'Promotions' }));
+    const row = await screen.findByTestId('salon-promo');
+    expect(row.textContent).toContain('Buy 10 resistance sets, receive 2 free');
+    expect(row.textContent).toContain('You carry this');
+    expect(row.textContent).toContain('Ending soon');
+    expect(row.textContent).toContain('ends in 3 days');
+    await userEvent.click(row);
+    const detail = await screen.findByTestId('salon-promo-detail');
+    expect(detail.textContent).toContain('Thera-Band resistance set, 3 levels');
+    expect(detail.textContent).toContain('on your shelf');
+    expect(detail.textContent).toContain('Applies per order line.');
+    await userEvent.click(screen.getByTestId('promo-order'));
+    expect(await screen.findByText(/New order/)).toBeDefined();
+  });
+
+  it('a connected supplier row offers its printed catalogs; a click opens the PDF through the session in a new tab', async () => {
+    mockApi([]);
+    const opened = vi.fn();
+    vi.stubGlobal('open', opened);
+    URL.createObjectURL = vi.fn(() => 'blob:catalog');
+    await openSuppliers();
+    await userEvent.click(screen.getByTestId(`media-${SUP1}`));
+    const list = await screen.findByTestId('media-list');
+    const file = await within(list).findByTestId('media-file');
+    expect(file.textContent).toContain('Autumn catalog 2026.pdf');
+    expect(file.textContent).toContain('3.0 MB');
+    await userEvent.click(file);
+    await waitFor(() => expect(opened).toHaveBeenCalledWith('blob:catalog', '_blank', 'noopener'));
   });
 });

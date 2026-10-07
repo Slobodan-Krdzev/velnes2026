@@ -13,6 +13,9 @@ import {
   PersonalOfferSchema,
   type CustomerInsights,
   type CustomerProfile,
+  BillingCustomerListSchema,
+  BillingCustomerSchema,
+  type BillingCustomerWrite,
 } from '@velnes/contracts';
 import { I, Icon, PhoneInput } from '@velnes/ui';
 import { useEffect, useState } from 'react';
@@ -495,6 +498,7 @@ function NewCustomerPanel({
 const TABS = [
   ['appointments', 'cust.tabAppointments'],
   ['sales', 'cust.tabSales'],
+  ['billing', 'cust.tabBilling'],
   ['loyalty', 'cust.tabLoyalty'],
   ['premium', 'cust.tabPremium'],
   ['prepaid', 'cust.tabPrepaid'],
@@ -749,6 +753,7 @@ function Profile({ id }: { id: string }) {
             </div>
             {tab === 'appointments' ? <ApptsTab id={id} /> : null}
             {tab === 'sales' ? <SalesTab id={id} /> : null}
+            {tab === 'billing' ? <BillingTab id={id} /> : null}
             {tab === 'loyalty' ? <LoyaltyTab id={id} /> : null}
             {tab === 'premium' ? <PremiumTab c={c} /> : null}
             {tab === 'prepaid' ? (
@@ -1109,6 +1114,212 @@ function ApptsTab({ id }: { id: string }) {
       </tbody>
     </table>
     </>
+  );
+}
+
+/**
+ * Billing details (Phase 1, 2026-10-06) — docs/INVOICING.md: who an
+ * invoice for this customer is made out to, a person or a company,
+ * kept apart from the customer profile; electronic-invoice consent as
+ * an explicit, recorded act. Reads and writes through `billing.create`.
+ */
+function BillingTab({ id }: { id: string }) {
+  const { t } = useTranslation();
+  const { can } = useSession();
+  const qc = useQueryClient();
+  const toast = useToast();
+  const allowed = can('billing.create');
+  const q = useQuery({
+    queryKey: ['billingCustomer', id],
+    queryFn: () => get(BillingCustomerListSchema, `/billing/customers?customerId=${id}`),
+    enabled: allowed,
+  });
+  const existing = q.data?.customers[0] ?? null;
+  const [editing, setEditing] = useState(false);
+  const [form, setForm] = useState<BillingCustomerWrite | null>(null);
+  const [consentNote, setConsentNote] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const start = () =>
+    setForm(
+      existing
+        ? { ...existing, customerId: id }
+        : { customerId: id, kind: 'person', name: '', address: '', city: '', zip: '', country: 'North Macedonia', edb: '', vatRegNo: '', email: '', phone: '' },
+    );
+  const setF = <K extends keyof BillingCustomerWrite>(k: K, v: BillingCustomerWrite[K]) => setForm((f) => (f ? { ...f, [k]: v } : f));
+  const save = async () => {
+    if (!form) return;
+    setError(null);
+    try {
+      if (existing) await patch(BillingCustomerSchema, `/billing/customers/${existing.id}`, form);
+      else await post(BillingCustomerSchema, '/billing/customers', form);
+      toast(t('cbill.saved'));
+      setEditing(false);
+      void qc.invalidateQueries({ queryKey: ['billingCustomer', id] });
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : String(e));
+    }
+  };
+  const consent = async (granted: boolean) => {
+    if (!existing) return;
+    await post(BillingCustomerSchema, `/billing/customers/${existing.id}/consent`, { granted, note: consentNote });
+    setConsentNote('');
+    void qc.invalidateQueries({ queryKey: ['billingCustomer', id] });
+  };
+  if (!allowed) return <Empty title={t('cbill.title')} sub={t('cbill.noRight')} />;
+  if (!q.data) return null;
+
+  if (editing && form)
+    return (
+      <div style={{ padding: 20 }} data-testid="billing-form">
+        <div className="grid2">
+          <div className="field span2">
+            <span>{t('cbill.kind')}</span>
+            <div className="tabs" style={{ marginTop: 4 }}>
+              {(['person', 'company'] as const).map((k) => (
+                <button key={k} type="button" className={`tab ${form.kind === k ? 'active' : ''}`} onClick={() => setF('kind', k)}>
+                  {t(k === 'person' ? 'cbill.person' : 'cbill.company')}
+                </button>
+              ))}
+            </div>
+          </div>
+          <label className="field span2">
+            <span>{form.kind === 'company' ? t('cbill.legalName') : t('cbill.name')}<span className="req">*</span></span>
+            <input className="input" value={form.name} onChange={(e) => setF('name', e.target.value)} />
+          </label>
+          <label className="field span2">
+            <span>{t('cbill.address')}{form.kind === 'company' ? <span className="req">*</span> : null}</span>
+            <input className="input" value={form.address} onChange={(e) => setF('address', e.target.value)} />
+          </label>
+          <label className="field">
+            <span>{t('cbill.city')}{form.kind === 'company' ? <span className="req">*</span> : null}</span>
+            <input className="input" value={form.city} onChange={(e) => setF('city', e.target.value)} />
+          </label>
+          <label className="field">
+            <span>{t('cbill.zip')}</span>
+            <input className="input" value={form.zip} onChange={(e) => setF('zip', e.target.value)} />
+          </label>
+          <label className="field">
+            <span>{t('cbill.country')}</span>
+            <input className="input" value={form.country} onChange={(e) => setF('country', e.target.value)} />
+          </label>
+          {form.kind === 'company' ? (
+            <>
+              <label className="field">
+                <span>{t('cbill.edb')}<span className="req">*</span></span>
+                <input className="input" value={form.edb} onChange={(e) => setF('edb', e.target.value)} placeholder="4030000000000" />
+              </label>
+              <label className="field">
+                <span>{t('cbill.vatRegNo')}</span>
+                <input className="input" value={form.vatRegNo} onChange={(e) => setF('vatRegNo', e.target.value)} placeholder="MK4030000000000" />
+              </label>
+            </>
+          ) : null}
+          <label className="field">
+            <span>{t('cbill.email')}</span>
+            <input className="input" type="email" value={form.email} onChange={(e) => setF('email', e.target.value)} />
+          </label>
+          <label className="field">
+            <span>{t('cbill.phone')}</span>
+            <input className="input" value={form.phone} onChange={(e) => setF('phone', e.target.value)} />
+          </label>
+        </div>
+        {error ? (
+          <p role="alert" style={{ color: 'var(--danger)', fontWeight: 600 }}>
+            {error}
+          </p>
+        ) : null}
+        <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+          <button className="btn btn-primary" onClick={() => void save()}>
+            {t('cbill.save')}
+          </button>
+          <button className="btn btn-ghost" onClick={() => setEditing(false)}>
+            {t('cbill.cancel')}
+          </button>
+        </div>
+      </div>
+    );
+
+  if (!existing)
+    return (
+      <div style={{ padding: 20 }}>
+        <p className="muted" style={{ marginTop: 0 }}>{t('cbill.sub')}</p>
+        <p className="muted">{t('cbill.none')}</p>
+        <button
+          className="btn btn-primary btn-sm"
+          onClick={() => {
+            start();
+            setEditing(true);
+          }}
+        >
+          {t('cbill.add')}
+        </button>
+      </div>
+    );
+
+  return (
+    <div style={{ padding: 20 }} data-testid="billing-details">
+      <p className="muted" style={{ marginTop: 0 }}>{t('cbill.sub')}</p>
+      <div className="grid2" style={{ marginBottom: 12 }}>
+        <div>
+          <span className="stat-label">{existing.kind === 'company' ? t('cbill.legalName') : t('cbill.name')}</span>
+          <div className="bold">{existing.name}</div>
+          <div className="muted">{[existing.address, [existing.zip, existing.city].filter(Boolean).join(' '), existing.country].filter(Boolean).join(' · ')}</div>
+        </div>
+        <div>
+          {existing.kind === 'company' ? (
+            <>
+              <span className="stat-label">{t('cbill.edb')}</span>
+              <div className="bold tnum">{existing.edb || '—'}</div>
+              {existing.vatRegNo ? <div className="muted tnum">{t('cbill.vatRegNo')}: {existing.vatRegNo}</div> : null}
+            </>
+          ) : null}
+          <div className="muted">{[existing.email, existing.phone].filter(Boolean).join(' · ')}</div>
+        </div>
+      </div>
+      <button
+        className="btn btn-secondary btn-sm"
+        onClick={() => {
+          start();
+          setEditing(true);
+        }}
+      >
+        {t('cust.editDetails')}
+      </button>
+
+      <div className="card" style={{ marginTop: 16 }}>
+        <div className="card-header">
+          <h3 style={{ margin: 0, fontSize: 15 }}>{t('cbill.consent')}</h3>
+        </div>
+        <div style={{ padding: '0 20px 16px' }}>
+          <p className="muted" style={{ fontSize: 13 }}>{t('cbill.consentHint')}</p>
+          <p className="bold" data-testid="consent-state">
+            {existing.consentElectronicAt ? t('cbill.consentOn', { date: dateShort(existing.consentElectronicAt.slice(0, 10)) }) : t('cbill.consentOff')}
+          </p>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <input className="input" placeholder={t('cbill.consentNote')} value={consentNote} onChange={(e) => setConsentNote(e.target.value)} style={{ maxWidth: 320 }} />
+            {existing.consentElectronicAt ? (
+              <button className="btn btn-secondary btn-sm" onClick={() => void consent(false)}>
+                {t('cbill.consentWithdraw')}
+              </button>
+            ) : (
+              <button className="btn btn-primary btn-sm" onClick={() => void consent(true)}>
+                {t('cbill.consentGive')}
+              </button>
+            )}
+          </div>
+          {existing.consentHistory.length ? (
+            <ul className="muted" style={{ fontSize: 12, marginTop: 10, paddingLeft: 18 }}>
+              {existing.consentHistory.map((h) => (
+                <li key={h.id}>
+                  {h.at.slice(0, 16).replace('T', ' ')} · {h.granted ? t('cbill.consentGiven') : t('cbill.consentWithdrawn')} · {h.actorName}
+                  {h.note ? ` · ${h.note}` : ''}
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </div>
+      </div>
+    </div>
   );
 }
 

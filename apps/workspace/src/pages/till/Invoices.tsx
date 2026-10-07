@@ -4,6 +4,7 @@ import {
   InvoiceSchema,
   type DrawerCloseResponse,
   type Invoice,
+  BillingInvoiceSchema,
 } from '@velnes/contracts';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { I, Icon } from '@velnes/ui';
@@ -181,7 +182,7 @@ export function InvoicesPage() {
                       {l.qty} × {l.description}
                     </span>
                     <span className="tnum" style={{ fontWeight: 600 }}>
-                      {money(l.qty * l.unitPrice)}
+                      {money(l.amount)}
                     </span>
                   </div>
                 ))}
@@ -192,6 +193,22 @@ export function InvoicesPage() {
                   <span className="bold tnum">{money(open.total)}</span>
                 </div>
               </div>
+              {open.status === 'Paid' && can('billing.create') ? (
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' }}>
+                  <span className="muted" style={{ fontSize: 13 }}>{t('till.accountingHint')}</span>
+                  <button
+                    className="btn btn-secondary"
+                    onClick={() =>
+                      void (async () => {
+                        const d = await post(BillingInvoiceSchema, '/billing/invoices', { saleId: open.id });
+                        navigate(`/invoices/${d.id}`);
+                      })()
+                    }
+                  >
+                    {t('till.accountingDraft')}
+                  </button>
+                </div>
+              ) : null}
               {open.status === 'Paid' && can('pos.refund') ? (
                 <label className="field">
                   <span>{t('till.refundReason')}</span>

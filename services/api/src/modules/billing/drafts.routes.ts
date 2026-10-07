@@ -1,0 +1,235 @@
+import {
+  BillingInvoiceCreateSchema,
+  BillingInvoiceListSchema,
+  BillingInvoicePatchSchema,
+  BillingInvoiceQuerySchema,
+  BillingInvoiceSchema,
+  BillingIssueBlockedSchema,
+  BillingIssueRequestSchema,
+  BillingLogoSchema,
+  BillingOverpaymentSchema,
+  BillingPaymentListSchema,
+  BillingPaymentWriteSchema,
+} from '@velnes/contracts';
+import type { FastifyInstance, FastifyReply } from 'fastify';
+import type { ZodTypeProvider } from 'fastify-type-provider-zod';
+import { z } from 'zod';
+import { withTenant } from '../../db/index.js';
+import { permsFor } from '../auth/authz.service.js';
+import { BillingError } from './billing.service.js';
+import { createDraft, getDraft, listDrafts, patchDraft } from './drafts.service.js';
+import { issueInvoice, logoOf } from './issue.service.js';
+import { invoicePdf, pdfFilename } from './pdf.service.js';
+import { ledgerOf, recordManualPayment, summaryOf } from './payments.service.js';
+import { reachOf } from './scope.js';
+
+const Err = z.object({ error: z.string(), message: z.string() });
+const IdParams = z.object({ id: z.uuid() });
+
+function sendErr(reply: FastifyReply, e: unknown) {
+  if (e instanceof BillingError) {
+    if (e.code === 'ISSUE_BLOCKED') return reply.code(422).send({ error: e.code, message: e.message, problems: e.problems });
+    if (e.code === 'OVERPAYMENT') return reply.code(422).send({ error: e.code, message: e.message, ...e.extra });
+    const status = e.code === 'NOT_FOUND' ? 404 : e.code === 'CONFLICT' ? 409 : e.code === 'INTEGRITY' ? 500 : 422;
+    return reply.code(status).send({ error: e.code, message: e.message });
+  }
+  throw e;
+}
+
+/** Accounting invoice drafts (phase 2, 2026-10-06) — docs/INVOICING.md.
+ *  `billing.create` drafts; `billing.read` reads; each at the role's
+ *  scope — a location-scoped desk sees its own locations' documents. */
+export function draftsRoutes(app: FastifyInstance) {
+  const r = app.withTypeProvider<ZodTypeProvider>();
+
+  r.route({
+    method: 'POST',
+    url: '/billing/invoices',
+    preHandler: [app.authenticate],
+    schema: { body: BillingInvoiceCreateSchema, response: { 200: BillingInvoiceSchema, 403: Err, 404: Err, 422: Err } },
+    handler: async (req, reply) =>
+      withTenant(req.claims.ten, async (trx) => {
+        const reach = reachOf(await permsFor(trx, req.claims), 'billing.create', req.claims);
+        if (!reach) return reply.code(403).send({ error: 'FORBIDDEN', message: 'Missing permission: billing.create' });
+        try {
+          return (await createDraft(trx, req.claims, reach, req.body)).invoice;
+        } catch (e) {
+          return sendErr(reply, e);
+        }
+      }),
+  });
+
+  r.route({
+    method: 'GET',
+    url: '/billing/invoices',
+    preHandler: [app.authenticate],
+    schema: { querystring: BillingInvoiceQuerySchema, response: { 200: BillingInvoiceListSchema, 403: Err } },
+    handler: async (req, reply) =>
+      withTenant(req.claims.ten, async (trx) => {
+        const reach = reachOf(await permsFor(trx, req.claims), 'billing.read', req.claims);
+        if (!reach) return reply.code(403).send({ error: 'FORBIDDEN', message: 'Missing permission: billing.read' });
+        return { invoices: await listDrafts(trx, reach, req.query) };
+      }),
+  });
+
+  r.route({
+    method: 'GET',
+    url: '/billing/invoices/:id',
+    preHandler: [app.authenticate],
+    schema: { params: IdParams, response: { 200: BillingInvoiceSchema, 403: Err, 404: Err } },
+    handler: async (req, reply) =>
+      withTenant(req.claims.ten, async (trx) => {
+        const reach = reachOf(await permsFor(trx, req.claims), 'billing.read', req.claims);
+        if (!reach) return reply.code(403).send({ error: 'FORBIDDEN', message: 'Missing permission: billing.read' });
+        try {
+          return await getDraft(trx, reach, req.params.id);
+        } catch (e) {
+          return sendErr(reply, e);
+        }
+      }),
+  });
+
+  r.route({
+    method: 'PATCH',
+    url: '/billing/invoices/:id',
+    preHandler: [app.authenticate],
+    schema: { params: IdParams, body: BillingInvoicePatchSchema, response: { 200: BillingInvoiceSchema, 403: Err, 404: Err, 422: Err } },
+    handler: async (req, reply) =>
+      withTenant(req.claims.ten, async (trx) => {
+        const reach = reachOf(await permsFor(trx, req.claims), 'billing.create', req.claims);
+        if (!reach) return reply.code(403).send({ error: 'FORBIDDEN', message: 'Missing permission: billing.create' });
+        try {
+          return await patchDraft(trx, req.claims, reach, req.params.id, req.body);
+        } catch (e) {
+          return sendErr(reply, e);
+        }
+      }),
+  });
+
+  /** The irreversible step (phase 3): `billing.issue`, one transaction,
+   *  the number given last. 422 carries the structured problems; 409 a
+   *  document already issued under another key. */
+  r.route({
+    method: 'POST',
+    url: '/billing/invoices/:id/issue',
+    preHandler: [app.authenticate],
+    schema: {
+      params: IdParams,
+      body: BillingIssueRequestSchema,
+      response: { 200: BillingInvoiceSchema, 403: Err, 404: Err, 409: Err, 422: z.union([BillingIssueBlockedSchema, Err]) },
+    },
+    handler: async (req, reply) =>
+      withTenant(req.claims.ten, async (trx) => {
+        const reach = reachOf(await permsFor(trx, req.claims), 'billing.issue', req.claims);
+        if (!reach) return reply.code(403).send({ error: 'FORBIDDEN', message: 'Missing permission: billing.issue' });
+        try {
+          return (await issueInvoice(trx, req.claims, reach, req.params.id, req.body.key)).invoice;
+        } catch (e) {
+          return sendErr(reply, e);
+        }
+      }),
+  });
+
+  r.route({
+    method: 'GET',
+    url: '/billing/invoices/:id/logo',
+    preHandler: [app.authenticate],
+    schema: { params: IdParams, response: { 200: BillingLogoSchema, 204: z.null(), 403: Err, 404: Err } },
+    handler: async (req, reply) =>
+      withTenant(req.claims.ten, async (trx) => {
+        const reach = reachOf(await permsFor(trx, req.claims), 'billing.read', req.claims);
+        if (!reach) return reply.code(403).send({ error: 'FORBIDDEN', message: 'Missing permission: billing.read' });
+        try {
+          const logo = await logoOf(trx, reach, req.params.id);
+          if (!logo) return reply.code(204).send(null);
+          return logo;
+        } catch (e) {
+          return sendErr(reply, e);
+        }
+      }),
+  });
+
+  /** The canonical PDF (phase 4): issued documents only, `billing.read`
+   *  at the role's reach, the same bytes for preview and download —
+   *  only the disposition differs. The ETag is the canonical hash. The
+   *  bytes are sent only after the transaction that may have claimed
+   *  the hash has committed: nobody sees a PDF whose hash is not yet a
+   *  fact. */
+  r.route({
+    method: 'GET',
+    url: '/billing/invoices/:id/pdf',
+    preHandler: [app.authenticate],
+    schema: { params: IdParams, querystring: z.object({ download: z.enum(['0', '1']).default('0') }) },
+    handler: async (req, reply) => {
+      type Out = { ok: true; pdf: Awaited<ReturnType<typeof invoicePdf>> } | { ok: false; status: number; body: { error: string; message: string } };
+      const out: Out = await withTenant(req.claims.ten, async (trx): Promise<Out> => {
+        const reach = reachOf(await permsFor(trx, req.claims), 'billing.read', req.claims);
+        if (!reach) return { ok: false, status: 403, body: { error: 'FORBIDDEN', message: 'Missing permission: billing.read' } };
+        try {
+          const name = (await trx.selectFrom('employees').select('name').where('id', '=', req.claims.sub).executeTakeFirst())?.name ?? '';
+          return { ok: true, pdf: await invoicePdf(trx, req.claims.ten, reach, req.params.id, { id: req.claims.sub, name }) };
+        } catch (e) {
+          if (e instanceof BillingError) {
+            const status = e.code === 'NOT_FOUND' ? 404 : e.code === 'CONFLICT' ? 409 : e.code === 'INTEGRITY' ? 500 : 422;
+            return { ok: false, status, body: { error: e.code, message: e.message } };
+          }
+          throw e;
+        }
+      });
+      if (!out.ok) return reply.code(out.status).send(out.body);
+      const pdf = out.pdf;
+      return reply
+        .header('content-type', 'application/pdf')
+        .header('content-disposition', `${req.query.download === '1' ? 'attachment' : 'inline'}; filename="${pdfFilename(pdf.number)}"`)
+        .header('content-length', String(pdf.buffer.length))
+        .header('etag', `"${pdf.sha256}"`)
+        .header('x-document-sha256', pdf.sha256)
+        .header('cache-control', 'private, no-store')
+        .send(pdf.buffer);
+    },
+  });
+
+  /** The payment ledger (phase 5): read with `billing.read`; a manual
+   *  record with `billing.record_payment`. The source is the server's. */
+  r.route({
+    method: 'GET',
+    url: '/billing/invoices/:id/payments',
+    preHandler: [app.authenticate],
+    schema: { params: IdParams, response: { 200: BillingPaymentListSchema, 403: Err, 404: Err } },
+    handler: async (req, reply) =>
+      withTenant(req.claims.ten, async (trx) => {
+        const reach = reachOf(await permsFor(trx, req.claims), 'billing.read', req.claims);
+        if (!reach) return reply.code(403).send({ error: 'FORBIDDEN', message: 'Missing permission: billing.read' });
+        try {
+          const doc = await getDraft(trx, reach, req.params.id);
+          const l = await ledgerOf(trx, doc.id);
+          return { payments: l.payments, summary: await summaryOf(trx, doc.id, doc.totals.grossMinor) };
+        } catch (e) {
+          return sendErr(reply, e);
+        }
+      }),
+  });
+
+  r.route({
+    method: 'POST',
+    url: '/billing/invoices/:id/payments',
+    preHandler: [app.authenticate],
+    schema: {
+      params: IdParams,
+      body: BillingPaymentWriteSchema,
+      response: { 200: BillingPaymentListSchema, 403: Err, 404: Err, 409: Err, 422: z.union([BillingOverpaymentSchema, Err]) },
+    },
+    handler: async (req, reply) =>
+      withTenant(req.claims.ten, async (trx) => {
+        const reach = reachOf(await permsFor(trx, req.claims), 'billing.record_payment', req.claims);
+        if (!reach) return reply.code(403).send({ error: 'FORBIDDEN', message: 'Missing permission: billing.record_payment' });
+        try {
+          const r = await recordManualPayment(trx, req.claims, reach, req.params.id, req.body);
+          const l = await ledgerOf(trx, req.params.id);
+          return { payments: l.payments, summary: r.summary };
+        } catch (e) {
+          return sendErr(reply, e);
+        }
+      }),
+  });
+}

@@ -27,6 +27,8 @@ export class ApiError extends Error {
     message: string,
     public refusalCode?: string,
     public refusalParams?: Record<string, string | number>,
+    /** The error body as the server sent it, for doors that answer with structure (e.g. the issue door's `problems`). */
+    public body?: Record<string, unknown>,
   ) {
     super(message);
   }
@@ -108,13 +110,26 @@ export async function api<S extends z.ZodType>(
       body.message ?? body.error ?? 'Request failed',
       body.code,
       body.params,
+      body as Record<string, unknown>,
     );
   }
   return schema.parse(await res.json()) as z.infer<S>;
 }
 
 export const get = <S extends z.ZodType>(schema: S, path: string) => api(schema, path);
+/** A binary door (a PDF, say): the same auth and refresh, the body as a Blob. */
+export async function getBlob(path: string): Promise<Blob> {
+  let res = await rawFetch(path);
+  if (res.status === 401 && (await tryRefresh())) res = await rawFetch(path);
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as { error?: string; message?: string };
+    throw new ApiError(res.status, body.error ?? 'ERROR', body.message ?? body.error ?? 'Request failed');
+  }
+  return res.blob();
+}
 export const post = <S extends z.ZodType>(schema: S, path: string, body: unknown) =>
   api(schema, path, { method: 'POST', body: JSON.stringify(body) });
 export const patch = <S extends z.ZodType>(schema: S, path: string, body: unknown) =>
   api(schema, path, { method: 'PATCH', body: JSON.stringify(body) });
+export const put = <S extends z.ZodType>(schema: S, path: string, body: unknown) =>
+  api(schema, path, { method: 'PUT', body: JSON.stringify(body) });

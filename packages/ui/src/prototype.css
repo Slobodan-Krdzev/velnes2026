@@ -728,24 +728,14 @@ body.panel-open .shell{padding-right:var(--panel-w)}
    meer — de plakkende kop in een scrollende kaart schoof over de rijen
    heen en dat was precies wat er op de schermafdruk misging. De pagina
    scrollt gewoon; de rangorde bepaalt wat er boven de vouw woont. */
+/* 2026-10-07 (Alex): cards take the height of their content and no
+   more — an opportunity with one line is one line tall, an empty stock
+   card is a title and a sentence. Nothing stretches to fill the fold;
+   the columns are top-aligned and the page simply scrolls. */
 @media(min-width:1200px){
-  .fd-fold{min-height:calc(100vh - var(--header) - 44px)}
-  .fd-main{flex:1;min-height:0}
-  .fd-left{min-height:0}
+  .fd-main{align-items:start}
   .fd-pulse,.fd-hero{flex:none}
-  /* De kansen nemen wat er onder de heldkaart overblijft: hoger bij
-     meer ruimte, nooit talrijker. */
-  .fd-opps{flex:1;min-height:0}
-  .fd-opp{flex:1 1 0;min-height:64px}
-  /* Rechts vult de voorraadkaart de kolom, op zijn natuurlijke hoogte
-     gestut door dezelfde flex — zonder eigen scroll en zonder plakkende
-     kop. */
-  .fd-side .fd-card{flex:1}
-}
-@supports(height:100dvh){
-  @media(min-width:1200px){
-    .fd-fold{min-height:calc(100dvh - var(--header) - 44px)}
-  }
+  .fd-opp{min-height:64px}
 }
 @media(max-width:1199px){
   .fd-main,.fd-more-grid{grid-template-columns:1fr}
@@ -2443,6 +2433,12 @@ body.ob-src .ob-body{display:flex;align-items:center;justify-content:center;
 .infotip-title{font-weight:800;font-size:13px;margin-bottom:6px}
 .infotip-p{margin:0 0 8px;font-size:13px;line-height:1.45;font-weight:500;color:var(--text)}
 .infotip-p:last-child{margin-bottom:0}
+/* A ⓘ whose explanation shows on hover or keyboard focus (2026-10-07); `data-tip` carries the text. */
+.hovertip{position:relative;display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;margin-left:4px;vertical-align:middle;border:0;background:none;padding:0;color:var(--ink-muted);cursor:help;border-radius:50%}
+.hovertip:hover,.hovertip:focus-visible{color:var(--ink)}
+.hovertip::after{content:attr(data-tip);position:absolute;right:-4px;bottom:calc(100% + 8px);width:max-content;max-width:280px;padding:8px 10px;border-radius:8px;background:var(--ink);color:#fff;font-size:12px;line-height:1.45;font-weight:500;text-align:left;white-space:normal;box-shadow:0 6px 20px rgba(0,0,0,.18);opacity:0;pointer-events:none;transition:opacity .12s;z-index:30}
+.hovertip:hover::after,.hovertip:focus-visible::after{opacity:1}
+.hovertip.left::after{right:auto;left:-4px}
 
 /* Booking changes (Alex, 2026-09-30): a cancelled visit stays on the
    grid as history — muted and struck, never in the way. */
@@ -2464,4 +2460,13 @@ body.ob-src .ob-body{display:flex;align-items:center;justify-content:center;
 .cal-cell.quiet::after{content:"";position:absolute;right:5px;top:5px;width:6px;height:6px;border-radius:50%;background:#FF8D67;
   box-shadow:0 0 0 2px rgba(255,141,103,.25)}
 @media(hover:hover){.cal-col:not(.closed) .cal-cell.quiet:hover{background:rgba(255,141,103,.18)}}
+
+/* Row cards stack their lines (Alex, 2026-10-06): the title on its own
+   row, each secondary line under it — everywhere. Inline, a title and
+   its detail ran into one sentence ("… is out of stockConnected salons
+   carry these"). */
+.rowcard .grow .t,.rowcard .grow .s{display:block}
+.rowcard .grow .s{margin-top:2px;line-height:1.4}
+/* The portal's mark is a button too (2026-10-06): the workspace's
+   `button.applogo` rules above dress it — same tile, same ring. */
 
