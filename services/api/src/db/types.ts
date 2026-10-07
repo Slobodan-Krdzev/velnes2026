@@ -1457,6 +1457,19 @@ export interface Suppliers {
   verified: Generated<boolean>;
 }
 
+export interface SupplierMedia {
+  createdAt: Generated<Timestamp>;
+  data: Buffer;
+  id: Generated<string>;
+  mime: Generated<string>;
+  name: string;
+  sha256: string;
+  sizeBytes: number;
+  supplierId: string;
+  uploadedBy: string | null;
+  uploadedByName: Generated<string>;
+}
+
 export interface SupplierJoinLinks {
   createdAt: Generated<Timestamp>;
   createdBy: Generated<string>;
@@ -1633,6 +1646,7 @@ export interface DB {
   supplierRoles: SupplierRoles;
   suppliers: Suppliers;
   supplierJoinLinks: SupplierJoinLinks;
+  supplierMedia: SupplierMedia;
   supplierUsers: SupplierUsers;
   supportTickets: SupportTickets;
   taxRules: TaxRules;

@@ -36,6 +36,10 @@ import {
   promotionStatus,
   SupplierJoinPreviewSchema,
   SupplierJoinRequestSchema,
+  SupplierMediaListSchema,
+  SupplierMediaSchema,
+  SupplierMediaUploadSchema,
+  SUPPLIER_MEDIA_MAX_BYTES,
 } from '@velnes/contracts';
 import argon2 from 'argon2';
 import type { FastifyInstance, FastifyReply } from 'fastify';
@@ -50,6 +54,7 @@ import { poTransition, SupplierError, toOrderContract,
 } from './suppliers.service.js';
 import { queueMail } from '../mail/mail.service.js';
 import { claimJoinLink, joinMailBody, mintJoinLink, peekJoinLink } from './join-links.service.js';
+import { deleteMedia, listMedia, readMedia, uploadMedia } from './media.service.js';
 import { createTicket, listTickets, replyToTicket, SupportError } from '../support/support.service.js';
 
 const Err = z.object({ error: z.string(), message: z.string() });
@@ -991,6 +996,70 @@ export function portalRoutes(app: FastifyInstance) {
   });
 
   // ── Settings: company, team and the role kit. ────────────────
+  // ── Media: printed catalogs as PDFs (2026-10-07). Catalog right to
+  // add and remove; anyone in the portal may list and open.
+  r.route({
+    method: 'GET',
+    url: '/portal/media',
+    preHandler: [app.authenticateSupplier],
+    schema: { response: { 200: SupplierMediaListSchema } },
+    handler: async (req) => withSupplier(req.supplierClaims.sup, async (trx) => ({ files: await listMedia(trx, req.supplierClaims.sup) })),
+  });
+
+  r.route({
+    method: 'POST',
+    url: '/portal/media',
+    preHandler: [app.authenticateSupplier],
+    bodyLimit: Math.ceil((SUPPLIER_MEDIA_MAX_BYTES * 4) / 3) + 4096,
+    schema: {
+      body: SupplierMediaUploadSchema,
+      response: { 200: SupplierMediaSchema, 403: Err, 422: Err },
+    },
+    handler: async (req, reply) =>
+      withSupplier(req.supplierClaims.sup, async (trx) => {
+        if (!(await portalCan(trx, reply, req.supplierClaims.rol, 'po.catalog'))) return reply;
+        try {
+          return await uploadMedia(trx, req.supplierClaims.sup, { id: req.supplierClaims.sub, name: req.supplierClaims.name }, req.body);
+        } catch (e) {
+          if (e instanceof SupplierError) return reply.code(422).send({ error: e.code, message: e.message });
+          throw e;
+        }
+      }),
+  });
+
+  r.route({
+    method: 'DELETE',
+    url: '/portal/media/:id',
+    preHandler: [app.authenticateSupplier],
+    schema: { params: z.object({ id: z.uuid() }), response: { 200: z.object({ ok: z.literal(true) }), 403: Err, 404: Err } },
+    handler: async (req, reply) =>
+      withSupplier(req.supplierClaims.sup, async (trx) => {
+        if (!(await portalCan(trx, reply, req.supplierClaims.rol, 'po.catalog'))) return reply;
+        try {
+          await deleteMedia(trx, req.supplierClaims.sup, req.params.id);
+          return { ok: true as const };
+        } catch (e) {
+          if (e instanceof SupplierError) return reply.code(404).send({ error: e.code, message: e.message });
+          throw e;
+        }
+      }),
+  });
+
+  r.route({
+    method: 'GET',
+    url: '/portal/media/:id/file',
+    preHandler: [app.authenticateSupplier],
+    schema: { params: z.object({ id: z.uuid() }) },
+    handler: async (req, reply) => {
+      const file = await withSupplier(req.supplierClaims.sup, (trx) => readMedia(trx, req.supplierClaims.sup, req.params.id));
+      if (!file) return reply.code(404).send({ error: 'NOT_FOUND', message: 'No such file' });
+      return reply
+        .header('content-type', file.mime)
+        .header('content-disposition', `inline; filename="${encodeURIComponent(file.name)}"`)
+        .send(file.data);
+    },
+  });
+
   r.route({
     method: 'GET',
     url: '/portal/company',

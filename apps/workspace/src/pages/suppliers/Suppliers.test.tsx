@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App, queryClient } from '../../App.js';
@@ -57,6 +57,9 @@ function mockApi(calls: { method: string; path: string; body?: unknown }[], orde
       const ok = (b: unknown) => new Response(JSON.stringify(b), { status: 200 });
       if (path.endsWith('/auth/me')) return ok(me);
       if (path.includes('/suppliers') && path.includes('/catalog')) return ok({ products: [spRow] });
+      if (path.includes('/media/') && path.endsWith('/file')) return new Response('%PDF-1.4 x', { status: 200, headers: { 'content-type': 'application/pdf' } });
+      if (path.includes('/suppliers') && path.includes('/media'))
+        return ok({ files: [{ id: 'f7000000-0000-4000-8000-000000000001', supplierId: SUP1, name: 'Autumn catalog 2026.pdf', sizeBytes: 3 * 1024 * 1024, sha256: 'a'.repeat(64), uploadedByName: 'Vesna', createdAt: '2026-09-30T10:00:00.000Z' }] });
       if (path.includes('/suppliers')) return ok({ suppliers: [supplier(), supplier({ id: 'd1000000-0000-4000-8000-000000000003', name: 'Adriatic Beauty Group', status: 'available', customerNo: '', products: 1 })] });
       if (path.includes('/purchase-orders') && path.includes('/receive'))
         return ok(order('partdelivered'));
@@ -182,5 +185,20 @@ describe('suppliers', () => {
     expect(detail.textContent).toContain('Applies per order line.');
     await userEvent.click(screen.getByTestId('promo-order'));
     expect(await screen.findByText(/New order/)).toBeDefined();
+  });
+
+  it('a connected supplier row offers its printed catalogs; a click opens the PDF through the session in a new tab', async () => {
+    mockApi([]);
+    const opened = vi.fn();
+    vi.stubGlobal('open', opened);
+    URL.createObjectURL = vi.fn(() => 'blob:catalog');
+    await openSuppliers();
+    await userEvent.click(screen.getByTestId(`media-${SUP1}`));
+    const list = await screen.findByTestId('media-list');
+    const file = await within(list).findByTestId('media-file');
+    expect(file.textContent).toContain('Autumn catalog 2026.pdf');
+    expect(file.textContent).toContain('3.0 MB');
+    await userEvent.click(file);
+    await waitFor(() => expect(opened).toHaveBeenCalledWith('blob:catalog', '_blank', 'noopener'));
   });
 });

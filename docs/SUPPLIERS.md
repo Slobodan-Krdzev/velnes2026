@@ -482,3 +482,30 @@ test now asserts the link. Deferred, not faked: "forgot password" for
 supplier users (no door yet — HQ or the owner re-invites), and an
 expiry reminder.
 
+## Printed catalogs as PDFs (2026-10-07)
+
+Suppliers had catalogs made for print and nowhere to put them. The
+portal's Catalog tab now opens with a **Printed catalogs** card: the
+supplier attaches a PDF (`POST /portal/media`, base64 in JSON like
+avatars and logos, a per-route body limit; the server decodes it,
+insists on the `%PDF-` magic, 15 MB and at most twenty files, and
+stores the bytes in `supplier_media` beside their sha256, the uploader's
+name and the time) and removes it at any time (`DELETE
+/portal/media/:id`, one in-row confirmation) — the catalog right
+(`po.catalog`) for both, any portal user may open one
+(`GET /portal/media/:id/file`, inline). On the salon side the connected
+supplier's row in Workspace › Suppliers carries a **Catalogs** button
+beside New order; it opens a modal listing the files (`GET
+/suppliers/:id/media`, 404 unless connected) and a click fetches the
+bytes through the session and opens them in a new tab, the way the
+purchase-order invoice opens. RLS does the real gating: a salon reads a
+supplier's files only while a `connected` row links them, the supplier
+only its own, HQ reads. No object store, no CDN, nothing faked: the
+bytes live in Postgres on the VPS and travel through the API. Tests:
+`media.test.ts` (API: publish, list, bytes identical, another
+supplier blind, removal, unconnected salon 404, non-PDF 422),
+`App.test.tsx` (portal card: list, upload as base64, remove) and
+`Suppliers.test.tsx` (workspace: button, modal, open). Deferred: a
+thumbnail or page count, ordering or renaming, and a bell to connected
+salons when a catalog is published.
+

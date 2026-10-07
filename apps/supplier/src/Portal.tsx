@@ -21,7 +21,12 @@ import {
   SupplierPromotionListSchema,
   SUPPORT_CATEGORIES,
   SupportTicketListSchema,
+  SupplierMediaListSchema,
+  SupplierMediaSchema,
+  SUPPLIER_MEDIA_MAX_BYTES,
+  SUPPLIER_MEDIA_MAX_FILES,
   type PurchaseOrder,
+  type SupplierMedia,
   type SupportCategory,
   type SupportTicket,
 } from '@velnes/contracts';
@@ -33,7 +38,7 @@ import { SUPPLIER_INDEX, type PoCtx } from './navsearch.js';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { z } from 'zod';
-import { pDelete, pGet, pPatch, pPost, PortalApiError, type PortalUser, pBlob } from './api.js';
+import { type PortalUser, PortalApiError, pBlob, pDelete, pGet, pPatch, pPost } from './api.js';
 import { fileToAvatarDataUrl } from './image.js';
 
 /** The supplier's own workspace: the prototype's viewPortal, chrome
@@ -727,6 +732,109 @@ const USE_LABEL: Record<string, string> = { pro: 'po.usePro', retail: 'po.useRet
 
 type CatProduct = z.infer<typeof SupplierProductListSchema>['products'][number];
 
+/** Printed catalogs as PDFs (2026-10-07): the supplier attaches the
+ *  catalogs it had made for print; connected salons open them from the
+ *  supplier's row. PDF only, 15 MB each. Add and remove at any time. */
+function MediaCard({ canEdit, say }: { canEdit: boolean; say: (m: string) => void }) {
+  const { t, i18n } = useTranslation();
+  const [files, setFiles] = useState<SupplierMedia[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [confirmId, setConfirmId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const reload = useCallback(() => {
+    void pGet(SupplierMediaListSchema, '/portal/media').then((r) => setFiles(r.files));
+  }, []);
+  useEffect(reload, [reload]);
+  const size = (n: number) => (n >= 1024 * 1024 ? `${(n / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
+  const when = (iso: string) => new Date(iso).toLocaleDateString(i18n.language, { day: 'numeric', month: 'short', year: 'numeric' });
+  const pick = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    e.target.value = '';
+    if (!f) return;
+    setError(null);
+    if (f.size > SUPPLIER_MEDIA_MAX_BYTES) {
+      setError(t('po.media.tooBig'));
+      return;
+    }
+    setBusy(true);
+    try {
+      const data = await new Promise<string>((res, rej) => {
+        const r = new FileReader();
+        r.onload = () => res(String(r.result).replace(/^data:[^,]*,/, ''));
+        r.onerror = () => rej(new Error('read'));
+        r.readAsDataURL(f);
+      });
+      await pPost(SupplierMediaSchema, '/portal/media', { name: f.name, data });
+      say(t('po.media.added'));
+      reload();
+    } catch (err) {
+      setError(err instanceof PortalApiError ? err.message : t('login.error'));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const open = async (f: SupplierMedia) => {
+    const blob = await pBlob(`/portal/media/${f.id}/file`);
+    window.open(URL.createObjectURL(blob), '_blank', 'noopener');
+  };
+  const remove = async (id: string) => {
+    setBusy(true);
+    try {
+      await pDelete(z.object({ ok: z.literal(true) }), `/portal/media/${id}`);
+      setConfirmId(null);
+      say(t('po.media.removed'));
+      reload();
+    } catch (err) {
+      setError(err instanceof PortalApiError ? err.message : t('login.error'));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <section className="card" style={{ padding: 16, marginBottom: 14 }} data-testid="media-card">
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+        <div>
+          <h3 style={{ margin: 0 }}>{t('po.media.title')}</h3>
+          <p className="muted" style={{ margin: '2px 0 0', fontSize: 13 }}>{t('po.media.sub', { max: SUPPLIER_MEDIA_MAX_FILES })}</p>
+        </div>
+        {canEdit ? (
+          <label className="btn btn-secondary" style={{ cursor: busy ? 'progress' : 'pointer' }}>
+            {busy ? t('po.media.uploading') : t('po.media.add')}
+            <input type="file" accept="application/pdf,.pdf" onChange={(e) => void pick(e)} disabled={busy || files.length >= SUPPLIER_MEDIA_MAX_FILES} style={{ display: 'none' }} data-testid="media-input" />
+          </label>
+        ) : null}
+      </div>
+      {error ? <p role="alert" style={{ color: 'var(--danger)', fontWeight: 600, margin: '10px 0 0' }}>{error}</p> : null}
+      {files.length === 0 ? (
+        <p className="muted" style={{ margin: '12px 0 0' }}>{t('po.media.empty')}</p>
+      ) : (
+        <ul style={{ listStyle: 'none', margin: '12px 0 0', padding: 0, display: 'grid', gap: 6 }}>
+          {files.map((f) => (
+            <li key={f.id} className="rowcard" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px' }} data-testid="media-row">
+              <Icon d={I.note} size={18} />
+              <span className="grow" style={{ minWidth: 0 }}>
+                <span className="t" style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.name}</span>
+                <span className="s muted" style={{ fontSize: 12 }}>{size(f.sizeBytes)} · {when(f.createdAt)}{f.uploadedByName ? ` · ${f.uploadedByName}` : ''}</span>
+              </span>
+              <button className="btn btn-ghost btn-sm" onClick={() => void open(f)}>{t('po.media.open')}</button>
+              {canEdit ? (
+                confirmId === f.id ? (
+                  <>
+                    <button className="btn btn-sm" style={{ background: 'var(--danger, #b3261e)', color: '#fff' }} disabled={busy} onClick={() => void remove(f.id)} data-testid="media-remove-confirm">{t('po.media.removeSure')}</button>
+                    <button className="btn btn-ghost btn-sm" onClick={() => setConfirmId(null)}>{t('po.cancel')}</button>
+                  </>
+                ) : (
+                  <button className="btn btn-ghost btn-sm" onClick={() => setConfirmId(f.id)}>{t('po.media.remove')}</button>
+                )
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
 function Catalog({
   user,
   say,
@@ -803,6 +911,7 @@ function Catalog({
           </div>
         ) : null}
       </div>
+      <MediaCard canEdit={canEdit} say={say} />
       <div className="card">
         <table>
           <thead>

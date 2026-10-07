@@ -6,6 +6,7 @@ import {
   PurchaseOrderStatusSchema,
   ReceiveRequestSchema,
   SupplierListSchema,
+  SupplierMediaListSchema,
   SupplierProductListSchema,
   SalonPromotionListSchema,
 } from '@velnes/contracts';
@@ -16,6 +17,7 @@ import { withTenant } from '../../db/index.js';
 import { can, permsFor } from '../auth/authz.service.js';
 import { localIso } from '../scheduling/scheduling.service.js';
 import { salonPromotions } from './promotions.service.js';
+import { listMedia, readMedia } from './media.service.js';
 import {
   createOrder,
   poTransition,
@@ -220,6 +222,47 @@ export function suppliersRoutes(app: FastifyInstance) {
 
   // The invoice as a PDF (Alex, 2026-10-06): the same document the
   // supplier opens, for a delivered order of this salon.
+  // ── A connected supplier's printed catalogs (2026-10-07). RLS shows a
+  // salon only the files of suppliers it is connected to; the door says
+  // 404 for anyone else rather than an empty list.
+  const connectedTo = async (trx: Parameters<typeof permsFor>[0], supplierId: string) =>
+    !!(await trx
+      .selectFrom('supplierConnections')
+      .select('supplierId')
+      .where('supplierId', '=', supplierId)
+      .where('status', '=', 'connected')
+      .executeTakeFirst());
+
+  r.route({
+    method: 'GET',
+    url: '/suppliers/:id/media',
+    preHandler: [app.authenticate],
+    schema: { params: z.object({ id: z.uuid() }), response: { 200: SupplierMediaListSchema, 403: Err, 404: Err } },
+    handler: async (req, reply) =>
+      withTenant(req.claims.ten, async (trx) => {
+        if (!(await gate(trx, req.claims, reply))) return reply;
+        if (!(await connectedTo(trx, req.params.id))) return reply.code(404).send({ error: 'NOT_FOUND', message: 'Not a connected supplier' });
+        return { files: await listMedia(trx, req.params.id) };
+      }),
+  });
+
+  r.route({
+    method: 'GET',
+    url: '/suppliers/:id/media/:fid/file',
+    preHandler: [app.authenticate],
+    schema: { params: z.object({ id: z.uuid(), fid: z.uuid() }) },
+    handler: async (req, reply) =>
+      withTenant(req.claims.ten, async (trx) => {
+        if (!(await gate(trx, req.claims, reply))) return reply;
+        const file = await readMedia(trx, req.params.id, req.params.fid);
+        if (!file) return reply.code(404).send({ error: 'NOT_FOUND', message: 'No such file' });
+        return reply
+          .header('content-type', file.mime)
+          .header('content-disposition', `inline; filename="${encodeURIComponent(file.name)}"`)
+          .send(file.data);
+      }),
+  });
+
   r.route({
     method: 'GET',
     url: '/purchase-orders/:id/invoice.pdf',

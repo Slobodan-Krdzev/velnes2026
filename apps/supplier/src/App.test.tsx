@@ -44,6 +44,11 @@ function mockApi(calls: { method: string; path: string; body?: unknown }[]) {
         });
       if (path.includes('/portal/join/') && method === 'POST')
         return ok({ accessToken: 'portal-token', user: { ...user, name: 'Slobodan Krdzev', email: 'owner@krdzev.mk', supplierName: 'Krdzev Supply' } });
+      if (path.includes('/portal/media') && method === 'DELETE') return ok({ ok: true });
+      if (path.includes('/portal/media') && method === 'POST')
+        return ok({ id: 'f7000000-0000-4000-8000-000000000002', supplierId: SUP1, name: 'Spring 2027.pdf', sizeBytes: 2048, sha256: 'b'.repeat(64), uploadedByName: 'Vesna Todorova', createdAt: '2026-10-07T10:00:00.000Z' });
+      if (path.includes('/portal/media'))
+        return ok({ files: [{ id: 'f7000000-0000-4000-8000-000000000001', supplierId: SUP1, name: 'Autumn catalog 2026.pdf', sizeBytes: 3 * 1024 * 1024, sha256: 'a'.repeat(64), uploadedByName: 'Vesna Todorova', createdAt: '2026-09-30T10:00:00.000Z' }] });
       if (path.includes('/portal/auth/login')) return ok({ accessToken: 'portal-token', user });
       if (path.includes('/portal/notifications'))
         return ok({
@@ -423,5 +428,28 @@ describe('the supplier portal', () => {
     expect(await screen.findAllByText('BeautyPro MK')).toBeDefined(); // the dashboard mock
     expect(window.location.pathname).toBe('/');
     expect(JSON.parse(localStorage.getItem('velnes.portal')!).user.email).toBe('owner@krdzev.mk');
+  });
+
+  it('printed catalogs: the Catalog tab lists the published PDFs, a new PDF is read and posted as base64, a removal asks once', async () => {
+    const calls: { method: string; path: string; body?: unknown }[] = [];
+    mockApi(calls);
+    localStorage.setItem('velnes.portal', JSON.stringify({ token: 'portal-token', user }));
+    render(<App />);
+    await userEvent.click(await screen.findByRole('button', { name: /Catalog/ }));
+    const card = await screen.findByTestId('media-card');
+    expect(card.textContent).toContain('Autumn catalog 2026.pdf');
+    expect(card.textContent).toContain('3.0 MB');
+    const pdf = new File(['%PDF-1.4 tiny'], 'Spring 2027.pdf', { type: 'application/pdf' });
+    await userEvent.upload(screen.getByTestId('media-input'), pdf);
+    await waitFor(() => {
+      const sent = calls.find((c) => c.path.endsWith('/portal/media') && c.method === 'POST');
+      expect(sent).toBeDefined();
+      const b = sent!.body as { name: string; data: string };
+      expect(b.name).toBe('Spring 2027.pdf');
+      expect(Buffer.from(b.data, 'base64').toString()).toBe('%PDF-1.4 tiny');
+    });
+    await userEvent.click(within(card).getAllByRole('button', { name: 'Remove' })[0]!);
+    await userEvent.click(screen.getByTestId('media-remove-confirm'));
+    await waitFor(() => expect(calls.some((c) => c.method === 'DELETE' && c.path.includes('/portal/media/f7000000-0000-4000-8000-000000000001'))).toBe(true));
   });
 });

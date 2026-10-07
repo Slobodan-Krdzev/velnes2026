@@ -207,6 +207,32 @@ export const SupplierJoinRequestSchema = z.object({
   company: SupplierJoinCompanySchema.optional(),
 });
 
+/**
+ * Supplier media (2026-10-07): the printed catalogs a supplier publishes
+ * as PDFs. PDF only, `SUPPLIER_MEDIA_MAX_BYTES` each, at most
+ * `SUPPLIER_MEDIA_MAX_FILES` per supplier. Uploaded as base64 in JSON
+ * (the same road avatars and logos take); read back as the bytes.
+ */
+export const SUPPLIER_MEDIA_MAX_BYTES = 15 * 1024 * 1024;
+export const SUPPLIER_MEDIA_MAX_FILES = 20;
+export const SupplierMediaSchema = z.object({
+  id: z.uuid(),
+  supplierId: z.uuid(),
+  name: z.string(),
+  sizeBytes: z.number().int(),
+  sha256: z.string(),
+  uploadedByName: z.string(),
+  createdAt: z.string(),
+});
+export type SupplierMedia = z.infer<typeof SupplierMediaSchema>;
+export const SupplierMediaListSchema = z.object({ files: z.array(SupplierMediaSchema) });
+export const SupplierMediaUploadSchema = z.object({
+  /** The file name as shown to salons, `.pdf` kept or added. */
+  name: z.string().trim().min(1).max(120),
+  /** The PDF bytes, base64 (no data: prefix). */
+  data: z.string().min(8).max(Math.ceil((SUPPLIER_MEDIA_MAX_BYTES * 4) / 3) + 4),
+});
+
 /** Shaped to reject tenant and HQ tokens by construction. */
 export const SupplierClaimsSchema = z.object({
   sup: z.uuid(), // supplier id

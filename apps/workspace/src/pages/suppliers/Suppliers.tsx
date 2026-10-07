@@ -5,7 +5,9 @@ import {
   SupplierListSchema,
   SupplierProductListSchema,
   SalonPromotionListSchema,
+  SupplierMediaListSchema,
   type PurchaseOrder,
+  type SupplierMedia,
   type SalonPromotion,
   type Supplier,
 } from '@velnes/contracts';
@@ -121,6 +123,7 @@ function SupplierRow({
   const toast = useToast();
   const qc = useQueryClient();
   const locations = useLocations();
+  const [mediaOf, setMediaOf] = useState<Supplier | null>(null);
   const locName = (id: string) => locations.data?.locations.find((l) => l.id === id)?.name ?? '—';
 
   const connect = async () => {
@@ -170,6 +173,9 @@ function SupplierRow({
       </span>
       {s.status === 'connected' ? (
         <span className="acts">
+          <button className="btn btn-secondary btn-sm" onClick={() => setMediaOf(s)} data-testid={`media-${s.id}`}>
+            {t('sup.media.button')}
+          </button>
           <button className="btn btn-primary btn-sm" onClick={() => startOrder(s.id)}>
             {t('sup.newOrder')}
           </button>
@@ -181,6 +187,59 @@ function SupplierRow({
           {t('sup.requestConnection')}
         </button>
       ) : null}
+      {mediaOf ? <MediaModal supplier={mediaOf} onClose={() => setMediaOf(null)} /> : null}
+    </div>
+  );
+}
+
+/** A connected supplier's printed catalogs (2026-10-07): the PDFs it
+ *  published, opened in a new tab through the session like the invoice. */
+function MediaModal({ supplier, onClose }: { supplier: Supplier; onClose: () => void }) {
+  const { t, i18n } = useTranslation();
+  const files = useQuery({
+    queryKey: ['supplier-media', supplier.id],
+    queryFn: () => get(SupplierMediaListSchema, `/suppliers/${supplier.id}/media`),
+  });
+  const size = (n: number) => (n >= 1024 * 1024 ? `${(n / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
+  const when = (iso: string) => new Date(iso).toLocaleDateString(i18n.language, { day: 'numeric', month: 'short', year: 'numeric' });
+  const open = async (f: SupplierMedia) => {
+    const blob = await getBlob(`/suppliers/${supplier.id}/media/${f.id}/file`);
+    window.open(URL.createObjectURL(blob), '_blank', 'noopener');
+  };
+  return (
+    <div className="overlay" onClick={onClose}>
+      <div className="modal" role="dialog" aria-modal="true" aria-labelledby="media-title" style={{ maxWidth: 560 }} onClick={(e) => e.stopPropagation()}>
+        <div className="modal-head">
+          <div>
+            <h2 id="media-title">{t('sup.media.title', { name: supplier.name })}</h2>
+            <span className="muted" style={{ fontWeight: 500 }}>{t('sup.media.sub')}</span>
+          </div>
+        </div>
+        <div className="modal-body" style={{ display: 'grid', gap: 8 }} data-testid="media-list">
+          {files.isLoading ? (
+            <p className="muted" style={{ margin: 0 }}>{t('sup.media.loading')}</p>
+          ) : !files.data || files.data.files.length === 0 ? (
+            <p className="muted" style={{ margin: 0 }}>{t('sup.media.empty')}</p>
+          ) : (
+            files.data.files.map((f) => (
+              <button key={f.id} type="button" className="rowcard" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', textAlign: 'left', width: '100%' }} onClick={() => void open(f)} data-testid="media-file">
+                <Icon d={I.note} size={18} />
+                <span className="grow" style={{ minWidth: 0 }}>
+                  <span className="t" style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.name}</span>
+                  <span className="s muted" style={{ fontSize: 12 }}>{size(f.sizeBytes)} · {when(f.createdAt)}</span>
+                </span>
+                <span className="muted" style={{ fontSize: 12, whiteSpace: 'nowrap' }}>{t('sup.media.openPdf')}</span>
+              </button>
+            ))
+          )}
+        </div>
+        <div className="modal-foot" style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+          <button className="btn btn-secondary" onClick={onClose}>{t('sup.promoClose')}</button>
+        </div>
+        <button className="modal-close" aria-label={t('sup.promoClose')} onClick={onClose}>
+          <Icon d={I.x} size={20} />
+        </button>
+      </div>
     </div>
   );
 }
