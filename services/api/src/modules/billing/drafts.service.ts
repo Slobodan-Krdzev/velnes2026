@@ -4,9 +4,11 @@ import type {
   BillingInvoice,
   BillingInvoiceLine,
   BillingIssuerSnapshot,
+  BillingLang,
   BillingOrigin,
 } from '@velnes/contracts';
 import {
+  BILLING_LANGS,
   allocateDiscount,
   computeLine,
   evaluateBillingProfile,
@@ -18,6 +20,7 @@ import {
 } from '@velnes/contracts';
 import { sql } from 'kysely';
 import type { Trx } from '../../db/index.js';
+import { withHq } from '../../db/index.js';
 import { logAudit } from '../audit/audit.service.js';
 import { localIso, nowAt } from '../scheduling/scheduling.service.js';
 import { BillingError } from './billing.service.js';
@@ -268,12 +271,42 @@ export async function actorName(trx: Trx, id: string | null) {
   return (await trx.selectFrom('employees').select('name').where('id', '=', id).executeTakeFirst())?.name ?? '';
 }
 
+/**
+ * The document's language (phase 4): the explicit choice, else the
+ * buyer's Velnes account language when the customer has one, else the
+ * salon's country (North Macedonia → mk), else Macedonian. Chosen once
+ * on the draft and frozen at issue — never derived again at render.
+ */
+export async function langFor(trx: Trx, customerId: string | null, explicit?: BillingLang): Promise<BillingLang> {
+  if (explicit) return explicit;
+  if (customerId) {
+    const link = await trx
+      .selectFrom('clientCustomerLinks')
+      .select('clientUserId')
+      .where('customerId', '=', customerId)
+      .orderBy('createdAt', 'desc')
+      .limit(1)
+      .executeTakeFirst();
+    if (link) {
+      // The account row lives outside the tenant's world: one read of
+      // its language under the platform context, in its own transaction.
+      const u = await withHq((t) => t.selectFrom('clientUsers').select('lang').where('id', '=', link.clientUserId).executeTakeFirst());
+      if (u && (BILLING_LANGS as readonly string[]).includes(u.lang)) return u.lang as BillingLang;
+    }
+  }
+  const biz = await trx.selectFrom('businesses').select('country').executeTakeFirst();
+  const c = (biz?.country ?? '').toLowerCase();
+  if (/macedonia|македонија|maqedoni/.test(c)) return 'mk';
+  if (/albania|shqip|kosov/.test(c)) return 'sq';
+  return 'mk';
+}
+
 /** One draft per sale, built once, replayed afterwards. */
 export async function createDraft(
   trx: Trx,
   claims: AccessClaims,
   reach: Reach,
-  input: { saleId: string; billingCustomerId?: string | null | undefined; key?: string | undefined },
+  input: { saleId: string; billingCustomerId?: string | null | undefined; key?: string | undefined; lang?: BillingLang | undefined },
 ): Promise<{ invoice: BillingInvoice; created: boolean }> {
   const sale = await trx.selectFrom('invoices').selectAll().where('id', '=', input.saleId).executeTakeFirst();
   if (!sale) throw new BillingError('NOT_FOUND', 'Unknown sale');
@@ -312,6 +345,7 @@ export async function createDraft(
   // The supply happened on the location's day, not the server's.
   const supplyDate = nowAt(location.tz, sale.createdAt).date;
   const name = await actorName(trx, claims.sub);
+  const lang = await langFor(trx, sale.customerId, input.lang);
 
   const inv = await trx
     .insertInto('billingInvoices')
@@ -325,6 +359,7 @@ export async function createDraft(
       originSaleId: sale.id,
       originAppointmentId: rows.find((r) => r.appointmentId)?.appointmentId ?? null,
       idempotencyKey: input.key ?? null,
+      lang,
       currency: issuer.currency,
       vatRegistered: issuer.vatRegistered,
       pricesIncludeVat: issuer.pricesIncludeVat,
@@ -433,6 +468,9 @@ export async function rowToContract(trx: Trx, id: string): Promise<BillingInvoic
     series: r.series,
     year: r.year,
     numberSeq: r.numberSeq,
+    lang: r.lang as BillingLang,
+    pdfSha256: r.pdfSha256,
+    fiscalReceiptRef: r.fiscalReceiptRef,
     currency: r.currency,
     vatRegistered: r.vatRegistered,
     pricesIncludeVat: r.pricesIncludeVat,
@@ -550,7 +588,7 @@ export async function patchDraft(
   claims: AccessClaims,
   reach: Reach,
   id: string,
-  p: { billingCustomerId?: string | null | undefined; supplyDate?: string | undefined; dueDate?: string | null | undefined; notes?: string | undefined },
+  p: { billingCustomerId?: string | null | undefined; supplyDate?: string | undefined; dueDate?: string | null | undefined; notes?: string | undefined; lang?: BillingLang | undefined },
 ): Promise<BillingInvoice> {
   const r = await trx.selectFrom('billingInvoices').select(['id', 'status', 'locationId', 'originSaleId']).where('id', '=', id).executeTakeFirst();
   if (!r || !reaches(reach, r.locationId)) throw new BillingError('NOT_FOUND', 'Unknown accounting invoice');
@@ -571,6 +609,7 @@ export async function patchDraft(
   if (p.supplyDate !== undefined) set.supplyDate = new Date(p.supplyDate);
   if (p.dueDate !== undefined) set.dueDate = p.dueDate ? new Date(p.dueDate) : null;
   if (p.notes !== undefined) set.notes = p.notes;
+  if (p.lang !== undefined) set.lang = p.lang;
   const name = await actorName(trx, claims.sub);
   await trx
     .updateTable('billingInvoices')

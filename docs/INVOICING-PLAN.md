@@ -759,8 +759,17 @@ door + UI + tests + seed + docs paragraph; each shippable alone)
    lock once a document is issued; `billing.issue` goes to owner-shaped
    roles only; the five-working-day rule is a reported warning, not an
    enforced rule.
-4. **PDF**: renderer from snapshots in mk/sq/en, hash, reproducibility
-   test, Download/Print, the fiscal disclaimer, non-VAT layout.
+4. **PDF** — **built 2026-10-07** (`docs/INVOICING.md` "Phase 4").
+   Settled against the analysis: the document carries its own language
+   (`lang`, chosen on the draft, frozen at issue) instead of rendering
+   by the viewer's; the renderer is a pure function of the issued
+   contract plus the content-addressed logo; determinism comes from
+   pinning PDFKit's dates to `issued_at`; the hash is claimed once and
+   a mismatch is refused and audited rather than overwritten; preview
+   and download share one door; a renderer-version stamp travels in
+   the `pdf` event because the canonical hash binds documents to a
+   renderer version — the rule for renderer changes after go-live is
+   the open decision carried into phase 5.
 5. **Payments**: `billing_payments`, record payment, derived statuses,
    link from the sale's merchant transaction, Unpaid/Paid tabs.
 6. **Credit notes and refunds**: KO series, full/partial, negative

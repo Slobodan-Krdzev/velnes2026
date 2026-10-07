@@ -24,7 +24,7 @@ import { logAudit } from '../audit/audit.service.js';
 
 export class BillingError extends Error {
   constructor(
-    public code: 'NOT_FOUND' | 'INVALID' | 'ISSUE_BLOCKED' | 'CONFLICT',
+    public code: 'NOT_FOUND' | 'INVALID' | 'ISSUE_BLOCKED' | 'CONFLICT' | 'INTEGRITY',
     message: string,
     /** For ISSUE_BLOCKED: what the issue door found wrong, structured. */
     public problems: BillingIssueProblem[] = [],

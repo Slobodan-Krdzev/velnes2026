@@ -16,6 +16,7 @@ import { permsFor } from '../auth/authz.service.js';
 import { BillingError } from './billing.service.js';
 import { createDraft, getDraft, listDrafts, patchDraft } from './drafts.service.js';
 import { issueInvoice, logoOf } from './issue.service.js';
+import { invoicePdf, pdfFilename } from './pdf.service.js';
 import { reachOf } from './scope.js';
 
 const Err = z.object({ error: z.string(), message: z.string() });
@@ -24,7 +25,8 @@ const IdParams = z.object({ id: z.uuid() });
 function sendErr(reply: FastifyReply, e: unknown) {
   if (e instanceof BillingError) {
     if (e.code === 'ISSUE_BLOCKED') return reply.code(422).send({ error: e.code, message: e.message, problems: e.problems });
-    return reply.code(e.code === 'NOT_FOUND' ? 404 : e.code === 'CONFLICT' ? 409 : 422).send({ error: e.code, message: e.message });
+    const status = e.code === 'NOT_FOUND' ? 404 : e.code === 'CONFLICT' ? 409 : e.code === 'INTEGRITY' ? 500 : 422;
+    return reply.code(status).send({ error: e.code, message: e.message });
   }
   throw e;
 }
@@ -136,6 +138,35 @@ export function draftsRoutes(app: FastifyInstance) {
           const logo = await logoOf(trx, reach, req.params.id);
           if (!logo) return reply.code(204).send(null);
           return logo;
+        } catch (e) {
+          return sendErr(reply, e);
+        }
+      }),
+  });
+
+  /** The canonical PDF (phase 4): issued documents only, `billing.read`
+   *  at the role's reach, the same bytes for preview and download —
+   *  only the disposition differs. The ETag is the canonical hash. */
+  r.route({
+    method: 'GET',
+    url: '/billing/invoices/:id/pdf',
+    preHandler: [app.authenticate],
+    schema: { params: IdParams, querystring: z.object({ download: z.enum(['0', '1']).default('0') }) },
+    handler: async (req, reply) =>
+      withTenant(req.claims.ten, async (trx) => {
+        const reach = reachOf(await permsFor(trx, req.claims), 'billing.read', req.claims);
+        if (!reach) return reply.code(403).send({ error: 'FORBIDDEN', message: 'Missing permission: billing.read' });
+        try {
+          const name = (await trx.selectFrom('employees').select('name').where('id', '=', req.claims.sub).executeTakeFirst())?.name ?? '';
+          const pdf = await invoicePdf(trx, req.claims.ten, reach, req.params.id, { id: req.claims.sub, name });
+          return reply
+            .header('content-type', 'application/pdf')
+            .header('content-disposition', `${req.query.download === '1' ? 'attachment' : 'inline'}; filename="${pdfFilename(pdf.number)}"`)
+            .header('content-length', String(pdf.buffer.length))
+            .header('etag', `"${pdf.sha256}"`)
+            .header('x-document-sha256', pdf.sha256)
+            .header('cache-control', 'private, no-store')
+            .send(pdf.buffer);
         } catch (e) {
           return sendErr(reply, e);
         }

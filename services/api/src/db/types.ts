@@ -759,6 +759,7 @@ export interface BillingInvoices {
   issueKey: string | null;
   issuer: Json;
   kind: Generated<string>;
+  lang: Generated<string>;
   legalEntityId: string;
   location: Json;
   locationId: string;

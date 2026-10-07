@@ -1,10 +1,10 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { BillingInvoiceListSchema, BillingInvoiceSchema, BillingLogoSchema, type BillingInvoice, type BillingIssueProblem } from '@velnes/contracts';
+import { BILLING_LANGS, BillingInvoiceListSchema, BillingInvoiceSchema, BillingLogoSchema, type BillingInvoice, type BillingIssueProblem, type BillingLang } from '@velnes/contracts';
 import { I, Icon } from '@velnes/ui';
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ApiError, api, get, post, useSession } from '@velnes/client';
+import { ApiError, api, get, getBlob, patch, post, useSession } from '@velnes/client';
 import { moneyMinor, pctBp } from '../../lib/money.js';
 import { useToast } from '../../lib/toast.js';
 
@@ -134,8 +134,42 @@ function DocDetail({ id }: { id: string }) {
   // One key per attempt from this screen: a retry after a lost answer
   // sends the same key and gets the same issued document back.
   const issueKey = useMemo(() => newKey(), []);
+  const [pdfBusy, setPdfBusy] = useState<'preview' | 'download' | null>(null);
   const d = q.data;
   if (!d) return null;
+
+  /** The canonical PDF: the same bytes for both; only what the browser does with them differs. */
+  const openPdf = async (mode: 'preview' | 'download') => {
+    setPdfBusy(mode);
+    setError(null);
+    try {
+      const blob = await getBlob(`/billing/invoices/${id}/pdf${mode === 'download' ? '?download=1' : ''}`);
+      const url = URL.createObjectURL(blob);
+      if (mode === 'preview') window.open(url, '_blank', 'noopener');
+      else {
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `invoice-${d.number ?? id}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+      }
+      void qc.invalidateQueries({ queryKey: ['billingInvoice', id] });
+    } catch (e) {
+      setError(t('inv.pdfFailed', { message: e instanceof Error ? e.message : String(e) }));
+    } finally {
+      setPdfBusy(null);
+    }
+  };
+  const setLang = async (lang: BillingLang) => {
+    setError(null);
+    try {
+      const doc = await patch(BillingInvoiceSchema, `/billing/invoices/${id}`, { lang });
+      qc.setQueryData(['billingInvoice', id], doc);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  };
   const cur = d.currency;
   const m = (v: number) => moneyMinor(v, cur);
   const issued = d.status === 'issued';
@@ -183,6 +217,16 @@ function DocDetail({ id }: { id: string }) {
               {t('inv.issue')}
             </button>
           ) : null}
+          {issued ? (
+            <>
+              <button className="btn btn-secondary" onClick={() => void openPdf('preview')} disabled={pdfBusy !== null} data-testid="pdf-preview">
+                {t('inv.previewPdf')}
+              </button>
+              <button className="btn btn-primary" onClick={() => void openPdf('download')} disabled={pdfBusy !== null} data-testid="pdf-download">
+                {t('inv.downloadPdf')}
+              </button>
+            </>
+          ) : null}
           <span className={`badge ${d.status === 'draft' ? 'warning' : 'success'}`} data-testid="doc-status">{t(`inv.status.${d.status}`)}</span>
         </div>
       </div>
@@ -212,6 +256,18 @@ function DocDetail({ id }: { id: string }) {
             <div>{t('inv.supplyDate')}: <b>{dateShort(d.supplyDate)}</b></div>
             {d.dueDate ? <div>{t('inv.dueDate')}: <b>{dateShort(d.dueDate)}</b></div> : null}
             {d.origin ? <div>{t('inv.fromSale', { number: d.origin.saleNumber, date: dateShort(d.origin.saleDate) })}</div> : null}
+            <div style={{ marginTop: 6, display: 'flex', gap: 6, alignItems: 'center', justifyContent: 'flex-end' }}>
+              <label htmlFor="inv-lang">{t('inv.lang')}:</label>
+              {d.status === 'draft' && can('billing.create') ? (
+                <select id="inv-lang" className="input" value={d.lang} onChange={(e) => void setLang(e.target.value as BillingLang)} title={t('inv.langHint')} style={{ width: 'auto', padding: '2px 6px' }}>
+                  {BILLING_LANGS.map((l) => (
+                    <option key={l} value={l}>{t(`inv.lang.${l}`)}</option>
+                  ))}
+                </select>
+              ) : (
+                <b data-testid="doc-lang">{t(`inv.lang.${d.lang}`)}</b>
+              )}
+            </div>
           </div>
         </div>
 
@@ -333,6 +389,11 @@ function DocDetail({ id }: { id: string }) {
             {!issued && d.updatedAt !== d.createdAt ? ` · ${t('inv.updatedBy', { name: d.updatedBy.name, when: when(d.updatedAt) })}` : ''}
             {issued && d.issuedBy && d.issuedAt ? ` · ${t('inv.issuedBy', { name: d.issuedBy.name, when: when(d.issuedAt) })}` : ''}
           </div>
+          {issued && d.pdfSha256 ? (
+            <div className="muted tnum" style={{ marginTop: 4, fontSize: 11, wordBreak: 'break-all' }} data-testid="pdf-sha">
+              {t('inv.pdfSha')}: {d.pdfSha256}
+            </div>
+          ) : null}
         </div>
 
         {d.events.length ? (

@@ -31,7 +31,7 @@ const draftOf = (id: string, registered: boolean) => {
   const sum = (k: 'netMinor' | 'vatMinor' | 'grossMinor') => lines.reduce((s, l) => s + l[k], 0);
   const rates = [...new Set(lines.map((l) => l.vatRateBp))];
   return {
-    id, kind: 'invoice', status: 'draft', number: null, series: null, year: null, numberSeq: null, currency: 'MKD', vatRegistered: registered, pricesIncludeVat: true,
+    id, kind: 'invoice', status: 'draft', number: null, series: null, year: null, numberSeq: null, lang: 'mk', pdfSha256: null, fiscalReceiptRef: null, currency: 'MKD', vatRegistered: registered, pricesIncludeVat: true,
     legalEntityId: LE, locationId: LOC, billingCustomerId: null, originSaleId: SALE, originAppointmentId: null,
     supplyDate: '2026-10-06', issueDate: null, dueDate: null, issuedAt: null, issuer, location,
     buyer: { billingCustomerId: null, customerId: null, kind: 'company', name: 'Nova Health DOO', address: 'Bul. Ilinden 5', city: 'Skopje', zip: '1000', country: 'North Macedonia', edb: '', vatRegNo: '', email: '', phone: '' },
@@ -53,7 +53,7 @@ const readyDraft = (id: string) => {
 };
 const issuedOf = (d: ReturnType<typeof readyDraft>) => ({
   ...d, status: 'issued', number: '2026-000041', series: '', year: 2026, numberSeq: 41, issueDate: '2026-10-18', issuedAt: '2026-10-18T09:30:00.000Z',
-  issuedBy: { id: me.id, name: 'Maria Petrovska' }, issueReadiness: { ready: true, problems: [], warnings: [] },
+  issuedBy: { id: me.id, name: 'Maria Petrovska' }, issueReadiness: { ready: true, problems: [], warnings: [] }, pdfSha256: 'ab'.repeat(32),
   events: [...d.events, { id: `${EV}2`, kind: 'issued', at: '2026-10-18T09:30:00.000Z', actorName: 'Maria Petrovska', source: 'API', data: { number: '2026-000041' } }],
   updatedAt: '2026-10-18T09:30:00.000Z',
 });
@@ -73,6 +73,8 @@ function mockApi(calls: { method: string; path: string; body?: unknown }[], opts
       const ok = (b: unknown) => new Response(JSON.stringify(b), { status: 200 });
       if (path.endsWith('/auth/me')) return ok({ ...me, perms: opts.perms ?? me.perms });
       if (path.endsWith('/logo')) return new Response(null, { status: 204 });
+      if (/\/pdf(\?download=1)?$/.test(path)) return new Response('%PDF-1.3 fake', { status: 200, headers: { 'content-type': 'application/pdf' } });
+      if (path.includes(`/billing/invoices/${D1}`) && method === 'PATCH') return ok({ ...d1, lang: (JSON.parse(String(init?.body)) as { lang: string }).lang });
       if (path.endsWith(`/billing/invoices/${D3}/issue`)) {
         if (opts.issueFails)
           return new Response(JSON.stringify({ error: 'ISSUE_BLOCKED', message: 'blocked', problems: [{ part: 'issuer', field: 'signatoryName', reason: 'missing' }, { part: 'sale', field: 'status', reason: 'changed' }] }), { status: 422 });
@@ -229,6 +231,50 @@ describe('accounting invoices', () => {
       await screen.findByTestId('draft-preview');
       expect(screen.queryByTestId('issue-btn')).toBeNull();
       expect(screen.getByText(/needs the “Issue accounting invoices” right/)).toBeDefined();
+    });
+  });
+
+  describe('the PDF (phase 4)', () => {
+    it('a draft offers the language choice and no PDF; choosing a language PATCHes the draft', async () => {
+      const calls: { method: string; path: string; body?: unknown }[] = [];
+      mockApi(calls);
+      await open(`/invoices/${D1}`);
+      await screen.findByTestId('draft-preview');
+      expect(screen.queryByTestId('pdf-preview')).toBeNull();
+      expect(screen.queryByTestId('pdf-download')).toBeNull();
+      const select = screen.getByLabelText('Invoice language:') as HTMLSelectElement;
+      expect(select.value).toBe('mk');
+      await userEvent.selectOptions(select, 'sq');
+      await waitFor(() => expect(calls.find((c) => c.method === 'PATCH' && c.path.endsWith(`/billing/invoices/${D1}`))?.body).toEqual({ lang: 'sq' }));
+      await waitFor(() => expect((screen.getByLabelText('Invoice language:') as HTMLSelectElement).value).toBe('sq'));
+    });
+
+    it('an issued document shows its fixed language and hash, and fetches the one canonical PDF for preview and for download', async () => {
+      const calls: { method: string; path: string; body?: unknown }[] = [];
+      mockApi(calls);
+      const opened: string[] = [];
+      const openSpy = vi.spyOn(window, 'open').mockImplementation((url) => { opened.push(String(url)); return null; });
+      const makeUrl = (b: Blob) => `blob:${b.type}`;
+      (window.URL as unknown as { createObjectURL: typeof makeUrl }).createObjectURL = makeUrl;
+      (globalThis.URL as unknown as { createObjectURL: typeof makeUrl }).createObjectURL = makeUrl;
+      await open(`/invoices/${D3}`);
+      await screen.findByTestId('draft-preview');
+      await userEvent.click(screen.getByTestId('issue-btn'));
+      await userEvent.click(screen.getByTestId('issue-confirm'));
+      await waitFor(() => expect(screen.getByTestId('doc-status').textContent).toBe('Issued'));
+      expect(screen.queryByLabelText('Invoice language:')).toBeNull();
+      expect(screen.getByTestId('doc-lang').textContent).toBe('Македонски');
+      expect(screen.getByTestId('pdf-sha').textContent).toContain('ab'.repeat(32));
+      await userEvent.click(screen.getByTestId('pdf-preview'));
+      await waitFor(() => expect(opened).toEqual(['blob:application/pdf']));
+      const fetched = () => (globalThis.fetch as unknown as { mock: { calls: [string][] } }).mock.calls.map((c) => String(c[0])).filter((u) => u.includes('/pdf'));
+      expect(fetched()).toEqual([expect.stringMatching(new RegExp(`/billing/invoices/${D3}/pdf$`))]);
+      const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+      await userEvent.click(screen.getByTestId('pdf-download'));
+      await waitFor(() => expect(click).toHaveBeenCalledTimes(1));
+      expect(fetched()[1]).toMatch(new RegExp(`/billing/invoices/${D3}/pdf\\?download=1$`));
+      click.mockRestore();
+      openSpy.mockRestore();
     });
   });
 });

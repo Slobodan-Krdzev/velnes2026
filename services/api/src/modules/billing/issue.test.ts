@@ -150,7 +150,7 @@ describe('issuing accounting invoices', () => {
       const ev = doc.events.find((e) => e.kind === 'issued')!;
       expect(ev.actorName).toBe('Maria Petrovska');
       expect(ev.data).toMatchObject({ number: doc.number, issueDate: doc.issueDate, legalEntityId: entityId, locationId: demo.locAerodrom, netMinor: doc.totals.netMinor, vatMinor: doc.totals.vatMinor, grossMinor: doc.totals.grossMinor, issueKey: k });
-      const audit = await admin.query(`SELECT object, after FROM audit_log WHERE tenant_id=$1 AND action='Invoice issued' AND object=$2`, [demo.business, `Invoice · ${doc.number}`]);
+      const audit = await admin.query(`SELECT object, after FROM audit_log WHERE tenant_id=$1 AND action='Invoice issued' AND object=$2 AND ts >= $3`, [demo.business, `Invoice · ${doc.number}`, started]);
       expect(audit.rowCount).toBe(1);
       // What the GET door reads back is what the issue door returned.
       expect(await get(doc.id)).toEqual(doc);

@@ -423,10 +423,145 @@ cases (not ready, the full flow, a refused issue, no right).
 
 ### Deferred, honestly
 
-The PDF (4), payments (5), credit notes and void (6), auto-issue (7),
-email (8). The five-working-day rule is reported as a gap, not
-enforced. The `[confirm]` treatments stand as decided "for now"; the
-service charge stays refused. `issueMode: 'auto'` is stored but no
-checkout issues anything. The HQ app does not yet list issued
-documents across tenants.
+The PDF (4 — **built**, below), payments (5), credit notes and void
+(6), auto-issue (7), email (8). The five-working-day rule is reported
+as a gap, not enforced. The `[confirm]` treatments stand as decided
+"for now"; the service charge stays refused. `issueMode: 'auto'` is
+stored but no checkout issues anything. The HQ app does not yet list
+issued documents across tenants.
+
+## Phase 4 — the canonical PDF
+
+Built 2026-10-07. The issued JSON document of phase 3 becomes one A4
+PDF, rendered from the frozen document alone, the same bytes every
+time, its SHA-256 written once. Nothing financial happens here: the
+renderer is presentation over figures that arrived final.
+
+### The document's language (migration `20261007140000_billing_phase4_pdf.sql`)
+
+`billing_invoices.lang` (`mk` | `sq` | `en`, default `mk`). Chosen when
+the draft is created — the explicit choice, else the buyer's Velnes
+account language when the customer is linked to one (read under the
+platform context, as booking changes do), else the salon's country
+(North Macedonia → `mk`, Albania/Kosovo → `sq`), else Macedonian —
+editable on the draft (Workspace: "Invoice language"), and frozen at
+issue by the whitelist trigger like every other column. Documents
+that existed before the column took the deterministic fallback, `mk`.
+One invoice, one language; the PDF never infers another.
+
+### The renderer — `invoice-pdf.ts`
+
+`renderInvoicePdf(issuedDocument, frozenLogo)` is a pure function of
+the `BillingInvoice` contract and the content-addressed logo asset
+the issuer snapshot names. It reads no table. Strings come from the
+three dictionaries (`pdf.*` keys, completeness-tested); numbers from
+`@velnes/contracts/billing-format` — integer minor units to
+`5.150,00 MKD` (mk/sq) or `5,150.00 MKD` (en), thousandth quantities to
+`1` / `1,5` / `0,25`, basis points to `18%` / `5,5%`, dates to
+`07.10.2026`; negatives carry a minus so credit notes print through
+the same door. Fonts: the bundled DejaVu Sans regular, bold and
+oblique, embedded as subsets — Cyrillic, Albanian and Latin in one
+face, no network, no system font.
+
+Layout, A4 with 50pt margins: logo (fit in 150×64, aspect kept) and
+the title `ФАКТУРА` / `FATURË` / `INVOICE`, number, issue, supply and
+due dates; issuer (legal name, trading name when different, seat,
+ЕМБС, ЕДБ, VAT number only for a registered issuer, contact, bank);
+buyer (company: name, seat, ЕДБ, VAT number; person: name and what
+address it has; none: the approved walk-in wording) and the place of
+supply; the lines — `#`, description (wrapping), quantity, unit, unit
+price, discount only when any line carries one, then for a registered
+issuer net, VAT %, VAT, gross, and for a non-registered issuer a
+single amount column; the frozen VAT breakdown row for row (rate,
+taxable base, VAT, gross), discounts, net total, VAT total and the
+total in bold — or, for a non-registered issuer, the total and the
+approved statement that no VAT is charged or shown; a payment block
+(method of the sale, gift-card tender as payment information, due
+date, bank, the sale reference, the frozen payment instructions,
+notes, footer text); and on every page a footer with the authorised
+signatory's name, the page count, the disclaimer and, only when one is
+recorded, the external fiscal receipt reference. A figure too wide for
+its cell shrinks rather than breaks; the line table continues over
+pages with its head repeated; the totals block is kept together.
+
+The fiscal disclaimer, verbatim: `Оваа фактура не е фискална сметка.`
+/ `Kjo faturë nuk është kupon fiskal.` / `This invoice is not a fiscal
+receipt.` No fiscal number, no QR code, no e-Faktura artefact is
+produced; the reserved columns stay unused.
+
+### Determinism and the hash
+
+PDFKit's only run-dependent output is the pair of dates in the info
+dictionary (which also seed the file ID); both are set to the
+document's `issued_at`, so the file says when it was issued, never
+when it was rendered. Font subset names derive from the order of use;
+compression is deterministic. `RENDERER_VERSION` is stamped into the
+`pdf` event, not into the file.
+
+`GET /billing/invoices/:id/pdf` (`billing.read`, reach by scope,
+issued only — a draft answers 422) renders, hashes, and on the first
+render claims `pdf_sha256` atomically (`UPDATE … WHERE pdf_sha256 IS
+NULL`) and writes the document's `pdf` event (hash, bytes, language,
+logo outcome, renderer version). Every later render must reproduce
+the stored hash. If it does not, the bytes are **not served**: a `pdf`
+event with the expected and rendered hashes and a platform audit row
+`Invoice PDF integrity failure` are written in their own transaction,
+the door answers `500 INTEGRITY`, and the stored hash is never
+overwritten — it is history. A missing frozen logo asset is the same
+class of failure; the current profile logo is never substituted. An
+unsupported logo format (anything but PNG/JPEG) renders without a
+logo and says so in the event.
+
+Preview and download are one endpoint (`?download=1` only changes the
+content disposition); the filename is `invoice-<number>.pdf`; the
+ETag is the hash. Downloads are not audited — the issued document and
+its canonical hash are the historical facts.
+
+### Workspace
+
+Draft detail: the language selector. Issued detail: the fixed
+language, **Preview PDF** and **Download PDF** (the same canonical
+bytes fetched with the session token), the PDF SHA-256 once
+established. The HTML detail stays; the PDF is the accounting
+representation. A draft has no PDF action.
+
+### Tests
+
+`billing-format.test.ts` (contracts, 8). `invoice-pdf.test.ts`
+(renderer, 12, no database): one page with embedded subsets; three
+renders byte-identical with no clock date anywhere; a draft refused;
+mk/sq/en as three canonical files; the non-VAT layout; mixed rates,
+discounts, person, walk-in, due date and instructions; 1, 10 and 35
+lines with multipage continuation; long names, addresses and footers;
+Cyrillic and Albanian through the embedded face; zero, one deni,
+large values and fractional quantities; no logo, the profile's JPEG,
+portrait, landscape and oversized PNGs, an unsupported SVG, logo
+determinism; the fiscal reference only when present. `pdf.test.ts`
+(API, 9): the door's headers, the hash written once with its event,
+repeated renders identical, download disposition, no event on
+re-render; a draft refused; language default, explicit, editable then
+frozen (API and database), two languages two files, the buyer's
+account language; the regression after entity, profile, logo, buyer,
+business, location, service and product all changed; the integrity
+refusal with its audit and event and the hash untouched; the missing
+asset refused; the location desk, the right revoked, another salon.
+Workspace: two cases (language on the draft; preview and download on
+the issued document). With `VELNES_PDF_OUT` set the renderer suite
+writes its sample documents for a visual pass; the six requested
+(mk, sq, en VAT; non-VAT; mixed; multipage) were inspected rasterised.
+
+### Deferred, honestly
+
+Payments (5), credit notes (6), auto-issue (7), email (8 — the PDF
+door is reusable by it). **Renderer changes after go-live**: the
+canonical hash binds a document to this renderer version; any later
+change to layout or fonts would make existing documents fail the
+integrity check by design. Before the first production invoice the
+rule is needed: version the renderer and keep old versions for old
+documents, or re-establish under an HQ-audited step. Until then,
+`RENDERER_VERSION` records which one rendered what. The dev documents
+rendered during this build were re-established once after the layout
+was corrected, before any production use. Page sizes other than A4,
+a second currency's formatting conventions and the HQ cross-tenant
+list of issued documents remain open.
 

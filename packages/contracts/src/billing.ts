@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { AvatarSchema } from './auth.js';
+import { BILLING_LANGS } from './billing-format.js';
 import { splitGross } from './billing-math.js';
 
 /**
@@ -234,6 +235,8 @@ export const BILLING_DOC_KINDS = ['invoice', 'credit_note', 'debit_note', 'advan
 export const BillingDocKindSchema = z.enum(BILLING_DOC_KINDS);
 export const BILLING_DOC_STATUSES = ['draft', 'issued', 'void'] as const;
 export const BillingDocStatusSchema = z.enum(BILLING_DOC_STATUSES);
+/** The document's one language (phase 4): chosen on the draft, frozen at issue. */
+export const BillingLangSchema = z.enum(BILLING_LANGS);
 
 export const BillingIssuerSnapshotSchema = z.object({
   legalEntityId: z.uuid(),
@@ -435,6 +438,11 @@ export const BillingInvoiceSchema = z.object({
   series: z.string().nullable(),
   year: z.number().int().nullable(),
   numberSeq: z.number().int().nullable(),
+  lang: BillingLangSchema,
+  /** The canonical PDF's SHA-256 once it has been rendered (phase 4); null before. */
+  pdfSha256: z.string().nullable(),
+  /** An external fiscal device's receipt reference, when one was recorded; never produced here. */
+  fiscalReceiptRef: z.string().nullable(),
   currency: z.string(),
   vatRegistered: z.boolean(),
   pricesIncludeVat: z.boolean(),
@@ -489,6 +497,8 @@ export const BillingInvoiceListSchema = z.object({ invoices: z.array(BillingInvo
 
 export const BillingInvoiceCreateSchema = z.object({
   saleId: z.uuid(),
+  /** The document's language; absent, the buyer's Velnes account language, else the salon's country's, else Macedonian. */
+  lang: BillingLangSchema.optional(),
   /** A billing identity to invoice; absent, the sale's customer's own identity is used when there is exactly one, else the customer's name alone. */
   billingCustomerId: z.uuid().nullable().optional(),
   key: z.string().min(8).optional(),
@@ -499,6 +509,7 @@ export const BillingInvoicePatchSchema = z.object({
   supplyDate: z.iso.date().optional(),
   dueDate: z.iso.date().nullable().optional(),
   notes: z.string().trim().max(1000).optional(),
+  lang: BillingLangSchema.optional(),
 });
 export const BillingInvoiceQuerySchema = z.object({
   status: BillingDocStatusSchema.optional(),
