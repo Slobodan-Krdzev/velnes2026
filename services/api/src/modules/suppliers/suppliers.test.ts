@@ -506,6 +506,20 @@ describe('the supplier chain', () => {
     expect((await admin.query(`SELECT category FROM supplier_products WHERE id=$1`, [(nb.json() as { id: string }).id])).rows[0].category).toBe('Skin care');
     const shelves = (await get(`${API_PREFIX}/portal/categories`, bojanToken)).json() as { categories: string[] };
     expect(shelves.categories).toEqual(expect.arrayContaining(['Hair care', 'Skin care', 'Supports']));
+    // A missing shelf is asked of HQ: pending, HQ's bell rung; a shelf that exists or a pending twin is 409;
+    // HQ's answer lands on the supplier's bell (checked at the database — the HQ door is HQ's own test).
+    const ask = await post(`${API_PREFIX}/portal/category-requests`, { name: 'Clinic supplies', note: 'Gloves, paper, disinfectant' }, bojanToken);
+    expect(ask.statusCode, ask.body).toBe(200);
+    const reqId = (ask.json() as { id: string }).id;
+    expect((await admin.query(`SELECT supplier_id IS NOT NULL AS sup, tenant_id IS NULL AS no_tenant, status, kind FROM category_requests WHERE id=$1`, [reqId])).rows[0]).toEqual({ sup: true, no_tenant: true, status: 'pending', kind: 'products' });
+    expect((await admin.query(`SELECT body FROM platform_notices WHERE audience='hq' AND kind='category_request' AND ref_id=$1`, [reqId])).rows[0]?.body).toContain('(supplier) asks for a new product category');
+    expect((await post(`${API_PREFIX}/portal/category-requests`, { name: 'clinic supplies' }, bojanToken)).statusCode).toBe(409);
+    expect((await post(`${API_PREFIX}/portal/category-requests`, { name: 'Hair care' }, bojanToken)).statusCode).toBe(409);
+    expect((await post(`${API_PREFIX}/portal/category-requests`, { name: 'Anything' }, vesnaToken)).statusCode).toBe(403);
+    const mine = (await get(`${API_PREFIX}/portal/category-requests`, bojanToken)).json() as { requests: { id: string; status: string }[] };
+    expect(mine.requests.find((r) => r.id === reqId)?.status).toBe('pending');
+    await admin.query(`DELETE FROM platform_notices WHERE ref_id=$1`, [reqId]);
+    await admin.query(`DELETE FROM category_requests WHERE id=$1`, [reqId]);
     expect((await admin.query(`SELECT count(*)::int AS c FROM brands WHERE lower(name)='olaplex pro'`)).rows[0].c).toBe(1);
     expect((await admin.query(`SELECT count(*)::int AS c FROM platform_notices WHERE kind='brand_added' AND ref_id=$1`, [brandRow.id])).rows[0].c).toBe(1);
     const offered = (await get(`${API_PREFIX}/portal/brands`, bojanToken)).json() as { brands: { name: string; carried: boolean }[] };
@@ -516,6 +530,10 @@ describe('the supplier chain', () => {
     const theirs = (await get(`${API_PREFIX}/portal/brands`, vesnaToken)).json() as { brands: { name: string; carried: boolean }[] };
     expect(theirs.brands.some((b) => b.name === 'Olaplex Pro')).toBe(true);
     for (const id of [(nb.json() as { id: string }).id, (nb2.json() as { id: string }).id]) await del(`${API_PREFIX}/portal/catalog/${id}`);
+    // The brand this test gave birth to does not outlive it (the HQ registry test reads the seeded world).
+    await admin.query(`DELETE FROM platform_notices WHERE ref_id=$1`, [brandRow.id]);
+    await admin.query(`DELETE FROM supplier_brands WHERE brand_id=$1`, [brandRow.id]);
+    await admin.query(`DELETE FROM brands WHERE id=$1`, [brandRow.id]);
 
     // Create a throwaway product, edit every kind of field, delete it.
     const created = await post(

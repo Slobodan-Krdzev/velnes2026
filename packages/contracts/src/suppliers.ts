@@ -183,6 +183,23 @@ export const PortalSalonListSchema = z.object({ salons: z.array(PortalSalonSchem
 /** Every brand on the platform, as the product panel offers it: the
  *  supplier's own first. A name not in this list, typed into the panel,
  *  becomes a new brand when the product is saved (2026-10-07). */
+/** A supplier asks HQ for a product shelf that is missing (2026-10-07):
+ *  the salons' request lifecycle, pending → approved / declined. */
+export const PortalCategoryRequestCreateSchema = z.object({
+  name: z.string().trim().min(1).max(60),
+  note: z.string().trim().max(300).default(''),
+});
+export const PortalCategoryRequestSchema = z.object({
+  id: z.uuid(),
+  name: z.string(),
+  note: z.string(),
+  status: z.enum(['pending', 'approved', 'declined']),
+  hqReason: z.string(),
+  createdAt: z.iso.datetime(),
+  decidedAt: z.iso.datetime().nullable(),
+});
+export const PortalCategoryRequestListSchema = z.object({ requests: z.array(PortalCategoryRequestSchema) });
+
 /** The platform's product categories — the shelves a supplier product must stand on (2026-10-07). */
 export const PortalCategoryListSchema = z.object({ categories: z.array(z.string()) });
 

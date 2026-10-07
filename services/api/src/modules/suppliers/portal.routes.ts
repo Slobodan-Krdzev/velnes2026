@@ -30,6 +30,8 @@ import {
   SupportTicketReplySchema,
   PortalBrandListSchema,
   PortalCategoryListSchema,
+  PortalCategoryRequestCreateSchema,
+  PortalCategoryRequestListSchema,
 } from '@velnes/contracts';
 import argon2 from 'argon2';
 import type { FastifyInstance, FastifyReply } from 'fastify';
@@ -751,6 +753,63 @@ export function portalRoutes(app: FastifyInstance) {
     preHandler: [app.authenticateSupplier],
     schema: { response: { 200: PortalCategoryListSchema } },
     handler: async (req) => withSupplier(req.supplierClaims.sup, async (trx) => ({ categories: await productCategories(trx) })),
+  });
+
+  // Ask HQ for a shelf that is missing — the salons' lifecycle, from the
+  // supplier's side: a pending request, HQ's bell rung, the answer rung
+  // back on the supplier's bell when HQ decides.
+  r.route({
+    method: 'GET',
+    url: '/portal/category-requests',
+    preHandler: [app.authenticateSupplier],
+    schema: { response: { 200: PortalCategoryRequestListSchema } },
+    handler: async (req) =>
+      withSupplier(req.supplierClaims.sup, async (trx) => {
+        const rows = await trx.selectFrom('categoryRequests').selectAll().where('supplierId', '=', req.supplierClaims.sup).orderBy('createdAt', 'desc').limit(50).execute();
+        return {
+          requests: rows.map((r2) => ({
+            id: r2.id,
+            name: r2.name,
+            note: r2.note,
+            status: r2.status as 'pending' | 'approved' | 'declined',
+            hqReason: r2.hqReason,
+            createdAt: r2.createdAt.toISOString(),
+            decidedAt: r2.decidedAt ? r2.decidedAt.toISOString() : null,
+          })),
+        };
+      }),
+  });
+  r.route({
+    method: 'POST',
+    url: '/portal/category-requests',
+    preHandler: [app.authenticateSupplier],
+    schema: { body: PortalCategoryRequestCreateSchema, response: { 200: z.object({ id: z.uuid() }), 403: Err, 409: Err } },
+    handler: async (req, reply) =>
+      withSupplier(req.supplierClaims.sup, async (trx) => {
+        if (!(await portalCan(trx, reply, req.supplierClaims.rol, 'po.catalog'))) return reply;
+        const name = req.body.name.replace(/\s+/g, ' ');
+        const exists = await trx.selectFrom('productCategories').select('id').where(sql`lower(name)`, '=', name.toLowerCase()).executeTakeFirst();
+        if (exists) return reply.code(409).send({ error: 'EXISTS', message: 'That category already exists — just pick it' });
+        const pending = await trx
+          .selectFrom('categoryRequests')
+          .select('id')
+          .where(sql`lower(name)`, '=', name.toLowerCase())
+          .where('kind', '=', 'products')
+          .where('status', '=', 'pending')
+          .executeTakeFirst();
+        if (pending) return reply.code(409).send({ error: 'PENDING', message: 'That request is already with Velnes HQ' });
+        const row = await trx
+          .insertInto('categoryRequests')
+          .values({ supplierId: req.supplierClaims.sup, name, kind: 'products', note: req.body.note })
+          .returning('id')
+          .executeTakeFirstOrThrow();
+        const sup = await trx.selectFrom('suppliers').select('name').where('id', '=', req.supplierClaims.sup).executeTakeFirst();
+        await trx
+          .insertInto('platformNotices')
+          .values({ audience: 'hq', kind: 'category_request', title: `Category request: ${name}`, body: `${sup?.name ?? 'A supplier'} (supplier) asks for a new product category.`, refId: row.id })
+          .execute();
+        return { id: row.id };
+      }),
   });
 
   r.route({

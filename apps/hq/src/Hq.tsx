@@ -1067,7 +1067,10 @@ function Categories({ say }: { say: (m: string) => void }) {
                   <td className="muted">
                     {r.type === 'services' ? t('hq.forServices') : t('hq.forProducts')}
                   </td>
-                  <td className="muted">{r.tenantName}</td>
+                  <td className="muted">
+                    {r.tenantName}
+                    {r.requester === 'supplier' ? <span className="badge" style={{ marginLeft: 6 }}>{t('hq.requesterSupplier')}</span> : null}
+                  </td>
                   <td className="muted" style={{ maxWidth: 280 }}>
                     {r.note || '—'}
                   </td>

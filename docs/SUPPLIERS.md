@@ -404,7 +404,17 @@ renames it on every supplier product by trigger. Existing products were
 matched by name; the two seeded texts that match no shelf ("Clinic
 supplies", "Wellness supplies") keep their text with no link, are
 flagged in the panel, and must be re-shelved on their next edit —
-nothing was invented into HQ's taxonomy. A supplier asks HQ for a
-missing shelf; a portal request door for that, like the salons' category
-requests, is deferred.
+nothing was invented into HQ's taxonomy.
+
+A missing shelf is **asked of HQ from the product panel** ("Ask Velnes
+HQ for a category"): `POST /portal/category-requests` writes a
+`category_requests` row owned by the supplier (migration
+`20261007220000_supplier_category_requests.sql` lets a request belong to
+a salon or a supplier, never both; the supplier context reads and writes
+its own), refuses a shelf that already exists or a twin already pending
+(`409`), and rings HQ's bell. HQ's queue shows the asker with a
+"supplier" badge; approve creates the shelf and rings the supplier's own
+bell, decline rings it with the reason; the panel lists the supplier's
+pending and recently decided requests. `GET /portal/category-requests`
+lists them.
 

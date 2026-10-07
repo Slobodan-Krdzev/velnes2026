@@ -5,6 +5,8 @@ import {
   PortalCompanySchema,
   PortalBrandListSchema,
   PortalCategoryListSchema,
+  PortalCategoryRequestCreateSchema,
+  PortalCategoryRequestListSchema,
   PortalDashboardSchema,
   PortalNotificationListSchema,
   PortalProductCreateSchema,
@@ -258,6 +260,8 @@ export function Portal({
                             if (n.refId) setFocusTicket(n.refId);
                           } else if (n.kind === 'connection') {
                             setTab('salons');
+                          } else if (n.kind === 'category') {
+                            setTab('catalog');
                           } else {
                             setTab('orders');
                             if (n.refId) setFocusOrder(n.refId);
@@ -1149,6 +1153,7 @@ function ProductPanel({
               ))}
             </select>
             <span className="muted" style={{ display: 'block', fontSize: 12, marginTop: 4 }}>{t('po.categoryHint')}</span>
+            <AskCategory say={say} />
           </label>
           <label className="field">
             <span>
@@ -2959,6 +2964,68 @@ function PortalSupport({
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+/** A shelf that is missing is asked of Velnes HQ, from the product
+ *  panel: the request's lifecycle is HQ's; the answer comes to the bell. */
+function AskCategory({ say }: { say: (m: string) => void }) {
+  const { t } = useTranslation();
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState('');
+  const [note, setNote] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [requests, setRequests] = useState<z.infer<typeof PortalCategoryRequestListSchema>['requests']>([]);
+  const load = useCallback(() => {
+    void pGet(PortalCategoryRequestListSchema, '/portal/category-requests').then((r) => setRequests(r.requests));
+  }, []);
+  useEffect(load, [load]);
+  const send = async () => {
+    setBusy(true);
+    try {
+      await pPost(z.object({ id: z.string() }), '/portal/category-requests', PortalCategoryRequestCreateSchema.parse({ name, note }));
+      say(t('po.askCategorySent'));
+      setName('');
+      setNote('');
+      setOpen(false);
+      load();
+    } catch (e) {
+      say(e instanceof PortalApiError ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const recent = requests.filter((r) => r.status === 'pending' || (r.decidedAt && Date.now() - Date.parse(r.decidedAt) < 14 * 86_400_000));
+  return (
+    <div style={{ marginTop: 6 }}>
+      {!open ? (
+        <button type="button" className="btn btn-secondary btn-sm" onClick={() => setOpen(true)} data-testid="ask-category">
+          {t('po.askCategory')}
+        </button>
+      ) : (
+        <div style={{ display: 'grid', gap: 6, marginTop: 4 }} data-testid="ask-category-form">
+          <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder={t('po.askCategoryName')} aria-label={t('po.askCategoryName')} />
+          <input className="input" value={note} onChange={(e) => setNote(e.target.value)} placeholder={t('po.askCategoryNote')} aria-label={t('po.askCategoryNote')} />
+          <span style={{ display: 'flex', gap: 6 }}>
+            <button type="button" className="btn btn-primary btn-sm" disabled={busy || !name.trim()} onClick={() => void send()}>
+              {t('po.askCategorySend')}
+            </button>
+            <button type="button" className="btn btn-secondary btn-sm" disabled={busy} onClick={() => setOpen(false)}>
+              {t('po.cancel')}
+            </button>
+          </span>
+        </div>
+      )}
+      {recent.length ? (
+        <ul className="muted" style={{ margin: '6px 0 0', padding: 0, listStyle: 'none', fontSize: 12 }} data-testid="category-requests">
+          {recent.map((r) => (
+            <li key={r.id}>
+              {t('po.askCategoryRequests')}: {r.name} · {t(`po.askCategoryStatus.${r.status}`)}{r.status === 'declined' && r.hqReason ? ` — ${r.hqReason}` : ''}
+            </li>
+          ))}
+        </ul>
+      ) : null}
     </div>
   );
 }

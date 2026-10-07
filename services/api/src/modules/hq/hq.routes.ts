@@ -847,16 +847,18 @@ export function hqRoutes(app: FastifyInstance) {
       withHq(async (trx) => {
         const rows = await trx
           .selectFrom('categoryRequests as cr')
-          .innerJoin('businesses as b', 'b.id', 'cr.tenantId')
+          .leftJoin('businesses as b', 'b.id', 'cr.tenantId')
+          .leftJoin('suppliers as s', 's.id', 'cr.supplierId')
           .selectAll('cr')
-          .select('b.name as tenantName')
+          .select(['b.name as tenantName', 's.name as supplierName'])
           .orderBy('cr.createdAt', 'desc')
           .limit(100)
           .execute();
         return {
           requests: rows.map((r2) => ({
             id: r2.id,
-            tenantName: r2.tenantName,
+            tenantName: r2.tenantName ?? r2.supplierName ?? '—',
+            requester: (r2.supplierId ? 'supplier' : 'salon') as 'salon' | 'supplier',
             name: r2.name,
             type: r2.kind as 'services' | 'products',
             note: r2.note,
@@ -917,6 +919,12 @@ export function hqRoutes(app: FastifyInstance) {
                 : 'A new product category is available to every salon.',
           })
           .execute();
+        // A supplier that asked hears it on its own bell.
+        if (cr.supplierId)
+          await trx
+            .insertInto('supplierNotifications')
+            .values({ supplierId: cr.supplierId, kind: 'category', title: `Category approved: ${cr.name}`, body: 'The shelf is now on the list — pick it on your products.', refId: cr.id })
+            .execute();
         return { ok: true as const };
       }),
   });
@@ -934,7 +942,7 @@ export function hqRoutes(app: FastifyInstance) {
       withHq(async (trx) => {
         const cr = await trx
           .selectFrom('categoryRequests')
-          .select(['id', 'status', 'name', 'tenantId'])
+          .select(['id', 'status', 'name', 'tenantId', 'supplierId'])
           .where('id', '=', req.params.id)
           .executeTakeFirst();
         if (!cr) return reply.code(404).send({ error: 'NOT_FOUND', message: 'Unknown request' });
@@ -946,16 +954,22 @@ export function hqRoutes(app: FastifyInstance) {
           .where('id', '=', cr.id)
           .execute();
         // The answer travels back to whoever asked — with the reason.
-        await trx
-          .insertInto('platformNotices')
-          .values({
-            audience: 'salons',
-            tenantId: cr.tenantId,
-            kind: 'category_declined',
-            title: `Category request declined: ${cr.name}`,
-            body: req.body.reason,
-          })
-          .execute();
+        if (cr.tenantId)
+          await trx
+            .insertInto('platformNotices')
+            .values({
+              audience: 'salons',
+              tenantId: cr.tenantId,
+              kind: 'category_declined',
+              title: `Category request declined: ${cr.name}`,
+              body: req.body.reason,
+            })
+            .execute();
+        if (cr.supplierId)
+          await trx
+            .insertInto('supplierNotifications')
+            .values({ supplierId: cr.supplierId, kind: 'category', title: `Category request declined: ${cr.name}`, body: req.body.reason, refId: cr.id })
+            .execute();
         return { ok: true as const };
       }),
   });

@@ -208,7 +208,9 @@ export const HqCategoryPatchSchema = z.object({
 /** The category-request intake, HQ-side. */
 export const HqCategoryRequestSchema = z.object({
   id: z.uuid(),
+  /** Who asked — a salon's name or a supplier's (2026-10-07: suppliers ask too). */
   tenantName: z.string(),
+  requester: z.enum(['salon', 'supplier']).default('salon'),
   name: z.string(),
   type: z.enum(['services', 'products']),
   note: z.string(),

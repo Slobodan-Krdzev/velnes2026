@@ -285,7 +285,8 @@ export interface CategoryRequests {
   name: string;
   note: Generated<string>;
   status: Generated<string>;
-  tenantId: string;
+  supplierId: string | null;
+  tenantId: string | null;
 }
 
 export interface CheckoutItems {

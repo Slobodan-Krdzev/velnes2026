@@ -87,6 +87,8 @@ function mockApi(calls: { method: string; path: string; body?: unknown }[]) {
           ],
         });
       if (path.includes('/portal/categories')) return ok({ categories: ['Oils', 'Home exercise', 'Recovery aids', 'Supports'] });
+      if (path.includes('/portal/category-requests') && method === 'POST') return ok({ id: 'e5000000-0000-4000-8000-000000000001' });
+      if (path.includes('/portal/category-requests')) return ok({ requests: [{ id: 'e5000000-0000-4000-8000-000000000002', name: 'Clinic supplies', note: '', status: 'pending', hqReason: '', createdAt: '2026-10-07T08:00:00.000Z', decidedAt: null }] });
       if (path.includes('/portal/brands')) return ok({ brands: [{ name: 'Thera-Band', carried: true }, { name: 'CureTape', carried: true }, { name: 'Davines', carried: false }] });
       if (path.includes('/portal/catalog') && method === 'GET')
         return ok({
@@ -331,5 +333,21 @@ describe('the supplier portal', () => {
       const sent = calls.find((c) => c.method === 'PATCH' && c.path.includes('/portal/catalog/'));
       expect(sent?.body).toMatchObject({ brand: 'Olaplex', category: 'Recovery aids' });
     });
+  });
+
+  it('catalog: a missing shelf is asked of Velnes HQ from the product panel, and pending requests are shown', async () => {
+    const calls: { method: string; path: string; body?: unknown }[] = [];
+    mockApi(calls);
+    await signIn();
+    await userEvent.click(screen.getByRole('button', { name: 'Catalog' }));
+    await screen.findByText('Thera-Band resistance set, 3 levels');
+    await userEvent.click(screen.getByRole('button', { name: 'Edit' }));
+    await screen.findByLabelText('Category');
+    expect((await screen.findByTestId('category-requests')).textContent).toContain('Clinic supplies · with Velnes HQ');
+    await userEvent.click(screen.getByTestId('ask-category'));
+    await userEvent.type(screen.getByLabelText('Category name'), 'Wellness supplies');
+    await userEvent.type(screen.getByLabelText(/Why it is needed/), 'Towels and candles');
+    await userEvent.click(screen.getByRole('button', { name: 'Send request' }));
+    await waitFor(() => expect(calls.find((c) => c.method === 'POST' && c.path.endsWith('/portal/category-requests'))?.body).toEqual({ name: 'Wellness supplies', note: 'Towels and candles' }));
   });
 });
