@@ -745,9 +745,20 @@ door + UI + tests + seed + docs paragraph; each shippable alone)
    is enforced in the service, not only in the UI; the frozen-row
    triggers for issued documents were created now as phase-3 schema
    preparation.
-3. **Issue**: sequences, the atomic issue step, idempotency,
-   concurrency test (parallel issues never share a number), yearly
-   reset test, immutability tests (UPDATE rejected), audit events.
+3. **Issue** — **built 2026-10-07** (`docs/INVOICING.md` "Phase 3").
+   Settled against the analysis: the sequence row is advanced by one
+   upsert-increment statement under its row lock, last in the
+   transaction, after the readiness check; `series` is the configured
+   prefix (`''` default) and `year` the issue year in the location's
+   zone (or 0 for a non-resetting series); the rendered number is
+   unique per entity in its own right; readiness is one pure function
+   shared by the GET and issue doors; the logo is frozen at issue into
+   content-addressed `billing_assets` rather than copied per row;
+   `billing_events` arrived here (append-only by trigger); the freeze
+   trigger became a whitelist (notes frozen too); numbering settings
+   lock once a document is issued; `billing.issue` goes to owner-shaped
+   roles only; the five-working-day rule is a reported warning, not an
+   enforced rule.
 4. **PDF**: renderer from snapshots in mk/sq/en, hash, reproducibility
    test, Download/Print, the fiscal disclaimer, non-VAT layout.
 5. **Payments**: `billing_payments`, record payment, derived statuses,

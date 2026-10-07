@@ -68,6 +68,7 @@ export const PERM_GROUPS = [
       ['billing.settings', 'Set up invoicing: legal identity, numbering, defaults'],
       ['billing.create', 'Create billing details and accounting invoice drafts'],
       ['billing.read', 'See accounting invoices'],
+      ['billing.issue', 'Issue accounting invoices: assign the legal number and freeze the document'],
     ],
   },
   {

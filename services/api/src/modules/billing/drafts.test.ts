@@ -331,10 +331,12 @@ describe('accounting invoice drafts', () => {
     it('an issued row cannot have its money or lines changed, even by the database owner path the API uses', async () => {
       const sale = await sell({ lines: [{ kind: 'product', productId: demo.p1, qty: 1 }] });
       const d = BillingInvoiceSchema.parse((await draft(sale.id)).json());
-      await admin.query(`UPDATE billing_invoices SET status='issued', issued_at=now(), number='T-1', series='', year=2026, number_seq=1 WHERE id=$1`, [d.id]);
+      await admin.query(`UPDATE billing_invoices SET status='issued', issued_at=now(), issue_date=current_date, number='T-1', series='', year=2026, number_seq=1 WHERE id=$1`, [d.id]);
       await expect(admin.query(`UPDATE billing_invoices SET gross_minor = gross_minor + 100, net_minor = net_minor + 100 WHERE id=$1`, [d.id])).rejects.toThrow(/frozen/);
       await expect(admin.query(`DELETE FROM billing_invoice_lines WHERE invoice_id=$1`, [d.id])).rejects.toThrow(/frozen/);
-      await admin.query(`UPDATE billing_invoices SET notes = 'a note may still be added' WHERE id=$1`, [d.id]);
+      // Phase 3 froze the notes too: an issued document's text is history; a later word belongs in its events.
+      await expect(admin.query(`UPDATE billing_invoices SET notes = 'a note may still be added' WHERE id=$1`, [d.id])).rejects.toThrow(/frozen/);
+      await admin.query(`UPDATE billing_invoices SET pdf_sha256 = 'cache columns stay writable' WHERE id=$1`, [d.id]);
       // Nor can it go back to being a draft.
       await expect(admin.query(`UPDATE billing_invoices SET status='draft' WHERE id=$1`, [d.id])).rejects.toThrow(/frozen/);
     });

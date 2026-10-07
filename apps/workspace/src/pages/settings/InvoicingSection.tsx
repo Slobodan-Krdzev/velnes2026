@@ -246,18 +246,18 @@ function ProfileForm({ profile }: { profile: BillingProfile }) {
         </Field>
       </Group>
 
-      <Group title={t('iset.gNumbering')} hint={t('iset.numberingHint')}>
+      <Group title={t('iset.gNumbering')} hint={profile.numberingLocked ? t('iset.numberingLocked') : t('iset.numberingHint')}>
         <Field label={t('iset.invoicePrefix')}>
-          <input className="input" value={form.invoicePrefix} onChange={(e) => set('invoicePrefix', e.target.value.toUpperCase())} placeholder="INV-" />
+          <input className="input" value={form.invoicePrefix} disabled={profile.numberingLocked} onChange={(e) => set('invoicePrefix', e.target.value.toUpperCase())} placeholder="INV-" />
         </Field>
         <Field label={t('iset.creditPrefix')}>
-          <input className="input" value={form.creditPrefix} onChange={(e) => set('creditPrefix', e.target.value.toUpperCase())} />
+          <input className="input" value={form.creditPrefix} disabled={profile.numberingLocked} onChange={(e) => set('creditPrefix', e.target.value.toUpperCase())} />
         </Field>
         <Field label={t('iset.numberWidth')}>
-          <input className="input" type="number" min={4} max={8} value={form.numberWidth} style={{ width: 120 }} onChange={(e) => set('numberWidth', Number(e.target.value))} />
+          <input className="input" type="number" min={4} max={8} value={form.numberWidth} disabled={profile.numberingLocked} style={{ width: 120 }} onChange={(e) => set('numberWidth', Number(e.target.value))} />
         </Field>
         <div>
-          <ToggleRow label={t('iset.yearlyReset')} on={form.yearlyReset} onChange={(v) => set('yearlyReset', v)} />
+          <ToggleRow label={t('iset.yearlyReset')} on={form.yearlyReset} disabled={profile.numberingLocked} onChange={(v) => set('yearlyReset', v)} />
         </div>
         <p className="muted span2 tnum" style={{ margin: 0, fontSize: 13 }} data-testid="numbering-preview">
           {t('iset.preview', { inv: sample(form.invoicePrefix), cn: sample(form.creditPrefix) })}

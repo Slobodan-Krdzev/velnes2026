@@ -231,8 +231,202 @@ tests (list, registered and non-registered previews, the receipt door).
 
 ### Deferred, honestly
 
-Issuing and numbering (phase 3), the PDF (4), payments (5), credit
-notes and void (6), auto-draft on checkout (7), email (8). The four
-`[confirm]` treatments above and the service-charge rule are decisions
-for the accountant before issuing goes live.
+Issuing and numbering (phase 3 — **built**, below), the PDF (4),
+payments (5), credit notes and void (6), auto-draft on checkout (7),
+email (8). The four `[confirm]` treatments above and the service-charge
+rule are decisions for the accountant before issuing goes live.
+
+## Phase 3 — issuing: the number, the freeze, the timeline
+
+Built 2026-10-07 (Alex's approval of phase 2 and the phase-3 brief).
+The transition `draft → issued`, irreversible by design: there is no
+`issued → draft`, no delete, no edit of an issued document; a mistake
+is corrected later by a credit note (phase 6). Nothing here renders a
+PDF (phase 4 renders exclusively from what phase 3 freezes).
+
+### Decisions this phase fixed
+
+- **Accounting treatment, for now**: promo codes and loyalty value are
+  price reductions allocated over the lines; a gift card is tender; a
+  tip is outside the document; a **service charge is unresolved** and
+  a sale carrying one is still refused (no tax treatment is invented).
+  The flags on the draft's origin stay for the accountant.
+- **Numbering**: one sequence per *legal entity × series × calendar
+  year*, yearly reset; the default invoice format is `2026-000001`
+  (credit notes `KO-2026-000001` later). The year is the **issue date
+  in the location's time zone**, never the server's UTC day.
+- **Logo**: not frozen at draft time (a draft shows the profile's
+  current logo); frozen **at issue** by content.
+
+### Tables (migration `20261007100000_billing_phase3_issue.sql`)
+
+- `billing_sequences (tenant_id, legal_entity_id, series, year,
+  last_seq)`, PK on all four keys. `series` is the configured prefix of
+  the document kind (`''` for the default invoice series); `year` is
+  the legal issue year, or `0` for a series that does not reset.
+  Advanced only inside the issue transaction (below). RLS; no DELETE
+  policy.
+- `billing_events (invoice_id, at, actor, source, kind, data)` — the
+  document's own timeline: `created`, `edited`, `issued` live now; the
+  later kinds are reserved. **Append-only for everyone**: RLS offers
+  SELECT and INSERT only, and a trigger refuses UPDATE and DELETE even
+  from the database owner. Existing drafts were given their `created`
+  event from their own row.
+- `billing_assets (tenant_id, sha256, kind, mime, bytes, data)` —
+  content-addressed, immutable copies of the branding an issued
+  document used. Insert-only by RLS, UPDATE/DELETE refused by trigger.
+  A thousand invoices with the same logo store it once; the profile's
+  logo may change tomorrow without touching yesterday's document.
+- `billing_invoices` gained `issue_key` (unique per tenant), `issued_by`,
+  `issued_by_name`; a unique index on `(legal_entity_id, number)` so
+  the rendered string is unique in its own right beside the
+  `(entity, series, year, number_seq)` index; and a CHECK that a draft
+  has none of the number facts while a non-draft has all of them.
+
+### The issue door — `POST /billing/invoices/:id/issue` (`billing.issue`)
+
+One transaction (`withTenant`), in this order:
+
+1. lock the row `FOR UPDATE` (a second issuer waits, then finds it
+   issued); reach by the role's scope as in phase 2;
+2. **idempotency** by the body's `key` (the till's convention): an
+   issued document with the same key is returned as is (a lost answer,
+   a retry); with another key it is `409 CONFLICT` naming the number;
+   a key already used by another document is `409` too;
+3. refresh what is refreshed until issue — the issuer snapshot (entity
+   + profile + brand), the place, and the buyer from its billing
+   identity when it has one. The sale's money is **not** rebuilt: the
+   draft is the transaction as it happened;
+4. the issue date is `nowAt(location.tz)`; an unknown zone blocks;
+5. **readiness** — one pure function, `evaluateIssueReadiness` in
+   `@velnes/contracts`, which the GET door reports on every draft and
+   the issue door refuses on, so they never disagree. It takes the
+   Phase 1 `evaluateBillingProfile` verdict verbatim (issuer complete
+   and verified), `evaluateBuyer` (a company needs name, address, city,
+   ЕДБ; a person its name; no buyer is a warning, not a block), the
+   clock, the dates (supply ≤ issue; due ≥ issue; a supply-to-issue gap
+   over seven days is a **warning** — the five-working-day rule needs
+   the holiday calendar, which is not modelled, so it is reported, not
+   enforced), and every money invariant from billing-math over the
+   **stored** lines: `net + vat = gross` per line, `gross = source −
+   allocated`, the half-up split re-derived per line, exempt lines at
+   zero, totals as sums, the breakdown equal to the grouped lines, the
+   discount equal to the allocations, and the phase-2 origin equation
+   both ways (`Σ gross = lines − cart − promo − loyalty = sale − tip +
+   gift`). It also compares the live sale with the origin snapshot:
+   still `Paid`, the same total, tip and gift, no service charge. Any
+   problem → `422 ISSUE_BLOCKED` with the structured `problems`
+   (`{part, field, reason}`) and **nothing below has run**;
+6. the branding: the profile's logo is hashed (SHA-256 of the data
+   URL), inserted into `billing_assets` if new, and referenced from the
+   issuer snapshot as `logoSha256`/`logoMime`;
+7. **the number, last**: an upsert-increment on the sequence row —
+   `INSERT … ON CONFLICT DO UPDATE SET last_seq = last_seq + 1
+   RETURNING last_seq` — one statement, one row lock, inside this
+   transaction. Never `MAX(number) + 1`. The rendered number is built
+   by `formatInvoiceNumber` from prefix, issue year, sequence and
+   width; series, year and sequence are stored apart from the string;
+8. the row: status, number parts, `issue_date` (a `date`),
+   `issued_at` (`clock_timestamp()`, so the order of commits is the
+   order of numbers), actor, key, the finalised snapshots;
+9. the `issued` event (number, dates, entity, location, totals,
+   currency, key, logo hash, warnings) and the platform audit row
+   `Invoice issued · 2026-000001`.
+
+A failure anywhere rolls everything back **including the sequence
+advance**, so an ordinary failed issue never burns a number; the next
+successful issue gets the number the failed one held. Tested at the
+service level by throwing after allocation.
+
+### Immutability
+
+The phase-2 trigger became a **whitelist**: once `issued`, the only
+columns of `billing_invoices` that may change are `paid_minor`,
+`pdf_sha256`, `fiscal_receipt_ref`, `efaktura_euid`, `efaktura_status`
+and the `updated_*` stamps. Everything else — status, kind, number,
+series, year, sequence, entity, location, origin, every snapshot,
+supply/issue/due dates, `issued_at`, currency, VAT state, net, VAT,
+gross, discount, breakdown, **notes**, buyer link, actor, key — is a
+historical fact and raises `frozen`. A `BEFORE DELETE` trigger refuses
+deleting an issued row even for the owner. Lines of an issued document
+refuse insert, update and delete. Thirty-one columns are tried one by
+one in `issue.test.ts`.
+
+### Numbering configuration
+
+Once an entity has issued anything, `billing_profiles` refuses a change
+to `invoicePrefix`, `creditPrefix`, `numberWidth` or `yearlyReset`
+(`422`, "Numbering cannot change once an invoice has been issued"); the
+profile reports `numberingLocked` and Settings → Invoicing disables the
+four fields and says why. A new series is a decision for the
+accountant, not a form field. The database stays the last word either
+way (two unique indexes).
+
+### Rights
+
+`billing.issue` (scope none/location/locations/business) is in the
+vocabulary and in `ownerPermMap`; the migration grants it only to
+owner-shaped roles (`users.manage` at business). `billing.create` does
+**not** imply it — the Employee kit drafts and gets `403`; a salon
+widens it by hand in Roles. Tested: create ≠ issue.
+
+### Doors
+
+- `POST /billing/invoices/:id/issue` — above.
+- `GET /billing/invoices/:id` now carries `series`, `year`,
+  `numberSeq`, `issuedBy`, `events` (oldest first) and
+  `issueReadiness` (always ready on an issued document).
+- `GET /billing/invoices/:id/logo` (`billing.read`) — the frozen asset
+  of an issued document, the profile's current logo for a draft
+  (`sha256: null`), `204` when there is none.
+- `PATCH` on an issued document answers `422` ("corrected by a credit
+  note"). There is no `DELETE` route.
+
+### Workspace
+
+The draft detail shows a readiness pill ("Ready to issue" / "Not ready
+— n to fix") and, with `billing.issue`, an **Issue invoice** button.
+The modal states the consequence ("Issuing assigns the final invoice
+number and freezes this document. Changes after issuance require a
+correction document."), lists the server's problems (confirm disabled
+until none remain) and its warnings, and sends one idempotency key per
+screen so a retry after a lost answer returns the same document. A
+`422` shows the structured problems; nothing is assumed issued until
+the server answers. The issued view shows the number in place of
+"Draft — number assigned when issued", the Issued badge, issue and
+supply dates, issuer, buyer, lines, breakdown, totals, who issued it
+and when, the frozen logo, and the document's history; no edit, delete,
+cancel or back-to-draft control exists. The Issued tab is live; a user
+without the right sees which right it takes. PDF buttons wait for
+phase 4.
+
+### Tests
+
+`billing-issue.test.ts` (contracts, 12): the number string, the clock,
+and the readiness evaluator on every rule. `issue.test.ts` (API, 25):
+the happy path with every stored fact; sequential numbers; idempotency
+(replay, conflict, key reuse); the draft doors refused after issue;
+create ≠ issue and another salon's owner; six refusals that leave the
+sequence untouched (incomplete issuer, unverified entity, incomplete
+company buyer — then issued once corrected, tampered money, refunded
+sale, bad dates) and the till still selling; rollback after allocation
+(the number comes back); nine concurrent issues under two legal
+entities (unique, contiguous per entity, ordered by commit, all
+frozen); thirty-one frozen columns, the mutable five, no delete, lines,
+events and assets; the snapshot regression (entity, profile, bank,
+signatory, brand, logo, identity, service name and rate, product,
+location all changed — issued JSON and logo identical, a fresh draft
+sees the new world); the issue date across the year boundary both ways
+(`Pacific/Kiritimati` → `2027-000001`, `Etc/GMT+12` → the 2026 sequence
+continues); the numbering lock; the logo door. Workspace: four new
+cases (not ready, the full flow, a refused issue, no right).
+
+### Deferred, honestly
+
+The PDF (4), payments (5), credit notes and void (6), auto-issue (7),
+email (8). The five-working-day rule is reported as a gap, not
+enforced. The `[confirm]` treatments stand as decided "for now"; the
+service charge stays refused. `issueMode: 'auto'` is stored but no
+checkout issues anything. The HQ app does not yet list issued
+documents across tenants.
 

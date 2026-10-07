@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { AvatarSchema } from './auth.js';
+import { splitGross } from './billing-math.js';
 
 /**
  * Invoicing phase 1 (Alex, 2026-10-06) — docs/INVOICING-PLAN.md, docs/INVOICING.md.
@@ -97,6 +98,10 @@ export const BillingProfileSchema = BillingProfileWriteSchema.extend({
   businessName: z.string(),
   locations: z.array(z.object({ id: z.uuid(), name: z.string(), tz: z.string() })),
   completeness: BillingCompletenessSchema,
+  /** Phase 3: once this entity has issued a document, prefix, width and
+   *  yearly reset are fixed — a changed format would read as another
+   *  series over the same numbers. */
+  numberingLocked: z.boolean(),
   updatedAt: z.iso.datetime().nullable(),
 });
 export type BillingProfile = z.infer<typeof BillingProfileSchema>;
@@ -249,6 +254,11 @@ export const BillingIssuerSnapshotSchema = z.object({
   website: z.string(),
   footerText: z.string(),
   paymentInstructions: z.string(),
+  /** Phase 3: the branding the ISSUED document used, by content hash
+   *  (a `billing_assets` row). Null on a draft — a draft shows the
+   *  profile's current logo; the issue step freezes the one it used. */
+  logoSha256: z.string().nullable().default(null),
+  logoMime: z.string().nullable().default(null),
 });
 export type BillingIssuerSnapshot = z.infer<typeof BillingIssuerSnapshotSchema>;
 
@@ -332,12 +342,99 @@ export const BillingVatRowSchema = z.object({
   grossMinor: z.number().int(),
 });
 
+/* ── Issuing (phase 3, 2026-10-07) ──────────────────────────────────
+   One structured vocabulary for "why this cannot be issued": a part of
+   the document, the field, and what is wrong with it. The Workspace
+   names the field; the API never invents a value to fill it. */
+
+export const BILLING_ISSUE_PARTS = ['issuer', 'buyer', 'location', 'dates', 'money', 'sale', 'document'] as const;
+export const BillingIssueProblemSchema = z.object({
+  part: z.enum(BILLING_ISSUE_PARTS),
+  field: z.string(),
+  reason: z.enum(['missing', 'invalid', 'unverified', 'changed', 'mismatch']),
+});
+export type BillingIssueProblem = z.infer<typeof BillingIssueProblemSchema>;
+/** A fact worth a look that does not block issuing. */
+export const BillingIssueWarningSchema = z.object({
+  code: z.enum(['supply_to_issue_gap', 'buyer_absent']),
+  params: z.record(z.string(), z.union([z.string(), z.number()])).default({}),
+});
+export const BillingIssueReadinessSchema = z.object({
+  ready: z.boolean(),
+  problems: z.array(BillingIssueProblemSchema),
+  warnings: z.array(BillingIssueWarningSchema),
+});
+export type BillingIssueReadiness = z.infer<typeof BillingIssueReadinessSchema>;
+
+export const BILLING_EVENT_KINDS = ['created', 'edited', 'issued', 'payment', 'credit_note', 'void', 'pdf', 'emailed', 'fiscal_ref', 'efaktura'] as const;
+export const BillingEventSchema = z.object({
+  id: z.uuid(),
+  kind: z.enum(BILLING_EVENT_KINDS),
+  at: z.iso.datetime(),
+  actorName: z.string(),
+  source: z.string(),
+  data: z.record(z.string(), z.unknown()),
+});
+export type BillingEvent = z.infer<typeof BillingEventSchema>;
+
+/** The issue door's body: the idempotency key the client keeps for
+ *  its retries — the same key returns the same issued document, a
+ *  different key against an issued document is a conflict. */
+export const BillingIssueRequestSchema = z.object({ key: z.string().min(8).max(120) });
+/** 422 from the issue door: the problems, structured. */
+export const BillingIssueBlockedSchema = z.object({
+  error: z.literal('ISSUE_BLOCKED'),
+  message: z.string(),
+  problems: z.array(BillingIssueProblemSchema),
+});
+/** The frozen logo of an issued document, or a draft's current one. */
+export const BillingLogoSchema = z.object({
+  sha256: z.string().nullable(),
+  mime: z.string(),
+  dataUrl: z.string(),
+});
+
+/**
+ * The legal number, rendered from its parts — the only place the
+ * string is built. `2026-000001` by default; the configured prefix
+ * before, the year (always: the number says when it was issued even
+ * for a series that does not reset), a dash, the sequence padded to
+ * the configured width. A sequence wider than the width is not cut.
+ */
+export function formatInvoiceNumber(p: { prefix: string; year: number; seq: number; width: number }): string {
+  if (!Number.isInteger(p.seq) || p.seq < 1) throw new RangeError('sequence must be a positive integer');
+  if (!Number.isInteger(p.year) || p.year < 2000 || p.year > 2999) throw new RangeError('year out of range');
+  if (!Number.isInteger(p.width) || p.width < 4 || p.width > 8) throw new RangeError('width out of range');
+  if (!SERIES_RE.test(p.prefix)) throw new RangeError('prefix out of shape');
+  return `${p.prefix}${p.year}-${String(p.seq).padStart(p.width, '0')}`;
+}
+
+/** Is this an IANA zone the runtime knows? The issue date is taken in
+ *  it, so an unknown zone must block, never fall back. */
+export function isKnownTimeZone(tz: string): boolean {
+  try {
+    new Intl.DateTimeFormat('en-CA', { timeZone: tz }).format(new Date(0));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Calendar days from one ISO date to another (b − a). */
+export function daysBetween(a: string, b: string): number {
+  return Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 86_400_000);
+}
+
 export const BillingInvoiceSchema = z.object({
   id: z.uuid(),
   kind: BillingDocKindSchema,
   status: BillingDocStatusSchema,
   /** Null until issued — a draft has no number, by design. */
   number: z.string().nullable(),
+  /** The number's parts, stored apart from the rendered string (phase 3). */
+  series: z.string().nullable(),
+  year: z.number().int().nullable(),
+  numberSeq: z.number().int().nullable(),
   currency: z.string(),
   vatRegistered: z.boolean(),
   pricesIncludeVat: z.boolean(),
@@ -364,6 +461,13 @@ export const BillingInvoiceSchema = z.object({
   vatBreakdown: z.array(BillingVatRowSchema),
   /** What a later issue would still need on the buyer side (B2B). */
   buyerCompleteness: BillingCompletenessSchema,
+  /** Everything the issue door would refuse on, evaluated the same way
+   *  it will evaluate — so the Workspace can say what to fix first.
+   *  Always `ready` on an issued document. */
+  issueReadiness: BillingIssueReadinessSchema,
+  issuedBy: z.object({ id: z.uuid().nullable(), name: z.string() }).nullable(),
+  /** The document's own timeline, oldest first. */
+  events: z.array(BillingEventSchema),
   notes: z.string(),
   createdBy: z.object({ id: z.uuid().nullable(), name: z.string() }),
   createdAt: z.iso.datetime(),
@@ -419,4 +523,115 @@ export function evaluateBuyer(b: BillingBuyerSnapshot | null): BillingCompletene
     if (b.vatRegNo && !VAT_NO_RE.test(b.vatRegNo)) invalid.push({ field: 'vatRegNo', reason: 'invalid' });
   }
   return { complete: missing.length === 0 && invalid.length === 0, missing, invalid };
+}
+
+/**
+ * The one issue-readiness evaluator (phase 3). The GET door reports
+ * it so the Workspace can say what to fix; the issue door refuses on
+ * it — the same function, so they never disagree. Pure: it is handed
+ * the issuer's completeness (from `evaluateBillingProfile`), the
+ * document as stored, and the issue date the door would use. It
+ * re-derives every money fact from billing-math and the stored lines;
+ * it never rebuilds the document from today's catalog.
+ */
+export function evaluateIssueReadiness(d: {
+  issuer: BillingCompleteness;
+  buyer: BillingBuyerSnapshot | null;
+  location: { locationId: string; tz: string } | null;
+  vatRegistered: boolean;
+  pricesIncludeVat: boolean;
+  supplyDate: string;
+  issueDate: string;
+  dueDate: string | null;
+  lines: readonly Pick<BillingInvoiceLine, 'sourceAmountMinor' | 'allocatedDiscountMinor' | 'vatRateBp' | 'exempt' | 'netMinor' | 'vatMinor' | 'grossMinor'>[];
+  totals: { netMinor: number; vatMinor: number; grossMinor: number; discountMinor: number };
+  vatBreakdown: readonly { rateBp: number; netMinor: number; vatMinor: number; grossMinor: number }[];
+  origin: BillingOrigin | null;
+  /** The sale as it is NOW, for a sale-backed document; null when it is gone. */
+  sale: { status: string; totalMinor: number; tipMinor: number; serviceChargeMinor: number; giftMinor: number } | null | undefined;
+}): BillingIssueReadiness {
+  const problems: BillingIssueProblem[] = [];
+  const warnings: BillingIssueReadiness['warnings'] = [];
+  const add = (part: BillingIssueProblem['part'], field: string, reason: BillingIssueProblem['reason']) => {
+    if (!problems.some((p) => p.part === part && p.field === field)) problems.push({ part, field, reason });
+  };
+
+  // Issuer — Phase 1's evaluator decides; nothing is re-stated here.
+  for (const f of d.issuer.missing) add('issuer', f, 'missing');
+  for (const i of d.issuer.invalid) add('issuer', i.field, i.reason);
+
+  // Buyer — a draft may be incomplete, an issued document may not.
+  const b = evaluateBuyer(d.buyer);
+  for (const f of b.missing) add('buyer', f, 'missing');
+  for (const i of b.invalid) add('buyer', i.field, i.reason);
+  if (!d.buyer) warnings.push({ code: 'buyer_absent', params: {} });
+
+  // Place — a known clock, or no issue date can be taken.
+  if (!d.location) add('location', 'location', 'missing');
+  else if (!isKnownTimeZone(d.location.tz)) add('location', 'tz', 'invalid');
+
+  // Dates.
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(d.supplyDate)) add('dates', 'supplyDate', 'invalid');
+  else if (d.supplyDate > d.issueDate) add('dates', 'supplyDate', 'invalid'); // supplied after it was invoiced
+  else {
+    const gap = daysBetween(d.supplyDate, d.issueDate);
+    // ЗДДВ: the invoice follows the supply within five working days
+    // [confirm]. Working days need the holiday calendar, which is not
+    // modelled; the gap is reported, not enforced.
+    if (gap > 7) warnings.push({ code: 'supply_to_issue_gap', params: { days: gap } });
+  }
+  if (d.dueDate && d.dueDate < d.issueDate) add('dates', 'dueDate', 'invalid');
+
+  // Money — every invariant, from the stored figures and billing-math.
+  if (!d.lines.length) add('money', 'lines', 'missing');
+  let net = 0;
+  let vat = 0;
+  let gross = 0;
+  let disc = 0;
+  const byRate = new Map<number, { net: number; vat: number; gross: number }>();
+  for (const l of d.lines) {
+    if (l.netMinor + l.vatMinor !== l.grossMinor) add('money', 'line', 'mismatch');
+    if (l.grossMinor !== l.sourceAmountMinor - l.allocatedDiscountMinor) add('money', 'line', 'mismatch');
+    if (d.vatRegistered) {
+      const s = d.pricesIncludeVat ? splitGross(l.grossMinor, l.vatRateBp) : null;
+      if (s && (s.net !== l.netMinor || s.vat !== l.vatMinor)) add('money', 'line', 'mismatch');
+      if (l.exempt && l.vatMinor !== 0) add('money', 'line', 'mismatch');
+    } else if (l.vatMinor !== 0 || l.vatRateBp !== 0 || !l.exempt) add('money', 'line', 'mismatch');
+    net += l.netMinor;
+    vat += l.vatMinor;
+    gross += l.grossMinor;
+    disc += l.allocatedDiscountMinor;
+    const r = byRate.get(l.vatRateBp) ?? { net: 0, vat: 0, gross: 0 };
+    r.net += l.netMinor;
+    r.vat += l.vatMinor;
+    r.gross += l.grossMinor;
+    byRate.set(l.vatRateBp, r);
+  }
+  if (d.totals.netMinor !== net || d.totals.vatMinor !== vat || d.totals.grossMinor !== gross) add('money', 'totals', 'mismatch');
+  if (d.totals.netMinor + d.totals.vatMinor !== d.totals.grossMinor) add('money', 'totals', 'mismatch');
+  if (d.totals.discountMinor !== disc) add('money', 'discount', 'mismatch');
+  const rates = [...byRate.keys()].sort((a, c) => a - c);
+  const brRates = [...d.vatBreakdown].map((r) => r.rateBp).sort((a, c) => a - c);
+  if (rates.length !== brRates.length || rates.some((r, i) => r !== brRates[i])) add('money', 'vatBreakdown', 'mismatch');
+  else
+    for (const row of d.vatBreakdown) {
+      const mine = byRate.get(row.rateBp)!;
+      if (mine.net !== row.netMinor || mine.vat !== row.vatMinor || mine.gross !== row.grossMinor) add('money', 'vatBreakdown', 'mismatch');
+    }
+
+  // Origin — the sale-backed equation of phase 2, both readings.
+  if (d.origin) {
+    const o = d.origin;
+    if (gross !== o.linesMinor - o.cartDiscountMinor - o.promoMinor - o.loyaltyMinor) add('money', 'origin', 'mismatch');
+    if (gross !== o.saleTotalMinor - o.tipMinor + o.giftTenderMinor) add('money', 'origin', 'mismatch');
+    if (disc !== o.cartDiscountMinor + o.promoMinor + o.loyaltyMinor) add('money', 'origin', 'mismatch');
+    if (d.sale === null) add('sale', 'sale', 'missing');
+    else if (d.sale) {
+      if (d.sale.status !== 'Paid') add('sale', 'status', 'changed');
+      if (d.sale.serviceChargeMinor > 0) add('sale', 'serviceCharge', 'invalid');
+      if (d.sale.totalMinor !== o.saleTotalMinor || d.sale.tipMinor !== o.tipMinor || d.sale.giftMinor !== o.giftTenderMinor) add('sale', 'amounts', 'changed');
+    }
+  }
+
+  return { ready: problems.length === 0, problems, warnings };
 }

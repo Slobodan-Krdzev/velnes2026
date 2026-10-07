@@ -6,12 +6,22 @@ import type {
   BillingIssuerSnapshot,
   BillingOrigin,
 } from '@velnes/contracts';
-import { allocateDiscount, computeLine, evaluateBuyer, summarize, type LineResult } from '@velnes/contracts';
+import {
+  allocateDiscount,
+  computeLine,
+  evaluateBillingProfile,
+  evaluateBuyer,
+  evaluateIssueReadiness,
+  summarize,
+  type BillingIssueReadiness,
+  type LineResult,
+} from '@velnes/contracts';
 import { sql } from 'kysely';
 import type { Trx } from '../../db/index.js';
 import { logAudit } from '../audit/audit.service.js';
 import { localIso, nowAt } from '../scheduling/scheduling.service.js';
 import { BillingError } from './billing.service.js';
+import { addEvent, listEvents } from './events.js';
 import { reaches, type Reach } from './scope.js';
 
 /**
@@ -43,18 +53,56 @@ const minor = (denars: number) => denars * MINOR;
 
 type Deductions = { cart: number; promo: number; loyalty: number; gift: number; tip: number; serviceCharge: number };
 
-async function issuerSnapshot(trx: Trx, legalEntityId: string): Promise<{ snap: BillingIssuerSnapshot; vatRegistered: boolean; currency: string; pricesIncludeVat: boolean }> {
+/** The issuer as the entity, its profile and the brand say right now —
+ *  with the profile's completeness verdict and its numbering, so the
+ *  issue door reads everything once. */
+export async function issuerSnapshot(trx: Trx, legalEntityId: string): Promise<{
+  snap: BillingIssuerSnapshot;
+  vatRegistered: boolean;
+  currency: string;
+  pricesIncludeVat: boolean;
+  completeness: ReturnType<typeof evaluateBillingProfile>;
+  numbering: { invoicePrefix: string; creditPrefix: string; numberWidth: number; yearlyReset: boolean };
+  logo: string | null;
+}> {
   const e = await trx
     .selectFrom('legalEntities')
-    .select(['id', 'name', 'taxId', 'vatReg', 'embs', 'currency'])
+    .select(['id', 'name', 'taxId', 'vatReg', 'embs', 'currency', 'status'])
     .where('id', '=', legalEntityId)
     .executeTakeFirstOrThrow();
   const p = await trx.selectFrom('billingProfiles').selectAll().where('legalEntityId', '=', e.id).executeTakeFirst();
   const biz = await trx.selectFrom('businesses').select('name').executeTakeFirst();
+  const numbering = {
+    invoicePrefix: p?.invoicePrefix ?? '',
+    creditPrefix: p?.creditPrefix ?? 'KO-',
+    numberWidth: p?.numberWidth ?? 6,
+    yearlyReset: p?.yearlyReset ?? true,
+  };
+  const completeness = evaluateBillingProfile({
+    legalName: e.name,
+    edb: e.taxId ?? '',
+    vatRegNo: e.vatReg ?? '',
+    embs: e.embs ?? '',
+    entityStatus: String(e.status),
+    address: p?.address ?? '',
+    city: p?.city ?? '',
+    zip: p?.zip ?? '',
+    country: p?.country ?? 'North Macedonia',
+    vatRegistered: p?.vatRegistered ?? false,
+    defaultCurrency: p?.defaultCurrency ?? e.currency ?? 'MKD',
+    ...numbering,
+    defaultVatRateBp: p?.defaultVatRateBp ?? 0,
+    signatoryName: p?.signatoryName ?? '',
+    contactEmail: p?.contactEmail ?? '',
+    bankAccount: p?.bankAccount ?? '',
+  });
   return {
     vatRegistered: p?.vatRegistered ?? false,
     currency: p?.defaultCurrency ?? e.currency ?? 'MKD',
     pricesIncludeVat: p?.pricesIncludeVat ?? true,
+    completeness,
+    numbering,
+    logo: p?.logo ?? null,
     snap: {
       legalEntityId: e.id,
       legalName: e.name,
@@ -74,11 +122,13 @@ async function issuerSnapshot(trx: Trx, legalEntityId: string): Promise<{ snap: 
       website: p?.website ?? '',
       footerText: p?.footerText ?? '',
       paymentInstructions: p?.paymentInstructions ?? '',
+      logoSha256: null,
+      logoMime: null,
     },
   };
 }
 
-async function locationSnapshot(trx: Trx, locationId: string) {
+export async function locationSnapshot(trx: Trx, locationId: string) {
   const l = await trx
     .selectFrom('locations')
     .select(['id', 'name', 'address', 'city', 'zip', 'country', 'tz'])
@@ -106,7 +156,7 @@ async function entityFor(trx: Trx, locationId: string): Promise<string> {
   return dflt.id;
 }
 
-async function buyerFromIdentity(trx: Trx, billingCustomerId: string): Promise<BillingBuyerSnapshot> {
+export async function buyerFromIdentity(trx: Trx, billingCustomerId: string): Promise<BillingBuyerSnapshot> {
   const b = await trx.selectFrom('billingCustomers').selectAll().where('id', '=', billingCustomerId).executeTakeFirst();
   if (!b) throw new BillingError('NOT_FOUND', 'Unknown billing identity');
   return {
@@ -213,7 +263,7 @@ function build(
   };
 }
 
-async function actorName(trx: Trx, id: string | null) {
+export async function actorName(trx: Trx, id: string | null) {
   if (!id) return '';
   return (await trx.selectFrom('employees').select('name').where('id', '=', id).executeTakeFirst())?.name ?? '';
 }
@@ -321,6 +371,12 @@ export async function createDraft(
         grossMinor: l.gross,
       })
       .execute();
+  await addEvent(trx, claims.ten, inv.id, 'created', { id: claims.sub, name }, {
+    originSaleId: sale.id,
+    saleNumber: sale.number,
+    grossMinor: built.totals.gross,
+    currency: issuer.currency,
+  });
   await logAudit(trx, claims.ten, {
     actorEmployeeId: claims.sub,
     actorName: name,
@@ -332,15 +388,51 @@ export async function createDraft(
   return { invoice: await getDraft(trx, reach, inv.id), created: true };
 }
 
-async function toContract(trx: Trx, id: string): Promise<BillingInvoice> {
+/** The sale as it is now, for the readiness check of a sale-backed document. */
+export async function saleNow(trx: Trx, saleId: string | null) {
+  if (!saleId) return undefined;
+  const s = await trx.selectFrom('invoices').select(['status', 'total', 'tip', 'serviceCharge', 'giftAmount']).where('id', '=', saleId).executeTakeFirst();
+  if (!s) return null;
+  return { status: s.status, totalMinor: minor(s.total), tipMinor: minor(s.tip), serviceChargeMinor: minor(s.serviceCharge), giftMinor: minor(s.giftAmount) };
+}
+
+/** What the issue door would say right now. An issued document is
+ *  ready by definition — it was checked when it was issued. */
+export async function readinessOf(trx: Trx, doc: BillingInvoice, issueDate?: string): Promise<BillingIssueReadiness> {
+  if (doc.status !== 'draft') return { ready: true, problems: [], warnings: [] };
+  const issuer = await issuerSnapshot(trx, doc.legalEntityId);
+  const date = issueDate ?? nowAt(doc.location.tz).date;
+  return evaluateIssueReadiness({
+    issuer: issuer.completeness,
+    buyer: doc.buyer,
+    location: doc.location,
+    vatRegistered: doc.vatRegistered,
+    pricesIncludeVat: doc.pricesIncludeVat,
+    supplyDate: doc.supplyDate,
+    issueDate: date,
+    dueDate: doc.dueDate,
+    lines: doc.lines,
+    totals: doc.totals,
+    vatBreakdown: doc.vatBreakdown,
+    origin: doc.origin,
+    sale: await saleNow(trx, doc.originSaleId),
+  });
+}
+
+/** The stored document, as the contract reads it — no readiness yet. */
+export async function rowToContract(trx: Trx, id: string): Promise<BillingInvoice> {
   const r = await trx.selectFrom('billingInvoices').selectAll().where('id', '=', id).executeTakeFirstOrThrow();
   const lines = await trx.selectFrom('billingInvoiceLines').selectAll().where('invoiceId', '=', id).orderBy('sort').execute();
   const buyer = (r.buyer ?? null) as BillingBuyerSnapshot | null;
+  const issuerRaw = r.issuer as BillingIssuerSnapshot;
   return {
     id: r.id,
     kind: r.kind as BillingInvoice['kind'],
     status: r.status as BillingInvoice['status'],
     number: r.number,
+    series: r.series,
+    year: r.year,
+    numberSeq: r.numberSeq,
     currency: r.currency,
     vatRegistered: r.vatRegistered,
     pricesIncludeVat: r.pricesIncludeVat,
@@ -353,7 +445,7 @@ async function toContract(trx: Trx, id: string): Promise<BillingInvoice> {
     issueDate: r.issueDate ? localIso(r.issueDate) : null,
     dueDate: r.dueDate ? localIso(r.dueDate) : null,
     issuedAt: r.issuedAt ? r.issuedAt.toISOString() : null,
-    issuer: r.issuer as BillingIssuerSnapshot,
+    issuer: { ...issuerRaw, logoSha256: issuerRaw.logoSha256 ?? null, logoMime: issuerRaw.logoMime ?? null },
     buyer,
     location: r.location as BillingInvoice['location'],
     origin: (r.origin ?? null) as BillingOrigin | null,
@@ -383,12 +475,20 @@ async function toContract(trx: Trx, id: string): Promise<BillingInvoice> {
     totals: { netMinor: num(r.netMinor), vatMinor: num(r.vatMinor), grossMinor: num(r.grossMinor), discountMinor: num(r.discountMinor) },
     vatBreakdown: (r.vatBreakdown ?? []) as BillingInvoice['vatBreakdown'],
     buyerCompleteness: evaluateBuyer(buyer),
+    issueReadiness: { ready: true, problems: [], warnings: [] },
+    issuedBy: r.issuedAt ? { id: r.issuedBy, name: r.issuedByName } : null,
+    events: await listEvents(trx, id),
     notes: r.notes,
     createdBy: { id: r.createdBy, name: r.createdByName },
     createdAt: r.createdAt.toISOString(),
     updatedBy: { id: r.updatedBy, name: r.updatedByName },
     updatedAt: r.updatedAt.toISOString(),
   };
+}
+
+async function toContract(trx: Trx, id: string): Promise<BillingInvoice> {
+  const doc = await rowToContract(trx, id);
+  return { ...doc, issueReadiness: await readinessOf(trx, doc) };
 }
 
 export async function getDraft(trx: Trx, reach: Reach, id: string): Promise<BillingInvoice> {
@@ -477,6 +577,12 @@ export async function patchDraft(
     .set({ ...set, updatedBy: claims.sub, updatedByName: name, updatedAt: new Date() })
     .where('id', '=', id)
     .execute();
+  await addEvent(trx, claims.ten, id, 'edited', { id: claims.sub, name }, {
+    fields: Object.keys(set),
+    buyer: p.billingCustomerId !== undefined ? (set.billingCustomerId ?? null) : undefined,
+    supplyDate: p.supplyDate,
+    dueDate: p.dueDate,
+  });
   const after = await toContract(trx, id);
   await logAudit(trx, claims.ten, {
     actorEmployeeId: claims.sub,

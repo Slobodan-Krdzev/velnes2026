@@ -1,7 +1,7 @@
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { App } from '../../App.js';
+import { App, queryClient } from '../../App.js';
 import { setAccessToken } from '@velnes/client';
 
 /** The eight settings sections added for prototype parity — each one
@@ -41,6 +41,7 @@ const billingProfile = {
   defaultCurrency: 'MKD', invoicePrefix: '', creditPrefix: 'KO-', yearlyReset: true, numberWidth: 6, defaultVatRateBp: 0, pricesIncludeVat: true,
   footerText: '', paymentInstructions: '', signatoryName: '', contactEmail: '', phone: '', website: '', logo: null, issueMode: 'draft',
   completeness: { complete: false, missing: ['address', 'city', 'zip', 'signatoryName'], invalid: [] },
+  numberingLocked: false,
   updatedAt: null,
 };
 
@@ -90,6 +91,7 @@ const hours = {
   '6': null,
 };
 
+let profileOverride: Partial<typeof billingProfile> = {};
 function mockApi(calls: { method: string; path: string; body?: unknown }[]) {
   vi.stubGlobal(
     'fetch',
@@ -102,7 +104,7 @@ function mockApi(calls: { method: string; path: string; body?: unknown }[]) {
       if (path.endsWith('/auth/me')) return ok(me);
       if (path.includes('/billing/profiles/') && method === 'PUT')
         return ok({ ...billingProfile, ...(JSON.parse(String(init?.body)) as object), completeness: { complete: true, missing: [], invalid: [] } });
-      if (path.includes('/billing/profiles')) return ok({ profiles: [billingProfile] });
+      if (path.includes('/billing/profiles')) return ok({ profiles: [{ ...billingProfile, ...profileOverride }] });
       if (path.includes('/business-settings')) {
         if (method === 'PATCH') {
           const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
@@ -198,6 +200,7 @@ async function openSettings() {
 
 describe('settings — the eight parity sections', () => {
   beforeEach(() => {
+    queryClient.clear();
     localStorage.clear();
     setAccessToken(null);
   });
@@ -235,6 +238,21 @@ describe('settings — the eight parity sections', () => {
       const call = calls.find((c) => c.method === 'PUT' && c.path.endsWith(`/billing/profiles/${LE}`));
       expect(call?.body).toMatchObject({ signatoryName: 'Maria Petrovska', address: 'Partizanski Odredi 14', vatRegistered: false, defaultVatRateBp: 0, creditPrefix: 'KO-' });
     });
+  });
+
+  it('Invoicing: once the entity has issued, the numbering fields are fixed and say why', async () => {
+    profileOverride = { numberingLocked: true, completeness: { complete: true, missing: [], invalid: [] } };
+    try {
+      mockApi([]);
+      await openSettings();
+      await userEvent.click(screen.getByRole('button', { name: 'Invoicing' }));
+      await screen.findByText(/Numbering is fixed/);
+      expect((screen.getByLabelText(/Invoice series prefix/) as HTMLInputElement).disabled).toBe(true);
+      expect((screen.getByLabelText(/Credit note series prefix/) as HTMLInputElement).disabled).toBe(true);
+      expect((screen.getByLabelText(/^Digits/) as HTMLInputElement).disabled).toBe(true);
+    } finally {
+      profileOverride = {};
+    }
   });
 
   it('Company: edits the card through PATCH /business and shows the HQ legal block read-only', async () => {

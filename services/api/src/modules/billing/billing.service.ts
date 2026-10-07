@@ -1,6 +1,7 @@
 import type {
   AccessClaims,
   BillingCustomer,
+  BillingIssueProblem,
   BillingCustomerWrite,
   BillingProfile,
   BillingProfileWrite,
@@ -23,8 +24,10 @@ import { logAudit } from '../audit/audit.service.js';
 
 export class BillingError extends Error {
   constructor(
-    public code: 'NOT_FOUND' | 'INVALID',
+    public code: 'NOT_FOUND' | 'INVALID' | 'ISSUE_BLOCKED' | 'CONFLICT',
     message: string,
+    /** For ISSUE_BLOCKED: what the issue door found wrong, structured. */
+    public problems: BillingIssueProblem[] = [],
   ) {
     super(message);
   }
@@ -80,6 +83,14 @@ async function buildProfile(trx: Trx, legalEntityId: string): Promise<BillingPro
     logo: p?.logo ?? null,
     issueMode: (p?.issueMode ?? 'draft') as 'draft' | 'auto',
   };
+  // Phase 3: a series that has issued a document fixes its format.
+  const used = await trx
+    .selectFrom('billingSequences')
+    .select('lastSeq')
+    .where('legalEntityId', '=', e.id)
+    .where('lastSeq', '>', 0)
+    .limit(1)
+    .executeTakeFirst();
   const identity = {
     legalName: e.name,
     edb: e.taxId ?? '',
@@ -95,6 +106,7 @@ async function buildProfile(trx: Trx, legalEntityId: string): Promise<BillingPro
     businessName: biz?.name ?? '',
     locations: locations.map((l) => ({ id: l.id, name: l.name, tz: l.tz })),
     completeness: evaluateBillingProfile({ ...identity, ...cfg }),
+    numberingLocked: !!used,
     updatedAt: p ? p.updatedAt.toISOString() : null,
   };
 }
@@ -150,6 +162,18 @@ export async function upsertProfile(
   }
   if (Object.keys(entityPatch).length)
     await trx.updateTable('legalEntities').set(entityPatch).where('id', '=', e.id).execute();
+
+  // Numbering is fixed once a document has been issued under this
+  // entity: a new prefix, width or reset rule would read as another
+  // series over numbers already given (phase 3, 2026-10-07).
+  if (before?.numberingLocked) {
+    const changed = (['invoicePrefix', 'creditPrefix', 'numberWidth', 'yearlyReset'] as const).filter((k) => w[k] !== before[k]);
+    if (changed.length)
+      throw new BillingError(
+        'INVALID',
+        `Numbering cannot change once an invoice has been issued (${changed.join(', ')}); a new series is a decision for the accountant`,
+      );
+  }
 
   const row = {
     tenantId: claims.ten,

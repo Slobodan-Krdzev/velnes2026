@@ -1,22 +1,27 @@
-import { useQuery } from '@tanstack/react-query';
-import { BillingInvoiceListSchema, BillingInvoiceSchema } from '@velnes/contracts';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { BillingInvoiceListSchema, BillingInvoiceSchema, BillingLogoSchema, type BillingInvoice, type BillingIssueProblem } from '@velnes/contracts';
 import { I, Icon } from '@velnes/ui';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams } from 'react-router-dom';
-import { get } from '@velnes/client';
+import { ApiError, api, get, post, useSession } from '@velnes/client';
 import { moneyMinor, pctBp } from '../../lib/money.js';
+import { useToast } from '../../lib/toast.js';
 
 /**
- * Accounting invoices (phase 2, 2026-10-06) — docs/INVOICING.md. The
- * legal documents a legal entity issues — not the till's receipts,
- * which live under the cash register. Today only drafts exist: the
- * list shows them, the detail is the preview of what will be issued.
- * Every figure is the server's; nothing is computed here.
+ * Accounting invoices (phase 2, 2026-10-06; issuing phase 3,
+ * 2026-10-07) — docs/INVOICING.md. The legal documents a legal entity
+ * issues — not the till's receipts, which live under the cash
+ * register. The list shows drafts and issued documents; the detail is
+ * the preview of a draft, or the issued document itself: numbered,
+ * frozen, with its history. Every figure is the server's; nothing is
+ * computed here, and nothing is issued from optimistic state — the
+ * page waits for the server's answer.
  */
 const STATUS_TABS = ['all', 'draft', 'issued', 'unpaid', 'paid', 'credited'] as const;
 type StatusTab = (typeof STATUS_TABS)[number];
-const LIVE_TABS: StatusTab[] = ['all', 'draft'];
+const LIVE_TABS: StatusTab[] = ['all', 'draft', 'issued'];
+const newKey = () => (crypto.randomUUID ? crypto.randomUUID() : String(Math.random()).slice(2) + Date.now());
 
 const dateShort = (iso: string) => {
   const [y, m, d] = iso.split('-');
@@ -25,7 +30,7 @@ const dateShort = (iso: string) => {
 
 export function AccountingInvoicesPage() {
   const { id } = useParams<{ id?: string }>();
-  return id ? <DraftDetail id={id} /> : <InvoiceList />;
+  return id ? <DocDetail id={id} /> : <InvoiceList />;
 }
 
 function InvoiceList() {
@@ -108,31 +113,102 @@ function InvoiceList() {
   );
 }
 
-function DraftDetail({ id }: { id: string }) {
+const when = (iso: string) => iso.slice(0, 16).replace('T', ' ');
+
+function DocDetail({ id }: { id: string }) {
   const { t } = useTranslation();
   const nav = useNavigate();
+  const { can } = useSession();
+  const qc = useQueryClient();
+  const toast = useToast();
   const q = useQuery({ queryKey: ['billingInvoice', id], queryFn: () => get(BillingInvoiceSchema, `/billing/invoices/${id}`) });
+  const logo = useQuery({
+    queryKey: ['billingInvoiceLogo', id, q.data?.issuer.logoSha256 ?? null],
+    queryFn: () => api(BillingLogoSchema.nullable(), `/billing/invoices/${id}/logo`).catch(() => null),
+    enabled: !!q.data,
+  });
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [blocked, setBlocked] = useState<BillingIssueProblem[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  // One key per attempt from this screen: a retry after a lost answer
+  // sends the same key and gets the same issued document back.
+  const issueKey = useMemo(() => newKey(), []);
   const d = q.data;
   if (!d) return null;
   const cur = d.currency;
   const m = (v: number) => moneyMinor(v, cur);
+  const issued = d.status === 'issued';
+  const mayIssue = d.status === 'draft' && can('billing.issue');
+  const ready = d.issueReadiness;
+
+  const issue = async () => {
+    setBusy(true);
+    setError(null);
+    setBlocked(null);
+    try {
+      const doc = await post(BillingInvoiceSchema, `/billing/invoices/${id}/issue`, { key: issueKey });
+      qc.setQueryData(['billingInvoice', id], doc);
+      void qc.invalidateQueries({ queryKey: ['billingInvoices'] });
+      void qc.invalidateQueries({ queryKey: ['billingInvoiceLogo', id] });
+      setConfirming(false);
+      toast?.(t('inv.issuedToast', { number: doc.number ?? '' }));
+    } catch (e) {
+      if (e instanceof ApiError && e.code === 'ISSUE_BLOCKED') {
+        // The server's list, verbatim: the body carried `problems`.
+        setBlocked(problemsOf(e) ?? []);
+      } else setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const problemLine = (p: BillingIssueProblem) =>
+    `${t(`inv.part.${p.part}`)}: ${t(`inv.f.${p.field}`, { defaultValue: p.field })} — ${t(`inv.reason.${p.reason}`)}`;
+
   return (
     <>
       <div className="toolbar toolbar-row">
         <button className="btn btn-ghost" onClick={() => nav('/invoices')}>
           <Icon d={I.arrowleft} size={16} /> {t('inv.back')}
         </button>
-        <div className="toolbar-actions">
+        <div className="toolbar-actions" style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+          {d.status === 'draft' && can('billing.issue') ? (
+            <span className={`muted ${ready.ready ? '' : 'warn'}`} style={{ fontSize: 13 }} data-testid="issue-readiness">
+              {ready.ready ? t('inv.issueReady') : t('inv.issueNotReady', { count: ready.problems.length })}
+            </span>
+          ) : null}
+          {mayIssue ? (
+            <button className="btn btn-primary" onClick={() => setConfirming(true)} data-testid="issue-btn">
+              {t('inv.issue')}
+            </button>
+          ) : null}
           <span className={`badge ${d.status === 'draft' ? 'warning' : 'success'}`} data-testid="doc-status">{t(`inv.status.${d.status}`)}</span>
         </div>
       </div>
+
+      {d.status === 'draft' && !can('billing.issue') ? (
+        <div className="note" style={{ marginBottom: 12 }}>{t('inv.noIssueRight')}</div>
+      ) : null}
+      {error ? <div className="note warn" style={{ marginBottom: 12 }}>{error}</div> : null}
+      {blocked && !confirming ? (
+        <div className="note warn" style={{ marginBottom: 12 }} data-testid="issue-blocked">
+          <div className="bold">{t('inv.issueBlocked')}</div>
+          <ul style={{ margin: '6px 0 0 18px' }}>{blocked.map((p, i) => <li key={i}>{problemLine(p)}</li>)}</ul>
+        </div>
+      ) : null}
+
       <div className="card" data-testid="draft-preview">
         <div className="card-header">
-          <div>
-            <h2>{t('inv.docTitle')}</h2>
-            <span className="muted">{d.number ?? t('inv.draftNumber')}</span>
+          <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
+            {logo.data?.dataUrl ? <img src={logo.data.dataUrl} alt="" data-testid="doc-logo" style={{ width: 48, height: 48, borderRadius: 8, objectFit: 'cover' }} /> : null}
+            <div>
+              <h2>{issued ? t('inv.docTitleIssued') : t('inv.docTitle')}</h2>
+              <span className={issued ? 'bold tnum' : 'muted'} data-testid="doc-number" style={issued ? { fontSize: 16 } : undefined}>{d.number ?? t('inv.draftNumber')}</span>
+            </div>
           </div>
           <div className="muted tnum" style={{ textAlign: 'right', fontSize: 13 }}>
+            {d.issueDate ? <div>{t('inv.issueDate')}: <b>{dateShort(d.issueDate)}</b></div> : null}
             <div>{t('inv.supplyDate')}: <b>{dateShort(d.supplyDate)}</b></div>
             {d.dueDate ? <div>{t('inv.dueDate')}: <b>{dateShort(d.dueDate)}</b></div> : null}
             {d.origin ? <div>{t('inv.fromSale', { number: d.origin.saleNumber, date: dateShort(d.origin.saleDate) })}</div> : null}
@@ -159,7 +235,7 @@ function DraftDetail({ id }: { id: string }) {
                 <div className="bold">{d.buyer.name}</div>
                 <div className="muted">{[d.buyer.address, [d.buyer.zip, d.buyer.city].filter(Boolean).join(' '), d.buyer.country].filter(Boolean).join(' · ') || (d.buyer.kind === 'person' ? t('inv.personNoAddress') : '')}</div>
                 {d.buyer.kind === 'company' ? <div className="muted tnum">{t('inv.edb')} {d.buyer.edb || '—'}{d.buyer.vatRegNo ? ` · ${t('inv.vatNo')} ${d.buyer.vatRegNo}` : ''}</div> : null}
-                {!d.buyerCompleteness.complete ? (
+                {!issued && !d.buyerCompleteness.complete ? (
                   <div className="note warn" style={{ marginTop: 8 }} data-testid="buyer-incomplete">
                     {t('inv.buyerIncomplete', { fields: d.buyerCompleteness.missing.map((f) => t(`inv.f.${f}`, { defaultValue: f })).join(', ') })}
                   </div>
@@ -249,15 +325,104 @@ function DraftDetail({ id }: { id: string }) {
           </div>
         </div>
 
-        <div className="note" style={{ margin: '0 20px 20px' }}>
-          {t('inv.draftNote')}
+        <div className={`note ${issued ? '' : ''}`} style={{ margin: '0 20px 20px' }} data-testid="doc-note">
+          {issued ? t('inv.issuedNote') : t('inv.draftNote')}
           {d.notes ? <div style={{ marginTop: 6 }}>{d.notes}</div> : null}
           <div className="muted" style={{ marginTop: 6, fontSize: 12 }}>
-            {t('inv.createdBy', { name: d.createdBy.name, when: d.createdAt.slice(0, 16).replace('T', ' ') })}
-            {d.updatedAt !== d.createdAt ? ` · ${t('inv.updatedBy', { name: d.updatedBy.name, when: d.updatedAt.slice(0, 16).replace('T', ' ') })}` : ''}
+            {t('inv.createdBy', { name: d.createdBy.name, when: when(d.createdAt) })}
+            {!issued && d.updatedAt !== d.createdAt ? ` · ${t('inv.updatedBy', { name: d.updatedBy.name, when: when(d.updatedAt) })}` : ''}
+            {issued && d.issuedBy && d.issuedAt ? ` · ${t('inv.issuedBy', { name: d.issuedBy.name, when: when(d.issuedAt) })}` : ''}
           </div>
         </div>
+
+        {d.events.length ? (
+          <div style={{ padding: '0 20px 20px' }} data-testid="doc-history">
+            <span className="stat-label">{t('inv.history')}</span>
+            <ul style={{ margin: '6px 0 0', padding: 0, listStyle: 'none', display: 'grid', gap: 4 }}>
+              {d.events.map((e) => (
+                <li key={e.id} className="muted" style={{ fontSize: 13 }}>
+                  <span className="tnum">{when(e.at)}</span> · {t(`inv.ev.${e.kind}`, { number: String(e.data.number ?? '') })}{e.actorName ? ` · ${e.actorName}` : ''}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
       </div>
+
+      {confirming ? (
+        <IssueModal
+          doc={d}
+          busy={busy}
+          blocked={blocked}
+          problemLine={problemLine}
+          onIssue={() => void issue()}
+          onClose={() => {
+            if (!busy) setConfirming(false);
+          }}
+        />
+      ) : null}
     </>
+  );
+}
+
+/** The structured problems of a 422 from the issue door, if the body carried them. */
+function problemsOf(e: ApiError): BillingIssueProblem[] | null {
+  const raw = e.body?.problems;
+  return Array.isArray(raw) ? (raw as BillingIssueProblem[]) : null;
+}
+
+function IssueModal({
+  doc,
+  busy,
+  blocked,
+  problemLine,
+  onIssue,
+  onClose,
+}: {
+  doc: BillingInvoice;
+  busy: boolean;
+  blocked: BillingIssueProblem[] | null;
+  problemLine: (p: BillingIssueProblem) => string;
+  onIssue: () => void;
+  onClose: () => void;
+}) {
+  const { t } = useTranslation();
+  const problems = blocked ?? doc.issueReadiness.problems;
+  const warnings = doc.issueReadiness.warnings;
+  return (
+    <div className="overlay" onClick={onClose}>
+      <div className="modal" role="dialog" aria-modal="true" aria-labelledby="issue-title" style={{ maxWidth: 520 }} onClick={(e) => e.stopPropagation()}>
+        <div className="modal-head">
+          <h2 id="issue-title">{t('inv.issueTitle')}</h2>
+        </div>
+        <div className="modal-body" style={{ display: 'grid', gap: 12 }}>
+          <p style={{ margin: 0 }}>{t('inv.issueWarning')}</p>
+          <div className="muted" style={{ fontSize: 13 }}>
+            <div>{doc.issuer.legalName} → {doc.buyer?.name ?? t('inv.walkIn')}</div>
+            <div className="tnum">{t('inv.total')}: {moneyMinor(doc.totals.grossMinor, doc.currency)} · {t('inv.supplyDate')}: {dateShort(doc.supplyDate)}</div>
+          </div>
+          {problems.length ? (
+            <div className="note warn" data-testid="issue-problems">
+              <div className="bold">{t('inv.issueBlocked')}</div>
+              <ul style={{ margin: '6px 0 0 18px' }}>{problems.map((p, i) => <li key={i}>{problemLine(p)}</li>)}</ul>
+            </div>
+          ) : null}
+          {warnings.length ? (
+            <div className="note" data-testid="issue-warnings">
+              {warnings.map((w, i) => <div key={i}>{t(`inv.warn.${w.code}`, w.params)}</div>)}
+            </div>
+          ) : null}
+        </div>
+        <div className="modal-foot" style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+          <button className="btn btn-ghost" onClick={onClose} disabled={busy}>{t('common.cancel')}</button>
+          <button className="btn btn-primary" onClick={onIssue} disabled={busy || problems.length > 0} data-testid="issue-confirm">
+            {busy ? t('inv.issueBusy') : t('inv.issueConfirm')}
+          </button>
+        </div>
+        <button className="modal-close" aria-label={t('common.close')} onClick={onClose} disabled={busy}>
+          <Icon d={I.x} size={20} />
+        </button>
+      </div>
+    </div>
   );
 }

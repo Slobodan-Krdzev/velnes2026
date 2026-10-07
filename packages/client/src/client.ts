@@ -27,6 +27,8 @@ export class ApiError extends Error {
     message: string,
     public refusalCode?: string,
     public refusalParams?: Record<string, string | number>,
+    /** The error body as the server sent it, for doors that answer with structure (e.g. the issue door's `problems`). */
+    public body?: Record<string, unknown>,
   ) {
     super(message);
   }
@@ -108,6 +110,7 @@ export async function api<S extends z.ZodType>(
       body.message ?? body.error ?? 'Request failed',
       body.code,
       body.params,
+      body as Record<string, unknown>,
     );
   }
   return schema.parse(await res.json()) as z.infer<S>;

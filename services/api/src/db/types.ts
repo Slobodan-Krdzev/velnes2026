@@ -680,6 +680,38 @@ export interface BillingCustomers {
   zip: Generated<string>;
 }
 
+export interface BillingAssets {
+  bytes: number;
+  createdAt: Generated<Timestamp>;
+  data: string;
+  kind: string;
+  mime: string;
+  sha256: string;
+  tenantId: string;
+}
+
+export interface BillingEvents {
+  actorEmployeeId: string | null;
+  actorName: Generated<string>;
+  at: Generated<Timestamp>;
+  data: Generated<Json>;
+  id: Generated<string>;
+  invoiceId: string;
+  kind: string;
+  source: Generated<string>;
+  tenantId: string;
+}
+
+export interface BillingSequences {
+  createdAt: Generated<Timestamp>;
+  lastSeq: Generated<number>;
+  legalEntityId: string;
+  series: string;
+  tenantId: string;
+  updatedAt: Generated<Timestamp>;
+  year: number;
+}
+
 export interface BillingInvoiceLines {
   allocatedDiscountMinor: Generated<Int8>;
   appointmentId: string | null;
@@ -722,6 +754,9 @@ export interface BillingInvoices {
   idempotencyKey: string | null;
   issueDate: Timestamp | null;
   issuedAt: Timestamp | null;
+  issuedBy: string | null;
+  issuedByName: Generated<string>;
+  issueKey: string | null;
   issuer: Json;
   kind: Generated<string>;
   legalEntityId: string;
@@ -1445,11 +1480,14 @@ export interface DB {
   appointmentHistory: AppointmentHistory;
   appointmentProducts: AppointmentProducts;
   appointments: Appointments;
+  billingAssets: BillingAssets;
   billingConsentEvents: BillingConsentEvents;
+  billingEvents: BillingEvents;
   billingCustomers: BillingCustomers;
   billingInvoiceLines: BillingInvoiceLines;
   billingInvoices: BillingInvoices;
   billingProfiles: BillingProfiles;
+  billingSequences: BillingSequences;
   bookingChangeRequests: BookingChangeRequests;
   assistantActions: AssistantActions;
   assistantDrafts: AssistantDrafts;

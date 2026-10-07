@@ -1,7 +1,7 @@
 import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { App } from '../../App.js';
+import { App, queryClient } from '../../App.js';
 import { setAccessToken } from '@velnes/client';
 
 /** Accounting invoices (phase 2): the list of drafts and the preview of
@@ -11,13 +11,15 @@ const LE = '50000000-0000-4000-8000-000000000001';
 const SALE = 'aa000000-0000-4000-8000-000000000001';
 const D1 = 'bb000000-0000-4000-8000-000000000001';
 const D2 = 'bb000000-0000-4000-8000-000000000002';
+const D3 = 'bb000000-0000-4000-8000-000000000003';
+const EV = 'dd000000-0000-4000-8000-00000000000';
 
 const me = {
   id: '40000000-0000-4000-8000-000000000001', name: 'Maria Petrovska', access: 'owner', roleId: '30000000-0000-4000-8000-000000000001',
   locationIds: [LOC], email: 'maria@velnes.mk', tenantId: '10000000-0000-4000-8000-000000000001', lang: 'en',
-  perms: { 'billing.read': 'business', 'billing.create': 'business', 'pos.checkout': 'business', 'pos.view_invoices': 'business' },
+  perms: { 'billing.read': 'business', 'billing.create': 'business', 'billing.issue': 'business', 'pos.checkout': 'business', 'pos.view_invoices': 'business' },
 };
-const issuer = { legalEntityId: LE, legalName: 'Velnes Studio DOOEL Skopje', tradingName: 'Velnes Fizio Centar', edb: 'MK4030026512345', vatRegNo: 'MK4030026512345', embs: '7012345', address: 'Partizanski Odredi 14', city: 'Skopje', zip: '1000', country: 'North Macedonia', bankName: 'Komercijalna', bankAccount: '300000001234567', signatoryName: 'Maria Petrovska', contactEmail: '', phone: '', website: '', footerText: '', paymentInstructions: '' };
+const issuer = { legalEntityId: LE, legalName: 'Velnes Studio DOOEL Skopje', tradingName: 'Velnes Fizio Centar', edb: 'MK4030026512345', vatRegNo: 'MK4030026512345', embs: '7012345', address: 'Partizanski Odredi 14', city: 'Skopje', zip: '1000', country: 'North Macedonia', bankName: 'Komercijalna', bankAccount: '300000001234567', signatoryName: 'Maria Petrovska', contactEmail: '', phone: '', website: '', footerText: '', paymentInstructions: '', logoSha256: null, logoMime: null };
 const location = { locationId: LOC, name: 'Centar', address: 'Makedonija 12', city: 'Skopje', zip: '1000', country: 'North Macedonia', tz: 'Europe/Skopje' };
 const line = (id: string, description: string, src: number, disc: number, rateBp: number, registered: boolean) => {
   const gross = src - disc;
@@ -29,7 +31,7 @@ const draftOf = (id: string, registered: boolean) => {
   const sum = (k: 'netMinor' | 'vatMinor' | 'grossMinor') => lines.reduce((s, l) => s + l[k], 0);
   const rates = [...new Set(lines.map((l) => l.vatRateBp))];
   return {
-    id, kind: 'invoice', status: 'draft', number: null, currency: 'MKD', vatRegistered: registered, pricesIncludeVat: true,
+    id, kind: 'invoice', status: 'draft', number: null, series: null, year: null, numberSeq: null, currency: 'MKD', vatRegistered: registered, pricesIncludeVat: true,
     legalEntityId: LE, locationId: LOC, billingCustomerId: null, originSaleId: SALE, originAppointmentId: null,
     supplyDate: '2026-10-06', issueDate: null, dueDate: null, issuedAt: null, issuer, location,
     buyer: { billingCustomerId: null, customerId: null, kind: 'company', name: 'Nova Health DOO', address: 'Bul. Ilinden 5', city: 'Skopje', zip: '1000', country: 'North Macedonia', edb: '', vatRegNo: '', email: '', phone: '' },
@@ -38,14 +40,30 @@ const draftOf = (id: string, registered: boolean) => {
     totals: { netMinor: sum('netMinor'), vatMinor: sum('vatMinor'), grossMinor: sum('grossMinor'), discountMinor: 5000 },
     vatBreakdown: rates.map((r) => ({ rateBp: r, netMinor: lines.filter((l) => l.vatRateBp === r).reduce((s, l) => s + l.netMinor, 0), vatMinor: lines.filter((l) => l.vatRateBp === r).reduce((s, l) => s + l.vatMinor, 0), grossMinor: lines.filter((l) => l.vatRateBp === r).reduce((s, l) => s + l.grossMinor, 0) })),
     buyerCompleteness: { complete: false, missing: ['edb'], invalid: [] },
+    issueReadiness: { ready: false, problems: [{ part: 'buyer', field: 'edb', reason: 'missing' }], warnings: [] },
+    issuedBy: null,
+    events: [{ id: `${EV}1`, kind: 'created', at: '2026-10-06T10:00:00.000Z', actorName: 'Maria Petrovska', source: 'API', data: {} }],
     notes: '', createdBy: { id: me.id, name: 'Maria Petrovska' }, createdAt: '2026-10-06T10:00:00.000Z', updatedBy: { id: me.id, name: 'Maria Petrovska' }, updatedAt: '2026-10-06T10:00:00.000Z',
   };
 };
+/** A ready draft, and what the server answers once it is issued. */
+const readyDraft = (id: string) => {
+  const d = draftOf(id, true);
+  return { ...d, buyer: { ...d.buyer, edb: 'MK4032011501234' }, buyerCompleteness: { complete: true, missing: [], invalid: [] }, issueReadiness: { ready: true, problems: [], warnings: [{ code: 'supply_to_issue_gap', params: { days: 12 } }] } };
+};
+const issuedOf = (d: ReturnType<typeof readyDraft>) => ({
+  ...d, status: 'issued', number: '2026-000041', series: '', year: 2026, numberSeq: 41, issueDate: '2026-10-18', issuedAt: '2026-10-18T09:30:00.000Z',
+  issuedBy: { id: me.id, name: 'Maria Petrovska' }, issueReadiness: { ready: true, problems: [], warnings: [] },
+  events: [...d.events, { id: `${EV}2`, kind: 'issued', at: '2026-10-18T09:30:00.000Z', actorName: 'Maria Petrovska', source: 'API', data: { number: '2026-000041' } }],
+  updatedAt: '2026-10-18T09:30:00.000Z',
+});
 const row = (d: ReturnType<typeof draftOf>) => ({ id: d.id, kind: d.kind, status: d.status, number: d.number, currency: d.currency, vatRegistered: d.vatRegistered, legalEntityId: LE, locationId: LOC, billingCustomerId: null, originSaleId: SALE, supplyDate: d.supplyDate, issueDate: null, dueDate: null, totals: d.totals, createdAt: d.createdAt, updatedAt: d.updatedAt, buyerName: d.buyer?.name ?? '', locationName: 'Centar', saleNumber: 'CEN-2026-0413' });
 
-function mockApi(calls: { method: string; path: string; body?: unknown }[]) {
+function mockApi(calls: { method: string; path: string; body?: unknown }[], opts: { perms?: Record<string, string>; issueFails?: boolean } = {}) {
   const d1 = draftOf(D1, true);
   const d2 = draftOf(D2, false);
+  const d3 = readyDraft(D3);
+  let d3Issued = false;
   vi.stubGlobal(
     'fetch',
     vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
@@ -53,9 +71,17 @@ function mockApi(calls: { method: string; path: string; body?: unknown }[]) {
       const method = init?.method ?? 'GET';
       if (method !== 'GET') calls.push({ method, path, body: init?.body ? JSON.parse(String(init.body)) : undefined });
       const ok = (b: unknown) => new Response(JSON.stringify(b), { status: 200 });
-      if (path.endsWith('/auth/me')) return ok(me);
+      if (path.endsWith('/auth/me')) return ok({ ...me, perms: opts.perms ?? me.perms });
+      if (path.endsWith('/logo')) return new Response(null, { status: 204 });
+      if (path.endsWith(`/billing/invoices/${D3}/issue`)) {
+        if (opts.issueFails)
+          return new Response(JSON.stringify({ error: 'ISSUE_BLOCKED', message: 'blocked', problems: [{ part: 'issuer', field: 'signatoryName', reason: 'missing' }, { part: 'sale', field: 'status', reason: 'changed' }] }), { status: 422 });
+        d3Issued = true;
+        return ok(issuedOf(d3));
+      }
       if (path.includes(`/billing/invoices/${D1}`)) return ok(d1);
       if (path.includes(`/billing/invoices/${D2}`)) return ok(d2);
+      if (path.includes(`/billing/invoices/${D3}`)) return ok(d3Issued ? issuedOf(d3) : d3);
       if (path.includes('/billing/invoices') && method === 'POST') return ok(d1);
       if (path.includes('/billing/invoices')) return ok({ invoices: [row(d1), row(d2)] });
       if (path.includes('/invoices?')) return ok({ invoices: [{ id: SALE, number: 'CEN-2026-0413', date: '2026-10-06', locationId: LOC, customerName: 'Walk-in', employeeName: 'Maria', method: 'Card', status: 'Paid', total: 2400, lines: [{ description: 'Rehab training', qty: 1, unitPrice: 1500, amount: 1500, lineDiscount: 0, vat: 18, itemClass: 'service' }] }] });
@@ -74,6 +100,7 @@ async function open(path: string) {
 
 describe('accounting invoices', () => {
   beforeEach(() => {
+    queryClient.clear();
     localStorage.clear();
     setAccessToken(null);
   });
@@ -88,7 +115,7 @@ describe('accounting invoices', () => {
     await screen.findByText('Accounting invoices');
     expect((await screen.findAllByText('Draft — number assigned when issued')).length).toBe(2);
     expect(screen.getByRole('button', { name: 'Draft' })).toHaveProperty('disabled', false);
-    expect(screen.getByRole('button', { name: 'Issued' })).toHaveProperty('disabled', true);
+    expect(screen.getByRole('button', { name: 'Issued' })).toHaveProperty('disabled', false);
     expect(screen.getByRole('button', { name: 'Paid' })).toHaveProperty('disabled', true);
     expect(screen.getAllByText('Nova Health DOO').length).toBe(2);
   });
@@ -139,5 +166,69 @@ describe('accounting invoices', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Draft accounting invoice' }));
     await waitFor(() => expect(calls.find((c) => c.method === 'POST' && c.path.endsWith('/billing/invoices'))?.body).toEqual({ saleId: SALE }));
     await screen.findByTestId('draft-preview');
+  });
+
+  describe('issuing (phase 3)', () => {
+    it('a draft that is not ready says so; the modal lists the problems and will not confirm', async () => {
+      mockApi([]);
+      await open(`/invoices/${D1}`);
+      await screen.findByTestId('draft-preview');
+      expect(screen.getByTestId('issue-readiness').textContent).toContain('1 to fix');
+      await userEvent.click(screen.getByTestId('issue-btn'));
+      expect(await screen.findByText('Issue this invoice?')).toBeDefined();
+      expect(screen.getByText(/assigns the final invoice number and freezes this document/)).toBeDefined();
+      expect(screen.getByTestId('issue-problems').textContent).toContain('Buyer: tax number (ЕДБ) — missing');
+      expect(screen.getByTestId('issue-confirm')).toHaveProperty('disabled', true);
+    });
+
+    it('issues only after deliberate confirmation, with one key, and then shows the issued document: number, badge, who and when, history, no issue button', async () => {
+      const calls: { method: string; path: string; body?: unknown }[] = [];
+      mockApi(calls);
+      await open(`/invoices/${D3}`);
+      await screen.findByTestId('draft-preview');
+      expect(screen.getByTestId('issue-readiness').textContent).toBe('Ready to issue');
+      expect(screen.getByTestId('doc-number').textContent).toBe('Draft — number assigned when issued');
+      await userEvent.click(screen.getByTestId('issue-btn'));
+      // Nothing was sent by opening the modal.
+      expect(calls.filter((c) => c.path.endsWith('/issue'))).toHaveLength(0);
+      expect(screen.getByTestId('issue-warnings').textContent).toContain('12 days after the supply');
+      await userEvent.click(screen.getByTestId('issue-confirm'));
+      await waitFor(() => expect(calls.filter((c) => c.path.endsWith(`/billing/invoices/${D3}/issue`))).toHaveLength(1));
+      const sent = calls.find((c) => c.path.endsWith('/issue'))!.body as { key: string };
+      expect(sent.key.length).toBeGreaterThanOrEqual(8);
+      await waitFor(() => expect(screen.getByTestId('doc-number').textContent).toBe('2026-000041'));
+      expect(screen.getByTestId('doc-status').textContent).toBe('Issued');
+      expect(screen.queryByTestId('issue-btn')).toBeNull();
+      expect(screen.queryByTestId('buyer-incomplete')).toBeNull();
+      expect(screen.getByText(/Issue date/).textContent).toContain('18.10.2026');
+      expect(screen.getByTestId('doc-note').textContent).toContain('issued and permanent');
+      expect(screen.getByTestId('doc-note').textContent).toContain('Issued by Maria Petrovska on 2026-10-18 09:30');
+      expect(screen.getByTestId('doc-history').textContent).toContain('Issued as 2026-000041');
+      expect(screen.getByTestId('doc-history').textContent).toContain('Draft created');
+      // No edit, delete, cancel or back-to-draft controls exist on an issued document.
+      expect(screen.queryByRole('button', { name: /edit|delete|cancel|draft/i })).toBeNull();
+    });
+
+    it('when the server refuses, the structured problems are shown — nothing is assumed issued', async () => {
+      const calls: { method: string; path: string; body?: unknown }[] = [];
+      mockApi(calls, { issueFails: true });
+      await open(`/invoices/${D3}`);
+      await screen.findByTestId('draft-preview');
+      await userEvent.click(screen.getByTestId('issue-btn'));
+      await userEvent.click(screen.getByTestId('issue-confirm'));
+      const problems = await screen.findByTestId('issue-problems');
+      expect(problems.textContent).toContain('Issuer: authorised signatory — missing');
+      expect(problems.textContent).toContain('Sale: sale status — changed since the draft');
+      expect(screen.getByTestId('doc-status').textContent).toBe('Draft');
+      expect(screen.getByTestId('doc-number').textContent).toBe('Draft — number assigned when issued');
+    });
+
+    it('without billing.issue there is no issue button, and the page says which right it takes', async () => {
+      mockApi([], { perms: { 'billing.read': 'business', 'billing.create': 'business' } });
+      await open(`/invoices/${D3}`);
+      await screen.findByTestId('draft-preview');
+      expect(screen.queryByTestId('issue-btn')).toBeNull();
+      expect(screen.getByText(/needs the “Issue accounting invoices” right/)).toBeDefined();
+    });
   });
 });
