@@ -67,7 +67,9 @@ test('sell at the till and see the invoice + audit trail', async ({ page }) => {
   await expect(toast).toContainText(/(CEN|AER)-2026-/);
   const invoiceNo = (await toast.textContent())?.match(/(?:CEN|AER)-2026-\d+/)?.[0] ?? '';
 
-  await page.getByRole('button', { name: 'Invoices' }).click();
+  // The till's own receipts list — the nav also carries an Invoices tile
+  // (accounting invoices) since invoicing phase 2.
+  await page.locator('button.btn-secondary', { hasText: /^Invoices$/ }).click();
   await expect(page.getByText(invoiceNo)).toBeVisible();
 
   await page.getByLabel('Settings', { exact: true }).click();
