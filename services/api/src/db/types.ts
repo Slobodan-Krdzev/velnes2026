@@ -1377,6 +1377,7 @@ export interface SupplierProducts {
   brand: Generated<string>;
   buy: Generated<number>;
   category: Generated<string>;
+  categoryId: string | null;
   descr: Generated<string>;
   ean: Generated<string>;
   id: Generated<string>;

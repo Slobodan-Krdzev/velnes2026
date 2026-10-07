@@ -63,3 +63,26 @@ export async function brandsFor(trx: Trx, supplierId: string): Promise<{ name: s
     .map((r) => ({ name: r.name, carried: r.carriedBy !== null }))
     .sort((a, b) => Number(b.carried) - Number(a.carried) || a.name.localeCompare(b.name));
 }
+
+/** A product's shelf: one of the platform's product categories, matched
+ *  case-insensitively, returned in its canonical spelling. Unknown names
+ *  are refused — the taxonomy is HQ's; a supplier asks for a shelf, it
+ *  does not invent one. */
+export class UnknownCategoryError extends Error {
+  constructor(public readonly name: string) {
+    super(`"${name}" is not a Velnes product category`);
+  }
+}
+export async function resolveCategory(trx: Trx, rawName: string): Promise<{ id: string; name: string }> {
+  const name = rawName.trim().replace(/\s+/g, ' ');
+  const c = await trx
+    .selectFrom('productCategories')
+    .select(['id', 'name'])
+    .where(sql`lower(name)`, '=', name.toLowerCase())
+    .executeTakeFirst();
+  if (!c) throw new UnknownCategoryError(name);
+  return c;
+}
+export async function productCategories(trx: Trx): Promise<string[]> {
+  return (await trx.selectFrom('productCategories').select('name').orderBy('sort').orderBy('name').execute()).map((c) => c.name);
+}

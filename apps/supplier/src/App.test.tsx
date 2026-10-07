@@ -86,6 +86,7 @@ function mockApi(calls: { method: string; path: string; body?: unknown }[]) {
             order('submitted', 'd4000000-0000-4000-8000-000000000003', 'CEN-0043'),
           ],
         });
+      if (path.includes('/portal/categories')) return ok({ categories: ['Oils', 'Home exercise', 'Recovery aids', 'Supports'] });
       if (path.includes('/portal/brands')) return ok({ brands: [{ name: 'Thera-Band', carried: true }, { name: 'CureTape', carried: true }, { name: 'Davines', carried: false }] });
       if (path.includes('/portal/catalog') && method === 'GET')
         return ok({
@@ -93,7 +94,7 @@ function mockApi(calls: { method: string; path: string; body?: unknown }[]) {
             id: 'd2000000-0000-4000-8000-000000000001', supplierId: SUP1, brand: 'Thera-Band',
             name: 'Thera-Band resistance set, 3 levels', sku: 'TB-SET-03', ean: '3474636975918', size: '3 levels',
             pack: 6, buy: 550, rrp: 990, vat: 18, moq: 1, stock: 240, lead: '2 days', use: 'both',
-            category: 'Rehab', descr: '', sample: false, active: true, linkedProductId: null,
+            category: 'Rehab', categoryId: null, descr: '', sample: false, active: true, linkedProductId: null,
           }],
         });
       if (path.includes('/portal/catalog')) return ok({ id: 'new', ok: true, updated: 1 });
@@ -319,10 +320,16 @@ describe('the supplier portal', () => {
     const input = await screen.findByLabelText('Name of the new brand');
     expect(screen.getByText(/added to the platform when you save/)).toBeDefined();
     await userEvent.type(input, 'Olaplex');
+    // The category is one of Velnes' shelves: "Rehab" is not one, so it is flagged and the save waits for a pick.
+    const cat = screen.getByLabelText('Category') as HTMLSelectElement;
+    expect(cat.value).toBe('__unknown__');
+    expect(screen.getByText('Rehab — not a Velnes category, pick one')).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Save changes' })).toHaveProperty('disabled', true);
+    await userEvent.selectOptions(cat, 'Recovery aids');
     await userEvent.click(screen.getByRole('button', { name: 'Save changes' }));
     await waitFor(() => {
       const sent = calls.find((c) => c.method === 'PATCH' && c.path.includes('/portal/catalog/'));
-      expect((sent?.body as { brand: string }).brand).toBe('Olaplex');
+      expect(sent?.body).toMatchObject({ brand: 'Olaplex', category: 'Recovery aids' });
     });
   });
 });

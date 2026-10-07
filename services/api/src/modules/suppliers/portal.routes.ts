@@ -1,4 +1,4 @@
-import { brandsFor, ensureBrand } from './brands.service.js';
+import { brandsFor, ensureBrand, productCategories, resolveCategory, UnknownCategoryError } from './brands.service.js';
 import { invoicePdf } from './invoice-pdf.service.js';
 import { env } from '../../env.js';
 import {
@@ -29,6 +29,7 @@ import {
   SupportTicketListSchema,
   SupportTicketReplySchema,
   PortalBrandListSchema,
+  PortalCategoryListSchema,
 } from '@velnes/contracts';
 import argon2 from 'argon2';
 import type { FastifyInstance, FastifyReply } from 'fastify';
@@ -522,6 +523,7 @@ export function portalRoutes(app: FastifyInstance) {
             lead: p.lead,
             use: p.use,
             category: p.category,
+            categoryId: p.categoryId,
             descr: p.descr,
             sample: p.sample,
             active: p.active,
@@ -575,7 +577,7 @@ export function portalRoutes(app: FastifyInstance) {
     schema: {
       params: z.object({ id: z.uuid() }),
       body: PortalProductPatchSchema,
-      response: { 200: z.object({ ok: z.literal(true) }), 403: Err, 404: Err },
+      response: { 200: z.object({ ok: z.literal(true) }), 403: Err, 404: Err, 422: Err },
     },
     handler: async (req, reply) =>
       withSupplier(req.supplierClaims.sup, async (trx) => {
@@ -589,12 +591,21 @@ export function portalRoutes(app: FastifyInstance) {
         if (!p) return reply.code(404).send({ error: 'NOT_FOUND', message: 'Unknown product' });
         const b = req.body;
         const brand = b.brand !== undefined ? (await ensureBrand(trx, req.supplierClaims.sup, b.brand)).name : undefined;
+        let shelf: { id: string; name: string } | undefined;
+        if (b.category !== undefined) {
+          try {
+            shelf = await resolveCategory(trx, b.category);
+          } catch (e) {
+            if (e instanceof UnknownCategoryError) return reply.code(422).send({ error: 'UNKNOWN_CATEGORY', message: e.message });
+            throw e;
+          }
+        }
         await trx
           .updateTable('supplierProducts')
           .set({
             ...(b.name !== undefined ? { name: b.name } : {}),
             ...(brand !== undefined ? { brand } : {}),
-            ...(b.category !== undefined ? { category: b.category } : {}),
+            ...(shelf ? { category: shelf.name, categoryId: shelf.id } : {}),
             ...(b.sku !== undefined ? { sku: b.sku } : {}),
             ...(b.ean !== undefined ? { ean: b.ean } : {}),
             ...(b.size !== undefined ? { size: b.size } : {}),
@@ -690,14 +701,22 @@ export function portalRoutes(app: FastifyInstance) {
     preHandler: [app.authenticateSupplier],
     schema: {
       body: PortalProductCreateSchema,
-      response: { 200: z.object({ id: z.uuid() }), 403: Err },
+      response: { 200: z.object({ id: z.uuid() }), 403: Err, 422: Err },
     },
     handler: async (req, reply) =>
       withSupplier(req.supplierClaims.sup, async (trx) => {
         if (!(await portalCan(trx, reply, req.supplierClaims.rol, 'po.catalog'))) return reply;
         const b = req.body;
-        // A brand the platform does not know yet is born here, in the supplier's name.
+        // A brand the platform does not know yet is born here, in the
+        // supplier's name; a category must be one of Velnes' shelves.
         const brand = (await ensureBrand(trx, req.supplierClaims.sup, b.brand)).name;
+        let shelf: { id: string; name: string };
+        try {
+          shelf = await resolveCategory(trx, b.category);
+        } catch (e) {
+          if (e instanceof UnknownCategoryError) return reply.code(422).send({ error: 'UNKNOWN_CATEGORY', message: e.message });
+          throw e;
+        }
         const row = await trx
           .insertInto('supplierProducts')
           .values({
@@ -713,7 +732,8 @@ export function portalRoutes(app: FastifyInstance) {
             moq: b.moq,
             stock: b.stock,
             use: b.use,
-            category: b.category,
+            category: shelf.name,
+            categoryId: shelf.id,
             descr: b.descr,
           })
           .returning('id')
@@ -724,6 +744,15 @@ export function portalRoutes(app: FastifyInstance) {
 
   // Every brand on the platform, the supplier's own first — what the
   // product panel offers; a new name typed there becomes a brand on save.
+  // Velnes' product shelves — the only categories a supplier product may stand on.
+  r.route({
+    method: 'GET',
+    url: '/portal/categories',
+    preHandler: [app.authenticateSupplier],
+    schema: { response: { 200: PortalCategoryListSchema } },
+    handler: async (req) => withSupplier(req.supplierClaims.sup, async (trx) => ({ categories: await productCategories(trx) })),
+  });
+
   r.route({
     method: 'GET',
     url: '/portal/brands',

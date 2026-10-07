@@ -486,15 +486,26 @@ describe('the supplier chain', () => {
     // A brand the platform does not know is born on the product panel
     // (2026-10-07): a platform row in the supplier's name, the link, and
     // a note to HQ; the same name in another spelling is the same brand.
-    const nb = await post(`${API_PREFIX}/portal/catalog`, { name: 'Bond builder', brand: '  Olaplex  Pro ', sku: 'OLX-1', buy: 900 }, bojanToken);
+    const nb = await post(`${API_PREFIX}/portal/catalog`, { name: 'Bond builder', brand: '  Olaplex  Pro ', category: 'hair care', sku: 'OLX-1', buy: 900 }, bojanToken);
     expect(nb.statusCode, nb.body).toBe(200);
     const brandRow = (await admin.query(`SELECT id, name, source, added_by_supplier_id FROM brands WHERE lower(name) = 'olaplex pro'`)).rows[0];
     expect(brandRow).toMatchObject({ name: 'Olaplex Pro', source: 'supplier' });
     expect((await admin.query(`SELECT 1 FROM supplier_brands WHERE brand_id=$1 AND supplier_id=$2`, [brandRow.id, brandRow.added_by_supplier_id])).rowCount).toBe(1);
     expect((await admin.query(`SELECT title FROM platform_notices WHERE audience='hq' AND kind='brand_added' AND ref_id=$1`, [brandRow.id])).rows[0]?.title).toBe('New brand: Olaplex Pro');
-    const nb2 = await post(`${API_PREFIX}/portal/catalog`, { name: 'Bond builder 2', brand: 'OLAPLEX PRO', sku: 'OLX-2', buy: 900 }, bojanToken);
+    const nb2 = await post(`${API_PREFIX}/portal/catalog`, { name: 'Bond builder 2', brand: 'OLAPLEX PRO', category: 'Hair care', sku: 'OLX-2', buy: 900 }, bojanToken);
     expect(nb2.statusCode).toBe(200);
     expect((await admin.query(`SELECT brand FROM supplier_products WHERE id=$1`, [(nb2.json() as { id: string }).id])).rows[0].brand).toBe('Olaplex Pro');
+    // The category is one of Velnes' shelves, in its canonical spelling and linked by id; an unknown one is refused.
+    const shelf = (await admin.query(`SELECT p.category, c.name FROM supplier_products p JOIN product_categories c ON c.id = p.category_id WHERE p.id=$1`, [(nb.json() as { id: string }).id])).rows[0];
+    expect(shelf).toEqual({ category: 'Hair care', name: 'Hair care' });
+    const unknown = await post(`${API_PREFIX}/portal/catalog`, { name: 'Nowhere', brand: 'Olaplex Pro', category: 'Clinic supplies', sku: 'OLX-3', buy: 900 }, bojanToken);
+    expect(unknown.statusCode).toBe(422);
+    expect((unknown.json() as { error: string }).error).toBe('UNKNOWN_CATEGORY');
+    expect((await patch(`${API_PREFIX}/portal/catalog/${(nb.json() as { id: string }).id}`, { category: 'Made up' })).statusCode).toBe(422);
+    expect((await patch(`${API_PREFIX}/portal/catalog/${(nb.json() as { id: string }).id}`, { category: 'SKIN CARE' })).statusCode).toBe(200);
+    expect((await admin.query(`SELECT category FROM supplier_products WHERE id=$1`, [(nb.json() as { id: string }).id])).rows[0].category).toBe('Skin care');
+    const shelves = (await get(`${API_PREFIX}/portal/categories`, bojanToken)).json() as { categories: string[] };
+    expect(shelves.categories).toEqual(expect.arrayContaining(['Hair care', 'Skin care', 'Supports']));
     expect((await admin.query(`SELECT count(*)::int AS c FROM brands WHERE lower(name)='olaplex pro'`)).rows[0].c).toBe(1);
     expect((await admin.query(`SELECT count(*)::int AS c FROM platform_notices WHERE kind='brand_added' AND ref_id=$1`, [brandRow.id])).rows[0].c).toBe(1);
     const offered = (await get(`${API_PREFIX}/portal/brands`, bojanToken)).json() as { brands: { name: string; carried: boolean }[] };
@@ -509,7 +520,7 @@ describe('the supplier chain', () => {
     // Create a throwaway product, edit every kind of field, delete it.
     const created = await post(
       `${API_PREFIX}/portal/catalog`,
-      { name: 'Test Widget', brand: 'Thera-Band', sku: 'TW-1', buy: 100 },
+      { name: 'Test Widget', brand: 'Thera-Band', category: 'Supports', sku: 'TW-1', buy: 100 },
       bojanToken,
     );
     expect(created.statusCode).toBe(200);

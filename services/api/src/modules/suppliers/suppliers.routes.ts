@@ -188,6 +188,7 @@ export function suppliersRoutes(app: FastifyInstance) {
             lead: p.lead,
             use: p.use,
             category: p.category,
+            categoryId: p.categoryId,
             descr: p.descr,
             sample: p.sample,
             linkedProductId: links.find((l) => l.supplierProductId === p.id)?.id ?? null,

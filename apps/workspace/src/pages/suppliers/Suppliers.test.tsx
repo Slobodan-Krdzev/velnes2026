@@ -32,7 +32,7 @@ const supplier = (over: Record<string, unknown> = {}) => ({
 const spRow = {
   id: SP1, supplierId: SUP1, brand: 'Thera-Band', name: 'Thera-Band resistance set, 3 levels',
   sku: 'TB-SET-03', ean: '', size: '3 bands', pack: 6, buy: 550, rrp: 990, vat: 18,
-  moq: 1, stock: 240, lead: '2 days', use: 'both', category: 'Home exercise', descr: '',
+  moq: 1, stock: 240, lead: '2 days', use: 'both', category: 'Home exercise', categoryId: null, descr: '',
   sample: false, linkedProductId: '70000000-0000-4000-8000-000000000001',
 };
 

@@ -388,10 +388,23 @@ supplier insert a brand only in its own name and link only itself.
 What stays deferred: renaming or merging brands (HQ, later), and a brand
 owner's claim on a name.
 
-The product's **Category** is a free-text label on the supplier's
-product. It is used in two places only: the portal's catalog table shows
-it, and a salon browsing a connected supplier's catalog sees the
-products grouped under it as section headings. It is not linked to the
-platform's service-category taxonomy nor to the salon's own product
-categories.
+## Categories: Velnes' shelves (2026-10-07)
+
+A supplier product's **Category** was free text, shown in the portal's
+catalog table and used by a salon browsing a connected supplier's
+catalog as the section heading. It is now one of the platform's product
+categories — `product_categories`, HQ's taxonomy, the same shelves a
+salon picks for its own products. `GET /portal/categories` lists them;
+the product panel offers them as a required select; the server
+(`resolveCategory`) matches the name case-insensitively, stores the
+canonical spelling in `category` and the link in `category_id`
+(migration `20261007210000_supplier_product_categories.sql`), and
+refuses an unknown name with `422 UNKNOWN_CATEGORY`. HQ renaming a shelf
+renames it on every supplier product by trigger. Existing products were
+matched by name; the two seeded texts that match no shelf ("Clinic
+supplies", "Wellness supplies") keep their text with no link, are
+flagged in the panel, and must be re-shelved on their next edit —
+nothing was invented into HQ's taxonomy. A supplier asks HQ for a
+missing shelf; a portal request door for that, like the salons' category
+requests, is deferred.
 

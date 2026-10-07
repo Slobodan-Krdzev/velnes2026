@@ -51,6 +51,8 @@ export const SupplierProductSchema = z.object({
   lead: z.string(),
   use: z.string(), // pro | retail | both
   category: z.string(),
+  /** The platform shelf (product_categories) the category names; null when the text matches none and the product must be re-shelved. */
+  categoryId: z.uuid().nullable(),
   descr: z.string(),
   sample: z.boolean(),
   active: z.boolean().optional(), // portal view only
@@ -181,6 +183,9 @@ export const PortalSalonListSchema = z.object({ salons: z.array(PortalSalonSchem
 /** Every brand on the platform, as the product panel offers it: the
  *  supplier's own first. A name not in this list, typed into the panel,
  *  becomes a new brand when the product is saved (2026-10-07). */
+/** The platform's product categories — the shelves a supplier product must stand on (2026-10-07). */
+export const PortalCategoryListSchema = z.object({ categories: z.array(z.string()) });
+
 export const PortalBrandListSchema = z.object({
   brands: z.array(z.object({ name: z.string(), carried: z.boolean() })),
 });

@@ -4,6 +4,7 @@ import {
   PO_SCOPES,
   PortalCompanySchema,
   PortalBrandListSchema,
+  PortalCategoryListSchema,
   PortalDashboardSchema,
   PortalNotificationListSchema,
   PortalProductCreateSchema,
@@ -745,10 +746,12 @@ function Catalog({
     onAsked?.();
   }, [asked, canEdit, onAsked]);
   const [brands, setBrands] = useState<string[]>([]);
+  const [categories, setCategories] = useState<string[]>([]);
   const reload = useCallback(() => {
     void pGet(SupplierProductListSchema, '/portal/catalog').then((r) => setRows(r.products));
-    // Every brand on the platform, this supplier's own first (2026-10-07).
+    // Every brand on the platform, this supplier's own first; Velnes' product shelves (2026-10-07).
     void pGet(PortalBrandListSchema, '/portal/brands').then((r) => setBrands(r.brands.map((b) => b.name)));
+    void pGet(PortalCategoryListSchema, '/portal/categories').then((r) => setCategories(r.categories));
   }, []);
   useEffect(reload, [reload]);
 
@@ -871,6 +874,7 @@ function Catalog({
         <ProductPanel
           product={edit === 'new' ? null : edit}
           brands={brands}
+          categories={categories}
           onClose={() => setEdit(null)}
           onSaved={(msg) => {
             setEdit(null);
@@ -981,12 +985,14 @@ function BulkPricePanel({
 function ProductPanel({
   product,
   brands,
+  categories,
   onClose,
   onSaved,
   say,
 }: {
   product: CatProduct | null;
   brands: string[];
+  categories: string[];
   onClose: () => void;
   onSaved: (msg: string) => void;
   say: (m: string) => void;
@@ -1016,7 +1022,8 @@ function ProductPanel({
     moq: String(product?.moq ?? 1), stock: String(product?.stock ?? 0), use: product?.use ?? 'both', descr: product?.descr ?? '',
   });
   const dirty = JSON.stringify(f) !== snap;
-  const valid = !!(f.name.trim() && f.brand.trim() && f.sku.trim() && f.buy.trim() !== '');
+  const categoryKnown = categories.includes(f.category);
+  const valid = !!(f.name.trim() && f.brand.trim() && categoryKnown && f.sku.trim() && f.buy.trim() !== '');
   // The brand field: the platform's list, or a new name typed in — which
   // becomes a brand when the product is saved (the server owns that).
   const NEW = '__new__';
@@ -1128,8 +1135,20 @@ function ProductPanel({
             {newBrand || !brands.length ? <span className="muted" style={{ display: 'block', fontSize: 12, marginTop: 4 }}>{t('po.brandHint')}</span> : null}
           </label>
           <label className="field">
-            <span>{t('po.category')}</span>
-            <input className="input" value={f.category} onChange={set('category')} />
+            <span>
+              {t('po.category')}
+              <span className="req">*</span>
+            </span>
+            <select className="select" style={{ width: '100%' }} value={categoryKnown ? f.category : f.category ? '__unknown__' : ''} aria-label={t('po.category')} onChange={(e) => setF((x) => ({ ...x, category: e.target.value === '__unknown__' ? x.category : e.target.value }))}>
+              <option value="" disabled>{t('po.categoryPick')}</option>
+              {!categoryKnown && f.category ? <option value="__unknown__" disabled>{t('po.categoryUnknown', { name: f.category })}</option> : null}
+              {categories.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+            <span className="muted" style={{ display: 'block', fontSize: 12, marginTop: 4 }}>{t('po.categoryHint')}</span>
           </label>
           <label className="field">
             <span>
