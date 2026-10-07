@@ -315,6 +315,7 @@ export function Shell() {
                           // the orders tab, a connection answer the suppliers.
                           else if (n.kind === 'supplier_order') navigate('/suppliers?tab=orders');
                           else if (n.kind === 'supplier_connection') navigate('/suppliers');
+                          else if (n.kind === 'supplier_promotion') navigate('/suppliers?tab=catalog');
                         }}
                       >
                         <span className="grow" style={{ textAlign: 'left' }}>

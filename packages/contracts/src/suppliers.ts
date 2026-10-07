@@ -139,6 +139,10 @@ export const SupplierPromotionSchema = z.object({
   audience: z.string(),
   value: z.number().int(),
   per: z.number().int(),
+  /** Paused by the supplier (2026-10-07): kept, but offered to nobody. */
+  active: z.boolean(),
+  /** Derived by the server from `active` and the dates — never stored. */
+  status: z.enum(['scheduled', 'running', 'paused', 'ended']),
 });
 export const SupplierPromotionListSchema = z.object({
   promotions: z.array(SupplierPromotionSchema),
@@ -286,6 +290,17 @@ export const PortalPromotionCreateSchema = z.object({
   terms: z.string().max(500).default(''),
   audience: z.string().max(120).default('Connected salons only'),
 });
+
+/** Edit a promotion (2026-10-07): any field of the offer, and pause / resume. */
+export const PortalPromotionPatchSchema = PortalPromotionCreateSchema.partial().extend({ active: z.boolean().optional() });
+
+/** The one derivation of a promotion's state. */
+export function promotionStatus(p: { active: boolean; starts: string; ends: string }, today: string): 'scheduled' | 'running' | 'paused' | 'ended' {
+  if (today > p.ends) return 'ended';
+  if (!p.active) return 'paused';
+  if (today < p.starts) return 'scheduled';
+  return 'running';
+}
 
 // ── Portal Settings: the supplier's own team + role kit. ─────────
 

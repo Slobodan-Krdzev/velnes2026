@@ -1,4 +1,5 @@
 import { brandsFor, ensureBrand, productCategories, resolveCategory, UnknownCategoryError } from './brands.service.js';
+import { notifyPromotion } from './suppliers.service.js';
 import { invoicePdf } from './invoice-pdf.service.js';
 import { env } from '../../env.js';
 import {
@@ -32,13 +33,15 @@ import {
   PortalCategoryListSchema,
   PortalCategoryRequestCreateSchema,
   PortalCategoryRequestListSchema,
+  PortalPromotionPatchSchema,
+  promotionStatus,
 } from '@velnes/contracts';
 import argon2 from 'argon2';
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { sql } from 'kysely';
 import { z } from 'zod';
-import { db, withSupplier, type Trx } from '../../db/index.js';
+import { db, withSupplier, withTenant, type Trx } from '../../db/index.js';
 import { AuthError } from '../auth/auth.service.js';
 import { localIso } from '../scheduling/scheduling.service.js';
 import { poTransition, SupplierError, toOrderContract,
@@ -567,6 +570,8 @@ export function portalRoutes(app: FastifyInstance) {
             audience: p.audience,
             value: p.value,
             per: p.per,
+            active: p.active,
+            status: promotionStatus({ active: p.active, starts: localIso(p.starts), ends: localIso(p.ends) }, localIso(new Date())),
           })),
         };
       }),
@@ -830,10 +835,10 @@ export function portalRoutes(app: FastifyInstance) {
       body: PortalPromotionCreateSchema,
       response: { 200: z.object({ id: z.uuid() }), 403: Err, 409: Err },
     },
-    handler: async (req, reply) =>
-      withSupplier(req.supplierClaims.sup, async (trx) => {
-        if (!(await portalCan(trx, reply, req.supplierClaims.rol, 'po.promotions'))) return reply;
-        const b = req.body;
+    handler: async (req, reply) => {
+      const b = req.body;
+      const made = await withSupplier(req.supplierClaims.sup, async (trx) => {
+        if (!(await portalCan(trx, reply, req.supplierClaims.rol, 'po.promotions'))) return null;
         // Brand follows the first chosen product; the products must be
         // the supplier's own (RLS also enforces this on insert).
         const first = await trx
@@ -842,8 +847,10 @@ export function portalRoutes(app: FastifyInstance) {
           .where('id', '=', b.productIds[0]!)
           .where('supplierId', '=', req.supplierClaims.sup)
           .executeTakeFirst();
-        if (!first)
-          return reply.code(409).send({ error: 'NO_PRODUCT', message: 'Pick your own products' });
+        if (!first) {
+          await reply.code(409).send({ error: 'NO_PRODUCT', message: 'Pick your own products' });
+          return null;
+        }
         const row = await trx
           .insertInto('supplierPromotions')
           .values({
@@ -861,7 +868,79 @@ export function portalRoutes(app: FastifyInstance) {
           })
           .returning('id')
           .executeTakeFirstOrThrow();
-        return { id: row.id };
+        const sup = await trx.selectFrom('suppliers').select('name').where('id', '=', req.supplierClaims.sup).executeTakeFirstOrThrow();
+        const salons = await trx.selectFrom('supplierConnections').select('tenantId').where('supplierId', '=', req.supplierClaims.sup).where('status', '=', 'connected').execute();
+        return { id: row.id, supplierName: sup.name, salons: salons.map((c) => c.tenantId) };
+      });
+      if (!made) return reply;
+      // Every connected salon hears about the offer — bell and mail —
+      // once the promotion is a fact, each in the salon's own context.
+      for (const tenantId of made.salons)
+        await withTenant(tenantId, (t) => notifyPromotion(t, tenantId, { id: made.id, title: b.title, starts: b.starts, ends: b.ends, supplierName: made.supplierName }));
+      return { id: made.id };
+    },
+  });
+
+  // Edit a promotion, pause it, resume it — the supplier's own, with the
+  // promotions right. A paused promotion is kept and offered to nobody.
+  r.route({
+    method: 'PATCH',
+    url: '/portal/promotions/:id',
+    preHandler: [app.authenticateSupplier],
+    schema: {
+      params: z.object({ id: z.uuid() }),
+      body: PortalPromotionPatchSchema,
+      response: { 200: z.object({ ok: z.literal(true) }), 403: Err, 404: Err, 409: Err },
+    },
+    handler: async (req, reply) =>
+      withSupplier(req.supplierClaims.sup, async (trx) => {
+        if (!(await portalCan(trx, reply, req.supplierClaims.rol, 'po.promotions'))) return reply;
+        const p = await trx.selectFrom('supplierPromotions').select(['id', 'starts', 'ends']).where('id', '=', req.params.id).where('supplierId', '=', req.supplierClaims.sup).executeTakeFirst();
+        if (!p) return reply.code(404).send({ error: 'NOT_FOUND', message: 'Unknown promotion' });
+        const b = req.body;
+        const starts = b.starts ?? localIso(p.starts);
+        const ends = b.ends ?? localIso(p.ends);
+        if (ends < starts) return reply.code(409).send({ error: 'DATES', message: 'The promotion cannot end before it starts' });
+        let brand: string | undefined;
+        if (b.productIds) {
+          const first = await trx.selectFrom('supplierProducts').select('brand').where('id', '=', b.productIds[0]!).where('supplierId', '=', req.supplierClaims.sup).executeTakeFirst();
+          if (!first) return reply.code(409).send({ error: 'NO_PRODUCT', message: 'Pick your own products' });
+          brand = first.brand;
+        }
+        await trx
+          .updateTable('supplierPromotions')
+          .set({
+            ...(b.title !== undefined ? { title: b.title } : {}),
+            ...(b.kind !== undefined ? { kind: b.kind } : {}),
+            ...(b.productIds !== undefined ? { productIds: b.productIds } : {}),
+            ...(brand !== undefined ? { brand } : {}),
+            ...(b.starts !== undefined ? { starts: b.starts } : {}),
+            ...(b.ends !== undefined ? { ends: b.ends } : {}),
+            ...(b.minOrder !== undefined ? { minOrder: b.minOrder } : {}),
+            ...(b.usageLimit !== undefined ? { usageLimit: b.usageLimit } : {}),
+            ...(b.terms !== undefined ? { terms: b.terms } : {}),
+            ...(b.audience !== undefined ? { audience: b.audience } : {}),
+            ...(b.active !== undefined ? { active: b.active } : {}),
+          })
+          .where('id', '=', req.params.id)
+          .execute();
+        return { ok: true as const };
+      }),
+  });
+
+  // Delete a promotion: an offer withdrawn. Nothing references a
+  // promotion (orders carry their own prices), so the row simply goes.
+  r.route({
+    method: 'DELETE',
+    url: '/portal/promotions/:id',
+    preHandler: [app.authenticateSupplier],
+    schema: { params: z.object({ id: z.uuid() }), response: { 200: z.object({ ok: z.literal(true) }), 403: Err, 404: Err } },
+    handler: async (req, reply) =>
+      withSupplier(req.supplierClaims.sup, async (trx) => {
+        if (!(await portalCan(trx, reply, req.supplierClaims.rol, 'po.promotions'))) return reply;
+        const gone = await trx.deleteFrom('supplierPromotions').where('id', '=', req.params.id).where('supplierId', '=', req.supplierClaims.sup).executeTakeFirst();
+        if (Number(gone.numDeletedRows) === 0) return reply.code(404).send({ error: 'NOT_FOUND', message: 'Unknown promotion' });
+        return { ok: true as const };
       }),
   });
 

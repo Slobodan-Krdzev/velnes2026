@@ -70,7 +70,7 @@ function mockApi(calls: { method: string; path: string; body?: unknown }[], orde
               brand: 'Thera-Band', title: 'Buy 10 resistance sets, receive 2 free', kind: 'bxgy',
               productIds: [SP1], starts: '2026-08-01', ends: '2026-08-31', minOrder: 0,
               usageLimit: 400, terms: 'Applies per order line.', audience: 'Connected salons only',
-              value: 2, per: 10,
+              value: 2, per: 10, active: true, status: 'running',
             },
           ],
         });

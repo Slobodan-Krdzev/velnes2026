@@ -418,3 +418,23 @@ bell, decline rings it with the reason; the panel lists the supplier's
 pending and recently decided requests. `GET /portal/category-requests`
 lists them.
 
+## Promotions: detail, pause, edit, delete, and the salons are told (2026-10-07)
+
+A promotion row opens its detail: type, value, products, period,
+minimum order, stock limit, audience, terms, and a status the server
+derives from `active` and the dates — scheduled, running, paused, ended
+(`promotionStatus` in contracts; never stored). With the promotions
+right the supplier can **pause** it (kept, offered to no salon — the
+salon-side list already filtered on `active`), **resume** it, **edit**
+every field in the same panel that creates one (`PATCH
+/portal/promotions/:id`; an end before the start is `409`), and
+**delete** it after a confirmation (`DELETE /portal/promotions/:id`;
+nothing references a promotion, orders carry their own prices). The
+header count is of running promotions only.
+
+Publishing a promotion now tells **every connected salon**: once the
+row is committed, each salon gets a `supplier_promotion` notice on its
+bell and a mail to its owner, in its own tenant context; the bell entry
+opens Suppliers → Catalog, where the offer sits. Edits and pauses do not
+re-notify — the offer is what the salon sees when it looks.
+

@@ -535,6 +535,31 @@ describe('the supplier chain', () => {
     await admin.query(`DELETE FROM supplier_brands WHERE brand_id=$1`, [brandRow.id]);
     await admin.query(`DELETE FROM brands WHERE id=$1`, [brandRow.id]);
 
+    // A promotion (2026-10-07): published, every connected salon is told
+    // (bell + mail); it can be paused, resumed, edited and deleted; a
+    // paused one is offered to nobody.
+    const prodForPromo = (await admin.query(`SELECT id FROM supplier_products WHERE supplier_id = (SELECT supplier_id FROM supplier_users WHERE email='bojan@beautypro.mk') LIMIT 1`)).rows[0].id as string;
+    const connectedSalons = (await admin.query(`SELECT tenant_id FROM supplier_connections WHERE status='connected' AND supplier_id = (SELECT supplier_id FROM supplier_users WHERE email='bojan@beautypro.mk')`)).rows.map((r) => r.tenant_id as string);
+    expect(connectedSalons.length).toBeGreaterThan(0);
+    const promo = await post(`${API_PREFIX}/portal/promotions`, { title: 'Autumn tape week', kind: 'pct', productIds: [prodForPromo], starts: '2026-10-01', ends: '2026-12-31', terms: '10% off' }, bojanToken);
+    expect(promo.statusCode, promo.body).toBe(200);
+    const promoId = (promo.json() as { id: string }).id;
+    const told = await admin.query(`SELECT tenant_id FROM platform_notices WHERE kind='supplier_promotion' AND ref_id=$1`, [promoId]);
+    expect(told.rows.map((r) => r.tenant_id).sort()).toEqual([...connectedSalons].sort());
+    expect((await admin.query(`SELECT count(*)::int AS c FROM mail_outbox WHERE kind='supplier_promotion' AND tenant_id = ANY($1::uuid[])`, [connectedSalons])).rows[0].c).toBeGreaterThanOrEqual(1);
+    const minePromos = (await get(`${API_PREFIX}/portal/promotions`, bojanToken)).json() as { promotions: { id: string; status: string; active: boolean }[] };
+    expect(minePromos.promotions.find((p) => p.id === promoId)).toMatchObject({ active: true, status: 'running' });
+    expect((await patch(`${API_PREFIX}/portal/promotions/${promoId}`, { active: false })).statusCode).toBe(200);
+    expect(((await get(`${API_PREFIX}/portal/promotions`, bojanToken)).json() as { promotions: { id: string; status: string }[] }).promotions.find((p) => p.id === promoId)?.status).toBe('paused');
+    const salonSees = (await get(`${API_PREFIX}/supplier-promotions`)).json() as { promotions: { id: string }[] };
+    expect(salonSees.promotions.some((p) => p.id === promoId)).toBe(false);
+    expect((await patch(`${API_PREFIX}/portal/promotions/${promoId}`, { active: true, title: 'Autumn tape fortnight', ends: '2026-11-30' })).statusCode).toBe(200);
+    expect((await admin.query(`SELECT title, ends::text, active FROM supplier_promotions WHERE id=$1`, [promoId])).rows[0]).toEqual({ title: 'Autumn tape fortnight', ends: '2026-11-30', active: true });
+    expect((await patch(`${API_PREFIX}/portal/promotions/${promoId}`, { ends: '2026-09-01' })).statusCode).toBe(409);
+    expect((await del(`${API_PREFIX}/portal/promotions/${promoId}`)).statusCode).toBe(200);
+    expect((await del(`${API_PREFIX}/portal/promotions/${promoId}`)).statusCode).toBe(404);
+    await admin.query(`DELETE FROM platform_notices WHERE ref_id=$1`, [promoId]);
+
     // Create a throwaway product, edit every kind of field, delete it.
     const created = await post(
       `${API_PREFIX}/portal/catalog`,

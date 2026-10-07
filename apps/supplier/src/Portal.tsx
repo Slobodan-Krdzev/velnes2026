@@ -17,6 +17,7 @@ import {
   PurchaseOrderListSchema,
   PurchaseOrderSchema,
   SupplierProductListSchema,
+  PortalPromotionPatchSchema,
   SupplierPromotionListSchema,
   SUPPORT_CATEGORIES,
   SupportTicketListSchema,
@@ -1705,6 +1706,8 @@ function Promotions({
   const [rows, setRows] = useState<z.infer<typeof SupplierPromotionListSchema>['promotions']>([]);
   const [products, setProducts] = useState<z.infer<typeof SupplierProductListSchema>['products']>([]);
   const [adding, setAdding] = useState(false);
+  const [open, setOpen] = useState<string | null>(null);
+  const [editing, setEditing] = useState<Promo | null>(null);
   const canAdd = user.role === 'sr_owner' || user.role === 'sr_account';
   useEffect(() => {
     if (asked !== 'add-promotion' || !canAdd) return;
@@ -1725,7 +1728,7 @@ function Promotions({
       <div className="toolbar">
         <div className="toolbar-context">
           <span className="k">{t('po.tabPromotions')}</span>
-          <span className="v">{t('po.runningCount', { n: rows.length })}</span>
+          <span className="v">{t('po.runningCount', { n: rows.filter((o) => o.status === 'running').length })}</span>
         </div>
         {canAdd ? (
           <div className="toolbar-actions">
@@ -1737,10 +1740,12 @@ function Promotions({
       </div>
       <div className="card">
         {rows.map((o) => (
-          <div className="rowcard" key={o.id}>
-            <span className="mark on">%</span>
+          <button type="button" className="rowcard" key={o.id} onClick={() => setOpen(o.id)} data-testid="promo-row" style={{ width: '100%', textAlign: 'left', cursor: 'pointer' }}>
+            <span className={`mark ${o.status === 'running' ? 'on' : ''}`}>%</span>
             <span className="grow">
-              <span className="t">{o.title}</span>
+              <span className="t">
+                {o.title} <span className={`badge ${o.status === 'running' ? 'success' : o.status === 'paused' ? 'warning' : ''}`} style={{ marginLeft: 6 }}>{t(`po.promoStatus.${o.status}`)}</span>
+              </span>
               <span className="s">
                 {o.productIds.map(prodName).join(', ')} · {dateShort(o.starts)} → {dateShort(o.ends)}
               </span>
@@ -1748,7 +1753,8 @@ function Promotions({
                 {o.audience} · {o.terms || '—'}
               </span>
             </span>
-          </div>
+            <Icon d={I.right} size={18} />
+          </button>
         ))}
         {rows.length === 0 ? (
           <p className="muted" style={{ padding: '16px 20px', fontWeight: 500 }}>
@@ -1759,14 +1765,39 @@ function Promotions({
           {t('po.promoNote')}
         </div>
       </div>
-      {adding ? (
+      {open && !editing ? (
+        <PromotionDetail
+          promo={rows.find((o) => o.id === open) ?? null}
+          prodName={prodName}
+          canEdit={canAdd}
+          onClose={() => setOpen(null)}
+          onEdit={(p) => setEditing(p)}
+          onChanged={(msg) => {
+            reload();
+            say(msg);
+          }}
+          onDeleted={() => {
+            setOpen(null);
+            reload();
+            say(t('po.promoDeleted'));
+          }}
+          say={say}
+        />
+      ) : null}
+      {adding || editing ? (
         <AddPromotionPanel
           products={products}
-          onClose={() => setAdding(false)}
-          onSaved={() => {
+          existing={editing}
+          onClose={() => {
             setAdding(false);
+            setEditing(null);
+          }}
+          onSaved={() => {
+            const wasEdit = !!editing;
+            setAdding(false);
+            setEditing(null);
             reload();
-            say(t('po.promoPublished'));
+            say(wasEdit ? t('po.promoUpdated') : t('po.promoPublished'));
           }}
           say={say}
         />
@@ -1775,29 +1806,156 @@ function Promotions({
   );
 }
 
+type Promo = z.infer<typeof SupplierPromotionListSchema>['promotions'][number];
+
+/** One promotion in full, with what the supplier may do to it: pause or
+ *  resume (kept, offered to nobody while paused), edit, delete. */
+function PromotionDetail({
+  promo,
+  prodName,
+  canEdit,
+  onClose,
+  onEdit,
+  onChanged,
+  onDeleted,
+  say,
+}: {
+  promo: Promo | null;
+  prodName: (id: string) => string;
+  canEdit: boolean;
+  onClose: () => void;
+  onEdit: (p: Promo) => void;
+  onChanged: (msg: string) => void;
+  onDeleted: () => void;
+  say: (m: string) => void;
+}) {
+  const { t } = useTranslation();
+  const [confirmDel, setConfirmDel] = useState(false);
+  const [busy, setBusy] = useState(false);
+  if (!promo) return null;
+  const kindLabel = t(`po.kind${promo.kind.charAt(0).toUpperCase()}${promo.kind.slice(1)}`, { defaultValue: promo.kind });
+  const value =
+    promo.kind === 'pct' && promo.value ? `${promo.value}%`
+    : promo.kind === 'bxgy' && promo.per ? `${promo.per} + ${promo.value}`
+    : promo.value ? String(promo.value) : '—';
+  const toggle = async () => {
+    setBusy(true);
+    try {
+      await pPatch(z.object({ ok: z.literal(true) }), `/portal/promotions/${promo.id}`, { active: !promo.active });
+      onChanged(promo.active ? t('po.promoPaused') : t('po.promoResumed'));
+    } catch (e) {
+      say(e instanceof PortalApiError ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const remove = async () => {
+    setBusy(true);
+    try {
+      await pDelete(z.object({ ok: z.literal(true) }), `/portal/promotions/${promo.id}`);
+      onDeleted();
+    } catch (e) {
+      say(e instanceof PortalApiError ? e.message : String(e));
+      setConfirmDel(false);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const Row = ({ k, v }: { k: string; v: string }) => (
+    <div className="kv" style={{ display: 'flex', justifyContent: 'space-between', gap: 16, padding: '6px 0', borderBottom: '1px solid var(--line, #eee)' }}>
+      <span className="muted">{k}</span>
+      <span style={{ textAlign: 'right' }}>{v}</span>
+    </div>
+  );
+  return (
+    <Panel onClose={onClose}>
+      <div className="panel-head plain">
+        <div>
+          <h2>{promo.title}</h2>
+          <p className="sub">
+            {t('po.promoDetailTitle')} · <span className={`badge ${promo.status === 'running' ? 'success' : promo.status === 'paused' ? 'warning' : ''}`} data-testid="promo-status">{t(`po.promoStatus.${promo.status}`)}</span>
+          </p>
+        </div>
+        <div className="panel-actions">
+          {canEdit && promo.status !== 'ended' ? (
+            <button className="btn btn-secondary btn-sm" disabled={busy} onClick={() => void toggle()} data-testid="promo-toggle">
+              {promo.active ? t('po.promoPause') : t('po.promoResume')}
+            </button>
+          ) : null}
+          {canEdit ? (
+            <button className="btn btn-primary btn-sm" disabled={busy} onClick={() => onEdit(promo)} data-testid="promo-edit">
+              {t('po.promoEdit')}
+            </button>
+          ) : null}
+          <button className="iconbtn" aria-label={t('po.cancel')} onClick={onClose}>
+            <Icon d={I.x} size={20} />
+          </button>
+        </div>
+      </div>
+      <div className="panel-body" data-testid="promo-detail">
+        <Row k={t('po.type')} v={kindLabel} />
+        <Row k={t('po.promoValue')} v={value} />
+        <Row k={t('po.promoProducts')} v={promo.productIds.map(prodName).join(', ')} />
+        <Row k={t('po.promoPeriod')} v={`${dateShort(promo.starts)} → ${dateShort(promo.ends)}`} />
+        <Row k={t('po.minimumOrder')} v={promo.minOrder ? money(promo.minOrder) : '—'} />
+        <Row k={t('po.promoUsageLimit')} v={promo.usageLimit ? String(promo.usageLimit) : t('po.promoNoLimit')} />
+        <Row k={t('po.promoAudience')} v={promo.audience} />
+        <Row k={t('po.promoTerms')} v={promo.terms || '—'} />
+        <div className="note" style={{ marginTop: 14 }}>{t('po.promoNote')}</div>
+        {canEdit ? (
+          <div className="rowcard" style={{ marginTop: 14 }}>
+            <span className="grow">
+              <span className="bold" style={{ display: 'block' }}>{t('po.promoDelete')}</span>
+              <span className="muted" style={{ fontSize: 12 }}>{t('po.promoDeleteSub')}</span>
+            </span>
+            {confirmDel ? (
+              <span style={{ display: 'inline-flex', gap: 6 }}>
+                <button className="btn btn-secondary btn-sm" disabled={busy} onClick={() => setConfirmDel(false)}>
+                  {t('po.cancel')}
+                </button>
+                <button className="btn btn-sm" style={{ background: 'var(--danger, #b3261e)', color: '#fff' }} disabled={busy} onClick={() => void remove()} data-testid="promo-delete-confirm">
+                  {t('po.promoDelete')}
+                </button>
+              </span>
+            ) : (
+              <button className="btn btn-secondary btn-sm" onClick={() => setConfirmDel(true)} data-testid="promo-delete">
+                {t('po.promoDelete')}
+              </button>
+            )}
+          </div>
+        ) : null}
+      </div>
+    </Panel>
+  );
+}
+
 function AddPromotionPanel({
   products,
+  existing = null,
   onClose,
   onSaved,
   say,
 }: {
   products: z.infer<typeof SupplierProductListSchema>['products'];
+  /** Editing this one (2026-10-07) — the same panel, PATCH instead of POST. */
+  existing?: Promo | null;
   onClose: () => void;
   onSaved: () => void;
   say: (m: string) => void;
 }) {
   const { t } = useTranslation();
+  const today = new Date().toISOString().slice(0, 10);
   const [f, setF] = useState({
-    title: '',
-    kind: 'pct' as 'pct' | 'amt' | 'tier' | 'bxgy' | 'gift' | 'bundle' | 'training',
-    min: '0',
-    from: '2026-08-10',
-    until: '2026-09-30',
-    limit: '0',
-    audience: 'All connected salons',
-    terms: '',
+    title: existing?.title ?? '',
+    kind: (existing?.kind ?? 'pct') as 'pct' | 'amt' | 'tier' | 'bxgy' | 'gift' | 'bundle' | 'training',
+    min: String(existing?.minOrder ?? 0),
+    from: existing?.starts ?? today,
+    until: existing?.ends ?? today,
+    limit: String(existing?.usageLimit ?? 0),
+    audience: existing?.audience ?? 'All connected salons',
+    terms: existing?.terms ?? '',
   });
-  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [picked, setPicked] = useState<Set<string>>(new Set(existing?.productIds ?? []));
   const dirty = f.title.trim() !== '' || picked.size > 0;
   const valid = f.title.trim() !== '' && picked.size > 0;
 
@@ -1819,7 +1977,7 @@ function AddPromotionPanel({
       return;
     }
     try {
-      await pPost(z.object({ id: z.string() }), '/portal/promotions', {
+      const body = {
         title: f.title.trim(),
         kind: f.kind,
         productIds: [...picked],
@@ -1829,7 +1987,9 @@ function AddPromotionPanel({
         usageLimit: Number(f.limit) || 0,
         terms: f.terms.trim(),
         audience: f.audience,
-      });
+      };
+      if (existing) await pPatch(z.object({ ok: z.literal(true) }), `/portal/promotions/${existing.id}`, PortalPromotionPatchSchema.parse(body));
+      else await pPost(z.object({ id: z.string() }), '/portal/promotions', body);
       onSaved();
     } catch (e) {
       say(e instanceof PortalApiError ? e.message : String(e));
@@ -1840,15 +2000,15 @@ function AddPromotionPanel({
     <Panel onClose={onClose}>
       <div className="panel-head plain">
         <div>
-          <h2>{t('po.createPromoTitle')}</h2>
-          <p className="sub">{t('po.createPromoSub')}</p>
+          <h2>{existing ? t('po.editPromoTitle') : t('po.createPromoTitle')}</h2>
+          <p className="sub">{existing ? t('po.promoNote') : t('po.createPromoSub')}</p>
         </div>
         <div className="panel-actions">
           <span className={`panel-status${dirty ? ' warn' : ''}`}>
             {dirty ? t('drawer.statusUnsaved') : t('drawer.statusSaved')}
           </span>
           <button className="btn btn-primary btn-sm" disabled={!valid} onClick={() => void save()}>
-            {t('po.publishPromo')}
+            {existing ? t('po.savePromo') : t('po.publishPromo')}
           </button>
           <button className="iconbtn" aria-label={t('po.cancel')} onClick={onClose}>
             <Icon d={I.x} size={20} />
@@ -1950,7 +2110,7 @@ function AddPromotionPanel({
             onChange={(e) => setF({ ...f, terms: e.target.value })}
           />
         </label>
-        <div className="note">{t('po.addPromoNote')}</div>
+        <div className="note">{existing ? t('po.addPromoNote') : `${t('po.addPromoNote')} ${t('po.promoNotified')}`}</div>
       </div>
     </Panel>
   );

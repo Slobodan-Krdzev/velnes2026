@@ -100,7 +100,15 @@ function mockApi(calls: { method: string; path: string; body?: unknown }[]) {
           }],
         });
       if (path.includes('/portal/catalog')) return ok({ id: 'new', ok: true, updated: 1 });
-      if (path.includes('/portal/promotions')) return ok({ promotions: [] });
+      if (path.includes('/portal/promotions/') && (method === 'PATCH' || method === 'DELETE')) return ok({ ok: true });
+      if (path.includes('/portal/promotions'))
+        return ok({
+          promotions: [{
+            id: 'f1000000-0000-4000-8000-000000000001', supplierId: SUP1, supplierName: 'BeautyPro MK', brand: 'Thera-Band', title: 'Buy 10 resistance sets, receive 2 free',
+            kind: 'bxgy', productIds: ['d2000000-0000-4000-8000-000000000001'], starts: '2026-08-21', ends: '2026-09-18', minOrder: 0, usageLimit: 0,
+            terms: 'Applies per order line.', audience: 'Connected salons only', value: 2, per: 10, active: true, status: 'running',
+          }],
+        });
       return new Response('{}', { status: 404 });
     }),
   );
@@ -349,5 +357,25 @@ describe('the supplier portal', () => {
     await userEvent.type(screen.getByLabelText(/Why it is needed/), 'Towels and candles');
     await userEvent.click(screen.getByRole('button', { name: 'Send request' }));
     await waitFor(() => expect(calls.find((c) => c.method === 'POST' && c.path.endsWith('/portal/category-requests'))?.body).toEqual({ name: 'Wellness supplies', note: 'Towels and candles' }));
+  });
+
+  it('promotions: a row opens its detail; pause PATCHes active=false; delete asks first, then DELETEs', async () => {
+    const calls: { method: string; path: string; body?: unknown }[] = [];
+    mockApi(calls);
+    await signIn();
+    await userEvent.click(screen.getByRole('button', { name: 'Promotions' }));
+    await userEvent.click(await screen.findByTestId('promo-row'));
+    const detail = await screen.findByTestId('promo-detail');
+    expect(detail.textContent).toContain('Buy X, get Y free');
+    expect(detail.textContent).toContain('10 + 2');
+    expect(detail.textContent).toContain('Thera-Band resistance set, 3 levels');
+    expect(detail.textContent).toContain('21.8.2026 → 18.9.2026');
+    expect(screen.getByTestId('promo-status').textContent).toBe('Running');
+    await userEvent.click(screen.getByTestId('promo-toggle'));
+    await waitFor(() => expect(calls.find((c) => c.method === 'PATCH' && c.path.includes('/portal/promotions/'))?.body).toEqual({ active: false }));
+    await userEvent.click(screen.getByTestId('promo-delete'));
+    expect(calls.some((c) => c.method === 'DELETE')).toBe(false);
+    await userEvent.click(screen.getByTestId('promo-delete-confirm'));
+    await waitFor(() => expect(calls.some((c) => c.method === 'DELETE' && c.path.includes('/portal/promotions/'))).toBe(true));
   });
 });

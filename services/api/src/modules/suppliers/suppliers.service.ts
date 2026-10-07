@@ -116,7 +116,7 @@ export async function tellSupplier(
 /** Ring the salon's bell and mail its owner. Tenant context required. */
 export async function tellSalon(
   trx: Trx,
-  q: { tenantId: string; kind: 'supplier_order' | 'supplier_connection'; title: string; body: string; refId: string; mailKind: string; ctaPath: string },
+  q: { tenantId: string; kind: 'supplier_order' | 'supplier_connection' | 'supplier_promotion'; title: string; body: string; refId: string; mailKind: string; ctaPath: string },
 ) {
   await trx
     .insertInto('platformNotices')
@@ -164,6 +164,20 @@ export async function notifyConnectionDecided(trx: Trx, tenantId: string, suppli
     refId: supplierId,
     mailKind: accepted ? 'connection_accepted' : 'connection_declined',
     ctaPath: '/suppliers',
+  });
+}
+
+/** A supplier published a promotion (2026-10-07): every connected salon
+ *  hears it — bell and mail. Caller sets the salon's tenant context. */
+export async function notifyPromotion(trx: Trx, tenantId: string, promo: { id: string; title: string; starts: string; ends: string; supplierName: string }) {
+  await tellSalon(trx, {
+    tenantId,
+    kind: 'supplier_promotion',
+    title: `${promo.supplierName}: ${promo.title}`,
+    body: `${promo.supplierName} published a promotion, ${promo.starts} to ${promo.ends}. See it under Suppliers → Catalog; nothing changes in your prices or till unless you order it.`,
+    refId: promo.id,
+    mailKind: 'supplier_promotion',
+    ctaPath: '/suppliers?tab=catalog',
   });
 }
 

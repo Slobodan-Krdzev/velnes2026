@@ -8,6 +8,7 @@ import {
   SupplierListSchema,
   SupplierProductListSchema,
   SupplierPromotionListSchema,
+  promotionStatus,
 } from '@velnes/contracts';
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
@@ -342,6 +343,8 @@ export function suppliersRoutes(app: FastifyInstance) {
             audience: p.audience,
             value: p.value,
             per: p.per,
+            active: p.active,
+            status: promotionStatus({ active: p.active, starts: localIso(p.starts), ends: localIso(p.ends) }, localIso(new Date())),
           })),
         };
       }),
