@@ -147,6 +147,7 @@ function doc(over: Partial<BillingInvoice> & { specs?: LineSpec[]; vat?: boolean
     })),
     buyerCompleteness: { complete: true, missing: [], invalid: [] },
     issueReadiness: { ready: true, problems: [], warnings: [] },
+    payment: { grossMinor: sum('grossMinor'), paidMinor: 0, outstandingMinor: sum('grossMinor'), state: 'unpaid', count: 0 },
     issuedBy: { id: '40000000-0000-4000-8000-000000000001', name: 'Maria Petrovska' },
     events: [],
     notes: '',

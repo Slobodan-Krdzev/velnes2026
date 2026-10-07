@@ -336,7 +336,7 @@ describe('accounting invoice drafts', () => {
       await expect(admin.query(`DELETE FROM billing_invoice_lines WHERE invoice_id=$1`, [d.id])).rejects.toThrow(/frozen/);
       // Phase 3 froze the notes too: an issued document's text is history; a later word belongs in its events.
       await expect(admin.query(`UPDATE billing_invoices SET notes = 'a note may still be added' WHERE id=$1`, [d.id])).rejects.toThrow(/frozen/);
-      await admin.query(`UPDATE billing_invoices SET pdf_sha256 = 'cache columns stay writable' WHERE id=$1`, [d.id]);
+      await admin.query(`UPDATE billing_invoices SET pdf_sha256 = 'cache columns stay writable', pdf_renderer = 'test' WHERE id=$1`, [d.id]);
       // Nor can it go back to being a draft.
       await expect(admin.query(`UPDATE billing_invoices SET status='draft' WHERE id=$1`, [d.id])).rejects.toThrow(/frozen/);
     });

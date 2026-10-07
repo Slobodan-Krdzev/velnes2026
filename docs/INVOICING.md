@@ -552,16 +552,155 @@ writes its sample documents for a visual pass; the six requested
 
 ### Deferred, honestly
 
-Payments (5), credit notes (6), auto-issue (7), email (8 — the PDF
-door is reusable by it). **Renderer changes after go-live**: the
-canonical hash binds a document to this renderer version; any later
-change to layout or fonts would make existing documents fail the
-integrity check by design. Before the first production invoice the
-rule is needed: version the renderer and keep old versions for old
-documents, or re-establish under an HQ-audited step. Until then,
-`RENDERER_VERSION` records which one rendered what. The dev documents
-rendered during this build were re-established once after the layout
-was corrected, before any production use. Page sizes other than A4,
+Payments (5 — **built**, below), credit notes (6), auto-issue (7),
+email (8 — the PDF door is reusable by it). Page sizes other than A4,
 a second currency's formatting conventions and the HQ cross-tenant
 list of issued documents remain open.
+
+### Phase 4 follow-up — the renderer binding (2026-10-07)
+
+The canonical hash binds a document to the renderer that produced it,
+and that binding is now a fact of the row: `billing_invoices.pdf_renderer`
+is written together with `pdf_sha256`, once, in the same atomic claim
+(a CHECK says both are set or neither). The frozen-row trigger refuses
+any later change to either — clearing, re-establishing, rebinding —
+for everyone, the database owner included. There is no HQ door, no
+API and no supported operation that resets a hash. The registry in
+`renderers.ts` maps a version to its renderer; `rendererFor(version)`
+returns the bound one and throws for one this build does not carry,
+which the PDF door answers as `500 INTEGRITY` — never a fallback to the
+current layout. The rule for a layout change: copy the renderer to a
+new module with a new version string, register it as current, never
+edit a registered version again. The documents hashed before the
+column existed were bound to `2026.10.07-1` by the migration, the only
+version there has ever been. A real-size JPEG logo (the format the
+profile stores) was issued and rendered on dev and inspected.
+
+## Phase 5 — the payment ledger
+
+Built 2026-10-07. Velnes processes no money in this phase and
+pretends to none: the ledger is the accounting record of money
+received against an issued document, from two sources today and a
+third reserved for real providers later. No payment intent, no
+authorization, no capture, no webhook, no token exists anywhere.
+
+### `billing_payments` (migration `20261007180000_billing_phase5_payments.sql`)
+
+One row per payment: tenant, invoice, `amount_minor` (CHECK > 0 — a
+reversal is phase 6's credit note, never a negative row), currency,
+`method` (the till's six: Cash, Card, Gift card, Bank transfer, Online
+card, Apple Pay — a recorded method, never a processed one), `source`
+(`sale` | `manual` | `provider`), `paid_at` (the moment the money was
+received) and `paid_on` (that moment as the location's business day),
+`reference`, `provider` and `provider_payment_id` (reserved, NULL),
+`origin_sale_id`, `origin_key` (unique per tenant: `sale:<id>:tender`,
+`sale:<id>:gift`, `manual:<key>`), note, who recorded it, `created_at`
+(when Velnes learned of it — a different fact from `paid_at`). Triggers:
+UPDATE and DELETE refused for everyone (append-only); INSERT refused
+unless the document is issued and the currency is the document's.
+`billing_invoices.paid_minor` is the ledger's cache, recomputed under
+the invoice's row lock by the two writers below and CHECKed to stay
+within `[0, gross]`; the state is derived, never stored.
+
+### Sources
+
+- **sale** — the originating till sale's own tender, imported by the
+  issue door inside its transaction after the row became issued: the
+  gift card redeemed as one row (method Gift card), the rest of the
+  gross as the sale's method; dated the sale's moment, `paid_on` the
+  sale's day at the location, reference the sale number. Evidence of
+  money that changed hands at the till, not a payment Velnes
+  processed. Only when the sale is still Paid and reconciles with the
+  document (gross = total − tip − service charge + gift); the tip is
+  never part of it. Idempotent by origin key: a retried issue finds
+  its rows. The till stores one method plus the gift amount, so that
+  is what the ledger shows; no split is invented.
+- **manual** — `POST /billing/invoices/:id/payments` with
+  `billing.record_payment`: staff say money was received outside
+  Velnes. The body carries amount, method, the day received, an
+  optional reference and note, and a key; the source is the server's
+  and is always `manual`. Refused: more than what is outstanding
+  (`422 OVERPAYMENT` with outstanding, paid and gross), zero or
+  negative, a draft, a currency other than the document's (not
+  converted, refused), a future day, a key already used on another
+  document (`409`). A retry with the same key returns the same row.
+  Today's payment keeps the moment; an earlier day is recorded as
+  that day's start at the location. The document is locked `FOR
+  UPDATE` for the whole check-and-insert, so two desks against the
+  same outstanding take turns and the second is refused.
+- **provider** — reserved. A future real provider's verified event
+  will write a row with `provider` and `provider_payment_id` (unique
+  per tenant) through server code; no door lets a client claim it.
+
+### State
+
+`derivePaymentState(gross, paid)`: `unpaid` at zero, `partially_paid`
+between, `paid` at the gross. `GET /billing/invoices/:id` carries
+`payment` (gross, paid, outstanding, state, count); the list rows
+carry `paidMinor` and `paymentState`, and `?payment=unpaid|paid|
+partially_paid` filters issued documents by it (Unpaid includes
+partially paid). `GET /billing/invoices/:id/payments` returns the
+ledger with the summary.
+
+### Rights
+
+`billing.record_payment` (none/location/locations/business) is in the
+vocabulary and in `ownerPermMap`. The migration grants it to
+owner-shaped roles at business and to roles that hold `pos.checkout`
+at that scope — the desk that takes money at the till records money
+received; the Employee kit has it at location. Reading the ledger is
+`billing.read`.
+
+### Backfill
+
+Documents issued before the ledger existed were given their
+sale-origin rows by the migration, only where the sale exists, is
+Paid and reconciles exactly; anything else was left unpaid for a
+person to look at. Idempotent (origin keys, `NOT EXISTS`). On dev the
+one issued document qualified and reads as paid.
+
+### Workspace
+
+Issued detail: a payment block (invoice total, paid, outstanding, the
+state badge), the ledger as a table (date, method, source — "POS sale
+· AER-2026-0010" or "Recorded by staff" —, reference, amount), and
+for holders of the right **Record payment**: a modal that says "This
+records a payment received outside Velnes. Velnes will not process or
+transfer money.", defaults the amount to what is outstanding, takes
+method, payment date (today at the location, no later), reference and
+note, and shows the server's refusal with the outstanding figure. No
+edit, no delete; the note under the ledger says a mistake is corrected
+by a credit note later. The list shows the payment state beside Issued,
+and the Unpaid and Paid tabs are live. A draft shows no payment block.
+
+### The canonical PDF is untouched
+
+Recording a payment changes no byte of the document: the test renders
+before, records, renders after — identical bytes, hash and binding
+unchanged. No PAID stamp, no payment history on the canonical
+invoice; a receipt or a statement would be a separate artifact later.
+
+### Tests
+
+`payments.test.ts` (13): the derivation; sale-origin on issue (method,
+amount, day, tip outside, the list and the Paid tab), the gift card as
+its own row, the issue retry not duplicating; full and partial manual
+payments, today's moment, no reference for cash, the same-key replay,
+every refusal with the figures, two desks at once; the Employee kit
+recording, billing.read alone refused, another salon; the row
+immutable, the document frozen, the cache within the gross, the PDF
+byte-identical after payment; a payment on a draft, a foreign
+currency and a negative amount refused at the database; the renderer
+binding permanent and an unregistered version refused. Workspace:
+five cases (summary and ledger, no block on a draft, the modal and the
+record flow to Paid, the overpayment refusal, no right).
+
+### Deferred, honestly
+
+Credit notes and reversals (6): a payment recorded by mistake has no
+correction in this phase, by decision. Real providers (`source =
+provider`): schema only. Multi-currency settlement, part-payment
+allocation across several documents, a payment receipt document, and
+the till's own refund interplay with the ledger wait for phase 6 and
+the provider design.
 

@@ -24,10 +24,12 @@ import { logAudit } from '../audit/audit.service.js';
 
 export class BillingError extends Error {
   constructor(
-    public code: 'NOT_FOUND' | 'INVALID' | 'ISSUE_BLOCKED' | 'CONFLICT' | 'INTEGRITY',
+    public code: 'NOT_FOUND' | 'INVALID' | 'ISSUE_BLOCKED' | 'CONFLICT' | 'INTEGRITY' | 'OVERPAYMENT',
     message: string,
     /** For ISSUE_BLOCKED: what the issue door found wrong, structured. */
     public problems: BillingIssueProblem[] = [],
+    /** For OVERPAYMENT: the figures the refusal rests on. */
+    public extra: Record<string, number | string> = {},
   ) {
     super(message);
   }

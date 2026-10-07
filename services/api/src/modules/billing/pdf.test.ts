@@ -5,6 +5,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { closeDb } from '../../db/index.js';
 import { demo } from '../../db/seed-demo.js';
 import { buildServer } from '../../server.js';
+import { CURRENT_RENDERER_VERSION } from './renderers.js';
 
 /**
  * The canonical PDF door (phase 4, 2026-10-07) — docs/INVOICING.md
@@ -118,7 +119,7 @@ describe('the canonical invoice PDF', () => {
       expect(await pdfEvents(id)).toEqual([expect.objectContaining({ sha256: h, bytes: bytes.length, lang: 'mk', logo: 'embedded' })]);
       const doc = BillingInvoiceSchema.parse((await call(maria, 'GET', `/billing/invoices/${id}`)).json());
       expect(doc.pdfSha256).toBe(h);
-      expect(doc.events.map((e) => e.kind)).toEqual(['created', 'issued', 'pdf']);
+      expect(doc.events.map((e) => e.kind)).toEqual(['created', 'issued', 'payment', 'pdf']); // phase 5: the sale's tender follows the issue
     });
     it('three more renders reproduce the same bytes; download is the same document with another disposition; no new event', async () => {
       for (let i = 0; i < 3; i++) {
@@ -222,23 +223,25 @@ describe('the canonical invoice PDF', () => {
 
   describe('integrity', () => {
     it('a stored hash the render no longer reproduces is refused, recorded, and never overwritten', async () => {
+      // The hash is permanent once set, so the only way to stage a mismatch
+      // is a wrong hash written before the first render — as a corrupted
+      // or tampered row would carry.
       const issued = await issue((await draft()).id);
-      const ok = await pdf(issued.id);
-      expect(ok.statusCode).toBe(200);
-      const h = sha(ok.rawPayload);
-      await admin.query(`UPDATE billing_invoices SET pdf_sha256 = $2 WHERE id=$1`, [issued.id, 'deadbeef'.repeat(8)]);
+      const wrong = 'deadbeef'.repeat(8);
+      await admin.query(`UPDATE billing_invoices SET pdf_sha256 = $2, pdf_renderer = $3 WHERE id=$1`, [issued.id, wrong, CURRENT_RENDERER_VERSION]);
       const res = await pdf(issued.id);
       expect(res.statusCode).toBe(500);
       expect(res.json().error).toBe('INTEGRITY');
       expect(res.headers['content-type']).not.toBe('application/pdf');
-      expect(await storedSha(issued.id)).toBe('deadbeef'.repeat(8));
+      expect(await storedSha(issued.id)).toBe(wrong);
       const audit = await admin.query(`SELECT before, after FROM audit_log WHERE tenant_id=$1 AND action='Invoice PDF integrity failure' AND object=$2 AND ts >= $3`, [demo.business, `Invoice · ${issued.number}`, started]);
       expect(audit.rowCount).toBe(1);
-      expect(audit.rows[0]).toEqual({ before: 'deadbeef'.repeat(8), after: h });
-      expect((await pdfEvents(issued.id)).at(-1)).toMatchObject({ integrity: 'mismatch', expected: 'deadbeef'.repeat(8), rendered: h });
-      // The historical hash restored, the document serves again.
-      await admin.query(`UPDATE billing_invoices SET pdf_sha256 = $2 WHERE id=$1`, [issued.id, h]);
-      expect((await pdf(issued.id)).statusCode).toBe(200);
+      expect(audit.rows[0].before).toBe(wrong);
+      expect(audit.rows[0].after).toMatch(/^[0-9a-f]{64}$/);
+      expect((await pdfEvents(issued.id)).at(-1)).toMatchObject({ integrity: 'mismatch', expected: wrong });
+      // And it stays refused: there is no door, and no UPDATE, that re-establishes a hash.
+      await expect(admin.query(`UPDATE billing_invoices SET pdf_sha256 = NULL, pdf_renderer = NULL WHERE id=$1`, [issued.id])).rejects.toThrow(/permanent/);
+      expect((await pdf(issued.id)).statusCode).toBe(500);
     });
     it('a missing frozen logo asset is an integrity failure, not a fallback to the current logo', async () => {
       const issued = await issue((await draft()).id);

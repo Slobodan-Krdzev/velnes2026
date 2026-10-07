@@ -770,8 +770,18 @@ door + UI + tests + seed + docs paragraph; each shippable alone)
    the `pdf` event because the canonical hash binds documents to a
    renderer version — the rule for renderer changes after go-live is
    the open decision carried into phase 5.
-5. **Payments**: `billing_payments`, record payment, derived statuses,
-   link from the sale's merchant transaction, Unpaid/Paid tabs.
+5. **Payments** — **built 2026-10-07** (`docs/INVOICING.md` "Phase 5").
+   Settled against the analysis: the ledger carries an explicit
+   `source` beside the method (`sale` imported by the issue door from
+   the till's own tender, `manual` recorded by staff, `provider`
+   reserved) and positive amounts only; `paid_minor` is a cache
+   recomputed under the invoice's lock and CHECKed within the gross;
+   the state is derived; overpayment is refused with the figures; rows
+   are append-only by trigger; the link to the merchant transaction
+   was not needed (the sale is the origin); `billing.record_payment`
+   goes to owner-shaped and till roles. The phase-4 renderer binding
+   (`pdf_renderer`, permanent with the hash, a registry of versions)
+   landed with it.
 6. **Credit notes and refunds**: KO series, full/partial, negative
    payments, cancellation flow integration, void for drafts.
 7. **Issue mode `auto`** and the till receipt pane link; consumer

@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { BILLING_LANGS, BillingInvoiceListSchema, BillingInvoiceSchema, BillingLogoSchema, type BillingInvoice, type BillingIssueProblem, type BillingLang } from '@velnes/contracts';
+import { BILLING_LANGS, BILLING_PAYMENT_METHODS, BillingInvoiceListSchema, BillingInvoiceSchema, BillingLogoSchema, BillingPaymentListSchema, type BillingInvoice, type BillingIssueProblem, type BillingLang, type BillingPayment, type BillingPaymentSummary } from '@velnes/contracts';
 import { I, Icon } from '@velnes/ui';
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -20,7 +20,7 @@ import { useToast } from '../../lib/toast.js';
  */
 const STATUS_TABS = ['all', 'draft', 'issued', 'unpaid', 'paid', 'credited'] as const;
 type StatusTab = (typeof STATUS_TABS)[number];
-const LIVE_TABS: StatusTab[] = ['all', 'draft', 'issued'];
+const LIVE_TABS: StatusTab[] = ['all', 'draft', 'issued', 'unpaid', 'paid'];
 const newKey = () => (crypto.randomUUID ? crypto.randomUUID() : String(Math.random()).slice(2) + Date.now());
 
 const dateShort = (iso: string) => {
@@ -40,6 +40,7 @@ function InvoiceList() {
   const [q, setQ] = useState('');
   const query = new URLSearchParams();
   if (tab === 'draft' || tab === 'issued') query.set('status', tab);
+  if (tab === 'unpaid' || tab === 'paid') query.set('payment', tab);
   if (q.trim()) query.set('q', q.trim());
   const list = useQuery({
     queryKey: ['billingInvoices', tab, q],
@@ -102,6 +103,11 @@ function InvoiceList() {
                   <td className="right bold tnum">{moneyMinor(r.totals.grossMinor, r.currency)}</td>
                   <td>
                     <span className={`badge ${r.status === 'draft' ? 'warning' : r.status === 'issued' ? 'success' : 'danger'}`}>{t(`inv.status.${r.status}`)}</span>
+                    {r.status === 'issued' ? (
+                      <span className={`badge ${r.paymentState === 'paid' ? 'success' : r.paymentState === 'partially_paid' ? 'warning' : 'danger'}`} style={{ marginLeft: 6 }} data-testid="row-payment">
+                        {t(`inv.pstate.${r.paymentState}`)}
+                      </span>
+                    ) : null}
                   </td>
                 </tr>
               ))}
@@ -135,6 +141,12 @@ function DocDetail({ id }: { id: string }) {
   // sends the same key and gets the same issued document back.
   const issueKey = useMemo(() => newKey(), []);
   const [pdfBusy, setPdfBusy] = useState<'preview' | 'download' | null>(null);
+  const [recording, setRecording] = useState(false);
+  const payments = useQuery({
+    queryKey: ['billingPayments', id],
+    queryFn: () => get(BillingPaymentListSchema, `/billing/invoices/${id}/payments`),
+    enabled: q.data?.status === 'issued',
+  });
   const d = q.data;
   if (!d) return null;
 
@@ -381,6 +393,16 @@ function DocDetail({ id }: { id: string }) {
           </div>
         </div>
 
+        {issued ? (
+          <PaymentBlock
+            doc={d}
+            summary={payments.data?.summary ?? d.payment}
+            payments={payments.data?.payments ?? []}
+            mayRecord={can('billing.record_payment')}
+            onRecord={() => setRecording(true)}
+          />
+        ) : null}
+
         <div className={`note ${issued ? '' : ''}`} style={{ margin: '0 20px 20px' }} data-testid="doc-note">
           {issued ? t('inv.issuedNote') : t('inv.draftNote')}
           {d.notes ? <div style={{ marginTop: 6 }}>{d.notes}</div> : null}
@@ -410,6 +432,20 @@ function DocDetail({ id }: { id: string }) {
         ) : null}
       </div>
 
+      {recording ? (
+        <RecordPaymentModal
+          doc={d}
+          summary={payments.data?.summary ?? d.payment}
+          onDone={(list) => {
+            qc.setQueryData(['billingPayments', id], list);
+            qc.setQueryData(['billingInvoice', id], { ...d, payment: list.summary });
+            void qc.invalidateQueries({ queryKey: ['billingInvoices'] });
+            void qc.invalidateQueries({ queryKey: ['billingInvoice', id] });
+            setRecording(false);
+          }}
+          onClose={() => setRecording(false)}
+        />
+      ) : null}
       {confirming ? (
         <IssueModal
           doc={d}
@@ -478,6 +514,165 @@ function IssueModal({
           <button className="btn btn-ghost" onClick={onClose} disabled={busy}>{t('common.cancel')}</button>
           <button className="btn btn-primary" onClick={onIssue} disabled={busy || problems.length > 0} data-testid="issue-confirm">
             {busy ? t('inv.issueBusy') : t('inv.issueConfirm')}
+          </button>
+        </div>
+        <button className="modal-close" aria-label={t('common.close')} onClick={onClose} disabled={busy}>
+          <Icon d={I.x} size={20} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** Money received against the document: the server's summary and
+ *  ledger, rendered — nothing is summed here. */
+function PaymentBlock({
+  doc,
+  summary,
+  payments,
+  mayRecord,
+  onRecord,
+}: {
+  doc: BillingInvoice;
+  summary: BillingPaymentSummary;
+  payments: BillingPayment[];
+  mayRecord: boolean;
+  onRecord: () => void;
+}) {
+  const { t } = useTranslation();
+  const m = (v: number) => moneyMinor(v, doc.currency);
+  const badge = summary.state === 'paid' ? 'success' : summary.state === 'partially_paid' ? 'warning' : 'danger';
+  return (
+    <div style={{ padding: '0 20px 20px' }} data-testid="payment-block">
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
+        <div>
+          <span className="stat-label">{t('inv.pay.title')}</span>
+          <div className="tnum" style={{ display: 'grid', gridTemplateColumns: 'auto auto', gap: '2px 14px', marginTop: 4 }} data-testid="payment-summary">
+            <span className="muted">{t('inv.pay.total')}</span><span className="bold">{m(summary.grossMinor)}</span>
+            <span className="muted">{t('inv.pay.paid')}</span><span className="bold">{m(summary.paidMinor)}</span>
+            <span className="muted">{t('inv.pay.outstanding')}</span><span className="bold">{m(summary.outstandingMinor)}</span>
+            <span className="muted">{t('inv.pay.state')}</span><span><span className={`badge ${badge}`} data-testid="payment-state">{t(`inv.pstate.${summary.state}`)}</span></span>
+          </div>
+        </div>
+        <div style={{ display: 'grid', gap: 6, justifyItems: 'end' }}>
+          {mayRecord && summary.outstandingMinor > 0 ? (
+            <button className="btn btn-secondary" onClick={onRecord} data-testid="record-payment">{t('inv.pay.record')}</button>
+          ) : null}
+          {!mayRecord && summary.outstandingMinor > 0 ? <span className="muted" style={{ fontSize: 12 }}>{t('inv.pay.noRight')}</span> : null}
+        </div>
+      </div>
+      <div style={{ marginTop: 12 }}>
+        <span className="stat-label">{t('inv.pay.history')}</span>
+        {payments.length === 0 ? (
+          <p className="muted" style={{ margin: '6px 0 0', fontSize: 13 }}>{t('inv.pay.none')}</p>
+        ) : (
+          <table data-testid="payment-history" style={{ marginTop: 6 }}>
+            <thead>
+              <tr>
+                <th>{t('inv.pay.colDate')}</th>
+                <th>{t('inv.pay.colMethod')}</th>
+                <th>{t('inv.pay.colSource')}</th>
+                <th>{t('inv.pay.colReference')}</th>
+                <th className="right">{t('inv.pay.colAmount')}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {payments.map((p) => (
+                <tr key={p.id}>
+                  <td className="tnum">{dateShort(p.paidOn)}</td>
+                  <td>{p.method}</td>
+                  <td className="muted">{t(`inv.source.${p.source}`)}{p.source === 'sale' && p.originSaleNumber ? ` · ${p.originSaleNumber}` : ''}</td>
+                  <td className="muted tnum">{p.reference || '—'}{p.note ? <span className="muted" style={{ display: 'block', fontSize: 12 }}>{p.note}</span> : null}</td>
+                  <td className="right bold tnum">{m(p.amountMinor)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+        <p className="muted" style={{ margin: '8px 0 0', fontSize: 12 }}>{t('inv.pay.correction')}</p>
+      </div>
+    </div>
+  );
+}
+
+/** "Record payment": a payment received outside Velnes, written to the
+ *  ledger by the server. Nothing is charged, processed or moved. */
+function RecordPaymentModal({
+  doc,
+  summary,
+  onDone,
+  onClose,
+}: {
+  doc: BillingInvoice;
+  summary: BillingPaymentSummary;
+  onDone: (list: { payments: BillingPayment[]; summary: BillingPaymentSummary }) => void;
+  onClose: () => void;
+}) {
+  const { t } = useTranslation();
+  const toast = useToast();
+  const todayAt = new Intl.DateTimeFormat('en-CA', { timeZone: doc.location.tz, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+  const [amount, setAmount] = useState((summary.outstandingMinor / 100).toFixed(2));
+  const [method, setMethod] = useState<(typeof BILLING_PAYMENT_METHODS)[number]>('Bank transfer');
+  const [paidOn, setPaidOn] = useState(todayAt);
+  const [reference, setReference] = useState('');
+  const [note, setNote] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const key = useMemo(() => newKey(), []);
+  const m = (v: number) => moneyMinor(v, doc.currency);
+  const submit = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const amountMinor = Math.round(Number(amount.replace(',', '.')) * 100);
+      const list = await post(BillingPaymentListSchema, `/billing/invoices/${doc.id}/payments`, { amountMinor, method, paidOn, reference, note, key, currency: doc.currency });
+      toast?.(t('inv.pay.recorded', { amount: m(amountMinor) }));
+      onDone(list);
+    } catch (e) {
+      if (e instanceof ApiError && e.code === 'OVERPAYMENT') setError(t('inv.pay.overpayment', { outstanding: m(Number(e.body?.outstandingMinor ?? 0)) }));
+      else setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="overlay" onClick={onClose}>
+      <div className="modal" role="dialog" aria-modal="true" aria-labelledby="pay-title" style={{ maxWidth: 480 }} onClick={(e) => e.stopPropagation()}>
+        <div className="modal-head">
+          <h2 id="pay-title">{t('inv.pay.recordTitle')}</h2>
+        </div>
+        <div className="modal-body" style={{ display: 'grid', gap: 12 }}>
+          <p className="note" style={{ margin: 0 }}>{t('inv.pay.recordNote')}</p>
+          <div className="muted tnum" style={{ fontSize: 13 }}>{doc.number} · {t('inv.pay.outstanding')}: {m(summary.outstandingMinor)}</div>
+          <label style={{ display: 'grid', gap: 4 }}>
+            <span className="stat-label">{t('inv.pay.amount', { currency: doc.currency })}</span>
+            <input className="input" type="number" step="0.01" min="0.01" max={(summary.outstandingMinor / 100).toFixed(2)} value={amount} onChange={(e) => setAmount(e.target.value)} />
+            <span className="muted" style={{ fontSize: 12 }}>{t('inv.pay.maxHint', { outstanding: m(summary.outstandingMinor) })}</span>
+          </label>
+          <label style={{ display: 'grid', gap: 4 }}>
+            <span className="stat-label">{t('inv.pay.method')}</span>
+            <select className="input" value={method} onChange={(e) => setMethod(e.target.value as (typeof BILLING_PAYMENT_METHODS)[number])}>
+              {BILLING_PAYMENT_METHODS.map((x) => <option key={x} value={x}>{x}</option>)}
+            </select>
+          </label>
+          <label style={{ display: 'grid', gap: 4 }}>
+            <span className="stat-label">{t('inv.pay.date')}</span>
+            <input className="input" type="date" value={paidOn} max={todayAt} onChange={(e) => setPaidOn(e.target.value)} />
+          </label>
+          <label style={{ display: 'grid', gap: 4 }}>
+            <span className="stat-label">{t('inv.pay.reference')}</span>
+            <input className="input" value={reference} onChange={(e) => setReference(e.target.value)} />
+          </label>
+          <label style={{ display: 'grid', gap: 4 }}>
+            <span className="stat-label">{t('inv.pay.note')}</span>
+            <input className="input" value={note} onChange={(e) => setNote(e.target.value)} />
+          </label>
+          {error ? <div className="note warn" data-testid="pay-error">{error}</div> : null}
+        </div>
+        <div className="modal-foot" style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+          <button className="btn btn-ghost" onClick={onClose} disabled={busy}>{t('common.cancel')}</button>
+          <button className="btn btn-primary" onClick={() => void submit()} disabled={busy || !(Number(amount.replace(',', '.')) > 0)} data-testid="pay-submit">
+            {busy ? t('inv.pay.busy') : t('inv.pay.submit')}
           </button>
         </div>
         <button className="modal-close" aria-label={t('common.close')} onClick={onClose} disabled={busy}>

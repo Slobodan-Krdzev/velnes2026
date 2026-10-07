@@ -5,7 +5,8 @@ import { logAudit } from '../audit/audit.service.js';
 import { BillingError } from './billing.service.js';
 import { rowToContract } from './drafts.service.js';
 import { addEvent } from './events.js';
-import { RENDERER_VERSION, renderInvoicePdf, type PdfLogo } from './invoice-pdf.js';
+import type { PdfLogo } from './invoice-pdf.js';
+import { rendererFor } from './renderers.js';
 import { reaches, type Reach } from './scope.js';
 
 /**
@@ -35,7 +36,7 @@ export async function invoicePdf(
 ): Promise<{ buffer: Buffer; sha256: string; number: string; established: boolean }> {
   const row = await trx
     .selectFrom('billingInvoices')
-    .select(['id', 'status', 'locationId', 'number', 'pdfSha256', 'issuer'])
+    .select(['id', 'status', 'locationId', 'number', 'pdfSha256', 'pdfRenderer', 'issuer'])
     .where('id', '=', id)
     .executeTakeFirst();
   if (!row || !reaches(reach, row.locationId)) throw new BillingError('NOT_FOUND', 'Unknown accounting invoice');
@@ -50,19 +51,27 @@ export async function invoicePdf(
     if (!a) throw new BillingError('INTEGRITY', `The logo this document was issued with (${doc.issuer.logoSha256.slice(0, 12)}…) is missing from the asset store`);
     logo = { mime: a.mime, dataUrl: a.data };
   }
-  const rendered = await renderInvoicePdf(doc, logo);
+  // The renderer the document is bound to — never a newer one for an
+  // old document, never an unregistered one.
+  let renderer: ReturnType<typeof rendererFor>;
+  try {
+    renderer = rendererFor(row.pdfRenderer);
+  } catch {
+    throw new BillingError('INTEGRITY', `${row.number} was rendered by ${row.pdfRenderer}, which this build does not carry; the PDF was not served`);
+  }
+  const rendered = await renderer.render(doc, logo);
   const hash = sha256(rendered.buffer);
 
   if (!row.pdfSha256) {
-    // First canonical render: claim the hash only if nobody did meanwhile.
+    // First canonical render: claim the hash and the renderer only if nobody did meanwhile.
     const claimed = await trx
       .updateTable('billingInvoices')
-      .set({ pdfSha256: hash, updatedAt: new Date() })
+      .set({ pdfSha256: hash, pdfRenderer: renderer.version, updatedAt: new Date() })
       .where('id', '=', id)
       .where('pdfSha256', 'is', null)
       .executeTakeFirst();
     if (Number(claimed.numUpdatedRows) === 1) {
-      await addEvent(trx, tenantId, id, 'pdf', actor, { sha256: hash, bytes: rendered.buffer.length, lang: doc.lang, logo: rendered.logo, renderer: RENDERER_VERSION });
+      await addEvent(trx, tenantId, id, 'pdf', actor, { sha256: hash, bytes: rendered.buffer.length, lang: doc.lang, logo: rendered.logo, renderer: renderer.version });
       return { buffer: rendered.buffer, sha256: hash, number: row.number, established: true };
     }
     const again = await trx.selectFrom('billingInvoices').select('pdfSha256').where('id', '=', id).executeTakeFirstOrThrow();
@@ -71,7 +80,7 @@ export async function invoicePdf(
   if (row.pdfSha256 !== hash) {
     // Not in this transaction: the refusal must not roll the record back.
     await withTenant(tenantId, async (own) => {
-      await addEvent(own, tenantId, id, 'pdf', actor, { integrity: 'mismatch', expected: row.pdfSha256, rendered: hash, bytes: rendered.buffer.length, renderer: RENDERER_VERSION });
+      await addEvent(own, tenantId, id, 'pdf', actor, { integrity: 'mismatch', expected: row.pdfSha256, rendered: hash, bytes: rendered.buffer.length, renderer: renderer.version });
       await logAudit(own, tenantId, {
         actorEmployeeId: actor.id,
         actorName: actor.name,

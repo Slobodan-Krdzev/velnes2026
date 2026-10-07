@@ -146,7 +146,7 @@ describe('issuing accounting invoices', () => {
       const asset = (await admin.query(`SELECT data, mime FROM billing_assets WHERE sha256=$1`, [doc.issuer.logoSha256])).rows[0];
       expect(asset).toMatchObject({ data: LOGO1, mime: 'image/png' });
       // The timeline and the platform trail.
-      expect(doc.events.map((e) => e.kind)).toEqual(['created', 'issued']);
+      expect(doc.events.map((e) => e.kind)).toEqual(['created', 'issued', 'payment']); // phase 5: the sale's tender follows the issue
       const ev = doc.events.find((e) => e.kind === 'issued')!;
       expect(ev.actorName).toBe('Maria Petrovska');
       expect(ev.data).toMatchObject({ number: doc.number, issueDate: doc.issueDate, legalEntityId: entityId, locationId: demo.locAerodrom, netMinor: doc.totals.netMinor, vatMinor: doc.totals.vatMinor, grossMinor: doc.totals.grossMinor, issueKey: k });
@@ -397,10 +397,14 @@ describe('issuing accounting invoices', () => {
         expect(err, set).toMatch(/frozen/);
       }
     });
-    it('the integration and cache columns stay writable — and nothing else', async () => {
-      for (const set of [`paid_minor = 1`, `pdf_sha256 = 'abc'`, `fiscal_receipt_ref = 'FR-1'`, `efaktura_euid = 'E-1'`, `efaktura_status = 'sent'`])
+    it('the integration and cache columns stay writable — and nothing else; the PDF binding is written once and then permanent', async () => {
+      for (const set of [`paid_minor = 1`, `fiscal_receipt_ref = 'FR-1'`, `efaktura_euid = 'E-1'`, `efaktura_status = 'sent'`])
         await admin.query(`UPDATE billing_invoices SET ${set} WHERE id=$1`, [id]);
-      await admin.query(`UPDATE billing_invoices SET paid_minor = 0, pdf_sha256 = NULL, fiscal_receipt_ref = NULL, efaktura_euid = NULL, efaktura_status = NULL WHERE id=$1`, [id]);
+      await admin.query(`UPDATE billing_invoices SET paid_minor = 0, fiscal_receipt_ref = NULL, efaktura_euid = NULL, efaktura_status = NULL WHERE id=$1`, [id]);
+      await expect(admin.query(`UPDATE billing_invoices SET pdf_sha256 = 'abc' WHERE id=$1`, [id])).rejects.toThrow(/pdf_binding/); // a hash needs its renderer
+      await admin.query(`UPDATE billing_invoices SET pdf_sha256 = 'abc', pdf_renderer = 'test' WHERE id=$1`, [id]);
+      await expect(admin.query(`UPDATE billing_invoices SET pdf_sha256 = NULL, pdf_renderer = NULL WHERE id=$1`, [id])).rejects.toThrow(/permanent/);
+      await expect(admin.query(`UPDATE billing_invoices SET pdf_sha256 = 'def' WHERE id=$1`, [id])).rejects.toThrow(/permanent/);
     });
     it('no DELETE, not even for the owner', async () => {
       await expect(admin.query(`DELETE FROM billing_invoices WHERE id=$1`, [id])).rejects.toThrow(/cannot be deleted/);

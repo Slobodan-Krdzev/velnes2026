@@ -8,6 +8,7 @@ import { nowAt } from '../scheduling/scheduling.service.js';
 import { BillingError } from './billing.service.js';
 import { actorName, buyerFromIdentity, issuerSnapshot, locationSnapshot, rowToContract, saleNow } from './drafts.service.js';
 import { addEvent } from './events.js';
+import { importSalePayments } from './payments.service.js';
 import { reaches, type Reach } from './scope.js';
 
 /**
@@ -194,6 +195,9 @@ export async function issueInvoice(
     logoSha256,
     warnings: readiness.warnings,
   });
+  // 10. The sale's own tender becomes the ledger (phase 5): a document
+  //     issued from a paid sale is paid, without anyone recording it twice.
+  await importSalePayments(trx, claims.ten, id, { id: claims.sub, name });
   await logAudit(trx, claims.ten, {
     actorEmployeeId: claims.sub,
     actorName: name,

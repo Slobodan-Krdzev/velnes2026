@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { AvatarSchema } from './auth.js';
 import { BILLING_LANGS } from './billing-format.js';
+import { PAYMENT_METHODS, PaymentMethodSchema } from './till.js';
 import { splitGross } from './billing-math.js';
 
 /**
@@ -428,6 +429,87 @@ export function daysBetween(a: string, b: string): number {
   return Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 86_400_000);
 }
 
+/* ── Payments (phase 5, 2026-10-07) ─────────────────────────────────
+   The ledger is the truth; the state is derived. Sources are explicit:
+   `sale` is the originating till sale's own tender (evidence, imported
+   by the issue workflow), `manual` a payment received outside Velnes
+   and recorded by staff, `provider` reserved for a verified event of a
+   real payment provider (not built). Velnes processes no money here. */
+
+export const BILLING_PAYMENT_SOURCES = ['sale', 'manual', 'provider'] as const;
+export const BillingPaymentSourceSchema = z.enum(BILLING_PAYMENT_SOURCES);
+export const BILLING_PAYMENT_STATES = ['unpaid', 'partially_paid', 'paid'] as const;
+export const BillingPaymentStateSchema = z.enum(BILLING_PAYMENT_STATES);
+export type BillingPaymentState = z.infer<typeof BillingPaymentStateSchema>;
+export const BILLING_PAYMENT_METHODS = PAYMENT_METHODS;
+
+export const BillingPaymentSchema = z.object({
+  id: z.uuid(),
+  amountMinor: z.number().int().positive(),
+  currency: z.string(),
+  /** A plain enum here: response schemas are serialised, and a preprocess cannot be. */
+  method: z.enum(PAYMENT_METHODS),
+  source: BillingPaymentSourceSchema,
+  paidAt: z.iso.datetime(),
+  paidOn: z.iso.date(),
+  reference: z.string(),
+  provider: z.string().nullable(),
+  providerPaymentId: z.string().nullable(),
+  originSaleId: z.uuid().nullable(),
+  /** The sale's number when the source is a sale, for the history table. */
+  originSaleNumber: z.string().nullable(),
+  note: z.string(),
+  recordedBy: z.object({ id: z.uuid().nullable(), name: z.string() }),
+  createdAt: z.iso.datetime(),
+});
+export type BillingPayment = z.infer<typeof BillingPaymentSchema>;
+
+export const BillingPaymentSummarySchema = z.object({
+  grossMinor: z.number().int(),
+  paidMinor: z.number().int(),
+  outstandingMinor: z.number().int(),
+  state: BillingPaymentStateSchema,
+  count: z.number().int(),
+});
+export type BillingPaymentSummary = z.infer<typeof BillingPaymentSummarySchema>;
+export const BillingPaymentListSchema = z.object({ payments: z.array(BillingPaymentSchema), summary: BillingPaymentSummarySchema });
+
+/** What staff may record: a positive amount in the document's currency,
+ *  a method from the till's vocabulary, the day the money was received
+ *  (the location's day), an optional reference and note, and the key
+ *  that makes a retry return the same row. The source is never theirs
+ *  to choose: a recorded payment is `manual`. */
+export const BillingPaymentWriteSchema = z.object({
+  amountMinor: z.number().int().positive(),
+  /** Must equal the document's currency; present so a wrong one is refused, not converted. */
+  currency: z.string().trim().toUpperCase().regex(/^[A-Z]{3}$/).optional(),
+  method: PaymentMethodSchema,
+  paidOn: z.iso.date(),
+  reference: z.string().trim().max(120).default(''),
+  note: z.string().trim().max(500).default(''),
+  key: z.string().min(8).max(120),
+});
+export type BillingPaymentWrite = z.infer<typeof BillingPaymentWriteSchema>;
+
+/** 422 from the payment door when the amount exceeds what is outstanding. */
+export const BillingOverpaymentSchema = z.object({
+  error: z.literal('OVERPAYMENT'),
+  message: z.string(),
+  outstandingMinor: z.number().int(),
+  paidMinor: z.number().int(),
+  grossMinor: z.number().int(),
+});
+
+/** The one derivation of a document's payment state. */
+export function derivePaymentState(grossMinor: number, paidMinor: number): BillingPaymentState {
+  if (paidMinor <= 0) return 'unpaid';
+  if (paidMinor < grossMinor) return 'partially_paid';
+  return 'paid';
+}
+export function paymentSummary(grossMinor: number, paidMinor: number, count: number): BillingPaymentSummary {
+  return { grossMinor, paidMinor, outstandingMinor: grossMinor - paidMinor, state: derivePaymentState(grossMinor, paidMinor), count };
+}
+
 export const BillingInvoiceSchema = z.object({
   id: z.uuid(),
   kind: BillingDocKindSchema,
@@ -473,6 +555,9 @@ export const BillingInvoiceSchema = z.object({
    *  it will evaluate — so the Workspace can say what to fix first.
    *  Always `ready` on an issued document. */
   issueReadiness: BillingIssueReadinessSchema,
+  /** Money received against the document (phase 5): derived from the
+   *  ledger by the server, never stored as an editable truth. Zeros on a draft. */
+  payment: BillingPaymentSummarySchema,
   issuedBy: z.object({ id: z.uuid().nullable(), name: z.string() }).nullable(),
   /** The document's own timeline, oldest first. */
   events: z.array(BillingEventSchema),
@@ -492,6 +577,8 @@ export const BillingInvoiceRowSchema = BillingInvoiceSchema.pick({
   buyerName: z.string(),
   locationName: z.string(),
   saleNumber: z.string().nullable(),
+  paidMinor: z.number().int(),
+  paymentState: BillingPaymentStateSchema,
 });
 export const BillingInvoiceListSchema = z.object({ invoices: z.array(BillingInvoiceRowSchema) });
 
@@ -513,6 +600,8 @@ export const BillingInvoicePatchSchema = z.object({
 });
 export const BillingInvoiceQuerySchema = z.object({
   status: BillingDocStatusSchema.optional(),
+  /** Issued documents by derived payment state; `unpaid` includes partially paid. */
+  payment: z.enum(['unpaid', 'partially_paid', 'paid']).optional(),
   kind: BillingDocKindSchema.optional(),
   locationId: z.uuid().optional(),
   from: z.iso.date().optional(),

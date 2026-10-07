@@ -771,6 +771,7 @@ export interface BillingInvoices {
   originAppointmentId: string | null;
   originSaleId: string | null;
   paidMinor: Generated<Int8>;
+  pdfRenderer: string | null;
   pdfSha256: string | null;
   pricesIncludeVat: Generated<boolean>;
   series: string | null;
@@ -785,6 +786,27 @@ export interface BillingInvoices {
   vatRegistered: boolean;
   voidedAt: Timestamp | null;
   year: number | null;
+}
+
+export interface BillingPayments {
+  amountMinor: Int8;
+  createdAt: Generated<Timestamp>;
+  currency: string;
+  id: Generated<string>;
+  invoiceId: string;
+  method: string;
+  note: Generated<string>;
+  originKey: string | null;
+  originSaleId: string | null;
+  paidAt: Timestamp;
+  paidOn: Timestamp;
+  provider: string | null;
+  providerPaymentId: string | null;
+  recordedBy: string | null;
+  recordedByName: Generated<string>;
+  reference: Generated<string>;
+  source: string;
+  tenantId: string;
 }
 
 export interface BillingProfiles {
@@ -1487,6 +1509,7 @@ export interface DB {
   billingCustomers: BillingCustomers;
   billingInvoiceLines: BillingInvoiceLines;
   billingInvoices: BillingInvoices;
+  billingPayments: BillingPayments;
   billingProfiles: BillingProfiles;
   billingSequences: BillingSequences;
   bookingChangeRequests: BookingChangeRequests;

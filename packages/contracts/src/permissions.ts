@@ -69,6 +69,7 @@ export const PERM_GROUPS = [
       ['billing.create', 'Create billing details and accounting invoice drafts'],
       ['billing.read', 'See accounting invoices'],
       ['billing.issue', 'Issue accounting invoices: assign the legal number and freeze the document'],
+      ['billing.record_payment', 'Record payments received against issued invoices'],
     ],
   },
   {
@@ -169,6 +170,8 @@ export function employeePermMap(): PermMap {
     // the one invoicing right a front desk needs; settings stay with owners.
     'billing.create': 'location',
     'billing.read': 'location',
+    // Phase 5: the desk that takes money at the till records money received.
+    'billing.record_payment': 'location',
   });
 }
 

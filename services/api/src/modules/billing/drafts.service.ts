@@ -11,9 +11,11 @@ import {
   BILLING_LANGS,
   allocateDiscount,
   computeLine,
+  derivePaymentState,
   evaluateBillingProfile,
   evaluateBuyer,
   evaluateIssueReadiness,
+  paymentSummary,
   summarize,
   type BillingIssueReadiness,
   type LineResult,
@@ -25,6 +27,7 @@ import { logAudit } from '../audit/audit.service.js';
 import { localIso, nowAt } from '../scheduling/scheduling.service.js';
 import { BillingError } from './billing.service.js';
 import { addEvent, listEvents } from './events.js';
+import { summaryOf } from './payments.service.js';
 import { reaches, type Reach } from './scope.js';
 
 /**
@@ -514,6 +517,7 @@ export async function rowToContract(trx: Trx, id: string): Promise<BillingInvoic
     vatBreakdown: (r.vatBreakdown ?? []) as BillingInvoice['vatBreakdown'],
     buyerCompleteness: evaluateBuyer(buyer),
     issueReadiness: { ready: true, problems: [], warnings: [] },
+    payment: r.status === 'issued' ? await summaryOf(trx, id, num(r.grossMinor)) : paymentSummary(num(r.grossMinor), 0, 0),
     issuedBy: r.issuedAt ? { id: r.issuedBy, name: r.issuedByName } : null,
     events: await listEvents(trx, id),
     notes: r.notes,
@@ -538,7 +542,7 @@ export async function getDraft(trx: Trx, reach: Reach, id: string): Promise<Bill
 export async function listDrafts(
   trx: Trx,
   reach: Reach,
-  q: { status?: string | undefined; kind?: string | undefined; locationId?: string | undefined; from?: string | undefined; to?: string | undefined; q?: string | undefined; limit: number },
+  q: { status?: string | undefined; kind?: string | undefined; payment?: string | undefined; locationId?: string | undefined; from?: string | undefined; to?: string | undefined; q?: string | undefined; limit: number },
 ) {
   let qb = trx
     .selectFrom('billingInvoices as b')
@@ -546,7 +550,7 @@ export async function listDrafts(
     .leftJoin('locations as l', 'l.id', 'b.locationId')
     .select([
       'b.id', 'b.kind', 'b.status', 'b.number', 'b.currency', 'b.vatRegistered', 'b.legalEntityId', 'b.locationId', 'b.billingCustomerId',
-      'b.originSaleId', 'b.supplyDate', 'b.issueDate', 'b.dueDate', 'b.netMinor', 'b.vatMinor', 'b.grossMinor', 'b.discountMinor',
+      'b.originSaleId', 'b.supplyDate', 'b.issueDate', 'b.dueDate', 'b.netMinor', 'b.vatMinor', 'b.grossMinor', 'b.discountMinor', 'b.paidMinor',
       'b.buyer', 'b.createdAt', 'b.updatedAt', 's.number as saleNumber', 'l.name as locationName',
     ])
     .orderBy('b.createdAt', 'desc')
@@ -554,6 +558,9 @@ export async function listDrafts(
   if (!reach.all) qb = qb.where('b.locationId', 'in', reach.locationIds.length ? reach.locationIds : ['00000000-0000-4000-8000-000000000000']);
   if (q.status) qb = qb.where('b.status', '=', q.status);
   if (q.kind) qb = qb.where('b.kind', '=', q.kind);
+  if (q.payment === 'paid') qb = qb.where('b.status', '=', 'issued').where(sql<boolean>`b.paid_minor >= b.gross_minor`);
+  if (q.payment === 'unpaid') qb = qb.where('b.status', '=', 'issued').where(sql<boolean>`b.paid_minor < b.gross_minor`);
+  if (q.payment === 'partially_paid') qb = qb.where('b.status', '=', 'issued').where(sql<boolean>`b.paid_minor > 0 AND b.paid_minor < b.gross_minor`);
   if (q.locationId) qb = qb.where('b.locationId', '=', q.locationId);
   if (q.from) qb = qb.where('b.supplyDate', '>=', new Date(q.from));
   if (q.to) qb = qb.where('b.supplyDate', '<=', new Date(q.to));
@@ -579,6 +586,8 @@ export async function listDrafts(
     buyerName: ((r.buyer ?? null) as BillingBuyerSnapshot | null)?.name ?? '',
     locationName: r.locationName ?? '',
     saleNumber: r.saleNumber ?? null,
+    paidMinor: num(r.paidMinor),
+    paymentState: r.status === 'issued' ? derivePaymentState(num(r.grossMinor), num(r.paidMinor)) : 'unpaid',
   }));
 }
 

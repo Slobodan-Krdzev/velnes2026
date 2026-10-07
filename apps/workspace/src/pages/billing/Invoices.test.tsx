@@ -17,7 +17,7 @@ const EV = 'dd000000-0000-4000-8000-00000000000';
 const me = {
   id: '40000000-0000-4000-8000-000000000001', name: 'Maria Petrovska', access: 'owner', roleId: '30000000-0000-4000-8000-000000000001',
   locationIds: [LOC], email: 'maria@velnes.mk', tenantId: '10000000-0000-4000-8000-000000000001', lang: 'en',
-  perms: { 'billing.read': 'business', 'billing.create': 'business', 'billing.issue': 'business', 'pos.checkout': 'business', 'pos.view_invoices': 'business' },
+  perms: { 'billing.read': 'business', 'billing.create': 'business', 'billing.issue': 'business', 'billing.record_payment': 'business', 'pos.checkout': 'business', 'pos.view_invoices': 'business' },
 };
 const issuer = { legalEntityId: LE, legalName: 'Velnes Studio DOOEL Skopje', tradingName: 'Velnes Fizio Centar', edb: 'MK4030026512345', vatRegNo: 'MK4030026512345', embs: '7012345', address: 'Partizanski Odredi 14', city: 'Skopje', zip: '1000', country: 'North Macedonia', bankName: 'Komercijalna', bankAccount: '300000001234567', signatoryName: 'Maria Petrovska', contactEmail: '', phone: '', website: '', footerText: '', paymentInstructions: '', logoSha256: null, logoMime: null };
 const location = { locationId: LOC, name: 'Centar', address: 'Makedonija 12', city: 'Skopje', zip: '1000', country: 'North Macedonia', tz: 'Europe/Skopje' };
@@ -41,6 +41,7 @@ const draftOf = (id: string, registered: boolean) => {
     vatBreakdown: rates.map((r) => ({ rateBp: r, netMinor: lines.filter((l) => l.vatRateBp === r).reduce((s, l) => s + l.netMinor, 0), vatMinor: lines.filter((l) => l.vatRateBp === r).reduce((s, l) => s + l.vatMinor, 0), grossMinor: lines.filter((l) => l.vatRateBp === r).reduce((s, l) => s + l.grossMinor, 0) })),
     buyerCompleteness: { complete: false, missing: ['edb'], invalid: [] },
     issueReadiness: { ready: false, problems: [{ part: 'buyer', field: 'edb', reason: 'missing' }], warnings: [] },
+    payment: { grossMinor: sum('grossMinor'), paidMinor: 0, outstandingMinor: sum('grossMinor'), state: 'unpaid', count: 0 },
     issuedBy: null,
     events: [{ id: `${EV}1`, kind: 'created', at: '2026-10-06T10:00:00.000Z', actorName: 'Maria Petrovska', source: 'API', data: {} }],
     notes: '', createdBy: { id: me.id, name: 'Maria Petrovska' }, createdAt: '2026-10-06T10:00:00.000Z', updatedBy: { id: me.id, name: 'Maria Petrovska' }, updatedAt: '2026-10-06T10:00:00.000Z',
@@ -54,16 +55,23 @@ const readyDraft = (id: string) => {
 const issuedOf = (d: ReturnType<typeof readyDraft>) => ({
   ...d, status: 'issued', number: '2026-000041', series: '', year: 2026, numberSeq: 41, issueDate: '2026-10-18', issuedAt: '2026-10-18T09:30:00.000Z',
   issuedBy: { id: me.id, name: 'Maria Petrovska' }, issueReadiness: { ready: true, problems: [], warnings: [] }, pdfSha256: 'ab'.repeat(32),
+  payment: { grossMinor: d.totals.grossMinor, paidMinor: 100000, outstandingMinor: d.totals.grossMinor - 100000, state: 'partially_paid', count: 1 },
   events: [...d.events, { id: `${EV}2`, kind: 'issued', at: '2026-10-18T09:30:00.000Z', actorName: 'Maria Petrovska', source: 'API', data: { number: '2026-000041' } }],
   updatedAt: '2026-10-18T09:30:00.000Z',
 });
-const row = (d: ReturnType<typeof draftOf>) => ({ id: d.id, kind: d.kind, status: d.status, number: d.number, currency: d.currency, vatRegistered: d.vatRegistered, legalEntityId: LE, locationId: LOC, billingCustomerId: null, originSaleId: SALE, supplyDate: d.supplyDate, issueDate: null, dueDate: null, totals: d.totals, createdAt: d.createdAt, updatedAt: d.updatedAt, buyerName: d.buyer?.name ?? '', locationName: 'Centar', saleNumber: 'CEN-2026-0413' });
+const row = (d: ReturnType<typeof draftOf>) => ({ id: d.id, kind: d.kind, status: d.status, number: d.number, currency: d.currency, vatRegistered: d.vatRegistered, legalEntityId: LE, locationId: LOC, billingCustomerId: null, originSaleId: SALE, supplyDate: d.supplyDate, issueDate: null, dueDate: null, totals: d.totals, createdAt: d.createdAt, updatedAt: d.updatedAt, buyerName: d.buyer?.name ?? '', locationName: 'Centar', saleNumber: 'CEN-2026-0413', paidMinor: 0, paymentState: 'unpaid' });
 
-function mockApi(calls: { method: string; path: string; body?: unknown }[], opts: { perms?: Record<string, string>; issueFails?: boolean } = {}) {
+const paymentOf = (id: string, amountMinor: number, source: 'sale' | 'manual', method: string, reference = '') => ({
+  id, amountMinor, currency: 'MKD', method, source, paidAt: '2026-10-05T10:00:00.000Z', paidOn: '2026-10-05', reference, provider: null, providerPaymentId: null,
+  originSaleId: source === 'sale' ? SALE : null, originSaleNumber: source === 'sale' ? 'CEN-2026-0413' : null, note: '', recordedBy: { id: me.id, name: 'Maria Petrovska' }, createdAt: '2026-10-07T08:00:00.000Z',
+});
+function mockApi(calls: { method: string; path: string; body?: unknown }[], opts: { perms?: Record<string, string>; issueFails?: boolean; overpay?: boolean } = {}) {
   const d1 = draftOf(D1, true);
   const d2 = draftOf(D2, false);
   const d3 = readyDraft(D3);
   let d3Issued = false;
+  const gross = d3.totals.grossMinor;
+  const ledger = { payments: [paymentOf('ee000000-0000-4000-8000-000000000001', 100000, 'sale', 'Card')], summary: { grossMinor: gross, paidMinor: 100000, outstandingMinor: gross - 100000, state: 'partially_paid', count: 1 } };
   vi.stubGlobal(
     'fetch',
     vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
@@ -73,6 +81,15 @@ function mockApi(calls: { method: string; path: string; body?: unknown }[], opts
       const ok = (b: unknown) => new Response(JSON.stringify(b), { status: 200 });
       if (path.endsWith('/auth/me')) return ok({ ...me, perms: opts.perms ?? me.perms });
       if (path.endsWith('/logo')) return new Response(null, { status: 204 });
+      if (path.endsWith(`/billing/invoices/${D3}/payments`) && method === 'POST') {
+        if (opts.overpay) return new Response(JSON.stringify({ error: 'OVERPAYMENT', message: 'too much', outstandingMinor: gross - 100000, paidMinor: 100000, grossMinor: gross }), { status: 422 });
+        const b = JSON.parse(String(init?.body)) as { amountMinor: number; method: string; reference: string };
+        ledger.payments = [...ledger.payments, paymentOf('ee000000-0000-4000-8000-000000000002', b.amountMinor, 'manual', b.method, b.reference)];
+        const paid = ledger.payments.reduce((s, p) => s + p.amountMinor, 0);
+        ledger.summary = { grossMinor: gross, paidMinor: paid, outstandingMinor: gross - paid, state: paid >= gross ? 'paid' : 'partially_paid', count: ledger.payments.length };
+        return ok(ledger);
+      }
+      if (path.endsWith(`/billing/invoices/${D3}/payments`)) return ok(ledger);
       if (/\/pdf(\?download=1)?$/.test(path)) return new Response('%PDF-1.3 fake', { status: 200, headers: { 'content-type': 'application/pdf' } });
       if (path.includes(`/billing/invoices/${D1}`) && method === 'PATCH') return ok({ ...d1, lang: (JSON.parse(String(init?.body)) as { lang: string }).lang });
       if (path.endsWith(`/billing/invoices/${D3}/issue`)) {
@@ -118,7 +135,8 @@ describe('accounting invoices', () => {
     expect((await screen.findAllByText('Draft — number assigned when issued')).length).toBe(2);
     expect(screen.getByRole('button', { name: 'Draft' })).toHaveProperty('disabled', false);
     expect(screen.getByRole('button', { name: 'Issued' })).toHaveProperty('disabled', false);
-    expect(screen.getByRole('button', { name: 'Paid' })).toHaveProperty('disabled', true);
+    expect(screen.getByRole('button', { name: 'Paid' })).toHaveProperty('disabled', false);
+    expect(screen.getByRole('button', { name: 'Credited' })).toHaveProperty('disabled', true);
     expect(screen.getAllByText('Nova Health DOO').length).toBe(2);
   });
 
@@ -275,6 +293,78 @@ describe('accounting invoices', () => {
       expect(fetched()[1]).toMatch(new RegExp(`/billing/invoices/${D3}/pdf\\?download=1$`));
       click.mockRestore();
       openSpy.mockRestore();
+    });
+  });
+
+  describe('payments (phase 5)', () => {
+    const issueD3 = async () => {
+      await open(`/invoices/${D3}`);
+      await screen.findByTestId('draft-preview');
+      await userEvent.click(screen.getByTestId('issue-btn'));
+      await userEvent.click(screen.getByTestId('issue-confirm'));
+      await waitFor(() => expect(screen.getByTestId('doc-status').textContent).toBe('Issued'));
+    };
+
+    it('an issued document shows the server\'s summary and ledger: total, paid, outstanding, state, the POS sale row', async () => {
+      mockApi([]);
+      await issueD3();
+      const summary = await screen.findByTestId('payment-summary');
+      expect(summary.textContent).toMatch(/Invoice total.*2[.,]300[.,]00/);
+      expect(summary.textContent).toMatch(/Paid.*1[.,]000[.,]00/);
+      expect(summary.textContent).toMatch(/Outstanding.*1[.,]300[.,]00/);
+      expect(screen.getByTestId('payment-state').textContent).toBe('Partially paid');
+      const rows = within(await screen.findByTestId('payment-history')).getAllByRole('row');
+      expect(rows).toHaveLength(2);
+      expect(rows[1]!.textContent).toContain('5.10.2026');
+      expect(rows[1]!.textContent).toContain('Card');
+      expect(rows[1]!.textContent).toContain('POS sale · CEN-2026-0413');
+      expect(screen.queryByTestId('payment-block')).not.toBeNull();
+    });
+
+    it('a draft shows no payment block', async () => {
+      mockApi([]);
+      await open(`/invoices/${D1}`);
+      await screen.findByTestId('draft-preview');
+      expect(screen.queryByTestId('payment-block')).toBeNull();
+    });
+
+    it('Record payment: the modal says Velnes moves no money, defaults to the outstanding amount, POSTs what was typed, and the document becomes Paid', async () => {
+      const calls: { method: string; path: string; body?: unknown }[] = [];
+      mockApi(calls);
+      await issueD3();
+      await screen.findByTestId('payment-summary');
+      await userEvent.click(screen.getByTestId('record-payment'));
+      expect(await screen.findByText('Record a payment')).toBeDefined();
+      expect(screen.getByText(/Velnes will not process or transfer money/)).toBeDefined();
+      const amount = screen.getByLabelText(/Amount \(MKD\)/) as HTMLInputElement;
+      expect(amount.value).toBe('1300.00');
+      await userEvent.type(screen.getByLabelText(/Reference/), 'MK202610071234');
+      await userEvent.click(screen.getByTestId('pay-submit'));
+      await waitFor(() => expect(calls.find((c) => c.method === 'POST' && c.path.endsWith('/payments'))?.body).toMatchObject({ amountMinor: 130000, method: 'Bank transfer', reference: 'MK202610071234', currency: 'MKD' }));
+      const sent = calls.find((c) => c.method === 'POST' && c.path.endsWith('/payments'))!.body as { key: string; paidOn: string };
+      expect(sent.key.length).toBeGreaterThanOrEqual(8);
+      expect(sent.paidOn).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+      await waitFor(() => expect(screen.getByTestId('payment-state').textContent).toBe('Paid'));
+      expect(within(screen.getByTestId('payment-history')).getAllByRole('row')).toHaveLength(3);
+      expect(screen.queryByTestId('record-payment')).toBeNull(); // nothing outstanding
+      expect(screen.getByTestId('doc-number').textContent).toBe('2026-000041'); // the document itself did not move
+    });
+
+    it('an overpayment refused by the server is shown with what is outstanding', async () => {
+      mockApi([], { overpay: true });
+      await issueD3();
+      await screen.findByTestId('payment-summary');
+      await userEvent.click(screen.getByTestId('record-payment'));
+      await userEvent.click(await screen.findByTestId('pay-submit'));
+      expect((await screen.findByTestId('pay-error')).textContent).toMatch(/Only .*1[.,]300[.,]00.* is outstanding/);
+    });
+
+    it('without billing.record_payment there is no Record payment button', async () => {
+      mockApi([], { perms: { 'billing.read': 'business', 'billing.create': 'business', 'billing.issue': 'business' } });
+      await issueD3();
+      await screen.findByTestId('payment-summary');
+      expect(screen.queryByTestId('record-payment')).toBeNull();
+      expect(screen.getByText(/needs the “Record payments” right/)).toBeDefined();
     });
   });
 });
