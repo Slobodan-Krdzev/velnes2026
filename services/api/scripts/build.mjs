@@ -53,7 +53,11 @@ await build({
   format: 'esm',
   target: 'node22',
   external: [...Object.keys(runtime), 'pg-native'],
-  banner: { js: "import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);" },
+  // The banner's import wears its own name: two source modules import
+  // `createRequire` themselves (the PDF renderers, to find the bundled
+  // fonts), and a second top-level `createRequire` is a SyntaxError
+  // (production, 2026-10-07).
+  banner: { js: "import { createRequire as __velnesCreateRequire } from 'node:module'; const require = __velnesCreateRequire(import.meta.url);" },
   logLevel: 'warning',
 });
 
