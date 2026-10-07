@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { FlightdeckSchema, TimingSuggestionsResponseSchema } from '@velnes/contracts';
+import { FlightdeckSchema, SalonPromotionListSchema, TimingSuggestionsResponseSchema } from '@velnes/contracts';
 import { I, Icon } from '@velnes/ui';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -73,6 +73,12 @@ export function FlightdeckPage() {
   const fd = useQuery({
     queryKey: ['flightdeck', loc ?? 'all'],
     queryFn: () => get(FlightdeckSchema, `/flightdeck${loc ? `?locationId=${loc}` : ''}`),
+  });
+  // Promotions from connected suppliers, ranked by what this salon carries and orders (2026-10-07).
+  const picks = useQuery({
+    queryKey: ['supPromotionPicks'],
+    queryFn: () => get(SalonPromotionListSchema, '/supplier-promotions?limit=4'),
+    enabled: can('suppliers.manage'),
   });
   const suggestions = useQuery({
     queryKey: ['timingSuggestions'],
@@ -401,6 +407,41 @@ export function FlightdeckPage() {
             </button>
           </div>
         </div>
+
+        {(picks.data?.promotions.length ?? 0) > 0 ? (
+          <div className="card" data-testid="fd-promos">
+            <div className="card-header">
+              <div>
+                <h2>{t('fd.promosTitle')}</h2>
+                <span className="muted" style={{ fontWeight: 500 }}>{t('fd.promosSub')}</span>
+              </div>
+              <button className="btn btn-subtle btn-sm" onClick={() => navigate('/suppliers?tab=promotions')}>
+                {t('fd.promosAll')} <Icon d={I.right} size={16} w={2.4} />
+              </button>
+            </div>
+            {picks.data!.promotions.map((o) => (
+              <button type="button" key={o.id} className="rowcard" style={{ width: '100%', textAlign: 'left', cursor: 'pointer' }} onClick={() => navigate(`/suppliers?tab=promotions&promo=${o.id}`)} data-testid="fd-promo">
+                <span className="mark on">
+                  <Icon d={I.tag} size={20} />
+                </span>
+                <span className="grow">
+                  <span className="t">
+                    {o.title}
+                    {o.reasons.slice(0, 2).map((r) => (
+                      <span key={r} className={`badge ${r === 'carry' || r === 'ordered_before' ? 'success' : r === 'ending_soon' ? 'warning' : ''}`} style={{ marginLeft: 6 }}>
+                        {t(`sup.reason.${r}`)}
+                      </span>
+                    ))}
+                  </span>
+                  <span className="s">
+                    {o.supplierName} · {o.daysLeft === 0 ? t('sup.promoEndsToday') : t('sup.promoEndsIn', { n: o.daysLeft })}
+                  </span>
+                </span>
+                <Icon d={I.right} size={18} />
+              </button>
+            ))}
+          </div>
+        ) : null}
 
         {sugg.length ? (
           <div className="card">

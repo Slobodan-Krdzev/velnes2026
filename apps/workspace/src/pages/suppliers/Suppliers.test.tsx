@@ -71,6 +71,8 @@ function mockApi(calls: { method: string; path: string; body?: unknown }[], orde
               productIds: [SP1], starts: '2026-08-01', ends: '2026-08-31', minOrder: 0,
               usageLimit: 400, terms: 'Applies per order line.', audience: 'Connected salons only',
               value: 2, per: 10, active: true, status: 'running',
+              products: [{ id: SP1, name: 'Thera-Band resistance set, 3 levels', buy: 550, carried: true }],
+              reasons: ['carry', 'ending_soon'], daysLeft: 3,
             },
           ],
         });
@@ -162,5 +164,23 @@ describe('suppliers', () => {
     await openSuppliers();
     await userEvent.click(screen.getByRole('button', { name: 'Orders' }));
     expect(await screen.findByText(/Out of stock until next month/)).toBeDefined();
+  });
+
+  it('promotions tab: running offers from connected suppliers with their reasons; the detail leads to an order from that supplier', async () => {
+    mockApi([]);
+    await openSuppliers();
+    await userEvent.click(await screen.findByRole('button', { name: 'Promotions' }));
+    const row = await screen.findByTestId('salon-promo');
+    expect(row.textContent).toContain('Buy 10 resistance sets, receive 2 free');
+    expect(row.textContent).toContain('You carry this');
+    expect(row.textContent).toContain('Ending soon');
+    expect(row.textContent).toContain('ends in 3 days');
+    await userEvent.click(row);
+    const detail = await screen.findByTestId('salon-promo-detail');
+    expect(detail.textContent).toContain('Thera-Band resistance set, 3 levels');
+    expect(detail.textContent).toContain('on your shelf');
+    expect(detail.textContent).toContain('Applies per order line.');
+    await userEvent.click(screen.getByTestId('promo-order'));
+    expect(await screen.findByText(/New order/)).toBeDefined();
   });
 });

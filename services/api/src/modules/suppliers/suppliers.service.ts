@@ -174,10 +174,10 @@ export async function notifyPromotion(trx: Trx, tenantId: string, promo: { id: s
     tenantId,
     kind: 'supplier_promotion',
     title: `${promo.supplierName}: ${promo.title}`,
-    body: `${promo.supplierName} published a promotion, ${promo.starts} to ${promo.ends}. See it under Suppliers → Catalog; nothing changes in your prices or till unless you order it.`,
+    body: `${promo.supplierName} published a promotion, ${promo.starts} to ${promo.ends}. See it under Suppliers → Promotions; nothing changes in your prices or till unless you order it.`,
     refId: promo.id,
     mailKind: 'supplier_promotion',
-    ctaPath: '/suppliers?tab=catalog',
+    ctaPath: `/suppliers?tab=promotions&promo=${promo.id}`,
   });
 }
 

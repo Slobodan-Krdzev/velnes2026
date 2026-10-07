@@ -1,4 +1,5 @@
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App, queryClient } from '../../App.js';
 import { setAccessToken } from '@velnes/client';
@@ -68,6 +69,15 @@ function mockApi() {
       if (path.endsWith('/auth/me')) return ok(me);
       if (path.includes('/flightdeck')) return ok(payload);
       if (path.includes('/timings/suggestions')) return ok({ suggestions: [] });
+      if (path.includes('/supplier-promotions'))
+        return ok({
+          promotions: [{
+            id: 'f5000000-0000-4000-8000-000000000001', supplierId: 'd1000000-0000-4000-8000-000000000001', supplierName: 'BeautyPro MK', brand: 'Thera-Band',
+            title: 'Buy 10 resistance sets, receive 2 free', kind: 'bxgy', productIds: ['d2000000-0000-4000-8000-000000000001'], starts: '2026-10-01', ends: '2026-10-10',
+            minOrder: 0, usageLimit: 0, terms: '', audience: 'Connected salons only', value: 2, per: 10, active: true, status: 'running',
+            products: [{ id: 'd2000000-0000-4000-8000-000000000001', name: 'Thera-Band resistance set, 3 levels', buy: 550, carried: true }], reasons: ['carry', 'ending_soon'], daysLeft: 3,
+          }],
+        });
       if (path.includes('/requests/pending')) return ok(pendingRequests);
       if (path.includes('/locations'))
         return ok({
@@ -160,5 +170,24 @@ describe('flightdeck', () => {
     );
     await openHome();
     expect(screen.getByText('Nothing is on fire')).toBeDefined();
+  });
+
+  it('shows the promotions the salon might like, ranked by the server, and opens the one clicked', async () => {
+    // The picks are for whoever runs suppliers: the right gates the card.
+    (me as { perms: Record<string, string> }).perms = { 'suppliers.manage': 'business' };
+    try {
+      mockApi();
+      await openHome();
+      const card = await screen.findByTestId('fd-promos');
+    expect(card.textContent).toContain('Promotions you might like');
+    const pick = within(card).getByTestId('fd-promo');
+    expect(pick.textContent).toContain('Buy 10 resistance sets, receive 2 free');
+    expect(pick.textContent).toContain('You carry this');
+    expect(pick.textContent).toContain('BeautyPro MK · ends in 3 days');
+    await userEvent.click(pick);
+    await waitFor(() => expect(window.location.search).toBe('?tab=promotions&promo=f5000000-0000-4000-8000-000000000001'));
+    } finally {
+      (me as { perms: Record<string, string> }).perms = {};
+    }
   });
 });

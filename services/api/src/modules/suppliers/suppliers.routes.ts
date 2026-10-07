@@ -7,8 +7,7 @@ import {
   ReceiveRequestSchema,
   SupplierListSchema,
   SupplierProductListSchema,
-  SupplierPromotionListSchema,
-  promotionStatus,
+  SalonPromotionListSchema,
 } from '@velnes/contracts';
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
@@ -16,6 +15,7 @@ import { z } from 'zod';
 import { withTenant } from '../../db/index.js';
 import { can, permsFor } from '../auth/authz.service.js';
 import { localIso } from '../scheduling/scheduling.service.js';
+import { salonPromotions } from './promotions.service.js';
 import {
   createOrder,
   poTransition,
@@ -310,43 +310,19 @@ export function suppliersRoutes(app: FastifyInstance) {
       }),
   });
 
+  // Promotions from connected suppliers, running or about to, with the
+  // reasons each may matter to this salon — one ranking for the tab and
+  // for the flight deck's picks (2026-10-07).
   r.route({
     method: 'GET',
     url: '/supplier-promotions',
     preHandler: [app.authenticate],
-    schema: { response: { 200: SupplierPromotionListSchema, 403: Err } },
+    schema: { querystring: z.object({ limit: z.coerce.number().int().min(1).max(50).optional() }), response: { 200: SalonPromotionListSchema, 403: Err } },
     handler: async (req, reply) =>
       withTenant(req.claims.ten, async (trx) => {
         if (!(await gate(trx, req.claims, reply))) return reply;
-        const rows = await trx
-          .selectFrom('supplierPromotions as p')
-          .innerJoin('suppliers as s', 's.id', 'p.supplierId')
-          .selectAll('p')
-          .select('s.name as supplierName')
-          .where('p.active', '=', true)
-          .orderBy('p.starts', 'desc')
-          .execute();
-        return {
-          promotions: rows.map((p) => ({
-            id: p.id,
-            supplierId: p.supplierId,
-            supplierName: p.supplierName,
-            brand: p.brand,
-            title: p.title,
-            kind: p.kind,
-            productIds: p.productIds,
-            starts: localIso(p.starts),
-            ends: localIso(p.ends),
-            minOrder: p.minOrder,
-            usageLimit: p.usageLimit,
-            terms: p.terms,
-            audience: p.audience,
-            value: p.value,
-            per: p.per,
-            active: p.active,
-            status: promotionStatus({ active: p.active, starts: localIso(p.starts), ends: localIso(p.ends) }, localIso(new Date())),
-          })),
-        };
+        const all = await salonPromotions(trx, req.claims.ten);
+        return { promotions: req.query.limit ? all.slice(0, req.query.limit) : all };
       }),
   });
 }

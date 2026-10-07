@@ -553,6 +553,19 @@ describe('the supplier chain', () => {
     expect(((await get(`${API_PREFIX}/portal/promotions`, bojanToken)).json() as { promotions: { id: string; status: string }[] }).promotions.find((p) => p.id === promoId)?.status).toBe('paused');
     const salonSees = (await get(`${API_PREFIX}/supplier-promotions`)).json() as { promotions: { id: string }[] };
     expect(salonSees.promotions.some((p) => p.id === promoId)).toBe(false);
+    // Resumed, the salon sees it as the server ranks it: products named, reasons computed, connected suppliers only.
+    expect((await patch(`${API_PREFIX}/portal/promotions/${promoId}`, { active: true })).statusCode).toBe(200);
+    const ranked = (await get(`${API_PREFIX}/supplier-promotions`)).json() as { promotions: { id: string; supplierId: string; products: { id: string; name: string; carried: boolean }[]; reasons: string[]; daysLeft: number; status: string }[] };
+    const mineRanked = ranked.promotions.find((p) => p.id === promoId)!;
+    expect(mineRanked.products.map((x) => x.id)).toEqual([prodForPromo]);
+    expect(mineRanked.status).toBe('running');
+    expect(mineRanked.daysLeft).toBeGreaterThan(7);
+    expect(mineRanked.reasons).toContain('new');
+    const connectedIds = (await admin.query(`SELECT supplier_id FROM supplier_connections WHERE tenant_id=$1 AND status='connected'`, [demo.business])).rows.map((r) => r.supplier_id as string);
+    for (const p of ranked.promotions) expect(connectedIds).toContain(p.supplierId);
+    expect(ranked.promotions.every((p) => p.status !== 'ended' && p.status !== 'paused')).toBe(true);
+    const one = (await get(`${API_PREFIX}/supplier-promotions?limit=1`)).json() as { promotions: unknown[] };
+    expect(one.promotions).toHaveLength(1);
     expect((await patch(`${API_PREFIX}/portal/promotions/${promoId}`, { active: true, title: 'Autumn tape fortnight', ends: '2026-11-30' })).statusCode).toBe(200);
     expect((await admin.query(`SELECT title, ends::text, active FROM supplier_promotions WHERE id=$1`, [promoId])).rows[0]).toEqual({ title: 'Autumn tape fortnight', ends: '2026-11-30', active: true });
     expect((await patch(`${API_PREFIX}/portal/promotions/${promoId}`, { ends: '2026-09-01' })).statusCode).toBe(409);

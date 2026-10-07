@@ -148,6 +148,19 @@ export const SupplierPromotionListSchema = z.object({
   promotions: z.array(SupplierPromotionSchema),
 });
 
+/** A promotion as the salon sees it (2026-10-07): from a connected
+ *  supplier, running or about to, with its products named and the
+ *  reasons it may matter to this salon — computed by the server. */
+export const SALON_PROMO_REASONS = ['carry', 'ordered_before', 'ending_soon', 'new'] as const;
+export const SalonPromotionSchema = SupplierPromotionSchema.extend({
+  products: z.array(z.object({ id: z.uuid(), name: z.string(), buy: MoneySchema, carried: z.boolean() })),
+  reasons: z.array(z.enum(SALON_PROMO_REASONS)),
+  /** Calendar days until it ends (0 on its last day). */
+  daysLeft: z.number().int(),
+});
+export type SalonPromotion = z.infer<typeof SalonPromotionSchema>;
+export const SalonPromotionListSchema = z.object({ promotions: z.array(SalonPromotionSchema) });
+
 // ── The portal's own principals. ─────────────────────────────────
 
 export const SupplierLoginResponseSchema = z.object({

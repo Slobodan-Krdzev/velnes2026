@@ -438,3 +438,20 @@ bell and a mail to its owner, in its own tenant context; the bell entry
 opens Suppliers → Catalog, where the offer sits. Edits and pauses do not
 re-notify — the offer is what the salon sees when it looks.
 
+## The salon's Promotions tab and the flight deck's picks (2026-10-07)
+
+Suppliers → **Promotions** lists the running (and about to start) offers
+of the salon's connected suppliers, each with its products named, how
+long it has left, and the reasons the server computed for this salon:
+*You carry this* (its own catalog links to a product in the offer),
+*Ordered before* (a purchase order carried one), *Ending soon* (a week
+or less), *New* (started within a week). A row opens the offer in full
+and leads straight to a new order from that supplier. The flight deck
+shows **Promotions you might like** — the same list ranked by those
+reasons (carry 3, ordered 2, ending 1, new 1, running first) and cut to
+four — and each pick opens the Promotions tab on that offer. One service
+(`salonPromotions`) feeds both doors (`GET /supplier-promotions`,
+`?limit=` for the picks), so the deck and the tab never disagree; paused
+and ended promotions, and suppliers the salon is not connected to, never
+appear. The promotion bell notice and its mail now open the offer itself.
+

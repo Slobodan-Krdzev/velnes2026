@@ -4,8 +4,9 @@ import {
   PurchaseOrderSchema,
   SupplierListSchema,
   SupplierProductListSchema,
-  SupplierPromotionListSchema,
+  SalonPromotionListSchema,
   type PurchaseOrder,
+  type SalonPromotion,
   type Supplier,
 } from '@velnes/contracts';
 import { I, Icon, NumInput } from '@velnes/ui';
@@ -25,6 +26,7 @@ import { useToast } from '../../lib/toast.js';
 const TABS = [
   ['suppliers', 'sup.tabSuppliers'],
   ['catalog', 'sup.tabCatalog'],
+  ['promotions', 'sup.tabPromotions'],
   ['orders', 'sup.tabOrders'],
   ['deliveries', 'sup.tabDeliveries'],
   ['academy', 'sup.tabAcademy'],
@@ -92,6 +94,7 @@ export function SuppliersPage() {
       </div>
       {tab === 'suppliers' ? <SuppliersTab startOrder={setDrafting} /> : null}
       {tab === 'catalog' ? <CatalogTab /> : null}
+      {tab === 'promotions' ? <PromotionsTab startOrder={setDrafting} openId={params.get('promo')} /> : null}
       {tab === 'orders' ? <OrdersTab receive={setReceiving} /> : null}
       {tab === 'deliveries' ? <DeliveriesTab receive={setReceiving} /> : null}
       {tab === 'academy' ? (
@@ -494,7 +497,7 @@ function OrderDraft({
   const catalog = useSupCatalog(supplierId);
   const promos = useQuery({
     queryKey: ['supPromotions'],
-    queryFn: () => get(SupplierPromotionListSchema, '/supplier-promotions'),
+    queryFn: () => get(SalonPromotionListSchema, '/supplier-promotions'),
   });
   const [qty, setQty] = useState<Record<string, number>>({});
   const [error, setError] = useState<string | null>(null);
@@ -729,5 +732,105 @@ function Receive({ order, done }: { order: PurchaseOrder; done: () => void }) {
         </div>
       </div>
     </>
+  );
+}
+
+/** Running promotions from connected suppliers (2026-10-07): the
+ *  server's list with its reasons; a row opens the offer; the offer
+ *  leads to an order from that supplier. */
+function PromotionsTab({ startOrder, openId }: { startOrder: (supplierId: string) => void; openId: string | null }) {
+  const { t } = useTranslation();
+  const promos = useQuery({ queryKey: ['supPromotions'], queryFn: () => get(SalonPromotionListSchema, '/supplier-promotions') });
+  const [open, setOpen] = useState<string | null>(openId);
+  const rows = promos.data?.promotions ?? [];
+  const current = rows.find((p) => p.id === open) ?? null;
+  return (
+    <>
+      <div className="card">
+        <div className="card-header">
+          <div>
+            <h2>{t('sup.promosTitle')}</h2>
+            <span className="muted" style={{ fontWeight: 500 }}>{t('sup.promosSub')}</span>
+          </div>
+        </div>
+        {promos.data && rows.length === 0 ? (
+          <p className="muted" style={{ padding: '16px 20px', fontWeight: 500 }}>{t('sup.noPromos')}</p>
+        ) : null}
+        {rows.map((o) => (
+          <button type="button" className="rowcard" key={o.id} onClick={() => setOpen(o.id)} data-testid="salon-promo" style={{ width: '100%', textAlign: 'left', cursor: 'pointer' }}>
+            <span className={`mark ${o.status === 'running' ? 'on' : ''}`}>
+              <Icon d={I.tag} size={20} />
+            </span>
+            <span className="grow">
+              <span className="t">
+                {o.title}
+                {o.reasons.map((r) => (
+                  <span key={r} className={`badge ${r === 'carry' || r === 'ordered_before' ? 'success' : r === 'ending_soon' ? 'warning' : ''}`} style={{ marginLeft: 6 }}>
+                    {t(`sup.reason.${r}`)}
+                  </span>
+                ))}
+              </span>
+              <span className="s">
+                {o.supplierName} · {o.products.map((x) => x.name).join(', ')}
+              </span>
+              <span className="s">
+                {o.status === 'scheduled' ? t('sup.promoStarts', { date: dateShort(o.starts) }) : o.daysLeft === 0 ? t('sup.promoEndsToday') : t('sup.promoEndsIn', { n: o.daysLeft })} · {o.terms || '—'}
+              </span>
+            </span>
+            <Icon d={I.right} size={18} />
+          </button>
+        ))}
+      </div>
+      {current ? <PromotionDetail promo={current} onClose={() => setOpen(null)} onOrder={() => startOrder(current.supplierId)} /> : null}
+    </>
+  );
+}
+
+function PromotionDetail({ promo, onClose, onOrder }: { promo: SalonPromotion; onClose: () => void; onOrder: () => void }) {
+  const { t } = useTranslation();
+  return (
+    <div className="overlay" onClick={onClose}>
+      <div className="modal" role="dialog" aria-modal="true" aria-labelledby="promo-title" style={{ maxWidth: 560 }} onClick={(e) => e.stopPropagation()}>
+        <div className="modal-head">
+          <div>
+            <h2 id="promo-title">{promo.title}</h2>
+            <span className="muted" style={{ fontWeight: 500 }}>{promo.supplierName} · {promo.brand}</span>
+          </div>
+        </div>
+        <div className="modal-body" style={{ display: 'grid', gap: 12 }} data-testid="salon-promo-detail">
+          <div>
+            {promo.reasons.map((r) => (
+              <span key={r} className={`badge ${r === 'carry' || r === 'ordered_before' ? 'success' : r === 'ending_soon' ? 'warning' : ''}`} style={{ marginRight: 6 }}>
+                {t(`sup.reason.${r}`)}
+              </span>
+            ))}
+          </div>
+          <div>
+            <span className="stat-label">{t('sup.promoProducts')}</span>
+            <ul style={{ margin: '4px 0 0', paddingLeft: 18 }}>
+              {promo.products.map((x) => (
+                <li key={x.id}>
+                  <span className="bold">{x.name}</span> <span className="muted tnum">· {money(x.buy)}</span>
+                  {x.carried ? <span className="badge success" style={{ marginLeft: 6 }}>{t('sup.promoCarried')}</span> : null}
+                </li>
+              ))}
+            </ul>
+          </div>
+          <div className="muted" style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '2px 14px' }}>
+            <span>{t('sup.promoPeriod')}</span><span className="tnum">{dateShort(promo.starts)} → {dateShort(promo.ends)}</span>
+            <span>{t('sup.promoMinOrder')}</span><span className="tnum">{promo.minOrder ? money(promo.minOrder) : '—'}</span>
+            <span>{t('sup.promoTerms')}</span><span>{promo.terms || '—'}</span>
+          </div>
+          <div className="note">{t('sup.promosSub')}</div>
+        </div>
+        <div className="modal-foot" style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+          <button className="btn btn-ghost" onClick={onClose}>{t('sup.promoClose')}</button>
+          <button className="btn btn-primary" onClick={onOrder} data-testid="promo-order">{t('sup.promoOrderFrom', { name: promo.supplierName })}</button>
+        </div>
+        <button className="modal-close" aria-label={t('sup.promoClose')} onClick={onClose}>
+          <Icon d={I.x} size={20} />
+        </button>
+      </div>
+    </div>
   );
 }
