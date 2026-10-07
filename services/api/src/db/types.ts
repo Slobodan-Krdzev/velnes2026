@@ -1081,6 +1081,22 @@ export interface ProductCategories {
   sort: Generated<number>;
 }
 
+export interface ProductPromotions {
+  active: Generated<boolean>;
+  createdAt: Generated<Timestamp>;
+  createdBy: string | null;
+  createdByName: Generated<string>;
+  endedAt: Timestamp | null;
+  ends: Timestamp;
+  id: Generated<string>;
+  kind: string;
+  note: Generated<string>;
+  productId: string;
+  starts: Timestamp;
+  tenantId: string;
+  value: number;
+}
+
 export interface Products {
   description: string | null;
   active: Generated<boolean>;
@@ -1574,6 +1590,7 @@ export interface DB {
   platformNotices: PlatformNotices;
   premiumOffers: PremiumOffers;
   productCategories: ProductCategories;
+  productPromotions: ProductPromotions;
   products: Products;
   purchaseOrderLines: PurchaseOrderLines;
   purchaseOrders: PurchaseOrders;

@@ -34,7 +34,8 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { sql } from 'kysely';
 import { z } from 'zod';
-import { svcAt, svcVariants } from '../modules/catalog/catalog.service.js';
+import { livePromos, svcAt, svcVariants } from '../modules/catalog/catalog.service.js';
+import { promoPrice, SALON_PAGE_PRODUCTS_MAX, DiscoveryProductsQuerySchema, DiscoveryProductsPageSchema } from '@velnes/contracts';
 import { ClientClaimsSchema } from '@velnes/contracts';
 import { rank, type RankCandidate } from '../modules/search/rank.js';
 import {
@@ -185,6 +186,33 @@ export function socialLinks(raw: unknown): ListedBusiness['socials'] {
 
 /** Great-circle distance in kilometres — the same arithmetic the app's
  *  own "from you" label uses. */
+/** The salon's shelf as the page shows it (2026-10-07): each product
+ *  with where it is sold and for how much there — the promo price when
+ *  a promotion is live, the regular one beside it — on promotion first,
+ *  then by name. */
+function shelfWithPromos(
+  shelf: { id: string; name: string; price: number; img: string | null; description: string | null; category: string | null }[],
+  rows: { locationId: string; productId: string; price: number; active: boolean; pos: boolean }[],
+  locations: { id: string }[],
+  promos: Map<string, { id: string; kind: 'pct' | 'price'; value: number; ends: string }>,
+) {
+  return shelf
+    .map((p) => {
+      const promo = promos.get(p.id) ?? null;
+      return {
+        ...p,
+        promo: promo ? { kind: promo.kind, value: promo.value, ends: promo.ends } : null,
+        at: locations.flatMap((l) => {
+          const c = rows.find((r) => r.productId === p.id && r.locationId === l.id);
+          if (!((c?.active ?? true) && (c?.pos ?? true))) return [];
+          const regular = c?.price ?? p.price;
+          return [{ locationId: l.id, price: promoPrice(regular, promo), regularPrice: regular }];
+        }),
+      };
+    })
+    .sort((a, b) => Number(!!b.promo) - Number(!!a.promo) || a.name.localeCompare(b.name));
+}
+
 function haversineKm(a: { lat: number; lng: number }, b: { lat: number; lng: number }): number {
   const R = 6371;
   const dLat = ((b.lat - a.lat) * Math.PI) / 180;
@@ -1736,7 +1764,7 @@ export async function discoveryRoutes(app: FastifyInstance) {
       if (!biz)
         return reply.code(404).send({ error: 'UNKNOWN_SALON', message: 'No salon here' });
       const pin = await firstPin(biz.id);
-      const { team, products, locations, addr, reviews, teamRatings } = await withTenant(biz.id, async (trx) => {
+      const { team, products, productsTotal, locations, addr, reviews, teamRatings } = await withTenant(biz.id, async (trx) => {
         // Verified reviews, unless the salon hides them.
         const reviews = biz.marketplace.showReviews ? await reviewSummary(trx, biz.id) : null;
         const teamRatings = biz.marketplace.showReviews ? await employeeRatings(trx, biz.id) : new Map<string, { avg: number; count: number }>();
@@ -1812,14 +1840,9 @@ export async function discoveryRoutes(app: FastifyInstance) {
                 )
                 .execute()
             : [];
-        const products = shelf.map((p) => ({
-          ...p,
-          at: locations.flatMap((l) => {
-            const c = rows.find((r) => r.productId === p.id && r.locationId === l.id);
-            return (c?.active ?? true) && (c?.pos ?? true) ? [{ locationId: l.id, price: c?.price ?? p.price }] : [];
-          }),
-        }));
-        return { team, products, locations, addr, reviews, teamRatings };
+        const all = shelfWithPromos(shelf, rows, locations, await livePromos(trx, shelf.map((p) => p.id)));
+        // The page shows twelve at most, on promotion first; the modal pages the rest.
+        return { team, products: all.slice(0, SALON_PAGE_PRODUCTS_MAX), productsTotal: all.length, locations, addr, reviews, teamRatings };
       });
       return {
         id: biz.id,
@@ -1838,6 +1861,7 @@ export async function discoveryRoutes(app: FastifyInstance) {
         showPrices: biz.marketplace.showPrices,
         team: team.map((e) => ({ id: e.id, name: e.name, role: e.roleTitle, avatar: e.avatar, rating: teamRatings.get(e.id) ?? null })),
         products,
+        productsTotal,
         bookable: locations.length > 0,
         publishableKey: locations.length ? consumerKey(biz.slug) : null,
         locations,
@@ -1865,6 +1889,49 @@ export async function discoveryRoutes(app: FastifyInstance) {
       if (!biz) return reply.code(404).send({ error: 'UNKNOWN_SALON', message: 'No salon here' });
       if (!biz.marketplace.showReviews) return { reviews: [], total: 0, offset: req.query.offset, limit: req.query.limit };
       return publicReviews(biz.id, req.query.offset, req.query.limit);
+    },
+  });
+
+  // All of a salon's products, searched by name, paged — on promotion
+  // first (2026-10-07). The same shape and the same prices as the page.
+  r.route({
+    method: 'GET',
+    url: '/discovery/salons/:slug/products',
+    schema: {
+      params: z.object({ slug: z.string().min(1) }),
+      querystring: DiscoveryProductsQuerySchema,
+      response: { 200: DiscoveryProductsPageSchema, 404: ErrorSchema },
+    },
+    handler: async (req, reply) => {
+      const listed = await listedBusinesses();
+      const biz = listed.find((b) => b.slug === req.params.slug);
+      if (!biz) return reply.code(404).send({ error: 'UNKNOWN_SALON', message: 'No salon here' });
+      const q = req.query.q.toLowerCase();
+      return withTenant(biz.id, async (trx) => {
+        const locations = await trx.selectFrom('locations').select('id').where('lifecycle', '=', 'ACTIVE').execute();
+        let shelfQ = trx
+          .selectFrom('products as p')
+          .leftJoin('productCategories as c', 'c.id', 'p.categoryId')
+          .select(['p.id', 'p.name', 'p.price', 'p.img', 'p.description'])
+          .select('c.name as category')
+          .where('p.active', '=', true)
+          .where('p.own', '=', false)
+          .where('p.price', '>', 0);
+        if (q) shelfQ = shelfQ.where('p.name', 'ilike', `%${q.replace(/[%_]/g, '')}%`);
+        const shelf = await shelfQ.orderBy('p.name').execute();
+        const rows =
+          shelf.length && locations.length
+            ? await trx
+                .selectFrom('locationCatalogProducts')
+                .select(['locationId', 'productId', 'price', 'active', 'pos'])
+                .where('productId', 'in', shelf.map((p) => p.id))
+                .where('locationId', 'in', locations.map((l) => l.id))
+                .execute()
+            : [];
+        const all = shelfWithPromos(shelf, rows, locations, await livePromos(trx, shelf.map((p) => p.id))).filter((p) => p.at.length > 0);
+        const start = (req.query.page - 1) * req.query.limit;
+        return { products: all.slice(start, start + req.query.limit), total: all.length, page: req.query.page, limit: req.query.limit };
+      });
     },
   });
 }

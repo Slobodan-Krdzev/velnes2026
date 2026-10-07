@@ -107,7 +107,9 @@ export const DiscoveryProductSchema = z.object({
   /** Where it is actually sold, and for how much there (2026-10-01):
    *  the shelf of each live location that sells it. A location missing
    *  here does not sell it; the app offers products per location. */
-  at: z.array(z.object({ locationId: z.uuid(), price: z.number().int() })).default([]),
+  at: z.array(z.object({ locationId: z.uuid(), price: z.number().int(), regularPrice: z.number().int().optional() })).default([]),
+  /** On promotion (2026-10-07): what is off and until when; `at[].price` is then the promo price and `regularPrice` the crossed-out one. */
+  promo: z.object({ kind: z.enum(['pct', 'price']), value: z.number().int(), ends: z.iso.date() }).nullable().default(null),
 });
 /** A gallery entry: the photograph a salon uploaded, or — when it has
  *  only named the space so far — the colour tile the workspace editor
@@ -149,7 +151,9 @@ export const DiscoverySalonDetailSchema = z.object({
   }),
   showPrices: z.boolean(),
   team: z.array(DiscoveryTeamMemberSchema),
+  /** The first twelve products — on promotion first, then by name (2026-10-07); `productsTotal` says how many there are in all. */
   products: z.array(DiscoveryProductSchema),
+  productsTotal: z.number().int().default(0),
   bookable: z.boolean(),
   publishableKey: z.string().nullable(),
   /** The salon's verified-review summary, or null when there are none
@@ -639,3 +643,18 @@ export type DiscoveryServiceCard = z.infer<typeof DiscoveryServiceCardSchema>;
 export type DiscoveryCategoryServices = z.infer<typeof DiscoveryCategoryServicesSchema>;
 export type DiscoverySalonCard = z.infer<typeof DiscoverySalonCardSchema>;
 export type DiscoverySalonDetail = z.infer<typeof DiscoverySalonDetailSchema>;
+
+/** A page of a salon's products for the "See all products" modal (2026-10-07): searched by name, on promotion first. */
+export const DiscoveryProductsQuerySchema = z.object({
+  q: z.string().trim().max(80).default(''),
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(48).default(12),
+});
+export const DiscoveryProductsPageSchema = z.object({
+  products: z.array(DiscoveryProductSchema),
+  total: z.number().int(),
+  page: z.number().int(),
+  limit: z.number().int(),
+});
+export const SALON_PAGE_PRODUCTS_MAX = 12;
+

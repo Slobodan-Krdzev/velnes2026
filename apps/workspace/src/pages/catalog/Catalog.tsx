@@ -17,6 +17,7 @@ import { useLocation as useRouterLocation, useSearchParams } from 'react-router-
 import { useScope } from '../../shell/Shell.js';
 import { ComboPanel } from './ComboPanel.js';
 import { ProductPanel } from './ProductPanel.js';
+import { PromoPanel } from './PromoPanel.js';
 import { ServicePanel } from './ServicePanel.js';
 import { z } from 'zod';
 
@@ -60,7 +61,7 @@ export function CatalogPage() {
   const [tab, setTab] = useState(urlTab && CAT_TABS.some(([id]) => id === urlTab) ? urlTab : (askedTab ?? 'services'));
   const [panel, setPanel] = useState<
     | { kind: 'service'; id: string | null }
-    | { kind: 'product'; id: string | null }
+    | { kind: 'product' | 'promo'; id: string | null }
     | { kind: 'combo'; id: string | null }
     | null
   >(null);
@@ -344,6 +345,11 @@ export function CatalogPage() {
                           <span className="cellhead">
                             <span className="bold">{p.name}</span>{' '}
                             {p.config.active ? null : <span className="badge">Off</span>}
+                            {p.promo ? (
+                              <span className="badge success" style={{ marginLeft: 6 }} data-testid="promo-badge">
+                                {t('catalog.promoBadge')} · {p.promo.kind === 'pct' ? `−${p.promo.value}%` : money(p.promo.value)}
+                              </span>
+                            ) : null}
                           </span>
                         </span>
                       </span>
@@ -412,6 +418,11 @@ export function CatalogPage() {
                           onClick={() => setLedgerFor({ id: p.id, name: p.name })}
                         >
                           {t('catalog.ledger')}
+                        </button>
+                      ) : null}{' '}
+                      {can('catalog.edit') && !p.own ? (
+                        <button className="btn btn-subtle btn-sm" onClick={() => setPanel({ kind: 'promo', id: p.id })} data-testid={`promo-${p.id}`}>
+                          {t('catalog.promo')}
                         </button>
                       ) : null}{' '}
                       <button
@@ -639,6 +650,13 @@ export function CatalogPage() {
             setPanel(null);
             toast(t('catalog.saved'));
           }}
+          onClose={() => setPanel(null)}
+        />
+      ) : null}
+      {panel?.kind === 'promo' && panel.id ? (
+        <PromoPanel
+          product={products.find((p) => p.id === panel.id)!}
+          onChanged={() => refresh()}
           onClose={() => setPanel(null)}
         />
       ) : null}

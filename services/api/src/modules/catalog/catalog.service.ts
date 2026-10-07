@@ -6,10 +6,11 @@ import type {
   ServiceChoice,
 } from '@velnes/contracts';
 import type { Trx } from '../../db/index.js';
+import { promoPrice } from '@velnes/contracts';
 
 export class CatalogError extends Error {
   constructor(
-    public code: 'NOT_FOUND' | 'BAD_MODIFIER' | 'BAD_CATEGORY' | 'BAD_ITEM',
+    public code: 'NOT_FOUND' | 'BAD_MODIFIER' | 'BAD_CATEGORY' | 'BAD_ITEM' | 'REFUSED' | 'CONFLICT',
     message: string,
   ) {
     super(message);
@@ -379,6 +380,27 @@ export async function priceFor(
 }
 
 /** prodAt — the per-location resolution of one product. */
+/** The promotions live today for these products (2026-10-07): active,
+ *  started, not yet ended. At most one per product by the unique index. */
+export async function livePromos(trx: Trx, productIds: string[], today = localIsoDate(new Date())) {
+  const out = new Map<string, { id: string; kind: 'pct' | 'price'; value: number; ends: string }>();
+  if (!productIds.length) return out;
+  const rows = await trx
+    .selectFrom('productPromotions')
+    .select(['id', 'productId', 'kind', 'value', 'ends'])
+    .where('productId', 'in', productIds)
+    .where('active', '=', true)
+    .where('starts', '<=', new Date(today))
+    .where('ends', '>=', new Date(today))
+    .execute();
+  for (const r of rows) out.set(r.productId, { id: r.id, kind: r.kind as 'pct' | 'price', value: r.value, ends: localIsoDate(r.ends) });
+  return out;
+}
+const localIsoDate = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+/** A product at a location: its shelf terms, and — the one place it is
+ *  decided — the price actually charged: the location's price with the
+ *  live promotion applied. `regularPrice` is the price before it. */
 export async function prodAt(trx: Trx, productId: string, locationId: string) {
   const p = await trx
     .selectFrom('products')
@@ -392,9 +414,13 @@ export async function prodAt(trx: Trx, productId: string, locationId: string) {
     .where('productId', '=', productId)
     .where('locationId', '=', locationId)
     .executeTakeFirst();
+  const regular = c?.price ?? p.price;
+  const promo = (await livePromos(trx, [productId])).get(productId) ?? null;
   return {
     active: c?.active ?? p.active,
-    price: c?.price ?? p.price,
+    price: promoPrice(regular, promo),
+    regularPrice: regular,
+    promo,
     pos: c?.pos ?? (p.own ? false : p.active),
     stock: c?.stock ?? 0,
     lowStock: c?.lowStock ?? 2,
@@ -446,24 +472,31 @@ export async function locationCatalog(
     .orderBy('p.name')
     .execute();
 
+  const promos = await livePromos(trx, products.map((p) => p.id));
   return {
     services: out,
-    products: products.map((p) => ({
-      id: p.id,
-      name: p.name,
-      category: p.category,
-      img: p.img,
-      description: p.description,
-      sku: p.sku,
-      vat: p.vat,
-      own: p.own,
-      config: {
-        active: p.lcActive ?? p.active,
-        price: p.lcPrice ?? p.price,
-        pos: p.lcPos ?? (p.own ? false : p.active),
-        stock: p.lcStock ?? 0,
-        lowStock: p.lcLowStock ?? 2,
-      },
-    })),
+    products: products.map((p) => {
+      const promo = promos.get(p.id) ?? null;
+      const regular = p.lcPrice ?? p.price;
+      return {
+        id: p.id,
+        name: p.name,
+        category: p.category,
+        img: p.img,
+        description: p.description,
+        sku: p.sku,
+        vat: p.vat,
+        own: p.own,
+        config: {
+          active: p.lcActive ?? p.active,
+          price: regular,
+          pos: p.lcPos ?? (p.own ? false : p.active),
+          stock: p.lcStock ?? 0,
+          lowStock: p.lcLowStock ?? 2,
+        },
+        promo,
+        promoPrice: promo ? promoPrice(regular, promo) : null,
+      };
+    }),
   };
 }

@@ -23,19 +23,36 @@ const detail = {
     // Sold only at the other location: not offered here.
     { id: TAPE, name: 'Kinesiology tape roll', category: 'Recovery aids', price: 550, at: [{ locationId: LOC2, price: 550 }] },
   ],
+  productsTotal: 2,
   locations: [{ id: LOC, name: 'Centar', city: 'Skopje', address: 'Makedonija 12', lat: null, lng: null, amenities: [], hours: null }],
 };
 const services = {
   services: [{ id: SVC, name: 'Sports massage', category: 'Recovery', durationMin: 45, price: 1900, priceFrom: 1900, variants: [], modifiers: [], employees: [{ id: '40000000-0000-4000-8000-000000000001', name: 'Maria Petrovska' }] }],
 };
 
-function mockApi() {
+const PROMO = '70000000-0000-4000-8000-000000000050';
+const many = {
+  ...detail,
+  products: [
+    { id: PROMO, name: 'Arnica massage oil', category: 'Oils', price: 900, promo: { kind: 'pct', value: 20, ends: '2026-10-20' }, at: [{ locationId: LOC, price: 720, regularPrice: 900 }] },
+    ...Array.from({ length: 14 }, (_, i) => ({ id: `70000000-0000-4000-8000-0000000001${String(i).padStart(2, '0')}`, name: `Shelf product ${String(i + 1).padStart(2, '0')}`, category: 'Oils', price: 100 + i, at: [{ locationId: LOC, price: 100 + i, regularPrice: 100 + i }] })),
+  ].slice(0, 12),
+  productsTotal: 15,
+};
+const extra = { id: '70000000-0000-4000-8000-000000000199', name: 'Foot cream deluxe', category: 'Oils', price: 450, at: [{ locationId: LOC, price: 450, regularPrice: 450 }] };
+
+function mockApi(which: 'few' | 'many' = 'few') {
   vi.stubGlobal(
     'fetch',
     vi.fn(async (url: string) => {
       const ok = (body: unknown) => new Response(JSON.stringify(body), { status: 200 });
       if (url.includes('/discovery/salons/velnes-fizio/reviews')) return ok({ reviews: [], total: 0, offset: 0, limit: 5 });
-      if (url.includes('/discovery/salons/velnes-fizio')) return ok(detail);
+      if (url.includes('/discovery/salons/velnes-fizio/products')) {
+        const q = new URL(url, 'http://x').searchParams.get('q') ?? '';
+        const all = [many.products[0]!, ...many.products.slice(1), extra].filter((p) => p.name.toLowerCase().includes(q.toLowerCase()));
+        return ok({ products: all.slice(0, 12), total: all.length, page: 1, limit: 12 });
+      }
+      if (url.includes('/discovery/salons/velnes-fizio')) return ok(which === 'many' ? many : detail);
       if (url.includes('/services?key=')) return ok(services);
       return ok({ categories: [], salons: [], services: [], slots: [{ t: '10:00', free: true }], towns: [], suggestions: [], how: 'default' });
     }),
@@ -109,5 +126,36 @@ describe('products with a booking, on the salon page', () => {
     const wrap = document.querySelector('.tr-wrap')!;
     expect(wrap.querySelector(':scope > button.tr-card')).toBeTruthy();
     expect(wrap.querySelector(':scope > button.fav-inline')).toBeTruthy();
+  });
+
+  it('a promotion shows its tag with the regular price crossed out, the page stops at twelve, and "See all products" opens the searchable modal that adds to the visit', async () => {
+    cleanup();
+    vi.unstubAllGlobals();
+    mockApi('many');
+    window.history.replaceState({}, '', `/salon/velnes-fizio?service=${SVC}`);
+    render(<App />);
+    await waitFor(() => expect(document.getElementById('dcart')).toBeTruthy());
+    const toggles = screen.getAllByRole('button', { name: /products/i });
+    expect(toggles[0]!.textContent).toContain('15 products');
+    fireEvent.click(toggles[0]!);
+    const promoCard = document.querySelector<HTMLButtonElement>(`[data-product="${PROMO}"]`)!;
+    expect(within(promoCard).getByTestId('promo-tag').textContent).toContain('Promo');
+    expect(within(promoCard).getByTestId('promo-tag').textContent).toContain('20%');
+    expect(within(promoCard).getByText('900 MKD').tagName).toBe('S');
+    expect(within(promoCard).getByText('720 MKD')).toBeDefined();
+    // Twelve on the page, the promotion first.
+    const grid = promoCard.closest('.tr-grid')!;
+    expect(grid.querySelectorAll('[data-product]').length).toBe(12);
+    expect(grid.querySelector('[data-product]')!.getAttribute('data-product')).toBe(PROMO);
+    fireEvent.click(screen.getAllByTestId('see-all-products')[0]!);
+    const modal = (await screen.findAllByTestId('all-products'))[0]!;
+    expect(await within(modal).findByText(/1–12 of 13/)).toBeDefined(); // the mock's shelf: the promo, eleven more, and the one only the modal carries
+    fireEvent.change(within(modal).getByLabelText('Search by name'), { target: { value: 'foot' } });
+    const found = await within(modal).findByText('Foot cream deluxe');
+    fireEvent.click(found.closest('button')!);
+    await waitFor(() => expect(within(modal).getByText('Foot cream deluxe').closest('button')?.getAttribute('aria-pressed')).toBe('true'));
+    // The product the modal added is in the visit's basket at its price.
+    const cart = document.getElementById('dcart')!;
+    await waitFor(() => expect(within(cart).getByTestId('cart-product').textContent).toContain('Foot cream deluxe'));
   });
 });

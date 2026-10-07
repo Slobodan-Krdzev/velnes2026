@@ -177,7 +177,8 @@ export function TillPage() {
         kind: 'product' as const,
         name: p.name,
         meta: `${p.config.stock} in stock at ${hereName}`,
-        price: p.config.price,
+        // The promo price while a promotion runs (2026-10-07) — what the sale door will charge.
+        price: p.promoPrice ?? p.config.price,
         letter: p.name[0] ?? '?',
         img: p.img,
       }));
@@ -226,7 +227,7 @@ export function TillPage() {
       refId: p.productId,
       name: p.name,
       sub: t('till.withBooking'),
-      price: products.find((x) => x.id === p.productId)?.config.price ?? p.unitPrice,
+      price: (() => { const x = products.find((y) => y.id === p.productId); return x ? (x.promoPrice ?? x.config.price) : p.unitPrice; })(),
       qty: p.qty,
       disc: 0,
     }));

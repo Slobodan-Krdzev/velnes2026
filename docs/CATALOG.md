@@ -113,3 +113,25 @@ must be picked, and whose price the salon card shows as "from"; a click
 on the already-marked radio clears it. The panel's save error now sits
 in the footer beside Save, where the eye is.
 `catalog/catalog.variants.test.ts`, `catalog/Catalog.test.tsx`.
+
+## Product promotions (2026-10-07)
+
+A salon puts one of its own products on promotion for a period: a
+percentage off (1–90 %) or a promo price (below the regular price).
+`product_promotions` keeps one live-or-scheduled promotion per product
+(a partial unique index); a new one is refused with `409` while one is
+running or scheduled; **End now** ends it early (`active = false`,
+`ended_at`) and the history stays — nothing is deleted. Doors:
+`GET/POST /products/:id/promotions` and `POST
+/products/:id/promotions/:pid/end` (`catalog.edit`), each write audited
+with before/after. The effective price is decided in one function,
+`promoPrice` in contracts, and applied by `prodAt` — the resolver the
+till and booking checkout already price products through — so the till
+charges the promo price while it runs, a booking takes the product home
+at it, the catalog screen shows it beside the regular price (and a Promo
+badge), and the till's tiles show it. The Workspace catalog table has a
+**Promo** button per product that opens the right-hand promotion panel.
+What is not here: promotions on services, stacking, and per-location
+promotions (a promotion applies to the product at every location, each
+at that location's price).
+

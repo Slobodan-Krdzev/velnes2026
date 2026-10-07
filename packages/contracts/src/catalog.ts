@@ -79,6 +79,66 @@ export const ResolvedServiceSchema = ServiceSchema.omit({
 export const PRODUCT_IMG_MAX_CHARS = 200_000; // data-URL chars ≈ 150 KB
 export const PRODUCT_IMG_MAX_EDGE_PX = 512;
 
+/* ── Product promotions (2026-10-07) ─────────────────────────────────
+   A salon's own product on offer for a period: a percentage off or a
+   promo price. One live-or-scheduled promotion per product; ending
+   early is a step, not a delete. The effective price is computed here,
+   once, and applied by the server wherever a product is priced. */
+
+export const PRODUCT_PROMO_KINDS = ['pct', 'price'] as const;
+export const ProductPromoKindSchema = z.enum(PRODUCT_PROMO_KINDS);
+export const ProductPromotionWriteSchema = z
+  .object({
+    kind: ProductPromoKindSchema,
+    /** pct: 1–90 · price: whole denars, must be below the regular price. */
+    value: z.number().int().positive(),
+    starts: z.iso.date(),
+    ends: z.iso.date(),
+    note: z.string().trim().max(200).default(''),
+  })
+  .refine((v) => v.ends >= v.starts, { path: ['ends'], message: 'The promotion cannot end before it starts' })
+  .refine((v) => v.kind !== 'pct' || v.value <= 90, { path: ['value'], message: 'At most 90 % off' });
+export type ProductPromotionWrite = z.infer<typeof ProductPromotionWriteSchema>;
+export const ProductPromotionSchema = z.object({
+  id: z.uuid(),
+  productId: z.uuid(),
+  kind: ProductPromoKindSchema,
+  value: z.number().int(),
+  starts: z.iso.date(),
+  ends: z.iso.date(),
+  active: z.boolean(),
+  /** Derived: scheduled (not yet started), running, ended (by date or early). */
+  status: z.enum(['scheduled', 'running', 'ended']),
+  note: z.string(),
+  createdBy: z.object({ id: z.uuid().nullable(), name: z.string() }),
+  createdAt: z.iso.datetime(),
+  endedAt: z.iso.datetime().nullable(),
+});
+export type ProductPromotion = z.infer<typeof ProductPromotionSchema>;
+export const ProductPromotionListSchema = z.object({ promotions: z.array(ProductPromotionSchema) });
+
+/** The promo as it travels with a priced product: what is off, until when. */
+export const ProductPromoTagSchema = z.object({
+  id: z.uuid(),
+  kind: ProductPromoKindSchema,
+  value: z.number().int(),
+  ends: z.iso.date(),
+});
+export type ProductPromoTag = z.infer<typeof ProductPromoTagSchema>;
+
+/** The one effective-price rule: a percentage off rounds half-up to a
+ *  whole denar; a promo price never exceeds the regular price. */
+export function promoPrice(regular: number, promo: { kind: 'pct' | 'price'; value: number } | null | undefined): number {
+  if (!promo) return regular;
+  if (promo.kind === 'pct') return Math.max(0, Math.round((regular * (100 - promo.value)) / 100));
+  return Math.max(0, Math.min(regular, promo.value));
+}
+export function productPromoStatus(p: { active: boolean; starts: string; ends: string }, today: string): 'scheduled' | 'running' | 'ended' {
+  if (!p.active || today > p.ends) return 'ended';
+  if (today < p.starts) return 'scheduled';
+  return 'running';
+}
+
 export const ResolvedProductSchema = z.object({
   id: z.uuid(),
   name: z.string(),
@@ -95,6 +155,9 @@ export const ResolvedProductSchema = z.object({
     stock: z.number().int(),
     lowStock: z.number().int(),
   }),
+  /** The live promotion and what it makes of this location's price (2026-10-07). */
+  promo: ProductPromoTagSchema.nullable().default(null),
+  promoPrice: MoneySchema.nullable().default(null),
 });
 
 export const LocationCatalogResponseSchema = z.object({

@@ -16,6 +16,9 @@ import {
   ServiceWriteSchema,
   VariantOverridePatchSchema,
   type PermKey,
+  ProductPromotionListSchema,
+  ProductPromotionSchema,
+  ProductPromotionWriteSchema,
 } from '@velnes/contracts';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
@@ -36,6 +39,7 @@ import {
   updateService,
 } from './catalog.crud.service.js';
 import { CatalogError, locationCatalog, priceFor, svcLine } from './catalog.service.js';
+import { createPromotion, endPromotion, listPromotions } from './promotions.service.js';
 
 const ErrorSchema = z.object({ error: z.string(), message: z.string() });
 const OkSchema = z.object({ ok: z.literal(true) });
@@ -53,7 +57,9 @@ function sendCatalogError(reply: FastifyReply, e: unknown) {
       ? 403
       : e.code === 'NOT_FOUND'
         ? 404
-        : 422;
+        : e.code === 'CONFLICT'
+          ? 409
+          : 422;
     return reply.code(status as 403).send({ error: e.code, message: e.message });
   }
   throw e;
@@ -539,6 +545,53 @@ export function catalogRoutes(app: FastifyInstance) {
           await deleteCombo(trx, req.params.id);
         });
         return { ok: true as const };
+      } catch (e) {
+        return sendCatalogError(reply, e);
+      }
+    },
+  });
+
+  /* ── Product promotions (2026-10-07) ─────────────────────────────
+     Read with catalog.view, write with catalog.edit. One live-or-
+     scheduled promotion per product; ending early is a step. */
+  r.route({
+    method: 'GET',
+    url: '/products/:id/promotions',
+    preHandler: [app.authenticate],
+    schema: { params: z.object({ id: z.uuid() }), response: { 200: ProductPromotionListSchema, 403: ErrorSchema } },
+    handler: async (req, reply) =>
+      withTenant(req.claims.ten, async (trx) => {
+        if (!(await canReadCatalog(trx, req.claims))) return reply.code(403).send({ error: 'FORBIDDEN', message: 'Missing permission: catalog.view' });
+        return { promotions: await listPromotions(trx, req.params.id) };
+      }),
+  });
+  r.route({
+    method: 'POST',
+    url: '/products/:id/promotions',
+    preHandler: [app.authenticate],
+    schema: { params: z.object({ id: z.uuid() }), body: ProductPromotionWriteSchema, response: { 200: ProductPromotionSchema, 403: ErrorSchema, 404: ErrorSchema, 409: ErrorSchema, 422: ErrorSchema } },
+    handler: async (req, reply) => {
+      try {
+        return await withTenant(req.claims.ten, async (trx) => {
+          await requirePerm('catalog.edit')(trx, req);
+          return createPromotion(trx, req.claims, req.params.id, req.body);
+        });
+      } catch (e) {
+        return sendCatalogError(reply, e);
+      }
+    },
+  });
+  r.route({
+    method: 'POST',
+    url: '/products/:id/promotions/:pid/end',
+    preHandler: [app.authenticate],
+    schema: { params: z.object({ id: z.uuid(), pid: z.uuid() }), response: { 200: ProductPromotionSchema, 403: ErrorSchema, 404: ErrorSchema, 422: ErrorSchema } },
+    handler: async (req, reply) => {
+      try {
+        return await withTenant(req.claims.ten, async (trx) => {
+          await requirePerm('catalog.edit')(trx, req);
+          return endPromotion(trx, req.claims, req.params.id, req.params.pid);
+        });
       } catch (e) {
         return sendCatalogError(reply, e);
       }
