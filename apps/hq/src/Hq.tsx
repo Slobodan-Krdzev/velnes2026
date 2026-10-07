@@ -2367,12 +2367,23 @@ function Suppliers({ say, isSuper }: { say: (m: string) => void; isSuper: boolea
                           {t('hq.inviteOwner')}
                         </button>
                       ) : (
-                        <span
-                          className={`badge ${s2.ownerStatus === 'active' ? 'success' : 'warning'}`}
-                          title={t('hq.ownerStateHint')}
-                        >
-                          {s2.ownerStatus === 'active' ? t('hq.ownerActive') : t('hq.ownerInvited')}
-                        </span>
+                        <>
+                          <span
+                            className={`badge ${s2.ownerStatus === 'active' ? 'success' : 'warning'}`}
+                            title={t('hq.ownerStateHint')}
+                          >
+                            {s2.ownerStatus === 'active' ? t('hq.ownerActive') : t('hq.ownerInvited')}
+                          </span>
+                          {s2.ownerStatus === 'invited' ? (
+                            <button
+                              className="btn btn-ghost btn-sm"
+                              title={t('hq.resendInviteHint')}
+                              onClick={() => setInviting({ id: s2.id, supplier: s2.name })}
+                            >
+                              {t('hq.resendInvite')}
+                            </button>
+                          ) : null}
+                        </>
                       )}
                       <button
                         className={s2.verified ? 'btn btn-ghost btn-sm' : 'btn btn-primary btn-sm'}

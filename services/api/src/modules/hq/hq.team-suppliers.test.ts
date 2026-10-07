@@ -188,18 +188,22 @@ describe('HQ team, supplier intelligence and the mail outbox', () => {
     const row = withOwner.suppliers.find((s) => s.id === id)!;
     expect(row.ownerStatus).toBe('invited');
     expect(row.hasOwner).toBe(true);
-    // A second invite is refused — one owner bootstrap only.
+    // The invite mail sits in the outbox, stamped mock_sent, carrying a join link.
+    const mail = await admin.query(
+      `SELECT status, kind, meta FROM mail_outbox WHERE to_email='owner@glowline.test'`,
+    );
+    expect(mail.rows[0]?.kind).toBe('supplier_invite');
+    expect(mail.rows[0]?.status).toBe('mock_sent');
+    expect((mail.rows[0]?.meta as { cta: { url: string } }).cta.url).toMatch(/\/join\//);
+    // While nobody has claimed it, HQ may re-send to a corrected address
+    // (the bootstrap stays one owner); join-links.test.ts covers the rest.
     const twice = await call('POST', `/hq/suppliers/${id}/invite`, {
       name: 'Another',
       email: 'another@glowline.test',
     });
-    expect(twice.statusCode).toBe(409);
-    // The invite mail sits in the outbox, stamped mock_sent.
-    const mail = await admin.query(
-      `SELECT status, kind FROM mail_outbox WHERE to_email='owner@glowline.test'`,
-    );
-    expect(mail.rows[0]?.kind).toBe('supplier_invite');
-    expect(mail.rows[0]?.status).toBe('mock_sent');
+    expect(twice.statusCode).toBe(200);
+    const owners = await admin.query(`SELECT email FROM supplier_users WHERE supplier_id=$1`, [id]);
+    expect(owners.rows.map((r) => r.email)).toEqual(['another@glowline.test']);
   });
 
   it('a salon invite and an email change also land in the outbox', async () => {

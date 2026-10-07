@@ -455,3 +455,30 @@ four — and each pick opens the Promotions tab on that offer. One service
 and ended promotions, and suppliers the salon is not connected to, never
 appear. The promotion bell notice and its mail now open the offer itself.
 
+## Join links: the invite is the way in (2026-10-07)
+
+Alex opened a real production invite ("Krdzev Supply") and found what
+the HQ bootstrap had left open: the mail's button led to the plain
+login page, and an invited supplier user — placeholder hash, status
+`invited` — could never pass it. Now every supplier invite mints a
+personal one-time link (`supplier_join_links`, sha256 of the token
+only, seven days, a fresh invite revokes the old) and the mail's button
+is that link. `GET /portal/join/:token` tells the claim page who is
+invited and whether they are the supplier's **first owner** (an owner
+role with no active user yet); `POST /portal/join/:token` takes the
+name, a password (`PASSWORD_MIN`) and — for the first owner only — the
+company's commercial details (contact, territory, lead time, terms,
+minimum order, written onto `suppliers` under the link's own supplier
+context), activates the user, burns the link under a row lock and
+answers like login, so the portal opens signed in. A team member's
+invite from `/portal/team` travels the same way; its company block is
+ignored. While the bootstrap owner is still unclaimed HQ may re-send
+the invite — correcting the name or address — and the table row offers
+**Resend invite** beside the "Owner invited" badge; once claimed, the
+one-bootstrap rule (409) is back. The invite mails no longer promise a
+two-factor step that nothing implements. Tests:
+`join-links.test.ts` (API), `App.test.tsx` (portal), the HQ invite
+test now asserts the link. Deferred, not faked: "forgot password" for
+supplier users (no door yet — HQ or the owner re-invites), and an
+expiry reminder.
+

@@ -37,6 +37,13 @@ function mockApi(calls: { method: string; path: string; body?: unknown }[]) {
       if (method !== 'GET')
         calls.push({ method, path, body: init?.body ? JSON.parse(String(init.body)) : undefined });
       const ok = (b: unknown) => new Response(JSON.stringify(b), { status: 200 });
+      if (path.includes('/portal/join/') && method === 'GET')
+        return ok({
+          name: 'Slobodan K.', email: 'owner@krdzev.mk', role: 'sr_owner', supplierName: 'Krdzev Supply', firstOwner: true,
+          company: { contact: '', territory: 'North Macedonia', lead: '', terms: '', minOrder: 0 },
+        });
+      if (path.includes('/portal/join/') && method === 'POST')
+        return ok({ accessToken: 'portal-token', user: { ...user, name: 'Slobodan Krdzev', email: 'owner@krdzev.mk', supplierName: 'Krdzev Supply' } });
       if (path.includes('/portal/auth/login')) return ok({ accessToken: 'portal-token', user });
       if (path.includes('/portal/notifications'))
         return ok({
@@ -379,5 +386,42 @@ describe('the supplier portal', () => {
     expect(calls.some((c) => c.method === 'DELETE')).toBe(false);
     await userEvent.click(screen.getByTestId('promo-delete-confirm'));
     await waitFor(() => expect(calls.some((c) => c.method === 'DELETE' && c.path.includes('/portal/promotions/'))).toBe(true));
+  });
+
+  it('an invite link opens the join page, not the login: the first owner sets a password and the company details, then lands in the portal signed in', async () => {
+    const calls: { method: string; path: string; body?: unknown }[] = [];
+    mockApi(calls);
+    window.history.pushState({}, '', '/join/tok-abcdefghijklmnopqrstuvwxyz');
+    render(<App />);
+    const form = await screen.findByTestId('join-form');
+    expect(form.textContent).toContain('Krdzev Supply');
+    expect(form.textContent).toContain('owner@krdzev.mk');
+    expect((screen.getByLabelText('Your name') as HTMLInputElement).value).toBe('Slobodan K.');
+    await userEvent.clear(screen.getByLabelText('Your name'));
+    await userEvent.type(screen.getByLabelText('Your name'), 'Slobodan Krdzev');
+    await userEvent.type(screen.getByLabelText('Password'), 'a-real-password-1');
+    await userEvent.type(screen.getByLabelText('Repeat the password'), 'different-password');
+    await userEvent.click(screen.getByRole('button', { name: 'Set the password and sign in' }));
+    expect(await screen.findByRole('alert')).toBeDefined(); // mismatch, nothing sent
+    expect(calls.some((c) => c.path.includes('/portal/join/'))).toBe(false);
+    await userEvent.clear(screen.getByLabelText('Repeat the password'));
+    await userEvent.type(screen.getByLabelText('Repeat the password'), 'a-real-password-1');
+    await userEvent.type(screen.getByLabelText('Contact (phone, email)'), '+389 70 000 000');
+    await userEvent.type(screen.getByLabelText('Usual lead time'), '2 business days');
+    await userEvent.clear(screen.getByLabelText('Minimum order (MKD)'));
+    await userEvent.type(screen.getByLabelText('Minimum order (MKD)'), '3000');
+    await userEvent.click(screen.getByRole('button', { name: 'Set the password and sign in' }));
+    await waitFor(() => {
+      const sent = calls.find((c) => c.path.endsWith('/portal/join/tok-abcdefghijklmnopqrstuvwxyz') && c.method === 'POST');
+      expect(sent).toBeDefined();
+      expect(sent!.body).toMatchObject({
+        name: 'Slobodan Krdzev', password: 'a-real-password-1',
+        company: { contact: '+389 70 000 000', territory: 'North Macedonia', lead: '2 business days', minOrder: 3000 },
+      });
+    });
+    // Signed in and inside the portal, the URL back at the root.
+    expect(await screen.findAllByText('BeautyPro MK')).toBeDefined(); // the dashboard mock
+    expect(window.location.pathname).toBe('/');
+    expect(JSON.parse(localStorage.getItem('velnes.portal')!).user.email).toBe('owner@krdzev.mk');
   });
 });

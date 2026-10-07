@@ -3,12 +3,19 @@ import { createI18n, type Lang } from '@velnes/i18n';
 import { useEffect, useMemo, useState } from 'react';
 import { I18nextProvider, useTranslation } from 'react-i18next';
 import { getSession, PortalApiError, pPost, setSession, type PortalUser } from './api.js';
+import { Join } from './Join.js';
 import { Portal } from './Portal.js';
 
 export function App() {
   const lang = (localStorage.getItem('velnes.portal.lang') as Lang) || 'en';
   const i18n = useMemo(() => createI18n(lang), [lang]);
   const [user, setUser] = useState<PortalUser | null>(getSession()?.user ?? null);
+  // `/join/<token>`: the invite mail's link — the claim page, never the login.
+  const [joinToken, setJoinToken] = useState<string | null>(() => /^\/join\/([^/?#]+)/.exec(window.location.pathname)?.[1] ?? null);
+  const leaveJoin = () => {
+    window.history.replaceState({}, '', '/');
+    setJoinToken(null);
+  };
 
   useEffect(() => {
     const out = () => setUser(null);
@@ -23,7 +30,16 @@ export function App() {
 
   return (
     <I18nextProvider i18n={i18n}>
-      {user ? (
+      {joinToken ? (
+        <Join
+          token={joinToken}
+          onCancel={leaveJoin}
+          onDone={(u) => {
+            leaveJoin();
+            setUser(u);
+          }}
+        />
+      ) : user ? (
         <Portal
           user={user}
           setLang={setLang}

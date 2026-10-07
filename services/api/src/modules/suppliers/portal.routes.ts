@@ -1,7 +1,6 @@
 import { brandsFor, ensureBrand, productCategories, resolveCategory, UnknownCategoryError } from './brands.service.js';
 import { notifyPromotion } from './suppliers.service.js';
 import { invoicePdf } from './invoice-pdf.service.js';
-import { env } from '../../env.js';
 import {
   PO_PERM_GROUPS,
   PortalCompanySchema,
@@ -35,6 +34,8 @@ import {
   PortalCategoryRequestListSchema,
   PortalPromotionPatchSchema,
   promotionStatus,
+  SupplierJoinPreviewSchema,
+  SupplierJoinRequestSchema,
 } from '@velnes/contracts';
 import argon2 from 'argon2';
 import type { FastifyInstance, FastifyReply } from 'fastify';
@@ -48,6 +49,7 @@ import { poTransition, SupplierError, toOrderContract,
   notifyConnectionDecided,
 } from './suppliers.service.js';
 import { queueMail } from '../mail/mail.service.js';
+import { claimJoinLink, joinMailBody, mintJoinLink, peekJoinLink } from './join-links.service.js';
 import { createTicket, listTickets, replyToTicket, SupportError } from '../support/support.service.js';
 
 const Err = z.object({ error: z.string(), message: z.string() });
@@ -125,6 +127,50 @@ export function portalRoutes(app: FastifyInstance) {
           supplierName: row.supplierName,
         },
       };
+    },
+  });
+
+  // ── Join links: the invite mail's one way in (2026-10-07). Pre-session,
+  // the token is the credential; rate-limited like login.
+  r.route({
+    method: 'GET',
+    url: '/portal/join/:token',
+    config: { rateLimit: { max: 30, timeWindow: '15 minutes' } },
+    schema: {
+      params: z.object({ token: z.string().min(16).max(128) }),
+      response: { 200: SupplierJoinPreviewSchema, 401: z.object({ error: z.string() }) },
+    },
+    handler: async (req, reply) => {
+      try {
+        return await peekJoinLink(req.params.token);
+      } catch (e) {
+        if (e instanceof AuthError) return reply.code(401).send({ error: e.code });
+        throw e;
+      }
+    },
+  });
+
+  r.route({
+    method: 'POST',
+    url: '/portal/join/:token',
+    config: { rateLimit: { max: 10, timeWindow: '15 minutes' } },
+    schema: {
+      params: z.object({ token: z.string().min(16).max(128) }),
+      body: SupplierJoinRequestSchema,
+      response: { 200: SupplierLoginResponseSchema, 401: z.object({ error: z.string() }) },
+    },
+    handler: async (req, reply) => {
+      try {
+        const user = await claimJoinLink(req.params.token, req.body);
+        const accessToken = await reply.jwtSign(
+          { sup: user.supplierId, sub: user.id, name: user.name, rol: user.role },
+          { expiresIn: '8h' },
+        );
+        return { accessToken, user };
+      } catch (e) {
+        if (e instanceof AuthError) return reply.code(401).send({ error: e.code });
+        throw e;
+      }
     },
   });
 
@@ -1043,13 +1089,14 @@ export function portalRoutes(app: FastifyInstance) {
           })
           .returning('id')
           .executeTakeFirstOrThrow();
+        const link = await mintJoinLink(trx, req.supplierClaims.sup, row.id, req.supplierClaims.sub);
         await queueMail(trx, {
           to: req.body.email,
           subject: 'You are invited to the Velnes supplier portal',
-          body: `${req.supplierClaims.name} invited you as ${req.body.role}. Two-factor is required at first sign-in.`,
+          body: joinMailBody(`${req.supplierClaims.name} invited you to the Velnes supplier portal as ${req.body.role}.`),
           kind: 'supplier_invite',
           refId: row.id,
-          cta: { label: 'Open the supplier portal', url: env.supplierAppUrl },
+          cta: { label: 'Join the supplier portal', url: link.url },
         });
         return { id: row.id };
       }),

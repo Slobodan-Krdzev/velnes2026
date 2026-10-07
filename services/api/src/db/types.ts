@@ -1457,6 +1457,18 @@ export interface Suppliers {
   verified: Generated<boolean>;
 }
 
+export interface SupplierJoinLinks {
+  createdAt: Generated<Timestamp>;
+  createdBy: Generated<string>;
+  expiresAt: Timestamp;
+  id: Generated<string>;
+  revokedAt: Timestamp | null;
+  supplierId: string;
+  supplierUserId: string;
+  tokenHash: string;
+  usedAt: Timestamp | null;
+}
+
 export interface SupplierUsers {
   createdAt: Generated<Timestamp>;
   email: string;
@@ -1620,6 +1632,7 @@ export interface DB {
   supplierPromotions: SupplierPromotions;
   supplierRoles: SupplierRoles;
   suppliers: Suppliers;
+  supplierJoinLinks: SupplierJoinLinks;
   supplierUsers: SupplierUsers;
   supportTickets: SupportTickets;
   taxRules: TaxRules;

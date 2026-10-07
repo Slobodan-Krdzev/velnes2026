@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { AvatarSchema } from './auth.js';
+import { AvatarSchema, PASSWORD_MIN, SIGN_IN_LINK_DAYS } from './auth.js';
 import { MoneySchema } from './catalog.js';
 
 /**
@@ -173,6 +173,38 @@ export const SupplierLoginResponseSchema = z.object({
     supplierId: z.uuid(),
     supplierName: z.string(),
   }),
+});
+
+/**
+ * Join links (2026-10-07): every supplier invite — HQ's bootstrap owner
+ * or a team member — carries a personal one-time link. Opening it shows
+ * who is invited and asks for a password; the first owner also
+ * completes the company's commercial details. Then they are signed in.
+ * The link lives `SUPPLIER_JOIN_LINK_DAYS`, is single-use, and a fresh
+ * invite revokes the old one.
+ */
+export const SUPPLIER_JOIN_LINK_DAYS = SIGN_IN_LINK_DAYS;
+export const SupplierJoinCompanySchema = z.object({
+  contact: z.string().max(200),
+  territory: z.string().max(120),
+  lead: z.string().max(80),
+  terms: z.string().max(200),
+  minOrder: z.number().int().min(0),
+});
+export const SupplierJoinPreviewSchema = z.object({
+  name: z.string(),
+  email: z.string(),
+  role: z.string(),
+  supplierName: z.string(),
+  /** The bootstrap owner completes the company; a team member only joins. */
+  firstOwner: z.boolean(),
+  company: SupplierJoinCompanySchema,
+});
+export const SupplierJoinRequestSchema = z.object({
+  name: z.string().trim().min(1).max(80),
+  password: z.string().min(PASSWORD_MIN).max(200),
+  /** Accepted only for the first owner; ignored otherwise. */
+  company: SupplierJoinCompanySchema.optional(),
 });
 
 /** Shaped to reject tenant and HQ tokens by construction. */
