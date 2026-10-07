@@ -728,24 +728,14 @@ body.panel-open .shell{padding-right:var(--panel-w)}
    meer — de plakkende kop in een scrollende kaart schoof over de rijen
    heen en dat was precies wat er op de schermafdruk misging. De pagina
    scrollt gewoon; de rangorde bepaalt wat er boven de vouw woont. */
+/* 2026-10-07 (Alex): cards take the height of their content and no
+   more — an opportunity with one line is one line tall, an empty stock
+   card is a title and a sentence. Nothing stretches to fill the fold;
+   the columns are top-aligned and the page simply scrolls. */
 @media(min-width:1200px){
-  .fd-fold{min-height:calc(100vh - var(--header) - 44px)}
-  .fd-main{flex:1;min-height:0}
-  .fd-left{min-height:0}
+  .fd-main{align-items:start}
   .fd-pulse,.fd-hero{flex:none}
-  /* De kansen nemen wat er onder de heldkaart overblijft: hoger bij
-     meer ruimte, nooit talrijker. */
-  .fd-opps{flex:1;min-height:0}
-  .fd-opp{flex:1 1 0;min-height:64px}
-  /* Rechts vult de voorraadkaart de kolom, op zijn natuurlijke hoogte
-     gestut door dezelfde flex — zonder eigen scroll en zonder plakkende
-     kop. */
-  .fd-side .fd-card{flex:1}
-}
-@supports(height:100dvh){
-  @media(min-width:1200px){
-    .fd-fold{min-height:calc(100dvh - var(--header) - 44px)}
-  }
+  .fd-opp{min-height:64px}
 }
 @media(max-width:1199px){
   .fd-main,.fd-more-grid{grid-template-columns:1fr}
